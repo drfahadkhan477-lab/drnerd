@@ -362,8 +362,12 @@ const LOADER = `<script>
     /* Not the split build's downloader: every figure is already on the
        device, so its card has nothing to offer. */
     window.SPLIT_BUILD = false;
+    /* The package's bank block, which BankPack.validate checked on import,
+       names the bank in the app (BANK in app/systole.html). A package made
+       before the block existed has none, and the build's own is used. */
     window.SYSTOLE_BANK = { source: 'imported', questions: imported.questions.length, figures: imported.figures,
-                            extras: Object.keys(imported.extras || {}).length };
+                            extras: Object.keys(imported.extras || {}).length,
+                            bank: (imported.manifest && imported.manifest.bank) || null };
     /* THE NOTES CAME IN THE PACKAGE TOO. The app fetches its reference seed
        and each unit's figure file from content/ as it always has; in this
        build the host has none of them, so those two kinds of request are
@@ -1080,7 +1084,7 @@ if (refImgParts) {
 const manifest = {
   name: 'Systole — Cardiology Board Review',
   short_name: 'Systole',
-  description: 'Cardiology board review on the ACCSAP 12 bank: spaced repetition, a WebGL rhythm lab, and Apex, a grounded AI tutor.',
+  description: 'Cardiology board review: spaced repetition, a WebGL rhythm lab, and Apex, a grounded AI tutor.',
   start_url: '.',
   scope: '.',
   display: 'standalone',
@@ -1167,7 +1171,7 @@ function contentVersion(dir) {
    code change would throw away the 408 figures the fellow pressed a button to
    download — 19 MB re-fetched because a stylesheet moved. Figures change when
    the content changes; the shell changes when the shell changes. */
-const SW = `/* ACCSAP 12 service worker.
+const SW = `/* Systole service worker.
    Shell is precached so a cold launch is instant and works offline. Figures
    are cache-first at runtime rather than precached: there are 408 of them and
    18 MB, and precaching that on install would stall the first launch for the

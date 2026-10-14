@@ -58,6 +58,11 @@ with no `img` gets the number of figures it names, and one with no `n` gets
 its place in its chapter. A field the bank gives is kept as it is. A question
 whose `img` disagrees with its `figs` is refused, as extraction refuses it.
 
+An option's `p` is the share of candidates who chose it, in percent: ACCSAP's
+peer statistics. A question whose options all carry one shows them (the answer
+distribution, and how many answered correctly); one without them shows none,
+and the tutor is not told any.
+
 ## A figure
 
 A name matching `[A-Za-z0-9_.-]+\.(webp|png|jpg)`, never containing `..`,
@@ -82,6 +87,14 @@ for a unit split across files) — and each must be JSON.
 app calls the bank; `by`, optional, is who wrote its commentary. The app
 shows `name` and `by`, so both are short plain text: no markup, quotes or
 control characters. `BankPack.validate()` refuses a block that breaks this.
+
+Every word the app says about its bank comes from this block (`BANK` in
+`app/systole.html`): the tutor is told the question is from `name`, under
+the heading OFFICIAL `by` COMMENTARY, and the screens speak of the `by`
+commentary. For ACCSAP 12 those are the words the app has always used. A bank
+with no `by` gets plain "commentary". The code-only deploy takes the block
+from the package imported on the device; every other build carries the block
+of the bank it was built from.
 
 A manifest with no `bank` is ACCSAP 12's, since every bank made before the
 block existed is. `scripts/extract-content.js` writes the block from the build

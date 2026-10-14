@@ -340,6 +340,40 @@ const copyFolder = (to, edit) => {
     }
   }
 
+  head('the app names no bank by a fixed name');
+  {
+    /* What the app says about its bank comes from the bank's label (BANK in
+       app/systole.html; tests/verify-bankname.js reads it in a browser). So
+       the app's code, its comments blanked (tests/_source.js), carries no
+       word of ACCSAP's or the ACC's: not the ACC/AHA of a guideline's name,
+       and a \n escape, two characters in the source and a line break in the
+       text it makes, is read as the space it is. */
+    const { blankComments } = require('./_source.js');
+    const WORDS = /ACCSAP|(?<![A-Za-z/])ACC(?![A-Za-z/])/g;
+    const hits = (name, text) => {
+      const b = blankComments(text.replace(/\\n/g, '  '), name);
+      return [...b.matchAll(WORDS)].map(m => `${name}:${b.slice(0, m.index).split('\n').length}`);
+    };
+    ok('the scan sees the words in code, after a \\n and in markup, and not in a comment or ACC/AHA',
+       hits('a.js', 'const a = `OFFICIAL ACC COMMENTARY`;\nconst b = "x\\nACC commentary";\nconst c = \'<b>ACCSAP 12</b>\';').length === 3 &&
+       hits('b.js', '/* the ACCSAP export */ // ACC\nconst g = "ACC/AHA and AHA/ACC";').length === 0,
+       hits('a.js', 'const a = `OFFICIAL ACC COMMENTARY`;\nconst b = "x\\nACC commentary";\nconst c = \'<b>ACCSAP 12</b>\';').join(', '));
+    const walk = d => fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })
+      .flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+    const code = ['app/systole.html', ...walk('app/css'), ...walk('src').filter(f => f.endsWith('.js'))];
+    const found = code.flatMap(f => hits(f, fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    ok(`the app's code names neither ACCSAP nor the ACC (${code.length} files)`, found.length === 0 && code.length > 20, found.join(', ') || 'none');
+
+    /* And what the split build ships for another bank: its loader, its code,
+       its web manifest and its service worker. */
+    const dist = path.join(dir, 'split-own', 'dist');
+    const shipped = ['index.html', 'app.js', 'manifest.webmanifest', 'sw.js'];
+    const missing = shipped.filter(f => !fs.existsSync(path.join(dist, f)));
+    const inDist = missing.length ? [] : shipped.flatMap(f => hits(f, fs.readFileSync(path.join(dist, f), 'utf8')));
+    ok('nor does what the split build ships for another bank', missing.length === 0 && inDist.length === 0,
+       missing.length ? 'not built: ' + missing.join(', ') : inDist.join(', ') || 'none');
+  }
+
   head('the command line');
   {
     const out = path.join(dir, 'cli.html');

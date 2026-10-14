@@ -23,8 +23,8 @@
  * run the browser suites on it.
  *
  * WHAT IS IN IT. Only the two lines assemble-app reads: `const ALL_Q=[…];` and
- * `const IMGS={…};`, in the field names the app reads (id, ch, n, s, o[{t}],
- * ci, ex, img). Every stem, option and commentary is invented placeholder
+ * `const IMGS={…};`, in the field names the app reads (id, ch, n, s,
+ * o[{l, t, p}], ci, ex, img). Every stem, option and commentary is invented placeholder
  * text. The chapters are the app's own CH_COLORS names. The ids that
  * answer-keys.js and content-flags.js correct are included, keyed and shaped
  * as their CORRECTIONS and FLAGS record, because the assembler applies those
@@ -118,7 +118,10 @@ function question(id, ch, n, ci, opts = {}) {
   return {
     id, ch, n,
     s: `Synthetic stem ${id}: an invented patient with ${TOPICS[n % TOPICS.length]} presents with an invented finding. Which invented next step is best?`,
-    o: [...LETTERS].map(L => ({ l: L, t: `Synthetic option ${L} for ${id}` })),
+    /* p, the share of candidates who chose each option, as the export carries
+       it: invented, with the keyed option the most chosen, as every keyed
+       option in the export is (scripts/answer-keys.js). */
+    o: [...LETTERS].map((L, i) => ({ l: L, t: `Synthetic option ${L} for ${id}`, p: i === ci ? 60 : 10 })),
     ci,
     ex: opts.ex !== undefined ? opts.ex : `Synthetic commentary for ${id}. Option ${LETTERS[ci]} is keyed as correct in this invented bank.`,
     img: opts.img || 0,

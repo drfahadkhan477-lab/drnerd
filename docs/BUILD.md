@@ -158,7 +158,11 @@ as the export's do, an option written as a plain string becomes the
 of figures it names and its place in its chapter. A bank extracted from a
 built app already carries the answer-key corrections, so they are applied only
 to a bank that has none of them, and one with some but not all is refused.
-A bank whose manifest names another bank (`"bank": { "id": …, "name": … }`)
+The app names its bank from that label (`BANK` in `app/systole.html`), and
+shows peer statistics only for a question whose options carry them, so a bank
+of your own reads as yours: `tests/verify-bankname.js` runs the synthetic
+build as another bank and reads what the tutor is sent and what the screens
+say. A bank whose manifest names another bank (`"bank": { "id": …, "name": … }`)
 gets none of the ACCSAP corrections or flags, and the split build
 (`scripts/build-pwa.js`) ships it as it is. The older ACC import
 (`tools/older-acc-import.js --merge`) refuses such a build.

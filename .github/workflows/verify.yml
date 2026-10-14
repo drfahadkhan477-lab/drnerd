@@ -545,6 +545,9 @@ jobs:
         name: grounded mode answers only from your references (28 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP's data cannot back (18 checks)
+        run: node tests/verify-bankname.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -800,6 +803,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: grounded mode answers only from your references (28 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP's data cannot back (18 checks)
+        run: node tests/verify-bankname.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html

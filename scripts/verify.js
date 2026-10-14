@@ -62,6 +62,10 @@ const SUITES = [
   ['polish',       'Pencil feel, the hero heart, the rhythm library'],
   ['splash',       'the pre-paint loading screen, on a throttled CPU'],
   ['braunwald',    'grounded mode answers only from your references'],
+  /* The app's words for its bank come from the bank's label: run as a bank
+     that is not ACCSAP's, through the code-only deploy's hand-off, it names
+     that bank and claims no peer statistics it does not have. */
+  ['bankname',     'the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP\'s data cannot back'],
   ['leads',        'the 12-lead morphology falls out of one dipole'],
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['theme',        'nine palettes, two axes, unthemed semantics'],
@@ -466,7 +470,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['bankbuild-pure'];
+const PENDING_RECORD = ['bankbuild-pure', 'bankname'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
