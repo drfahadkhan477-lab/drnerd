@@ -10,7 +10,8 @@
  * (0 = none). A suite past its ceiling is stopped, reported as having died, and
  * named with the section it was in. Section times come from the "── … ──"
  * headings, even when a chunk ends mid-line. The end-to-end check runs the real
- * runner with a ceiling too short for any suite to beat.
+ * runner with a ceiling too short for any suite to beat, and sends the log of
+ * that failed run to a temp file rather than over tests/last-run.log.
  *
  * And which suites the routine laptop run is: those tagged `laptop`, the ones
  * no CI job names, read from the workflow so the set keeps itself current.
@@ -27,6 +28,13 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 const MIN = 60000;
+const fs = require('fs');
+/* The runs this suite starts are built to fail, and a failing run writes its
+   log. Every child inherits this, so that log goes to a temp file
+   (scripts/verify.js, SYSTOLE_RUN_LOG), never over this checkout's
+   tests/last-run.log, which holds the output of the last real run that failed. */
+const RUN_LOG_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'systole-suitetime-'));
+process.env.SYSTOLE_RUN_LOG = path.join(RUN_LOG_DIR, 'last-run.log');
 
 head('the verification CLI can describe itself without starting a run');
 for (const helpFlag of ['--help', '-h']) {
@@ -170,6 +178,20 @@ head('the split build alone');
     ok('the stopped suite is reported as having died, not as passing', /did not report/.test(out) && r.status !== 0,
        `exit ${r.status}`);
     ok('and the runner says it stopped it, and after how long', /stopped by verify\.js after .* \(its limit: /.test(out));
+    /* Its failure log went where it was sent. A log's first line is its
+       "# systole verify — <time>" stamp, so this checkout's log opening with
+       the same line means the run wrote there as well. Only that line is read:
+       the rest of a real run's log can quote question text. */
+    const sent = fs.existsSync(String(process.env.SYSTOLE_RUN_LOG)) ? fs.readFileSync(process.env.SYSTOLE_RUN_LOG, 'utf8') : '';
+    const stamp = sent.split('\n')[0];
+    const firstLine = f => {
+      try { const fd = fs.openSync(f, 'r'), b = Buffer.alloc(200), n = fs.readSync(fd, b, 0, 200, 0); fs.closeSync(fd);
+            return b.toString('utf8', 0, n).split('\n')[0]; } catch (_) { return ''; }
+    };
+    const over = !!stamp && firstLine(path.join(ROOT, 'tests', 'last-run.log')) === stamp;
+    ok("and writes its failure log where it is sent, not over this checkout's tests/last-run.log",
+       /^# systole verify/.test(stamp) && /cause-pure/.test(sent) && !over,
+       !sent ? 'nothing was written where it was sent' : over ? 'written there, and over tests/last-run.log as well' : 'written there');
     const r2 = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--only', 'cause-pure', '--suite-timeout', 'later'],
                          { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
     ok('a bad --suite-timeout stops the run before any suite starts', r2.status === 2 && /wants minutes/.test(r2.stderr || ''),
@@ -283,6 +305,7 @@ head('the split build alone');
        (out.match(/Verifying \S+/) || ['no Verifying line'])[0]);
   }
 
+  fs.rmSync(RUN_LOG_DIR, { recursive: true, force: true });
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();
