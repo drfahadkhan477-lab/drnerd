@@ -16,7 +16,9 @@ must work with synthetic fixtures; the licensed question bank stays private.
 - `memorizer/`: PDF and study-file learning app, with its own storage and backup.
 - `lab/` and `src/lab/`: interactive learning tools.
 - `tests/`: logic and browser suites. `scripts/verify.js` is the suite registry;
-  `scripts/test-public.js` derives the public test run from the CI workflow.
+  `scripts/test-public.js` derives the public test run from the CI workflow and
+  reuses a browser suite's pass when nothing it read has changed
+  (`scripts/suite-cache.js`, `scripts/trace-inputs.js`).
 
 ## Start a task
 
@@ -44,6 +46,21 @@ Browser checks require `npx playwright install chromium webkit` and the host
 libraries those browsers need. WebKit is required for iPad-sensitive changes;
 Chromium alone does not establish iPad compatibility. Report unavailable
 measurements and checks that did not run, with their reasons.
+
+`npm test` does not measure a browser suite again when everything its last pass
+read is byte-identical (`docs/BUILD.md`, "Reusing a pass"). It prints that suite
+`REUSED`, never `PASS`, and its last line says how many were measured now. The
+first run in a clone measures everything; after a change, only what the change
+reaches, and restoring an edit finds the pass from before it, so an inject,
+watch FAIL, restore loop re-measures only the suites the defect reaches. Report
+that line as it stands ("N measured now, M reused"), keep reused suites apart
+from measured ones as you keep the record apart from observed results, and do
+not shorten it to "all passed". `npm run test:plan` says what
+would run and why, and runs nothing. `npm run test:fresh` measures every suite:
+use it for a release, a doubt, or a change to the cache or to Playwright or a
+browser. CI always measures, and Firefox is not cached. Do not run the whole
+browser suite to establish a baseline: CI measured the base commit, so read its
+result and measure your change.
 
 Use `npm run test:prepare` to download and verify the pinned public reader
 libraries, then `SYSTOLE_TEST_READERS_OFFLINE=1 npm test` to exercise the public
