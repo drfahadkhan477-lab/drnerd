@@ -1119,8 +1119,16 @@ function provenance() {
   return `${branch} @ ${sha}${dirty}`;
 }
 
+/* SYSTOLE_RUN_LOG sends this log elsewhere, for the runs a suite starts on
+   purpose. verify-suitetime-pure starts runs built to fail, and each one wrote
+   tests/last-run.log, over the output of the last real run that failed. A
+   release check's next step runs that suite early in its own run, so a failing
+   step's output was gone before anyone read it, as it once was on the owner's
+   laptop. */
+const RUN_LOG = process.env.SYSTOLE_RUN_LOG ? path.resolve(process.env.SYSTOLE_RUN_LOG)
+                                            : path.join(ROOT, 'tests', 'last-run.log');
 function writeFailLog() {
-  const file = path.join(ROOT, 'tests', 'last-run.log');
+  const file = RUN_LOG;
   let built = TARGET_IS_URL ? 'served over HTTP' : 'not found';
   if (!TARGET_IS_URL) {
     try {
