@@ -79,6 +79,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await realClock(false);
   };
   const reached = (screen, ms) => page.waitForFunction(s => S.screen === s, screen, { timeout: ms || 6000 }).then(() => true, () => false);
+  /* The screen being named is not the screen being drawn: S.screen is set at once and the markup follows. */
+  const drawn = sel => page.waitForSelector(sel, { timeout: 4000 }).then(() => true, () => false);
   const info = ids => page.evaluate(ids => ids.map(id => ({ id, ch: QBYID[id].ch, ci: QBYID[id].ci, n: QBYID[id].o.length, img: !!QBYID[id].img })), ids);
   /* The test says what time it is, an hour ahead of the real clock: a reading the app takes of its own clock (leaving
      the page, say) is then earlier than the last tick and adds nothing, so every number below is the test's own. */
@@ -143,7 +145,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const big = await page.evaluate(() => CHAPTERS.map(x => ({ x, n: POOL.filter(q => q.ch === x).length })).sort((a, b) => b.n - a.n)[0]);
     await page.evaluate(big => { setMockCfg('ch', big.x); setMockCfg('n', 20); setMockCfg('sec', 60); }, big);
     await page.click('#mockStart');
-    ok('a block set to one chapter opens', await reached('mock'));
+    ok('a block set to one chapter opens, and its first question is drawn', await reached('mock') && await drawn('.mock-opt'));
     const r = await page.evaluate(() => ({ ids: S.mock.ids.slice(), chs: [...new Set(S.mock.ids.map(id => QBYID[id].ch))], ch: S.mock.chapter, sec: S.mock.secPerQ, uniq: new Set(S.mock.ids).size }));
     ok('and asks only that chapter, the size asked, each question once, at the pace asked', r.chs.length === 1 && r.chs[0] === big.x && r.ids.length === Math.min(20, big.n) && r.uniq === r.ids.length && r.ch === big.x && r.sec === 60, JSON.stringify([r.chs, r.ids.length, r.ch, r.sec]));
     await clean(); await toStudy();
@@ -153,7 +155,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       save(); setMockCfg('ch', ''); setMockCfg('n', 20); setMockCfg('sec', 90);
     });
     await page.click('#mockStart');
-    ok('a block from the whole bank opens', await reached('mock'));
+    ok('a block from the whole bank opens, and its first question is drawn', await reached('mock') && await drawn('.mock-opt'));
     const f = await page.evaluate(() => ({ missing: window.__fresh.filter(id => !S.mock.ids.includes(id)).length, n: S.mock.ids.length }));
     ok('questions never met come before ones already seen: all twelve unseen are in a block of twenty', f.missing === 0 && f.n === 20, JSON.stringify(f));
   }
@@ -204,6 +206,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.evaluate(() => { window.__opt = document.querySelector('.mock-opt[data-mi="2"]'); });
     await page.click('.mock-opt[data-mi="2"]');
     ok('a tap updates the screen where it stands: the option on screen is the same element, not a redraw', await page.evaluate(() => window.__opt.isConnected && window.__opt.classList.contains('picked')));
+    const sp = await page.evaluate(() => JSON.parse(localStorage.getItem('accsap12.mock')));
+    ok('the pick is stored the moment it is made, before anything else is done', sp.sel[0] === 2 && !sp.flag[0], JSON.stringify([sp.sel, sp.flag]));
     await page.click('#mockFlagBtn');
     const f = await page.evaluate(() => ({ btn: document.getElementById('mockFlagBtn').classList.contains('on'), pressed: document.getElementById('mockFlagBtn').getAttribute('aria-pressed'), cell: document.querySelector('.mock-cell[data-mc="0"]').classList.contains('flag'), sub: document.getElementById('mockSub').textContent, flag: S.mock.flag[0] }));
     ok('flagging marks the button, the question\'s cell in the navigator, and the count', f.btn && f.pressed === 'true' && f.cell && /1 answered · 1 flagged/.test(f.sub) && f.flag === 1, JSON.stringify(f));
@@ -393,18 +397,24 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('the Study card now says a block is open, how far it is and how long is left, and offers to resume it', /a block is open/i.test(c.t) && /1 of 12 answered/.test(c.t) && /left/.test(c.t) && /1 flagged/.test(c.t) && c.resume && !c.start, c.t.replace(/\n+/g, ' | '));
     const idsBefore = await page.evaluate(() => S.mock.ids.slice());
     await page.evaluate(() => startMock());
-    await onScreen(page, 'mock', { marker: '.mock-opt' });
-    ok('starting a block while one is open opens that one, and does not replace it', await page.evaluate(ids => JSON.stringify(S.mock.ids) === JSON.stringify(ids), idsBefore));
+    const reopened = await reached('mock');
+    if (reopened) await onScreen(page, 'mock', { marker: '.mock-opt' });
+    ok('starting a block while one is open opens that one, and does not replace it', reopened && await page.evaluate(ids => JSON.stringify(S.mock.ids) === JSON.stringify(ids), idsBefore));
     await page.evaluate(() => goStudy());
     await onScreen(page, 'study', { marker: '#planCard' });
     await page.click('#mockDiscard');
     ok('discarding takes two taps: the first only asks', await page.evaluate(() => !!S.mock && /Tap again to discard/.test(document.getElementById('mockDiscard').textContent)));
     await page.waitForTimeout(5400);
     ok('and if the second tap does not come, the button goes back to asking nothing', await page.evaluate(() => _mockArm === false && /Discard this block/.test(document.getElementById('mockDiscard').textContent)));
+    await page.click('#mockDiscard');             // asks again, and this time Resume is pressed before the five seconds are up
+    const armed = await page.evaluate(() => _mockArm === true);
     await page.click('#mockResume');
-    await onScreen(page, 'mock', { marker: '.mock-opt' });
-    const r = await page.evaluate(() => ({ i: S.mock.i, sel: S.mock.sel[0], picked: document.querySelector('.mock-opt.picked') && document.querySelector('.mock-opt.picked').dataset.mi, flag: document.getElementById('mockFlagBtn').classList.contains('on'), arm: _mockArm }));
-    ok('resuming returns to the same question with the answer and the flag as they were, and disarms the discard', r.i === 0 && r.sel === 2 && r.picked === '2' && r.flag && r.arm === false, JSON.stringify(r));
+    const opened = await reached('mock');
+    ok('Resume opens the block', opened);
+    if (opened) await onScreen(page, 'mock', { marker: '.mock-opt' });
+    const r = await page.evaluate(() => { const p = document.querySelector('.mock-opt.picked'), f = document.getElementById('mockFlagBtn'); return { i: S.mock.i, sel: S.mock.sel[0], picked: p && p.dataset.mi, flag: !!f && f.classList.contains('on'), arm: _mockArm }; });
+    ok('resuming returns to the same question with the answer and the flag as they were', r.i === 0 && r.sel === 2 && r.picked === '2' && r.flag, JSON.stringify(r));
+    ok('and the discard it had been asked for goes back to asking nothing, so a single tap later does not throw the block away', armed && r.arm === false, JSON.stringify({ armed, arm: r.arm }));
     await page.evaluate(() => goHome());
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await toStudy();
@@ -502,7 +512,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       slow: (document.querySelector('.mock-slow') || {}).innerText, text: document.querySelector('.mock-report').innerText,
     }));
     const byCh = {}; q.forEach((x, k) => { const c = byCh[x.ch] || (byCh[x.ch] = [0, 0]); c[1]++; if (plan[k] === x.ci) c[0]++; });
-    ok('what is kept of the block is one summary: its size, answered, right, time, limit and chapters', r.mocks.length === 1 && r.mocks[0].n === 10 && r.mocks[0].answered === 7 && r.mocks[0].correct === 4 && r.mocks[0].ms === 600000 && r.mocks[0].limit === 600000 && same(r.mocks[0].by, byCh), JSON.stringify(r.mocks[0]).slice(0, 200));
+    const m0 = r.mocks[0] || {};                  // no summary at all must be a failed check, not a thrown error that ends the run
+    ok('what is kept of the block is one summary: its size, answered, right, time, limit and chapters', r.mocks.length === 1 && m0.n === 10 && m0.answered === 7 && m0.correct === 4 && m0.ms === 600000 && m0.limit === 600000 && same(m0.by, byCh), JSON.stringify(r.mocks).slice(0, 200));
     ok('and it is in the saved record as well as in memory', same(r.stored, r.mocks));
     ok('the block in progress is gone from memory and from storage; the one handed in is kept for its report', r.mock === null && r.key === null && r.last === true);
     ok('the report says 40%, and the time: ten minutes of ten, a minute a question', r.pct === '40%' && /10:00 of 10:00/.test(r.time) && /about 60 s a question/.test(r.time), r.time);
@@ -541,13 +552,15 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const missedIds = ids.filter((id, k) => plan[k] == null || plan[k] !== q[k].ci || flagged.includes(k));
     ok('the report offers to review exactly the wrong, the blank and the flagged', (await page.evaluate(() => document.querySelector('.results-btns .btn-next').textContent)).includes('Review the ' + missedIds.length + ' to learn from'), String(missedIds.length));
     await page.click('.results-btns .btn-next');
-    await onScreen(page, 'quiz', { marker: '.q-card' });
+    const inQuiz = await reached('quiz');
+    if (inQuiz) await onScreen(page, 'quiz', { marker: '.q-card' });
     const r = await page.evaluate(() => ({ mode: S.mode, ids: S.questions.map(x => x.id), rev: !!document.querySelector('.reveal-card'), wrong: document.querySelectorAll('.opt.wrong').length, right: document.querySelectorAll('.opt.correct').length, rate: !!document.querySelector('.rate-prompt'), sel: S.selected, first: S.answers[0] }));
-    ok('the review is the quiz screen on exactly those questions, in the order they were asked', r.mode === 'mockreview' && same(r.ids, missedIds), r.ids.length + ' questions');
+    ok('the review is the quiz screen on exactly those questions, in the order they were asked', inQuiz && r.mode === 'mockreview' && same(r.ids, missedIds), r.ids.length + ' questions');
     const k0 = ids.indexOf(r.ids[0]), wantWrong = plan[k0] != null && plan[k0] !== q[k0].ci ? 1 : 0;
     ok('it opens on the reveal for the answer that was given: the explanation, the choice if it was wrong, the key; and no rating', r.rev && r.right === 1 && r.wrong === wantWrong && r.rate === false, JSON.stringify([r.rev, r.wrong, r.right, wantWrong]));
     ok('opening it counted nothing', same(await snap(), before));
-    const blank = await page.evaluate(() => { const k = S.questions.findIndex((x, i) => !S.answers[i]); S.qIdx = k; restoreQuizState(); render(); return k; });
+    const blank = inQuiz ? await page.evaluate(() => { const k = S.questions.findIndex((x, i) => !S.answers[i]); S.qIdx = k; restoreQuizState(); render(); return k; }) : -1;
+    ok('and among the questions of the review there is one that was left blank, to try the next two checks on', blank >= 0, String(blank));
     if (blank >= 0) {
       await page.waitForSelector('.opt:not([disabled])');
       ok('a question that was left blank is open to answer, not revealed', await page.evaluate(() => !document.querySelector('.reveal-card') && S.answered === false));
@@ -556,9 +569,10 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       const b1 = await snap();
       ok('answering it now counts as one practice answer, and only that one', b1.sessionTotal === b0.sessionTotal + 1 && b1.log === b0.log + 1 && b1.srs === b0.srs);
     }
-    await page.evaluate(() => { S.qIdx = S.questions.length - 1; restoreQuizState(); nextQ(); });
-    await onScreen(page, 'mockreport', { marker: '#mockSummary' });
-    ok('finishing the review goes back to the report', await page.evaluate(() => S.screen === 'mockreport'));
+    if (inQuiz) await page.evaluate(() => { S.qIdx = S.questions.length - 1; restoreQuizState(); nextQ(); });
+    const backAtReport = await reached('mockreport');
+    if (backAtReport) await onScreen(page, 'mockreport', { marker: '#mockSummary' });
+    ok('finishing the review goes back to the report', backAtReport);
   }
 
   head('the report and the history survive a reload');
@@ -570,8 +584,9 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const c = await page.evaluate(() => document.getElementById('mockCard').innerText);
     ok('the Study card shows the score of the last block and offers its report', /Last block: \d+%/.test(c) && /see the report/.test(c), c.replace(/\n+/g, ' | '));
     await page.click('#mockCard .mock-quiet');
-    await onScreen(page, 'mockreport', { marker: '#mockSummary' });
-    ok('the report opens, with the numbers of that block', (await page.evaluate(() => document.getElementById('mockSummary').textContent)) === before.summary);
+    const reportOpen = await reached('mockreport');
+    if (reportOpen) await onScreen(page, 'mockreport', { marker: '#mockSummary' });
+    ok('the report opens, with the numbers of that block', reportOpen && (await page.evaluate(() => (document.getElementById('mockSummary') || {}).textContent)) === before.summary);
   }
 
   head('the Progress screen shows the blocks handed in');
@@ -595,7 +610,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.evaluate(() => { S.mocks = S.mocks.slice(0, 1); render(); });
     ok('a block with no right answer still has a bar you can see', (await page.evaluate(() => parseFloat(document.querySelector('#mockPanel .mk-bar i').style.height))) === 4);
     await page.evaluate(() => { S.mocks = []; render(); });
-    ok('with none handed in there is no panel at all', await page.evaluate(() => !document.getElementById('mockPanel')));
+    /* "No panel" alone is also what a Progress screen that failed to draw at all looks like. */
+    ok('with none handed in there is no panel at all, and the rest of the Progress screen is still there', await page.evaluate(() => !document.getElementById('mockPanel') && /last 30 days/i.test(document.getElementById('app').innerText)));
     await page.evaluate(() => { S.mocks = JSON.parse(localStorage.getItem('accsap12.v2')).exams; });
   }
 

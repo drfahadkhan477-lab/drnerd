@@ -378,3 +378,31 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   section satisfied them. → Rule: a negative holds a positive from the same
   run, and a check about what a run kept starts from an empty cache and shows
   that the run measured first.
+- **A wait written as the proposition.** The mock exam suite said "Resume opens
+  the block" as `await onScreen(page, 'mock', …)` and went on to check what
+  was on it. With Resume broken, `onScreen` timed out and threw: the run ended
+  at that line, no check was named, and every later section went unrun. The
+  same shape hid four other defects (the review not returning to the report,
+  the report not opening from its card, a missing summary read as
+  `mocks[0].n`). → Rule: when reaching the screen is what the check is about,
+  ask `reached()` and `ok()` it, and skip the steps that need the screen
+  rather than letting them throw; keep `onScreen` for a step that is only a way
+  to get somewhere.
+- **Two defences, each hiding the other's removal.** A block's clock is
+  stopped when its screen is drawn away, and again by the next tick, which
+  finds the screen gone. Taking out either left every check green, because the
+  other did the same job a second later, and the check waited up to five
+  seconds for the timer to be gone. → Rule: to test one of a pair, make the
+  other do nothing (the timer's tick replaced by a no-op) and read at the moment
+  the first should have acted; a check that waits for the effect cannot tell
+  which defence produced it.
+- **A timer waited out before the thing it guards is tried.** The Discard
+  button asks again for five seconds, then goes back by itself. The test waited
+  those five seconds and then pressed Resume, so a Resume that left Discard
+  armed looked identical to one that did not. → Rule: when a check is about what
+  an action does to a timed state, act inside the timer's window, not after it.
+- **A negative that a blank screen satisfies.** "There is no #mockPanel" passed
+  when the Progress screen failed to draw at all: the defect that put the panel
+  there made its code throw. This is the rule of "Negative checks that passed
+  over an empty record" again, in a screen instead of a record. → Rule: pair
+  every "X is absent" with something that must be on the same screen.
