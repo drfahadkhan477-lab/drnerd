@@ -860,8 +860,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         return { over: de.scrollWidth - de.clientWidth, appOver: app.scrollWidth - app.clientWidth, small };
       });
     };
-    const sizes = [[360, 780], [390, 844], [744, 1133], [834, 1194], [1194, 834], [1366, 1024]];
-    const bad = [];
+    const sizes = [[320, 568], [360, 780], [390, 844], [744, 1133], [834, 1194], [1194, 834], [1366, 1024]];
+    const bad = [], flagWord = [];
     const check = (name, w, p, anySmall) => { if (p.over > 1 || p.appOver > 1 || (anySmall ? p.small.length : p.small.some(x => /mock/.test(x)))) bad.push(`${name}@${w} ${JSON.stringify(p)}`); };
     for (const [w, h] of sizes) {
       await page.setViewportSize({ width: w, height: h });
@@ -872,6 +872,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       check('block', w, await probe(), true);
       await page.evaluate(() => mockGo(S.mock.ids.length - 1));          // the last question's row has the longest label: "Review and hand in"
       check('last question', w, await probe(), true);
+      flagWord.push(await page.evaluate(() => [Math.round(document.querySelector('.mock-flag-l').getBoundingClientRect().width), /Flag/.test(document.getElementById('mockFlagBtn').textContent)]).then(r => [w, ...r]));
       await page.evaluate(() => mockEnd()); await page.waitForSelector('.mock-end');
       check('end', w, await probe(), true);
       await page.evaluate(() => { mockGo(0); mockPause(); });
@@ -887,6 +888,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       check('progress', w, await probe(), false);
     }
     await page.setViewportSize({ width: 834, height: 1194 });
+    ok('on a phone the flag button shows its icon and the word stays for a screen reader; on anything wider the word is shown', flagWord.length === sizes.length && flagWord.every(([w, lw, sr]) => sr && (w <= 380 ? lw <= 1 : lw > 10)), JSON.stringify(flagWord));
     ok('the card, the block, the hand-in page, the pause and the report never run past the screen, and every control on them is at least 44 px tall', bad.length === 0, bad.join(' | ').slice(0, 400));
   }
 
