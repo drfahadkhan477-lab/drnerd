@@ -480,6 +480,45 @@ head('the tools the suites need are pinned, and named before they are missed');
        (pkgs['node_modules/playwright-core'] || {}).version || 'not in the lockfile');
   }
 
+  /* NOTHING ELSE IS INSTALLED FOR THE TESTS. chai and mocha were added once
+     and no suite loaded either (the suites carry their own ok()), yet `npm ci`
+     fetched their 26 packages in each CI job that installs, the self-hosted
+     runner that holds the licensed export among them, while package.json and
+     docs/BUILD.md went on naming two tools. A tool a suite needs is added to
+     NAMED with the line that says what it is for. The list is written here and
+     not read from package.json, because the defect is that file growing. Every
+     dependency field is read: a tool moved to "dependencies" is not out of
+     reach of this. */
+  const NAMED = ['playwright', 'ts-fsrs'];
+  const declared = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
+    .flatMap(k => Object.keys(pkg[k] || {}).map(n => (k === 'devDependencies' ? n : `${n} (${k})`)));
+  const strays = declared.filter(n => !NAMED.includes(n));
+  ok('and no other tool is installed for them: each is another package every npm ci fetches and trusts',
+     !strays.length, strays.length ? `${strays.join(', ')}; named: ${NAMED.join(', ')}` : NAMED.join(', '));
+
+  /* THE NODE MINIMUM IS ONE FACT, STATED IN FOUR PLACES. package.json says
+     ">=22". docs/BUILD.md said "Node 18+" and the Codespaces image pulled
+     Node 20 until a reader found both; scripts/doctor.js reads package.json,
+     so a Codespace built from that image would fail the doctor's Node line
+     at its first session. AGENTS.md, the line every session reads first, said
+     22 and was right; it is held with the rest so that it stays so. The prose
+     and the image follow the manifest. Each check fails when it cannot read
+     its claim, so a reworded line is a failure to fix here and not a pass that
+     measured nothing. */
+  const need = +((String((pkg.engines || {}).node || '').match(/(\d+)/) || [])[1] || 0);
+  ok('package.json declares a Node minimum', need > 0, (pkg.engines || {}).node || 'no engines.node');
+  const said = /\*\*Node (\d+)\+\*\*/.exec(fs.readFileSync(path.join(ROOT, 'docs', 'BUILD.md'), 'utf8'));
+  ok('docs/BUILD.md names that minimum, not an older one', !!said && +said[1] === need,
+     said ? `BUILD.md says ${said[1]}+, package.json wants ${need}` : 'no "**Node N+**" line in docs/BUILD.md');
+  const told = /Use Node (\d+) or newer/.exec(fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8'));
+  ok('and AGENTS.md, which every session reads first, says the same', !!told && +told[1] === need,
+     told ? `AGENTS.md says ${told[1]}, package.json wants ${need}` : 'no "Use Node N or newer" in AGENTS.md');
+  const dcFile = path.join(ROOT, '.devcontainer', 'devcontainer.json');
+  const dcText = fs.existsSync(dcFile) ? fs.readFileSync(dcFile, 'utf8') : null;
+  const image = dcText === null ? null : /javascript-node:(?:\d+-)?(\d+)\b/.exec(dcText);
+  ok('and no Codespaces image runs an older Node', need > 0 && (dcText === null || (!!image && +image[1] >= need)),
+     dcText === null ? 'no .devcontainer, so no image' : image ? `image Node ${image[1]}, package.json wants ${need}` : 'no javascript-node:<major> image in devcontainer.json');
+
   /* AN ENGINE THE HARNESS ACCEPTS IS NOT AN ENGINE THAT IS INSTALLED. firefox
      is in ENGINES and is not provisioned everywhere; without a check the run
      spawns every suite, each fails identically on a missing executable, and
