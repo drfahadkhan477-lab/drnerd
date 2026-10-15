@@ -322,8 +322,9 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.evaluate(() => { mockStopTicker(); MockExam.build = window.__build; goHome(); });
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await leave(); await page.evaluate(() => resumeMock());
-    await onScreen(page, 'mock', { marker: '.mock-opt' });
-    ok('and so does taking a block up again', (await said()) === '', await said());
+    const taken = await reached('mock');
+    if (taken) await onScreen(page, 'mock', { marker: '.mock-opt' });
+    ok('and so does taking a block up again, which opens it', taken && (await said()) === '', await said());
     await page.evaluate(() => { mockStopTicker(); goHome(); });
     await onScreen(page, 'home', { marker: '.hero-h1' });
   }
@@ -463,20 +464,22 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.evaluate(() => goHome());
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await page.evaluate(() => resumeMock());
-    await onScreen(page, 'mock', { marker: '.mock-opt' });
+    const late = await reached('mock');
+    if (late) await onScreen(page, 'mock', { marker: '.mock-opt' });
     await page.evaluate(() => { document.getElementById('srLive').textContent = 'quiet'; });
     await clockAt(t0); await tick(t0 + 1000);
-    ok('it does not say five minutes are left when there are two', (await page.evaluate(() => document.getElementById('srLive').textContent)) === 'quiet', await page.evaluate(() => document.getElementById('srLive').textContent));
+    ok('it does not say five minutes are left when there are two', late && (await page.evaluate(() => document.getElementById('srLive').textContent)) === 'quiet', await page.evaluate(() => document.getElementById('srLive').textContent));
     await page.evaluate(limit => { S.mock.elapsedMs = limit - 61000; }, limit);
     await tick(t0 + 2000);
     ok('and it still says the minute when the minute comes', (await page.evaluate(() => document.getElementById('srLive').textContent)) === 'One minute left.');
     await page.evaluate(() => { _mockSaid = { five: true, one: true }; goHome(); });
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await page.evaluate(() => { S.mock.elapsedMs = 12 * 60000 - 50000; resumeMock(); });                 // fifty seconds left: already inside the last minute
-    await onScreen(page, 'mock', { marker: '.mock-opt' });
+    const late2 = await reached('mock');
+    if (late2) await onScreen(page, 'mock', { marker: '.mock-opt' });
     await page.evaluate(() => { document.getElementById('srLive').textContent = 'quiet'; });
     await clockAt(t0 + 3000); await tick(t0 + 4000);
-    ok('a block taken up with a minute left does not announce the minute it is already in', (await page.evaluate(() => document.getElementById('srLive').textContent)) === 'quiet', await page.evaluate(() => document.getElementById('srLive').textContent));
+    ok('a block taken up with a minute left does not announce the minute it is already in', late2 && (await page.evaluate(() => document.getElementById('srLive').textContent)) === 'quiet', await page.evaluate(() => document.getElementById('srLive').textContent));
   }
 
   head('an untimed block counts up and never ends by itself');
