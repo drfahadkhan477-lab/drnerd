@@ -315,6 +315,16 @@ head('what is kept of a finished block');
   const lastTs = a => a.length ? (a[a.length - 1] || {}).ts : undefined;
   ok('adding something that is not a block adds nothing', M.pushHistory(kept, { ts: 1 }).length === 30 && lastTs(M.pushHistory(kept, null)) === 1039 && lastTs(M.pushHistory(kept, { ts: 1 })) === 1039 && M.pushHistory(null, s).length === 1);
   ok('the original list is not changed by adding to it', kept.length === M.HISTORY_CAP && kept[29].ts === 1039);
+  {
+    /* A bank can name a chapter anything. The history refuses a name over 120 characters, and a block it refuses is a
+       block that was counted into the progress record and is nowhere in the history. */
+    const long = 'Chapter '.repeat(40);
+    const rl = M.start({ ids: ['ALP_1', 'BET_1'], secPerQ: 60, chapter: null, now: 5 });
+    rl.sel = { 0: byId.ALP_1.ci }; rl.elapsedMs = 90000;
+    const gl = M.grade(rl, id => ({ ch: long, ci: byId[id].ci })), sl = M.summary(gl, rl, 888);
+    ok('a chapter name longer than the history allows is cut to 120 in the report', gl.byCh.length === 1 && gl.byCh[0].ch === long.slice(0, 120) && gl.items.every(x => x.ch.length === 120), String(gl.byCh[0] && gl.byCh[0].ch.length));
+    ok('so the block still reaches the history, with its chapter', M.validEntry(sl) === true && M.pushHistory([], sl).length === 1 && same(sl.by, { [long.slice(0, 120)]: [1, 2] }), JSON.stringify(Object.keys(sl.by).map(k => k.length)));
+  }
 }
 
 head('surviving a closed page');

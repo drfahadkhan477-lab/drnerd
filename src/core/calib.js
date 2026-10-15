@@ -45,6 +45,10 @@ const REASONS = [
 ];
 
 const answered = log => (log || []).filter(r => r && (r.m === 'practice' || r.m === 'review-answer'));
+/* A miss in a mock block is a miss to understand like any other, and the review that follows it offers the reasons, so
+   its reason counts in the error mix. Its confidence was never asked and its time is not a practice answer's (a block's
+   question can be left and come back to), so calibration and speed still leave exam answers out. */
+const missed = log => (log || []).filter(r => r && (r.m === 'practice' || r.m === 'review-answer' || r.m === 'exam') && !r.ok);
 
 function median(xs) {
   if (!xs.length) return null;
@@ -98,7 +102,7 @@ function speed(log) {
 }
 
 function reasons(log) {
-  const rows = answered(log).filter(r => !r.ok);
+  const rows = missed(log);
   const tagged = rows.filter(r => r.why);
   const counts = REASONS.map(x => ({
     ...x,

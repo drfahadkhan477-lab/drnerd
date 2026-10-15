@@ -272,7 +272,7 @@ jobs:
         run: node tests/verify-lab-pure.js
       - name: the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data (39 checks)
         run: node tests/verify-plan-pure.js
-      - name: a timed block is the size asked, counts only the time the app is on screen, scores a blank as wrong once, and is read back from storage whole or not at all (151 checks)
+      - name: a timed block is the size asked, counts only the time the app is on screen, scores a blank as wrong once, and is read back from storage whole or not at all (153 checks)
         run: node tests/verify-mockexam-pure.js
       - name: questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair (27 checks)
         run: node tests/verify-topicrun-pure.js
@@ -616,7 +616,7 @@ jobs:
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (131 checks)
+        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (170 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
@@ -872,7 +872,7 @@ jobs:
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (131 checks)
+        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (170 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)

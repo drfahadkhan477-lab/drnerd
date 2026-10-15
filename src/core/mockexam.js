@@ -216,7 +216,7 @@ function grade(rec, lookup) {
   let correct = 0, wrong = 0, skipped = 0, flagged = 0, flaggedWrong = 0;
   ids.forEach((id, k) => {
     const info = obj(look(id));
-    const ch = typeof info.ch === 'string' && info.ch ? info.ch : 'Other';
+    const ch = typeof info.ch === 'string' && info.ch ? info.ch.slice(0, MAX_NAME) : 'Other';   // a name the history would refuse would drop the whole block from it
     const ci = isInt(info.ci) ? info.ci : null;
     const picked = isInt(sel[k]) ? sel[k] : null;
     const fl = !!flag[k];

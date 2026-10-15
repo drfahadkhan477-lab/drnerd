@@ -406,3 +406,22 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   there made its code throw. This is the rule of "Negative checks that passed
   over an empty record" again, in a screen instead of a record. → Rule: pair
   every "X is absent" with something that must be on the same screen.
+- **A state set up by hand, so the check passes by hand.** The mock exam suite
+  made Apex "open" by adding the class `ai-open`. The app's own buttons also
+  hide the round button with an inline style, and a block took the class away
+  and never gave it back, so after any block begun with Apex open there was no
+  way to open it until a reload. The check "gives the search and the tutor
+  back" read the button's display, which the test had never hidden, and
+  passed. → Rule: set a state up with the function the user's tap calls
+  (`toggleAI()`), not the class it leaves behind, and compare the state before
+  and after.
+- **Injection tests the checks; it does not find the bugs nobody tested.** The
+  mock exam's shell code had about a hundred defects injected, and every one
+  was caught once the checks were tightened. A reader who had not seen the
+  checks, given only the diff, then found a dozen real problems in code no
+  check reached: a quiz verdict left in the screen-reader live region, an
+  enlarged figure carried to the next question, a held key picking and
+  un-picking, focus dropped by every redraw, a last-question row 7 px wider
+  than a phone. → Rule: before the injection round, give the diff to someone
+  who has not seen the tests and ask what it does wrong; inject defects to
+  prove the checks, not to find the faults.

@@ -148,7 +148,7 @@ body.voice-on #app{padding-bottom:104px}
 /* ══ Mock exam: the Study card, the block, the hand-in page ══ */
 .mock-card{cursor:default}
 .mock-card>*{position:relative;z-index:1}
-.mock-card>.fc-glow{z-index:0}
+.mock-card>.fc-glow{position:absolute;z-index:0}     /* the rule above makes every child relative; the glow is the one that must not be in the flow */
 .mock-card.live>.fc-glow{opacity:1;animation:glowSlide 5.5s ease-in-out infinite}
 .mock-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px;margin-top:12px}
 .mock-pick{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:52px;min-width:0;padding:6px 8px;
@@ -194,6 +194,11 @@ body.voice-on #app{padding-bottom:104px}
 .opt.mock-opt.picked::before{background:var(--teal);transform:scaleY(1)}
 .mock-actions .mock-flag{flex:0 0 auto;min-width:112px;padding:15px 16px;background:var(--card);border:1.5px solid var(--border);color:var(--muted)}
 .mock-actions .mock-flag.on{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+/* The last question's row is Previous, Flag and "Review and hand in": 355 px, and a phone's row is 336. The word goes (it stays for a screen reader). */
+@media(max-width:380px){
+  .mock-actions .mock-flag{min-width:52px;padding-left:0;padding-right:0;justify-content:center}
+  .mock-flag-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+}
 .mock-actions .btn:disabled{opacity:.45;cursor:default}
 .mock-navcard{margin-top:var(--s2);padding:var(--s4);border-radius:var(--r);background:var(--card);border:1px solid var(--border)}
 .mock-navh{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:var(--s3);
@@ -215,7 +220,7 @@ body.voice-on #app{padding-bottom:104px}
 .mock-paused,.mock-gone{text-align:center}
 .mock-end h2,.mock-paused h2{margin:0 0 var(--s2);font-size:var(--t-h4);font-weight:800;letter-spacing:-.02em}
 .mock-paused p,.mock-gone p{color:var(--muted);font-size:var(--t-meta);line-height:1.5;margin:0 auto var(--s3);max-width:34ch}
-.mock-pause-ic{display:inline-grid;place-items:center;width:56px;height:56px;margin-bottom:var(--s3);border-radius:50%;color:var(--teal);background:color-mix(in srgb,var(--teal) 12%,transparent)}
+.mock-pause-ic{display:inline-grid;place-items:center;width:56px;height:56px;margin-bottom:var(--s3);border-radius:50%;color:var(--teal);background:var(--teal4);background:color-mix(in srgb,var(--teal) 12%,transparent)}
 .mock-pause-ic .icon{width:26px;height:26px}
 .mock-end-sub{font-size:var(--t-meta);font-weight:700;color:var(--muted);margin-bottom:var(--s4)}
 .mock-end-sec{margin-bottom:var(--s4);font-size:var(--t-meta);line-height:1.5}
