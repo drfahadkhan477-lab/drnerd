@@ -425,3 +425,60 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   than a phone. → Rule: before the injection round, give the diff to someone
   who has not seen the tests and ask what it does wrong; inject defects to
   prove the checks, not to find the faults.
+
+## Flags and annotations (the second upgrade)
+
+- **A fixture in a shape the app never writes fails when the shuffle says so.**
+  The suite put a stroke on a question as `[[{x, y}]]`; the app writes
+  `{t, c, p: [[x, y, pressure]], sz}`, and the question's canvas throws on the
+  first. It passed whenever the shuffle did not draw that question and failed
+  the layout sweep's "no page errors" when it did. → Rule: make marks with the
+  tool that makes them (the pencil and a pointer), or copy the shape from the
+  code that writes it, and assert the precondition (one stroke, two points).
+- **A colour read mid-ease, or under the pointer, is not the state's colour.**
+  `.btn` eases all properties for 180 ms and `.btn-flag:hover` colours the
+  border: the "on" reading was half-way between two states and the "off" one
+  was the hover state, so "looks different" failed for the right reason twice.
+  → Rule: wait for the finite animations, move the pointer away, then read.
+- **`hidden` loses to a class that sets `display`.** The badge beside a stem is
+  shown and hidden with the attribute, and `.src-badge{display:inline-flex}`
+  beat the browser's own `[hidden]{display:none}`. A check that read the
+  attribute would have stayed green with the fix removed. → Rule: put
+  `.x[hidden]{display:none}` beside the rule that sets display, and measure the
+  box (`offsetWidth`) in the check, not the attribute.
+- **A new `confirm()` is a decision, and the house answer is two taps.**
+  verify-ui-pure pins the five dialogs by their text and fails on a sixth.
+  Clearing every flag arms the button for five seconds and clears on the second
+  tap, as the mock's Discard does; "nothing is flagged" is a toast.
+- **A check that hedges is two checks that cannot fail.** `same(x, a) || same(x, b)`
+  was written to avoid working out which; it passes for either, and for a
+  defect that produces the other. → Rule: work the expected value out from the
+  fixture; if two answers are possible, the fixture is under-specified.
+- **On the synthetic bank a search returns no question for most words.** A
+  reference note is scored at 2.1 times plus a coverage bonus and the search
+  drops everything under 32% of the best score, so "pericarditis" returns notes
+  and no question. A test that needs question hits uses a word no note holds
+  (`arr`) and asserts that it got hits before it asserts what the hits show.
+- **A suite ends with `})();` and nothing after it.** verify-engine reads the
+  tail of every browser suite: a `.catch` of its own eats the rejection that
+  `onDeath` is waiting to turn into a note.
+- **Hit-testing is not the DOM, and `quiet()` only watches the DOM.** A change
+  of screen starts a view transition (Chromium; WebKit runs with them off), and
+  while it runs the page is not hit-tested: a pointer lands on `<html>` and the
+  canvas under it never hears of it. The Annotations section reached its first
+  pencil stroke 0.6 s after the screen change, inside the animation on CI's
+  Chromium and after it on a slower machine, so the stroke was missing
+  (`{n:0, pts:0}`) there and only there. → Rule: before a gesture, wait until
+  `elementFromPoint(x, y)` is the element it is meant for, and make that a check
+  of its own, so a canvas that is never there is named and not mistaken for a
+  pencil that drew nothing.
+- **A lookup of what the test may not find returns nothing, not a throw.**
+  `at(C).none` threw when the list lacked C and ended the suite with a stack
+  where the FAIL lines would have said why. → Rule: the helper returns an empty
+  object, and the check that wants the row fails by name.
+- **A change to what is stored runs every suite that reads the store.** The fix
+  that kept flags in a restored record added a field to a record verify-backup
+  compares byte for byte, and was pushed without running it; both CI engines
+  failed it. → Rule: grep for the function (`importMarkup`,
+  `validateAnnotationBackup`, `progressFromBackup`: verify-backup, verify-flags,
+  verify-fsrs, verify-mockscreen) and run those suites before the push.

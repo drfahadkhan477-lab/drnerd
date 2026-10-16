@@ -999,7 +999,9 @@ function importMarkup(){
         if(d.stats){
           Object.assign(S,progress);
           FOREIGN={}; for(const k of Object.keys(d.stats)) if(!SCHEMA_KEYS.includes(k)) FOREIGN[k]=d.stats[k];
-          saveJSON('accsap12.v2',d.stats);
+          /* The record kept is the backup's, as it is. A backup with no flagged list says nothing of the flags made since, and a
+             reload must not lose them, so they go into it; with none made there is nothing to add. */
+          saveJSON('accsap12.v2',d.stats.flagged!=null||!S.flagged.size?d.stats:Object.assign({},d.stats,{flagged:[...S.flagged]}));
           applyTheme();
         }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
@@ -1604,6 +1606,7 @@ function refImportText(){
 @@SLOT[src:src/core/topicrun.js]@@
 @@SLOT[src:src/core/voicemode.js]@@
 @@SLOT[src:src/core/mockexam.js]@@
+@@SLOT[src:src/core/flagset.js]@@
 
 /* ═══════════ SM-2 spaced repetition + active recall ═══════════
    Per-question card: {difficulty, stability, ivl, reps, due, lapses, last}.
@@ -2777,6 +2780,7 @@ function buildSearch(){
       <div class="hit-top">
         <span class="hit-ch" style="background:${col}1F;color:${col}">${e(q.ch)} · ${q.n}</span>
         ${missed?'<span class="hit-flag">previously missed</span>':''}
+        ${S.flagged.has(q.id)?'<span class="hit-flag flagged">flagged</span>':''}
         ${q.img?`<span class="hit-fig">${icon('image','icon-sm')} ${q.img}</span>`:''}
       </div>
       <div class="hit-stem">${hl(snippet(q,SQ.q),SQ.q)}</div>
@@ -4276,7 +4280,7 @@ const KEY='accsap12.v2';
 const DATA_SCHEMA_VERSION=1;
 const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'sessionCorrect','sessionTotal','srs','reviewStreak','lastReviewDay','daily',
-  'practice','sinceBackup','lastBackup','resume','focusMode','examDate','exams'];
+  'practice','sinceBackup','lastBackup','resume','focusMode','examDate','exams','flagged'];
 let FOREIGN={};
 
 /* A calendar day as the app writes one (FSRS.localDateToISO): a daily key,
@@ -4319,6 +4323,7 @@ function usableStats(raw){
   for(const k in STAT_ENTRY) if(statRecord(out[k]))
     out[k]=Object.fromEntries(Object.entries(out[k]).filter(([key,v])=>statEntryOk(k,v,key)));
   if('exams' in out) out.exams=Array.isArray(out.exams)?out.exams.filter(MockExam.validEntry):[];
+  if('flagged' in out) out.flagged=FlagSet.clean(out.flagged);
   return out;
 }
 
@@ -4331,12 +4336,15 @@ function progressFromBackup(raw){
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
   if(raw.missed!=null&&(!Array.isArray(raw.missed)||raw.missed.some(x=>typeof x!=='string'))) throw new Error('Invalid missed list.');
   if(raw.exams!=null&&(!Array.isArray(raw.exams)||raw.exams.some(x=>!MockExam.validEntry(x)))) throw new Error('Invalid exam history.');
+  if(!FlagSet.valid(raw.flagged)) throw new Error('Invalid flagged list.');
   return {resume:raw.resume||{},resumed:false,sessionCorrect:raw.sessionCorrect||0,sessionTotal:raw.sessionTotal||0,
     chStats:raw.chStats||{},missed:new Set(raw.missed||[]),srs:raw.srs||{},reviewStreak:raw.reviewStreak||0,
     lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
     sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
     focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null,
-    mocks:MockExam.cleanHistory(raw.exams)};
+    mocks:MockExam.cleanHistory(raw.exams),
+    /* Absent says nothing: a backup made before flags must not empty the flags made since. A list, even an empty one, replaces them. */
+    ...(raw.flagged!=null?{flagged:new Set(FlagSet.clean(raw.flagged))}:{})};
 }
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
@@ -4345,7 +4353,7 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOR
   sessionCorrect:S.sessionCorrect,sessionTotal:S.sessionTotal,
   srs:S.srs,reviewStreak:S.reviewStreak,lastReviewDay:S.lastReviewDay,daily:S.daily,
   practice:S.practice,sinceBackup:S.sinceBackup,lastBackup:S.lastBackup,
-  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null,exams:S.mocks})));}
+  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null,exams:S.mocks,flagged:[...S.flagged]})));}
   /* This holds the statistics and all 639 FSRS cards. It had a bare catch, so
      the one store whose loss you would most want to hear about was the only
      one that died without a word. */
@@ -4377,7 +4385,10 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
   focusMode:!!boot.focusMode,
   examDate:/^\d{4}-\d{2}-\d{2}$/.test(boot.examDate||'')?boot.examDate:null,
   /* What is kept of each finished mock block, newest last (src/core/mockexam.js). */
-  mocks:MockExam.cleanHistory(boot.exams)};
+  mocks:MockExam.cleanHistory(boot.exams),
+  /* Question ids flagged to come back to, oldest flag first (src/core/flagset.js). Reset leaves them: they are
+     the fellow's own marks, as the ink and the sticky notes are, not a score. */
+  flagged:new Set(FlagSet.clean(boot.flagged))};
 
 /* ── theme ──
    A theme is a mode (which drives every existing component style) paired with
@@ -4735,8 +4746,10 @@ function recentPerDay(){
 function startQuiz(ch,mode='all',deck){
   let qs;
   if(mode==='missed') qs=[...S.missed].map(id=>QBYID[id]).filter(q=>q&&!q.bad);
+  else if(mode==='flagged') qs=flaggedQs();
   else if(mode==='due') qs=deck||reviewQueue(20);
   else qs=(ch?POOL.filter(q=>q.ch===ch):[...POOL]);
+  if(!qs.length&&mode==='flagged'){toast('Nothing is flagged. Tap Flag on a question, or press F, to keep it here.');return;}
   if(!qs.length){alert(mode==='due'?'Nothing left to review right now — the whole bank is scheduled.':'No questions available for that selection.');return;}
   /* A deck handed in (the study plan) is asked in the order it was planned in, not shuffled below. (Only
      'all' decks are ever saved for resuming: resumeKey is null for review, so a plan has nothing to resume.) */
@@ -4857,6 +4870,111 @@ function prevQ(){
   toTop();
   S.qIdx--;restoreQuizState();render();clearAnnounce();focusEl('.q-card');markShown();saveResume();
 }
+/* ── Flag: mark the question on screen to come back to (src/core/flagset.js). Painted in place, not by render():
+   a redraw replays the card's entrance, closes a sticky note being typed into and drops the keyboard's place.
+   The count is what the bank still has, which is also what the Flagged card and deck count. ── */
+const flaggedQs=()=>FlagSet.deck(S.flagged,QBYID);
+function toggleFlag(){
+  const q=S.screen==='quiz'?S.questions[S.qIdx]:null; if(!q) return;
+  const on=FlagSet.toggle(S.flagged,q.id);
+  save();
+  paintFlag(on);
+  const live=document.getElementById('srLive');
+  if(live){ live.textContent=''; live.textContent=FlagSet.said(on,flaggedQs().length); }
+}
+function paintFlag(on){
+  const b=document.getElementById('qFlag');
+  if(b){ b.classList.toggle('on',on); b.setAttribute('aria-pressed',on?'true':'false'); }
+  const g=document.getElementById('qFlagBadge');
+  if(g) g.hidden=!on;
+}
+/* Every flag at once, on the Study card. Two taps, not a dialog (as discarding a block is): the first arms the button
+   for five seconds, the second (not within a moment of the first) clears. Notes, marks and answers are not touched. */
+let _flagArm=false, _flagArmAt=0;
+const FLAG_DWELL_MS=400;      // a second tap sooner than this is the first one's echo, not a decision
+function clearFlags(){
+  if(!flaggedQs().length) return;
+  if(!_flagArm){
+    _flagArm=true; _flagArmAt=Date.now();
+    setTimeout(()=>{
+      if(!_flagArm) return;
+      _flagArm=false;
+      if(S.screen==='study'){ const had=!!document.activeElement&&document.activeElement.id==='flagClear'; render(); if(had) focusEl('#flagClear'); }
+    },5000);
+    if(S.screen==='study'){ render(); focusEl('#flagClear'); }
+    return;
+  }
+  if(Date.now()-_flagArmAt<FLAG_DWELL_MS) return;
+  /* The flags the Flagged card counts, and no others: one on a question the bank has lost or quarantined is kept, as flagset.js says. */
+  _flagArm=false; for(const q of flaggedQs()) S.flagged.delete(q.id); save(); render();
+  const live=document.getElementById('srLive'); if(live){ live.textContent=''; live.textContent='All flags cleared.'; }
+}
+/* ── Your annotations: every question with a sticky note or a pencil mark, found by what the note says.
+   The rows are made once, as the screen is drawn (nothing on it can change a note); typing filters them and
+   repaints the list only, so the keyboard stays in the box. ── */
+const ANNO={q:'',rows:[]};
+function annoCountText(all,shown){
+  return !all?'Nothing is written on any question yet.'
+    :ANNO.q.trim()&&FlagSet.words(ANNO.q).length?shown+' of '+all+' match':all+' question'+(all===1?'':'s')+' with a sticky note or pencil marks';
+}
+function annoRowHtml(r){
+  const q=r.q, col=CH_COLORS[q.ch]||'var(--teal)', w=ANNO.q;
+  return `<button class="hit anno-row" type="button" data-anno="${e(r.id)}" style="border-left-color:${col}">
+    <div class="hit-top"><span class="hit-ch" style="background:${col}1F;color:${col}">${e(q.ch)} · ${q.n}</span>
+      ${S.flagged.has(r.id)?'<span class="hit-flag flagged">flagged</span>':''}
+      ${S.missed.has(r.id)?'<span class="hit-flag">previously missed</span>':''}
+      ${r.notes?`<span class="hit-fig">${icon('sticky-note','icon-sm')} ${r.notes>1?r.notes+' notes':'note'}</span>`:''}
+      ${r.ink?`<span class="hit-fig">${icon('pencil','icon-sm')} pencil</span>`:''}</div>
+    ${r.text?`<div class="anno-text">${FlagSet.highlight(clip(r.text,320),w,e)}</div>`:`<div class="anno-text none">${r.notes?'An empty sticky note':'Pencil marks, no words'}</div>`}
+    <div class="anno-stem">${FlagSet.highlight(clip(q.s,150),w,e)}</div>
+  </button>`;
+}
+function annoListHtml(rows){
+  if(rows.length) return rows.map(annoRowHtml).join('');
+  return ANNO.rows.length
+    ?`<div class="sb-none">Nothing matched <b>${e(ANNO.q)}</b>.<br><span>Try fewer or shorter words. It looks in the note, the chapter and the question.</span></div>`
+    :`<div class="sb-none">Nothing is written on any question yet.<br><span>Open a question, choose the pencil, then the sticky note: what you write is kept here.</span></div>`;
+}
+const annoShown=()=>FlagSet.find(ANNO.rows,ANNO.q);
+const annoPractiseHtml=n=>`Practise these ${n} ${icon('arrow-right','icon-sm')}`;
+function buildAnnotations(){
+  ANNO.rows=FlagSet.annotated(NOTES,INK,QBYID);
+  const rows=annoShown();
+  return `<div class="home-wrap anim-fade anno-wrap">
+    <div class="search-bar">
+      <div class="sb-row">
+        <span class="sb-icon">${icon('pencil')}</span>
+        <input id="annoQ" type="search" placeholder="Find a note by what it says…" aria-label="Search your annotations"
+          value="${e(ANNO.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="annoInput(this.value)">
+      </div>
+      <div class="sb-row2">
+        <button class="btn btn-next sb-quiz" id="annoPractise" type="button" onclick="practiceAnnotated()"${rows.length?'':' disabled'}>${annoPractiseHtml(rows.length)}</button>
+        <button class="btn sb-back" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Chapters</button>
+      </div>
+    </div>
+    <div class="section-label" id="annoCount" role="status">${e(annoCountText(ANNO.rows.length,rows.length))}</div>
+    <div class="hits" id="annoList">${annoListHtml(rows)}</div>
+  </div>`;
+}
+function annoInput(v){
+  ANNO.q=String(v==null?'':v);
+  const list=document.getElementById('annoList'); if(!list) return;
+  const rows=annoShown();
+  list.innerHTML=annoListHtml(rows);
+  const c=document.getElementById('annoCount'); if(c) c.textContent=annoCountText(ANNO.rows.length,rows.length);
+  const p=document.getElementById('annoPractise'); if(p){ p.disabled=!rows.length; p.innerHTML=annoPractiseHtml(rows.length); }
+}
+function goAnnotations(){ ANNO.q=''; S.screen='annotations'; render(); toTop(); }
+function practiceAnnotated(){
+  const rows=annoShown(); if(!rows.length) return;
+  startAdhocQuiz(shuf(rows.map(r=>r.q)),null);
+  toast('Quiz built from your annotations — '+rows.length+' question'+(rows.length===1?'':'s')+'.');
+}
+/* Delegated once, from the document, so a repaint of the list cannot leave a dead listener behind. */
+document.addEventListener('click',ev=>{
+  const b=ev.target&&ev.target.closest?ev.target.closest('[data-anno]'):null;
+  if(b) jumpTo(b.getAttribute('data-anno'));
+});
 /* In a stacked split the document does not scroll — #app does. Every "go to
    the top of this screen" has to ask the right one, or it quietly does nothing
    and you arrive halfway down. Both are scrolled because only one of them is
@@ -5126,6 +5244,8 @@ function mockSubmit(ranOut){
     if(it.state==='skipped') continue;
     recordAnswer(QBYID[it.id],it.state==='correct','exam',{ms:it.ms>0?it.ms:null,cf:null});
   }
+  /* A flag set in a block is a flag from here on: added to the Flagged list, never taken off it. */
+  FlagSet.addAll(S.flagged,res.items.filter(it=>it.flagged).map(it=>it.id));
   S.mocks=MockExam.pushHistory(S.mocks,MockExam.summary(res,r,now));
   save();
   S.mockLast=r; S.mock=null; S.mockView='q';
@@ -5241,7 +5361,9 @@ function buildMockReport(){
   const timeLine=g.expired?'Time ran out at '+lim:lim?used+' of '+lim:used+', no time limit';
   const per=g.avgMs!=null?' · about '+Math.round(g.avgMs/1000)+' s a question':'';
   const slow=g.slowest.length?`<div class="mock-slow"><b>Slowest</b> ${g.slowest.map(s=>'Q'+(s.i+1)+' ('+e(CH_SHORT[s.ch]||s.ch)+', '+MockExam.fmtClock(s.ms)+')').join(' · ')}</div>`:'';
-  const flagLine=g.flagged?`<div class="mock-slow"><b>${g.flagged} flagged</b> — ${g.flaggedWrong} of them not right</div>`:'';
+  /* Said of the list as it is now, not of the moment of hand-in: the report is opened again after flags have been taken off. */
+  const kept=g.items.filter(it=>it.flagged&&S.flagged.has(it.id)).length;
+  const flagLine=g.flagged?`<div class="mock-slow"><b>${g.flagged} flagged</b> — ${g.flaggedWrong} of them not right. In your Flagged list: ${kept} of ${g.flagged}.</div>`:'';
   const missed=MockExam.reviewIds(g,'missed').length;
   return `<div class="results-wrap mock-report anim-fade">
     <div class="score-hero">
@@ -5486,6 +5608,7 @@ function buildScreen(){
     :S.screen==='echo'?buildEchoScreen()
     :S.screen==='memory'?buildMemory():S.screen==='study'?buildStudy()
     :S.screen==='search'?buildSearch()
+    :S.screen==='annotations'?buildAnnotations()
     :S.screen==='mock'?buildMock():S.screen==='mockreport'?buildMockReport()
     :S.screen==='stats'?buildStats():S.screen==='lab'?buildLab():'';
 }
@@ -6324,6 +6447,22 @@ function buildStudy(){
     <div class="fc-cta">Drill them ${icon('arrow-right','icon-sm')}</div>
   </button>`:'';
 
+  /* The fellow's own marks: the questions flagged to come back to, and the ones written on (src/core/flagset.js). */
+  const flagN=flaggedQs().length, annoN=FlagSet.annotated(NOTES,INK,QBYID).length;
+  const flagCard=flagN>0?`<div class="feed-card flag-card" id="flagCard" role="group" aria-label="Flagged questions">
+    <div class="fc-top"><span class="fc-badge amber">${icon('flag')} FLAGGED</span></div>
+    <div class="fc-title" id="flagCount">${e(FlagSet.phrase(flagN))}</div>
+    <div class="fc-sub">The ones you marked to come back to. A flag stays until you take it off.</div>
+    <button class="flag-go" id="flagGo" type="button" onclick="startQuiz(null,'flagged')">${icon('play')}<span>Go through them</span></button>
+    <button class="flag-quiet${_flagArm?' arm':''}" id="flagClear" type="button" onclick="clearFlags()">${_flagArm?'Tap again to clear all '+flagN:'Clear all flags'}</button>
+  </div>`:'';
+  const annoCard=annoN>0?`<button class="feed-card anno-card" id="annoCard" type="button" onclick="goAnnotations()">
+    <div class="fc-top"><span class="fc-badge amber">${icon('pencil')} ANNOTATED</span></div>
+    <div class="fc-title">${annoN} question${annoN===1?'':'s'} you wrote on</div>
+    <div class="fc-sub">Your sticky notes and pencil marks. Find one by what you wrote.</div>
+    <div class="fc-cta">Open them ${icon('arrow-right','icon-sm')}</div>
+  </button>`:'';
+
   const chCards=CHAPTERS.map(ch=>{
     const cnt=POOL.filter(q=>q.ch===ch).length;
     const fig=POOL.filter(q=>q.ch===ch&&q.img).length;
@@ -6361,6 +6500,8 @@ function buildStudy(){
       ${runCard}
       ${voiceCard}
       ${missCard}
+      ${flagCard}
+      ${annoCard}
       <button class="feed-card all-card" onclick="startQuiz(null)">
         <div class="fc-top"><span class="fc-badge">FULL BANK</span></div>
         <div class="fc-title">Shuffle all ${TOTAL_Q}</div>
@@ -6433,10 +6574,16 @@ function buildQuiz(){
   const isMobile=window.innerWidth<768;
   const letters=q.o.map(o=>`<kbd>${o.l}</kbd>`).join('');
   const kbHint=!answered
-    ?`<div class="kb-hint kbd-row">${isMobile?'Tap to answer':`Press ${letters} to answer · <kbd>←</kbd> <kbd>→</kbd> to move`}</div>`
-    :`<div class="kb-hint">${isMobile?'Tap Next to continue':'Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next'}</div>`;
+    ?`<div class="kb-hint kbd-row">${isMobile?'Tap to answer':`Press ${letters} to answer · <kbd>←</kbd> <kbd>→</kbd> to move · <kbd>F</kbd> to flag`}</div>`
+    :`<div class="kb-hint">${isMobile?'Tap Next to continue':'Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next · <kbd>F</kbd> to flag'}</div>`;
 
+  /* The flag is a toggle: its name stays "Flag" and aria-pressed says whether it is on, as the mock block's does. */
+  const flagOn=S.flagged.has(q.id);
+  const flagBtn=`<button class="btn btn-flag${flagOn?' on':''}" id="qFlag" type="button" onclick="toggleFlag()" aria-pressed="${flagOn}"
+    title="Flag this question to come back to it (F)">${icon('flag','icon-sm')}<span class="btn-flag-l">Flag</span></button>`;
   const reviewing = answered && S.mode==='due' && !alreadyRated;
+  /* A review session's action row is empty until the card is rated, and rating moves on: the Flag button is in the prompt,
+     where "right, but I do not trust it" is felt. */
   const rateRow = reviewing ? `<div class="rate-prompt anim-pop">
       <div class="rate-q">How well did you know this — before you saw the options?</div>
       <div class="rate-row">${RATINGS.map(([key,label,grade,col])=>
@@ -6444,12 +6591,13 @@ function buildQuiz(){
            <span class="rate-label">${label}</span>
            <span class="rate-sched">${fmtInterval(fsrsPreview(S.srs[q.id],grade).ivl)}</span>
          </button>`).join('')}</div>
+      <div class="rate-flag">${flagBtn}</div>
     </div>` : '';
   const prevBtn=canGoBack?`<button class="btn btn-prev" onclick="prevQ()" type="button" aria-label="Previous question">${icon('arrow-left','icon-sm')}</button>`:'';
   const actions = reviewing ? '' : answered
-    ?`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}
+    ?`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
       <button class="btn btn-next anim-pop" onclick="nextQ()" type="button">${qIdx<questions.length-1?'Next Question':'View Results'} ${icon('arrow-right','icon-sm')}</button>`
-    :`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}
+    :`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
       <button class="btn btn-skip" onclick="nextQ()" type="button">Skip ${icon('arrow-right','icon-sm')}</button>`;
 
   return `<div class="quiz-wrap">
@@ -6466,6 +6614,7 @@ function buildQuiz(){
     ${figHtml}
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}
+        <span class="src-badge flag-badge" id="qFlagBadge"${flagOn?'':' hidden'}>${icon('flag','icon-sm')} flagged</span>
         ${typeof hasMarkup==='function'&&hasMarkup(q.id)?`<span class="src-badge" style="color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)">${icon('pencil','icon-sm')} annotated</span>`:''}</div>
       ${e(q.s)}
       ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
@@ -6505,8 +6654,8 @@ function buildResults(){
         <div class="chp-count">${s.correct}/${s.total}</div></div></div>`;
   }).filter(Boolean).join('');
 
-  const restartLabel=(S.mode==='due'?'Continue Reviewing':S.chapter?'Restart Chapter':'Restart Quiz');
-  const restartMode=S.mode==='due'?'due':S.mode==='missed'?'missed':'all';
+  const restartLabel=(S.mode==='due'?'Continue Reviewing':S.mode==='flagged'?'Flagged Again':S.chapter?'Restart Chapter':'Restart Quiz');
+  const restartMode=S.mode==='due'?'due':S.mode==='missed'?'missed':S.mode==='flagged'?'flagged':'all';
   return `<div class="results-wrap anim-fade">
     <div class="score-hero">
       <div class="score-circle">${svgCircle}
@@ -6549,8 +6698,12 @@ document.addEventListener('keydown',ev=>{
   if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||ev.target.isContentEditable)return;
   if(S.screen==='mock'){ mockKey(ev); return; }
   if(S.screen!=='quiz')return;
+  if(!ev.ctrlKey&&!ev.metaKey&&!ev.altKey&&ev.key&&ev.key.toLowerCase()==='f'){ ev.preventDefault(); if(!ev.repeat) toggleFlag(); return; }   // a held key flags once
   if(S.answered){
-    if(ev.key===' '||ev.key==='Enter'||ev.key==='ArrowRight'){ev.preventDefault();nextQ();}
+    /* On a focused button, Enter and Space are that button's own (they used to move on whatever had the keyboard: Enter on Flag,
+       on Home or on Previous went to the next question). On the heading the answer moved the keyboard to, they still move on. */
+    const onControl=!!(ev.target&&ev.target.closest&&ev.target.closest('button,a[href],input,select,textarea,summary,[role="button"]'));
+    if(((ev.key===' '||ev.key==='Enter')&&!onControl)||ev.key==='ArrowRight'){ev.preventDefault();nextQ();}
     if(ev.key==='ArrowLeft'){ev.preventDefault();prevQ();}
     return;
   }

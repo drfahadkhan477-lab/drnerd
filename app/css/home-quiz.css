@@ -239,7 +239,7 @@ html [data-home="focus"] .story-rail{display:none}
 .dist-row:not(.correct-row):not(.wrong-row) .dist-bar{background:var(--border3)}
 
 /* Actions */
-.actions{display:flex;gap:10px;padding-bottom:28px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;padding-bottom:28px}
 .btn{flex:1;padding:15px;border:none;border-radius:var(--r2);font-size:13px;font-weight:700;
   cursor:pointer;transition:all .18s var(--ease);letter-spacing:-.01em;font-family:var(--font-sans);
   display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
@@ -256,6 +256,20 @@ html [data-home="focus"] .story-rail{display:none}
 .btn-skip{background:transparent;border:1.5px solid var(--border);color:var(--muted);
   font-size:13px;flex:0;min-width:70px;padding:15px 10px}
 .btn-skip:hover{border-color:var(--amber);color:var(--amber)}
+/* Flag: a toggle beside Previous. Amber and a filled pennant say it is on (not colour alone). On a phone the word goes
+   (it stays for a screen reader): Home, Previous, Flag and Next are 333 px of a 336 px row, and a row that is
+   still too narrow wraps Next onto a line of its own rather than running off the screen. */
+.btn-flag{background:var(--card);border:1.5px solid var(--border);color:var(--muted);font-size:13px;flex:0 0 auto;min-width:52px}
+.btn-flag:hover{border-color:var(--amber);color:var(--amber)}
+.btn-flag.on{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+.btn-flag.on .icon{fill:currentColor}
+@media(max-width:480px){
+  .btn-flag{padding-left:0;padding-right:0}
+  .btn-flag-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+}
+.rate-flag{display:flex;justify-content:center;margin-top:12px}
+.src-badge.flag-badge{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)}
+.src-badge.flag-badge[hidden]{display:none}
 
 /* ═══ RESULTS ═══ */
 .results-wrap{padding:16px 0 40px}

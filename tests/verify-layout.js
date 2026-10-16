@@ -58,7 +58,7 @@ const FRAMES = [
   ['iPhone portrait', 390, 844],
   ['desktop', 1440, 900],
 ];
-const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'echo', 'mock', 'mockreport'];
+const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'quizflag', 'annotations', 'echo', 'mock', 'mockreport'];
 
 /* Enough of a reply to overflow any panel, so "does it scroll" is a real
    question rather than one the fixture answers for us. */
@@ -123,6 +123,16 @@ const sse = text => [
       home: () => goHome(), stats: () => goStats(), lab: () => goLab(), refs: () => goRefs(),
       memory: () => goMemory(), study: () => goStudy(), search: () => openSearch(),
       quiz: () => startQuiz(CHAPTERS[0], 'all'),
+      /* The quiz with its question flagged (the badge beside the stem, the button pressed), and the list of what has been
+         written on: a note long enough to wrap, one with only pencil, and a flagged and a missed question among them. */
+      quizflag: () => { startQuiz(CHAPTERS[0], 'all'); S.flagged.add(S.questions[0].id); render(); },
+      annotations: () => {
+        NOTES = {}; INK = {};
+        NOTES[POOL[0].id] = [{ id: 'n1', x: .1, y: .1, text: 'A long note about the first question that goes on for more than one line so that a row has to wrap it, with a long-unbroken-token-' + 'x'.repeat(60), color: '' }];
+        INK[POOL[1].id + ':q'] = [{ t: 'pen', c: '#EF4444', p: [[.1, .1, .5], [.4, .4, .5]], sz: 'M' }];
+        S.flagged = new Set([POOL[0].id]); S.missed = new Set([POOL[1].id]);
+        goAnnotations();
+      },
       /* Echo Studio. Its two tabs share one screen and the calculator is the
          wider of them, but the sweep opens what goEcho() opens, which is the
          reference tab — so this covers the tab the fellow lands on, not both.
