@@ -11,8 +11,9 @@ personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5–derived
 spaced repetition, a timed mock exam that gives no feedback until you hand it in,
-and Apex — an AI tutor that can be grounded in your own reference notes, reads
-the figures they cite, and remembers you between sessions.
+a flag for questions to come back to and a list of every question you have
+written on, and Apex — an AI tutor that can be grounded in your own reference
+notes, reads the figures they cite, and remembers you between sessions.
 
 The home screen says one thing: a live ECG, one pearl drawn from your own
 reference notes — broken at its own joints into a numbered ladder, over ECG

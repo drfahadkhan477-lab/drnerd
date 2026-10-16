@@ -108,6 +108,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     return S.screen === 'quiz' && !!t && t.textContent.indexOf('Question ' + q.n + ' · ' + q.ch) >= 0 && !!document.getElementById('qFlag');
   }, id, { timeout: 6000 }).then(() => true, () => false);
   const settle = () => quiet(page);
+  /* A colour is read when it has stopped changing: the buttons ease between states, and a value read mid-way is neither. */
+  const stilled = () => page.waitForFunction(() => document.getAnimations().every(a => !(a.effect && Number.isFinite(a.effect.getTiming().iterations)) || a.playState !== 'running'), null, { timeout: 8000 }).catch(() => {});
   const deal = async ids => {
     await page.evaluate(ids => startAdhocQuiz(ids.map(id => QBYID[id]), null), ids);
     const up = await showing(ids[0]); await settle(); return up;
@@ -116,7 +118,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     const q = S.questions[S.qIdx], b = document.getElementById('qFlag'), g = document.getElementById('qFlagBadge');
     const saved = (JSON.parse(localStorage.getItem('accsap12.v2') || '{}').flagged || []);
     return {
-      id: q.id, pressed: b.getAttribute('aria-pressed'), on: b.classList.contains('on'), badge: !g.hidden && g.offsetWidth > 0, badgeText: g.textContent.trim(),
+      id: q.id, pressed: b.getAttribute('aria-pressed'), on: b.classList.contains('on'), badge: g.offsetWidth > 0 && g.offsetHeight > 0, badgeText: g.textContent.trim(),
       inSet: S.flagged.has(q.id), saved: saved.includes(q.id), size: S.flagged.size, live: document.getElementById('srLive').textContent,
     };
   });
@@ -159,6 +161,29 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('flagging and unflagging is not an answer: no total, no missed list, no log, no schedule, no resume place changed', same(await snap(), rec));
   }
   {
+    /* The key is F whatever the case: Shift, or Caps Lock, makes it a capital. */
+    await page.keyboard.press('Shift+F');
+    const cap = await flagRead();
+    ok('a capital F flags too', cap.inSet && cap.pressed === 'true', JSON.stringify(cap));
+    const look = async () => { await page.mouse.move(2, 2); await stilled(); return page.evaluate(() => {
+      const b = document.getElementById('qFlag'), g = document.getElementById('qFlagBadge'), cs = getComputedStyle(b);
+      return { color: cs.color, bg: cs.backgroundColor, border: cs.borderTopColor, fill: getComputedStyle(b.querySelector('.icon')).fill, badge: g.offsetWidth > 0 ? getComputedStyle(g).color : null };
+    }); };
+    const on = await look();
+    await page.keyboard.press('f');
+    const off = await look();
+    ok('a flag that is on looks different from one that is off: its colour, its ground and its edge', on.color !== off.color && on.bg !== off.bg && on.border !== off.border, JSON.stringify([on, off]));
+    ok('and not by colour alone: the pennant is filled when on and open when off', on.fill === on.color && off.fill === 'none', JSON.stringify([on.fill, on.color, off.fill]));
+    ok('the badge beside the stem is the same amber as the pressed button', on.badge === on.color, JSON.stringify([on.badge, on.color]));
+    /* The count a screen reader is given is the bank's: an id the bank has lost is not a question flagged. */
+    await page.evaluate(() => { S.flagged.add('NO_SUCH_QUESTION_AT_ALL'); });
+    await page.keyboard.press('f');
+    const ghost = await flagRead();
+    ok('a flag on an id the bank has lost is not counted when a screen reader is told how many are flagged', ghost.live === 'Flagged. 1 question is in your Flagged list.', ghost.live);
+    await page.keyboard.press('f');
+    await page.evaluate(() => { S.flagged.delete('NO_SUCH_QUESTION_AT_ALL'); save(); });
+  }
+  {
     await tapFlag();
     await page.evaluate(() => nextQ());
     const onB = await showing(B); await settle();
@@ -178,6 +203,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.keyboard.press('Control+f'); await page.keyboard.press('Meta+f'); await page.keyboard.press('Alt+f');
     const mod = await flagRead();
     ok('Control, Command and Option with F are not the flag key: the question stays unflagged', !mod.inSet && mod.size === 0, JSON.stringify(mod));
+
   }
   {
     await page.evaluate(() => addSticky());
@@ -200,6 +226,11 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       pressed: document.getElementById('qFlag') && document.getElementById('qFlag').getAttribute('aria-pressed'), saved: JSON.parse(localStorage.getItem('accsap12.v2')).flagged }));
     ok('answering a flagged question right leaves it flagged: it is "right but unsure" that a flag holds', right.flagged && !right.missed && right.saved.includes(A), JSON.stringify(right));
     ok('and the Flag button is still there once the answer is shown, pressed', right.btn && right.pressed === 'true');
+    /* With the answer shown, the F line is the only thing in the key handler that reads the key's name. */
+    const errs = errors.length;
+    await page.evaluate(() => document.dispatchEvent(new Event('keydown')));
+    await page.waitForTimeout(50);
+    ok('a key event that names no key does nothing and throws nothing', errors.length === errs && await page.evaluate(() => S.flagged.size) === 1, errors.slice(errs).join(' | '));
     await page.evaluate(() => nextQ());
     await showing(B); await settle();
     await page.keyboard.press('f');
@@ -415,7 +446,18 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await note(A, 'Class I for sotalol? check the QT', true);
     await note(B, 'Avoid beta blockers in cocaine chest pain', true);
     await note(B, 'second note on this one', false);
-    await page.evaluate(([a, b, c]) => { INK[c + ':q'] = [[{ x: .1, y: .1 }, { x: .2, y: .2 }]]; saveJSON(INK_KEY, INK); NOTES['NO_SUCH_QUESTION'] = [{ id: 'n1', text: 'a note on a question the bank lost' }]; saveJSON(NOTE_KEY, NOTES); S.flagged = new Set([a]); S.missed = new Set([b]); save(); goStudy(); }, [A, B, C]);
+    /* The mark on C is drawn with the pencil tool and a pointer, as a fellow draws one: a stroke written by hand in a shape the
+       app does not write ({t,c,p:[[x,y,pressure]]}) makes the question's canvas throw when that question is next drawn. */
+    await page.evaluate(id => jumpTo(id), C); await showing(C); await settle();
+    await drawn('.q-card .ink-canvas');
+    await page.evaluate(() => railAction('pen'));
+    const box = await page.evaluate(() => { const r = document.querySelector('.q-card .ink-canvas').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    await page.mouse.move(box.x + box.w * .2, box.y + box.h * .3); await page.mouse.down();
+    await page.mouse.move(box.x + box.w * .6, box.y + box.h * .6, { steps: 6 }); await page.mouse.up();
+    await page.evaluate(() => railAction('pen'));
+    const inked = await page.evaluate(id => { const s = INK[id + ':q'] || []; return { n: s.length, pts: s[0] && s[0].p ? s[0].p.length : 0, tool: s[0] && s[0].t }; }, C);
+    ok('the pencil drew a stroke on the third question: the marks the list is to find are the app\'s own', inked.n === 1 && inked.pts >= 2 && inked.tool === 'pen', JSON.stringify(inked));
+    await page.evaluate(([a, b]) => { NOTES['NO_SUCH_QUESTION'] = [{ id: 'n1', text: 'a note on a question the bank lost' }]; saveJSON(NOTE_KEY, NOTES); S.flagged = new Set([a]); S.missed = new Set([b]); save(); goStudy(); }, [A, B]);
     await onScreen(page, 'study', { marker: '#annoCard' }); await settle();
     const card = await page.evaluate(() => ({ title: document.querySelector('#annoCard .fc-title').textContent.trim(), h: document.getElementById('annoCard').offsetHeight }));
     ok('the Annotated card counts the questions with a note or a mark, and not the one the bank lacks', card.title === '3 questions you wrote on', card.title);
@@ -438,6 +480,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       label: document.getElementById('annoQ').getAttribute('aria-label'), type: document.getElementById('annoQ').type, h: document.getElementById('annoPractise').offsetHeight, hq: document.getElementById('annoQ').offsetHeight,
       hb: document.querySelector('.anno-wrap .sb-back').offsetHeight }));
     ok('it counts them, and offers to practise all three', /^3 questions with a sticky note or pencil marks$/.test(head0.count) && head0.practise === 'Practise these 3' && head0.dis === false, JSON.stringify(head0));
+    ok('the count is a status, so a screen reader hears it change as the list narrows', await page.evaluate(() => document.getElementById('annoCount').getAttribute('role')) === 'status');
     ok('the box is a search box with a name, and the box and the buttons are at least 44 px tall', head0.type === 'search' && /annotations/i.test(head0.label) && head0.h >= 44 && head0.hq >= 44 && head0.hb >= 44, JSON.stringify(head0));
 
     /* typing narrows the list in place */
@@ -497,6 +540,13 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       bold: document.querySelectorAll('#annoList .anno-text b').length, xss: window.__xss === undefined }));
     ok('a note with markup in it is shown as the characters it is, and runs nothing', x.text === evil && x.kids === 0 && x.xss, JSON.stringify({ kids: x.kids, xss: x.xss, text: x.text.slice(0, 40) }));
     ok('typing a word of it marks the word and still makes no markup of the note', x.bold <= 1 && x.kids === 0, JSON.stringify(x.bold));
+    const raw = { s: 'Stem with <b>markup</b> & <i>more</i> text', ch: 'Chapter <u>x</u> & y' };
+    await page.evaluate(([a, raw]) => { const q = QBYID[a]; window.__was = { s: q.s, ch: q.ch }; q.s = raw.s; q.ch = raw.ch; goAnnotations(); }, [A, raw]);
+    await drawn('#annoList .anno-row'); await settle();
+    const y = await page.evaluate(() => ({ stem: document.querySelector('.anno-stem').textContent, top: document.querySelector('.hit-ch').textContent,
+      tags: document.querySelectorAll('#annoList .anno-stem b, #annoList .anno-stem i, #annoList .hit-ch u').length }));
+    await page.evaluate(a => { QBYID[a].s = window.__was.s; QBYID[a].ch = window.__was.ch; }, A);
+    ok('a stem and a chapter\'s name with markup characters in them are shown as the characters they are', y.stem === raw.s && y.top.indexOf(raw.ch) === 0 && y.tags === 0, JSON.stringify(y));
     await fresh();
     await page.evaluate(() => goAnnotations()); await reached('annotations'); await settle();
     const empty = await page.evaluate(() => ({ rows: document.querySelectorAll('#annoList .anno-row').length, text: document.getElementById('annoList').textContent.trim(), count: document.getElementById('annoCount').textContent, dis: document.getElementById('annoPractise').disabled }));
@@ -624,4 +674,4 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
   console.log(`\n${passed} passed, ${failed} failed`);
   await browser.close();
   process.exit(failed ? 1 : 0);
-})().catch(e => { console.error('SUITE CRASH', e && e.stack || e); process.exit(1); });
+})();

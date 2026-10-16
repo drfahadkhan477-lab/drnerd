@@ -129,7 +129,7 @@ const sse = text => [
       annotations: () => {
         NOTES = {}; INK = {};
         NOTES[POOL[0].id] = [{ id: 'n1', x: .1, y: .1, text: 'A long note about the first question that goes on for more than one line so that a row has to wrap it, with a long-unbroken-token-' + 'x'.repeat(60), color: '' }];
-        INK[POOL[1].id + ':q'] = [[{ x: .1, y: .1 }]];
+        INK[POOL[1].id + ':q'] = [{ t: 'pen', c: '#EF4444', p: [[.1, .1, .5], [.4, .4, .5]], sz: 'M' }];
         S.flagged = new Set([POOL[0].id]); S.missed = new Set([POOL[1].id]);
         goAnnotations();
       },
