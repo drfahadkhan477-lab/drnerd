@@ -162,16 +162,16 @@ body.voice-on #app{padding-bottom:104px}
 .mock-chsel{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .mock-chsel select{flex:1;min-width:0;min-height:44px;padding:0 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);
   font:inherit;font-size:var(--t-meta);font-weight:600;letter-spacing:0;text-transform:none}
-.mock-go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;margin-top:14px;padding:0 14px;border:0;border-radius:14px;
+.mock-go,.flag-go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;margin-top:14px;padding:0 14px;border:0;border-radius:14px;
   font:inherit;font-weight:800;font-size:var(--t-meta);color:#fff;background:var(--navy);cursor:pointer;transition:transform .2s var(--spring),box-shadow .2s}
-.mock-go .icon{width:18px;height:18px;flex:none}
-@media(hover:hover){.mock-go:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(15,30,61,.28)}}
-.mock-go:active{transform:scale(.98)}
+.mock-go .icon,.flag-go .icon{width:18px;height:18px;flex:none}
+@media(hover:hover){.mock-go:hover,.flag-go:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(15,30,61,.28)}}
+.mock-go:active,.flag-go:active{transform:scale(.98)}
 .mock-note{margin-top:10px;font-size:var(--t-tiny);line-height:1.5;color:var(--muted)}
-.mock-quiet{display:block;width:100%;min-height:44px;margin-top:6px;padding:0 10px;border:0;border-radius:12px;background:transparent;color:var(--muted);
+.mock-quiet,.flag-quiet{display:block;width:100%;min-height:44px;margin-top:6px;padding:0 10px;border:0;border-radius:12px;background:transparent;color:var(--muted);
   font:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;text-align:center}
 .mock-quiet:disabled{opacity:.6;cursor:default}
-.mock-quiet.arm{color:var(--red);background:var(--red-bg)}
+.mock-quiet.arm,.flag-quiet.arm{color:var(--red);background:var(--red-bg)}
 
 /* the block: a bar with the clock, the question as the quiz draws it, a picked option instead of a verdict */
 .mock-bar .mock-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
@@ -248,3 +248,16 @@ body.voice-on #app{padding-bottom:104px}
 /* While a block is open there is no Apex to ask and no panel to open: either would hand over the answer. */
 html[data-mock] .ai-fab,html[data-mock] #ai{display:none!important}
 @media(prefers-reduced-motion:reduce){.mock-card.live>.fc-glow{animation:none!important}}
+
+/* ══ Flag and annotations: the Study cards and the list of what was written on ══ */
+.fc-badge.amber{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+.flag-card{cursor:default}
+.anno-card .fc-cta{color:var(--amber)}
+.anno-text{margin:2px 0 8px;padding:8px 10px;border-radius:10px;background:var(--amber-bg);border:1px solid var(--amber-b);
+  color:var(--text);font-size:var(--t-meta);line-height:1.5;overflow-wrap:anywhere}
+.anno-text.none{background:transparent;border-style:dashed;color:var(--muted);font-style:italic}
+.anno-stem{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.anno-row .hit-fig{display:inline-flex;align-items:center;gap:4px}
+.sb-quiz:disabled{opacity:.5;cursor:default}
+.anno-wrap .sb-quiz,.anno-wrap .sb-back{min-height:44px}
+.anno-wrap .sb-row input{min-height:44px}
