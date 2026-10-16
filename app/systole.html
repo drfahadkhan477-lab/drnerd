@@ -999,8 +999,9 @@ function importMarkup(){
         if(d.stats){
           Object.assign(S,progress);
           FOREIGN={}; for(const k of Object.keys(d.stats)) if(!SCHEMA_KEYS.includes(k)) FOREIGN[k]=d.stats[k];
-          /* The record kept is the backup's, and a backup with no flagged list must not drop the live flags from it. */
-          saveJSON('accsap12.v2',d.stats.flagged!=null?d.stats:Object.assign({},d.stats,{flagged:[...S.flagged]}));
+          /* The record kept is the backup's, as it is. A backup with no flagged list says nothing of the flags made since, and a
+             reload must not lose them, so they go into it; with none made there is nothing to add. */
+          saveJSON('accsap12.v2',d.stats.flagged!=null||!S.flagged.size?d.stats:Object.assign({},d.stats,{flagged:[...S.flagged]}));
           applyTheme();
         }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);

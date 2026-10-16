@@ -462,3 +462,23 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
 - **A suite ends with `})();` and nothing after it.** verify-engine reads the
   tail of every browser suite: a `.catch` of its own eats the rejection that
   `onDeath` is waiting to turn into a note.
+- **Hit-testing is not the DOM, and `quiet()` only watches the DOM.** A change
+  of screen starts a view transition (Chromium; WebKit runs with them off), and
+  while it runs the page is not hit-tested: a pointer lands on `<html>` and the
+  canvas under it never hears of it. The Annotations section reached its first
+  pencil stroke 0.6 s after the screen change, inside the animation on CI's
+  Chromium and after it on a slower machine, so the stroke was missing
+  (`{n:0, pts:0}`) there and only there. → Rule: before a gesture, wait until
+  `elementFromPoint(x, y)` is the element it is meant for, and make that a check
+  of its own, so a canvas that is never there is named and not mistaken for a
+  pencil that drew nothing.
+- **A lookup of what the test may not find returns nothing, not a throw.**
+  `at(C).none` threw when the list lacked C and ended the suite with a stack
+  where the FAIL lines would have said why. → Rule: the helper returns an empty
+  object, and the check that wants the row fails by name.
+- **A change to what is stored runs every suite that reads the store.** The fix
+  that kept flags in a restored record added a field to a record verify-backup
+  compares byte for byte, and was pushed without running it; both CI engines
+  failed it. → Rule: grep for the function (`importMarkup`,
+  `validateAnnotationBackup`, `progressFromBackup`: verify-backup, verify-flags,
+  verify-fsrs, verify-mockscreen) and run those suites before the push.

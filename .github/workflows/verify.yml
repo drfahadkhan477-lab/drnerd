@@ -621,7 +621,7 @@ jobs:
         name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (171 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (168 checks)
+        name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (171 checks)
         run: node tests/verify-flags.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
@@ -880,7 +880,7 @@ jobs:
         name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (171 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (168 checks)
+        name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (171 checks)
         run: node tests/verify-flags.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)

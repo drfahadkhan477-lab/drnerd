@@ -288,14 +288,14 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     const inPrompt = await drawn('.rate-prompt #qFlag'); await settle();
     const r = await page.evaluate(() => {
       const b = document.getElementById('qFlag'), q = b ? b.getBoundingClientRect() : null, a = document.querySelector('.actions');
-      const p = b && b.closest('.rate-prompt'), pr = p ? p.getBoundingClientRect() : null;
+      const p = b && b.closest('.rate-prompt'), pr = p ? p.getBoundingClientRect() : null, rr = document.querySelector('.rate-row');
       return { n: document.querySelectorAll('#qFlag').length, inPrompt: !!p, row: a ? a.children.length : -1, w: q && Math.round(q.width), h: q && Math.round(q.height), pressed: b && b.getAttribute('aria-pressed'),
-        off: q && pr ? Math.round(Math.abs((q.left + q.right) / 2 - (pr.left + pr.right) / 2)) : null };
+        off: q && pr ? Math.round(Math.abs((q.left + q.right) / 2 - (pr.left + pr.right) / 2)) : null, gap: q && rr ? Math.round(q.top - rr.getBoundingClientRect().bottom) : null };
     });
     ok('a review session is up, and a card has been answered', up);
     ok('the rating prompt holds the Flag button, which is the only one on the screen, while the action row is empty', inPrompt && r.inPrompt && r.n === 1 && r.row === 0, JSON.stringify(r));
     ok('and it is at least 44 px each way, and not pressed', r.w >= 44 && r.h >= 44 && r.pressed === 'false', JSON.stringify(r));
-    ok('and it sits in the middle of the prompt, under the ratings', r.off !== null && r.off <= 3, JSON.stringify(r));
+    ok('and it sits in the middle of the prompt, set apart from the ratings by a gap', r.off !== null && r.off <= 3 && r.gap !== null && r.gap >= 10, JSON.stringify(r));
     await page.click('#qFlag');
     const on = await flagRead();
     ok('tapping it there flags the question, before the card is rated', on.id === A && on.inSet && on.saved && on.pressed === 'true' && on.badge, JSON.stringify(on));
@@ -419,6 +419,9 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('and the record kept after the import still holds them, so a reload does not lose them', same(older.saved, [B, D]), JSON.stringify(older));
     await page.evaluate(`(${RESTORE})(${JSON.stringify(JSON.stringify({ stats: { flagged: [], chStats: {} } }))}).catch(() => {})`);
     ok('importing a backup with an empty list does empty the flags: a list, even an empty one, replaces them', same(await page.evaluate(() => [...S.flagged]), []) && same(await page.evaluate(() => JSON.parse(localStorage.getItem('accsap12.v2')).flagged), []));
+    await page.evaluate(`(${RESTORE})(${JSON.stringify(JSON.stringify({ stats: { chStats: {} } }))}).catch(() => {})`);
+    const bare = await page.evaluate(() => JSON.parse(localStorage.getItem('accsap12.v2')));
+    ok('and an older backup restored over nothing flagged is kept as it is: no flagged field is added to its record', same(bare, { chStats: {} }), JSON.stringify(bare));
   }
 
   head('the Flagged deck');
@@ -568,9 +571,28 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(id => jumpTo(id), C); await showing(C); await settle();
     await drawn('.q-card .ink-canvas');
     await page.evaluate(() => railAction('pen'));
-    const box = await page.evaluate(() => { const r = document.querySelector('.q-card .ink-canvas').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
-    await page.mouse.move(box.x + box.w * .2, box.y + box.h * .3); await page.mouse.down();
-    await page.mouse.move(box.x + box.w * .6, box.y + box.h * .6, { steps: 6 }); await page.mouse.up();
+    /* A pointer reaches the canvas only when the canvas is what is under it. A change of screen starts a view transition (Chromium;
+       WebKit runs with them off) and while one runs the page is not hit-tested: the pointer lands on <html> and makes no stroke. This
+       section's first jumpTo is such a change, so on a quick machine the pencil came down in the middle of it. The point it touches
+       is waited for until the canvas is under it, and a canvas that never is gets a failure of its own that names what is there. */
+    const pencilAt = () => page.evaluate(() => {
+      const c = document.querySelector('.q-card .ink-canvas');
+      if (!c) return null;
+      const r = c.getBoundingClientRect(), x = r.left + r.width * .2, y = r.top + r.height * .3, el = document.elementFromPoint(x, y);
+      return { x, y, w: r.width, h: r.height, on: el === c, under: el ? el.tagName.toLowerCase() + (el.className ? '.' + String(el.className).split(' ')[0] : '') : 'nothing' };
+    });
+    await page.waitForFunction(() => {
+      const c = document.querySelector('.q-card .ink-canvas');
+      if (!c) return false;
+      const r = c.getBoundingClientRect();
+      return document.elementFromPoint(r.left + r.width * .2, r.top + r.height * .3) === c;
+    }, null, { timeout: 6000 }).catch(() => {});
+    const pt = await pencilAt();
+    ok('the canvas is what is under the pencil when it touches down: the screen has stopped moving', !!pt && pt.on, pt ? pt.under : 'no canvas');
+    if (pt) {
+      await page.mouse.move(pt.x, pt.y); await page.mouse.down();
+      await page.mouse.move(pt.x + pt.w * .4, pt.y + pt.h * .3, { steps: 6 }); await page.mouse.up();
+    }
     await page.evaluate(() => railAction('pen'));
     const inked = await page.evaluate(id => { const s = INK[id + ':q'] || []; return { n: s.length, pts: s[0] && s[0].p ? s[0].p.length : 0, tool: s[0] && s[0].t }; }, C);
     ok('the pencil drew a stroke on the third question: the marks the list is to find are the app\'s own', inked.n === 1 && inked.pts >= 2 && inked.tool === 'pen', JSON.stringify(inked));
@@ -587,7 +609,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('three questions are listed: those with a note, and the one with pencil only; none the bank lacks', same(list.map(r => r.id).sort(), [A, B, C].sort()), JSON.stringify(list.map(r => r.id)));
     ok('the newest note\'s question is first, then the older, then the one with only pencil', same(list.map(r => r.id), [B, A, C]), JSON.stringify(list.map(r => r.id)));
     const info = await page.evaluate(([a, b, c]) => [a, b, c].map(id => ({ id, ch: QBYID[id].ch, n: QBYID[id].n, s: QBYID[id].s })), [A, B, C]);
-    const at = id => list.find(r => r.id === id), meta = id => info.find(i => i.id === id);
+    const at = id => list.find(r => r.id === id) || {}, meta = id => info.find(i => i.id === id);
     ok('a note\'s text is shown as it was typed', at(A).note === 'Class I for sotalol? check the QT' && at(B).note === 'Avoid beta blockers in cocaine chest pain · second note on this one', JSON.stringify([at(A).note, at(B).note]));
     ok('a question with only pencil says so instead of showing nothing', at(C).none && /Pencil marks, no words/.test(at(C).note), at(C).note);
     ok('each row names its chapter and question number', list.every(r => r.top.indexOf(meta(r.id).ch + ' · ' + meta(r.id).n) >= 0), JSON.stringify(list.map(r => r.top)));
@@ -665,13 +687,16 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('a note with an ampersand is not harmed by a search for "amp": the word is marked where it is written and the text is as typed', same(m1.marks, ['Amp']) && m1.text === amp, JSON.stringify(m1));
     ok('nor by one for "quot", which is also the name of the entity of a quote', same(m2.marks, ['quot']) && m2.text === amp, JSON.stringify(m2));
     ok('nor an apostrophe by "39", the number in its entity: the 39 that is written is marked, the one in the entity is not there to mark', same(m3.marks, ['39']) && m3.text === amp, JSON.stringify(m3));
-    const raw = { s: 'Stem with <b>markup</b> & <i>more</i> text', ch: 'Chapter <u>x</u> & y' };
+    const raw = { s: 'Stem with <b>markup</b> & <i>amp</i> text', ch: 'Chapter <u>x</u> & y' };
     await page.evaluate(([a, raw]) => { const q = QBYID[a]; window.__was = { s: q.s, ch: q.ch }; q.s = raw.s; q.ch = raw.ch; ANNO.q = ''; goAnnotations(); }, [A, raw]);
     await drawn('#annoList .anno-row'); await settle();
     const y = await page.evaluate(() => ({ stem: document.querySelector('.anno-stem').textContent, top: document.querySelector('.hit-ch').textContent,
       tags: document.querySelectorAll('#annoList .anno-stem b, #annoList .anno-stem i, #annoList .hit-ch u').length }));
+    await page.fill('#annoQ', 'amp');
+    const ys = await page.evaluate(() => ({ stem: document.querySelector('.anno-stem').textContent, marks: [...document.querySelectorAll('#annoList .anno-stem mark')].map(m => m.textContent) }));
     await page.evaluate(a => { QBYID[a].s = window.__was.s; QBYID[a].ch = window.__was.ch; }, A);
     ok('a stem and a chapter\'s name with markup characters in them are shown as the characters they are', y.stem === raw.s && y.top.indexOf(raw.ch) === 0 && y.tags === 0, JSON.stringify(y));
+    ok('and a word searched for is marked in a stem that holds an ampersand where it is written, not in the ampersand\'s entity', same(ys.marks, ['amp']) && ys.stem === raw.s, JSON.stringify(ys));
     await fresh();
     await page.evaluate(() => goAnnotations()); await reached('annotations'); await settle();
     const empty = await page.evaluate(() => ({ rows: document.querySelectorAll('#annoList .anno-row').length, text: document.getElementById('annoList').textContent.trim(), count: document.getElementById('annoCount').textContent, dis: document.getElementById('annoPractise').disabled }));
