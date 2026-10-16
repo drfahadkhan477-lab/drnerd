@@ -15,6 +15,7 @@
      deck(set, byId)                     the flagged questions the bank still has, in the order flagged
      annotated(notes, ink, byId)         every question with a sticky note or a mark, newest note first
      find(rows, query)                   the rows whose note, chapter or stem hold every word typed
+     highlight(text, query, esc)         the text with the words typed marked, escaped piece by piece
      phrase(n) / said(on, n)             what the card and the screen reader say
 
    THE RULES, because each is a way a flag quietly stops meaning anything:
@@ -36,14 +37,15 @@
         the same test as the badge on the quiz screen. The list never shows a question the bank
         does not have, and never a note's text as markup.
 
-   No DOM, no clock, no storage: bare Node can test it. ES2015 and no further (Safari 13.4 is
-   the floor, README; tests/verify-ipad-pure.js scans for what it lacks).
+   No DOM, no clock, no storage: bare Node can test it. ES2015, and one thing past it: words() and
+   highlight() use the `u` flag with \p{L} (ES2018, Safari 11.1). Safari 13.4 is the floor (README);
+   tests/verify-ipad-pure.js scans for what it lacks.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
 const MAX_FLAGS = 5000;      // a bank is hundreds of questions; this only bounds what a hand-edited file may hold
-const MAX_ID = 100;          // an id is a short key; a longer string is not one
+const MAX_ID = 120;          // the longest id a bank may give a question (bankpack.js SAFE_ID); a longer string is not one
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const obj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
@@ -152,6 +154,21 @@ function find(rows, query) {
   return list.filter(r => r && typeof r.hay === 'string' && w.every(x => r.hay.indexOf(x) >= 0));
 }
 
+/* The text with every word typed marked where it is found, escaped a piece at a time. The app's own hl() escapes first
+   and then matches, so a note holding "&" or a quote had the "amp" of "&amp;" marked and the entity broken. A match is any
+   stretch of the text that spells a word typed, in any case; where two words start together the longer one wins. esc turns
+   text into text that is safe to put in a page; the <mark> tags are the only markup made here. */
+function highlight(text, query, esc) {
+  const t = String(text == null ? '' : text), w = words(query);
+  if (!w.length) return esc(t);
+  /* words() leaves letters and digits only, so a word is safe in a pattern as it is. Split on a pattern with a group, the
+     text comes back as piece, match, piece, match, ..., piece: the odd ones are the words found. */
+  const parts = t.split(new RegExp('(' + w.slice().sort((a, b) => b.length - a.length).join('|') + ')', 'iu'));
+  let out = '';
+  parts.forEach((p, i) => { out += i % 2 ? '<mark>' + esc(p) + '</mark>' : esc(p); });
+  return out;
+}
+
 function phrase(n) {
   n = count(n);
   return n === 0 ? 'Nothing flagged' : n === 1 ? '1 question flagged' : n + ' questions flagged';
@@ -165,6 +182,6 @@ function said(on, n) {
   return (on ? 'Flagged. ' : 'Flag removed. ') + left;
 }
 
-root.FlagSet = { MAX_FLAGS, MAX_ID, clean, valid, toggle, addAll, deck, annotated, find, words, phrase, said };
+root.FlagSet = { MAX_FLAGS, MAX_ID, clean, valid, toggle, addAll, deck, annotated, find, words, highlight, phrase, said };
 
 })(typeof window !== 'undefined' ? window : this);

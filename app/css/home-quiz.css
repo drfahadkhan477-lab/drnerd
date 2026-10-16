@@ -267,6 +267,7 @@ html [data-home="focus"] .story-rail{display:none}
   .btn-flag{padding-left:0;padding-right:0}
   .btn-flag-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 }
+.rate-flag{display:flex;justify-content:center;margin-top:12px}
 .src-badge.flag-badge{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)}
 .src-badge.flag-badge[hidden]{display:none}
 

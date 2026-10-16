@@ -56,7 +56,7 @@ head('clean: ids kept once, in order, and nothing else');
   ok('a number, null, an object, an empty string and a nested list are dropped, and the ids beside them kept',
     safely(() => same(F.clean(['a', 5, null, '', {}, ['x'], undefined, true, 'b']), ['a', 'b']), false));
   ok('whatever is not a list is no list', safely(() => [null, undefined, 'abc', 7, { 0: 'a', length: 1 }, true].every(v => same(F.clean(v), [])), false));
-  ok('an id of 100 characters is kept and one of 101 is not', same(F.clean(['x'.repeat(100), 'y'.repeat(101)]), ['x'.repeat(100)]));
+  ok('an id of 120 characters, the longest a bank may give, is kept and one of 121 is not', same(F.clean(['x'.repeat(120), 'y'.repeat(121)]), ['x'.repeat(120)]) && F.MAX_ID === 120);
   const many = Array.from({ length: 6000 }, (_, k) => 'id' + k);
   const cut = F.clean(many);
   ok('a list longer than the cap is cut at the cap, from the front', cut.length === F.MAX_FLAGS && cut[0] === 'id0' && cut[F.MAX_FLAGS - 1] === 'id' + (F.MAX_FLAGS - 1), String(cut.length));
@@ -72,9 +72,10 @@ head('valid: a backup\'s list is sound only if it is nothing but ids');
   ok('ids are sound, and the same id twice is sound', F.valid(['a', 'b']) && F.valid(['a', 'a']));
   ok('a list with a number, null, an empty string, an object or a nested list in it is not sound', safely(() => [['a', 5], [null], [''], [{}], [['a']], ['a', undefined]].every(v => F.valid(v) === false), false));
   ok('what is not a list is not sound', safely(() => ['abc', 7, {}, true, { length: 0 }].every(v => F.valid(v) === false), false));
-  ok('an id of 101 characters is not sound and one of 100 is', F.valid(['x'.repeat(101)]) === false && F.valid(['x'.repeat(100)]) === true);
+  ok('an id of 121 characters is not sound and one of 120 is', F.valid(['x'.repeat(121)]) === false && F.valid(['x'.repeat(120)]) === true);
   ok('a list of the cap is sound and one more is not', F.valid(Array.from({ length: F.MAX_FLAGS }, (_, k) => 'i' + k)) === true && F.valid(Array.from({ length: F.MAX_FLAGS + 1 }, (_, k) => 'i' + k)) === false);
   ok('what valid() accepts, clean() keeps whole', (() => { const l = ['p', 'q', 'r']; return F.valid(l) && same(F.clean(l), l); })());
+  ok('a flag can be put on a question whose id is 120 characters, and taken off', (() => { const s = new Set(), id = 'q'.repeat(120); return F.toggle(s, id) === true && s.has(id) && F.toggle(s, id) === false && !s.has(id); })());
 }
 
 head('toggle: on, off, and which it is now');
@@ -87,7 +88,7 @@ head('toggle: on, off, and which it is now');
   F.toggle(s, 'A1'); F.toggle(s, 'A1');
   ok('taking a flag off and putting it back puts it last', same([...s], ['A2', 'B1', 'A1']));
   const t = new Set(['A1']);
-  ok('what is not an id changes nothing and says not flagged', safely(() => [5, null, undefined, '', {}, 'x'.repeat(101)].every(v => F.toggle(t, v) === false) && same([...t], ['A1']), false));
+  ok('what is not an id changes nothing and says not flagged', safely(() => [5, null, undefined, '', {}, 'x'.repeat(121)].every(v => F.toggle(t, v) === false) && same([...t], ['A1']), false));
 }
 
 head('addAll: adds, never removes, and counts the new');
@@ -211,6 +212,32 @@ head('words: what was typed, as the words to look for');
   ok('letters and digits, lower-cased, split on anything else', same(F.words(' Hello, World-42! '), ['hello', 'world', '42']));
   ok('punctuation alone, nothing and what is not text are no words', same(F.words('?!'), []) && same(F.words(''), []) && same(F.words(null), []) && same(F.words(undefined), []));
   ok('a letter outside a-z is a letter, in either case', same(F.words('Β-blockers'), ['β', 'blockers']));
+}
+
+head('highlight: the words typed, marked where they are, escaped a piece at a time');
+{
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const hl = (t, q) => F.highlight(t, q, esc);
+  ok('a word is marked where it is, in the case it was written in', hl('Class I for Sotalol', 'sotalol') === 'Class I for <mark>Sotalol</mark>');
+  ok('part of a word is marked, as part of a word is enough to find it', hl('Ampicillin and gentamicin', 'amp') === '<mark>Amp</mark>icillin and gentamicin');
+  ok('every word typed is marked, wherever each is', hl('Class I for sotalol', 'sot class') === '<mark>Class</mark> I for <mark>sot</mark>alol');
+  ok('every place a word is, not only the first', hl('QT, QTc and qt again', 'qt') === '<mark>QT</mark>, <mark>QT</mark>c and <mark>qt</mark> again');
+  ok('where two words start together the longer wins', hl('sotalol', 'sot sotalol') === '<mark>sotalol</mark>' && hl('sotalol', 'sotalol sot') === '<mark>sotalol</mark>');
+  ok('an ampersand in the text is not mistaken for the "amp" of its own entity', hl('Ampicillin & gentamicin', 'amp') === '<mark>Amp</mark>icillin &amp; gentamicin', hl('Ampicillin & gentamicin', 'amp'));
+  ok('nor are the quotes: "quot" is marked only where it is written', hl('say "hi" and quote', 'quot') === 'say &quot;hi&quot; and <mark>quot</mark>e', hl('say "hi" and quote', 'quot'));
+  ok('nor an apostrophe\'s entity: "39" is marked in the text, not in &#39;', hl("it's 39 mg", '39') === "it&#39;s <mark>39</mark> mg", hl("it's 39 mg", '39'));
+  ok('markup in the text is escaped and only the <mark> tags are markup', hl('<b>bold</b> & <i>it</i>', 'bold') === '&lt;b&gt;<mark>bold</mark>&lt;/b&gt; &amp; &lt;i&gt;it&lt;/i&gt;', hl('<b>bold</b> & <i>it</i>', 'bold'));
+  ok('a word that is a tag name marks the letters in the text and not the tag', hl('<b>x</b>', 'b') === '&lt;<mark>b</mark>&gt;x&lt;/<mark>b</mark>&gt;', hl('<b>x</b>', 'b'));
+  ok('a letter outside a-z is marked, in either case', hl('Avoid β-blockers', 'Β') === 'Avoid <mark>β</mark>-blockers');
+  ok('nothing typed, only punctuation, or nothing to mark leaves the text escaped and unmarked', hl('a < b', '') === 'a &lt; b' && hl('a < b', '?!') === 'a &lt; b' && hl('a < b', 'zzz') === 'a &lt; b' && hl('a < b', null) === 'a &lt; b');
+  ok('no text is no markup, and null is no text', hl('', 'a') === '' && hl(null, 'a') === '' && hl(undefined, 'a') === '');
+  ok('every piece goes through esc, and nothing it makes does', (() => {
+    const seen = [];
+    const out = F.highlight('ab cd ab', 'ab', s => { seen.push(s); return '[' + s + ']'; });
+    return out === '[]<mark>[ab]</mark>[ cd ]<mark>[ab]</mark>[]' && same(seen, ['', 'ab', ' cd ', 'ab', '']);
+  })());
+  ok('regular expression characters typed are only the words in them: nothing throws', safely(() => hl('a.b (c) [d] x', '.* (c) [d] +?') === 'a.b (<mark>c</mark>) [<mark>d</mark>] x', false), safely(() => hl('a.b (c) [d] x', '.* (c) [d] +?'), 'threw'));
+  ok('the text it was given is not changed', (() => { const t = 'Ampicillin & x'; hl(t, 'amp'); return t === 'Ampicillin & x'; })());
 }
 
 head('phrase and said: what is read out');

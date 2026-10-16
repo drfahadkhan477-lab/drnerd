@@ -254,9 +254,9 @@ html[data-mock] .ai-fab,html[data-mock] #ai{display:none!important}
 .flag-card{cursor:default}
 .anno-card .fc-cta{color:var(--amber)}
 .anno-text{margin:2px 0 8px;padding:8px 10px;border-radius:10px;background:var(--amber-bg);border:1px solid var(--amber-b);
-  color:var(--text);font-size:var(--t-meta);line-height:1.5;overflow-wrap:anywhere}
+  color:var(--text);font-size:var(--t-meta);line-height:1.5;overflow-wrap:break-word;overflow-wrap:anywhere;word-break:break-word}
 .anno-text.none{background:transparent;border-style:dashed;color:var(--muted);font-style:italic}
-.anno-stem{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.anno-stem{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);overflow-wrap:break-word;overflow-wrap:anywhere;word-break:break-word}
 .anno-row .hit-fig{display:inline-flex;align-items:center;gap:4px}
 .sb-quiz:disabled{opacity:.5;cursor:default}
 .anno-wrap .sb-quiz,.anno-wrap .sb-back{min-height:44px}

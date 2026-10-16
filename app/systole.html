@@ -999,7 +999,8 @@ function importMarkup(){
         if(d.stats){
           Object.assign(S,progress);
           FOREIGN={}; for(const k of Object.keys(d.stats)) if(!SCHEMA_KEYS.includes(k)) FOREIGN[k]=d.stats[k];
-          saveJSON('accsap12.v2',d.stats);
+          /* The record kept is the backup's, and a backup with no flagged list must not drop the live flags from it. */
+          saveJSON('accsap12.v2',d.stats.flagged!=null?d.stats:Object.assign({},d.stats,{flagged:[...S.flagged]}));
           applyTheme();
         }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
@@ -4340,7 +4341,9 @@ function progressFromBackup(raw){
     lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
     sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
     focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null,
-    mocks:MockExam.cleanHistory(raw.exams),flagged:new Set(FlagSet.clean(raw.flagged))};
+    mocks:MockExam.cleanHistory(raw.exams),
+    /* Absent says nothing: a backup made before flags must not empty the flags made since. A list, even an empty one, replaces them. */
+    ...(raw.flagged!=null?{flagged:new Set(FlagSet.clean(raw.flagged))}:{})};
 }
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
@@ -4885,16 +4888,24 @@ function paintFlag(on){
   if(g) g.hidden=!on;
 }
 /* Every flag at once, on the Study card. Two taps, not a dialog (as discarding a block is): the first arms the button
-   for five seconds, the second clears. Notes, marks and answers are not touched. */
-let _flagArm=false;
+   for five seconds, the second (not within a moment of the first) clears. Notes, marks and answers are not touched. */
+let _flagArm=false, _flagArmAt=0;
+const FLAG_DWELL_MS=400;      // a second tap sooner than this is the first one's echo, not a decision
 function clearFlags(){
   if(!flaggedQs().length) return;
   if(!_flagArm){
-    _flagArm=true; setTimeout(()=>{ if(_flagArm){ _flagArm=false; if(S.screen==='study') render(); } },5000);
+    _flagArm=true; _flagArmAt=Date.now();
+    setTimeout(()=>{
+      if(!_flagArm) return;
+      _flagArm=false;
+      if(S.screen==='study'){ const had=!!document.activeElement&&document.activeElement.id==='flagClear'; render(); if(had) focusEl('#flagClear'); }
+    },5000);
     if(S.screen==='study'){ render(); focusEl('#flagClear'); }
     return;
   }
-  _flagArm=false; S.flagged.clear(); save(); render();
+  if(Date.now()-_flagArmAt<FLAG_DWELL_MS) return;
+  /* The flags the Flagged card counts, and no others: one on a question the bank has lost or quarantined is kept, as flagset.js says. */
+  _flagArm=false; for(const q of flaggedQs()) S.flagged.delete(q.id); save(); render();
   const live=document.getElementById('srLive'); if(live){ live.textContent=''; live.textContent='All flags cleared.'; }
 }
 /* ── Your annotations: every question with a sticky note or a pencil mark, found by what the note says.
@@ -4913,8 +4924,8 @@ function annoRowHtml(r){
       ${S.missed.has(r.id)?'<span class="hit-flag">previously missed</span>':''}
       ${r.notes?`<span class="hit-fig">${icon('sticky-note','icon-sm')} ${r.notes>1?r.notes+' notes':'note'}</span>`:''}
       ${r.ink?`<span class="hit-fig">${icon('pencil','icon-sm')} pencil</span>`:''}</div>
-    ${r.text?`<div class="anno-text">${hl(clip(r.text,320),w)}</div>`:`<div class="anno-text none">${r.notes?'An empty sticky note':'Pencil marks, no words'}</div>`}
-    <div class="anno-stem">${hl(clip(q.s,150),w)}</div>
+    ${r.text?`<div class="anno-text">${FlagSet.highlight(clip(r.text,320),w,e)}</div>`:`<div class="anno-text none">${r.notes?'An empty sticky note':'Pencil marks, no words'}</div>`}
+    <div class="anno-stem">${FlagSet.highlight(clip(q.s,150),w,e)}</div>
   </button>`;
 }
 function annoListHtml(rows){
@@ -5349,7 +5360,9 @@ function buildMockReport(){
   const timeLine=g.expired?'Time ran out at '+lim:lim?used+' of '+lim:used+', no time limit';
   const per=g.avgMs!=null?' · about '+Math.round(g.avgMs/1000)+' s a question':'';
   const slow=g.slowest.length?`<div class="mock-slow"><b>Slowest</b> ${g.slowest.map(s=>'Q'+(s.i+1)+' ('+e(CH_SHORT[s.ch]||s.ch)+', '+MockExam.fmtClock(s.ms)+')').join(' · ')}</div>`:'';
-  const flagLine=g.flagged?`<div class="mock-slow"><b>${g.flagged} flagged</b> — ${g.flaggedWrong} of them not right. Added to your Flagged list.</div>`:'';
+  /* Said of the list as it is now, not of the moment of hand-in: the report is opened again after flags have been taken off. */
+  const kept=g.items.filter(it=>it.flagged&&S.flagged.has(it.id)).length;
+  const flagLine=g.flagged?`<div class="mock-slow"><b>${g.flagged} flagged</b> — ${g.flaggedWrong} of them not right. In your Flagged list: ${kept} of ${g.flagged}.</div>`:'';
   const missed=MockExam.reviewIds(g,'missed').length;
   return `<div class="results-wrap mock-report anim-fade">
     <div class="score-hero">
@@ -6560,10 +6573,16 @@ function buildQuiz(){
   const isMobile=window.innerWidth<768;
   const letters=q.o.map(o=>`<kbd>${o.l}</kbd>`).join('');
   const kbHint=!answered
-    ?`<div class="kb-hint kbd-row">${isMobile?'Tap to answer':`Press ${letters} to answer · <kbd>←</kbd> <kbd>→</kbd> to move`}</div>`
-    :`<div class="kb-hint">${isMobile?'Tap Next to continue':'Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next'}</div>`;
+    ?`<div class="kb-hint kbd-row">${isMobile?'Tap to answer':`Press ${letters} to answer · <kbd>←</kbd> <kbd>→</kbd> to move · <kbd>F</kbd> to flag`}</div>`
+    :`<div class="kb-hint">${isMobile?'Tap Next to continue':'Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next · <kbd>F</kbd> to flag'}</div>`;
 
+  /* The flag is a toggle: its name stays "Flag" and aria-pressed says whether it is on, as the mock block's does. */
+  const flagOn=S.flagged.has(q.id);
+  const flagBtn=`<button class="btn btn-flag${flagOn?' on':''}" id="qFlag" type="button" onclick="toggleFlag()" aria-pressed="${flagOn}"
+    title="Flag this question to come back to it (F)">${icon('flag','icon-sm')}<span class="btn-flag-l">Flag</span></button>`;
   const reviewing = answered && S.mode==='due' && !alreadyRated;
+  /* A review session's action row is empty until the card is rated, and rating moves on: the Flag button is in the prompt,
+     where "right, but I do not trust it" is felt. */
   const rateRow = reviewing ? `<div class="rate-prompt anim-pop">
       <div class="rate-q">How well did you know this — before you saw the options?</div>
       <div class="rate-row">${RATINGS.map(([key,label,grade,col])=>
@@ -6571,12 +6590,9 @@ function buildQuiz(){
            <span class="rate-label">${label}</span>
            <span class="rate-sched">${fmtInterval(fsrsPreview(S.srs[q.id],grade).ivl)}</span>
          </button>`).join('')}</div>
+      <div class="rate-flag">${flagBtn}</div>
     </div>` : '';
   const prevBtn=canGoBack?`<button class="btn btn-prev" onclick="prevQ()" type="button" aria-label="Previous question">${icon('arrow-left','icon-sm')}</button>`:'';
-  /* The flag is a toggle: its name stays "Flag" and aria-pressed says whether it is on, as the mock block's does. */
-  const flagOn=S.flagged.has(q.id);
-  const flagBtn=`<button class="btn btn-flag${flagOn?' on':''}" id="qFlag" type="button" onclick="toggleFlag()" aria-pressed="${flagOn}"
-    title="Flag this question to come back to it (F)">${icon('flag','icon-sm')}<span class="btn-flag-l">Flag</span></button>`;
   const actions = reviewing ? '' : answered
     ?`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
       <button class="btn btn-next anim-pop" onclick="nextQ()" type="button">${qIdx<questions.length-1?'Next Question':'View Results'} ${icon('arrow-right','icon-sm')}</button>`
@@ -6683,7 +6699,10 @@ document.addEventListener('keydown',ev=>{
   if(S.screen!=='quiz')return;
   if(!ev.ctrlKey&&!ev.metaKey&&!ev.altKey&&ev.key&&ev.key.toLowerCase()==='f'){ ev.preventDefault(); if(!ev.repeat) toggleFlag(); return; }   // a held key flags once
   if(S.answered){
-    if(ev.key===' '||ev.key==='Enter'||ev.key==='ArrowRight'){ev.preventDefault();nextQ();}
+    /* On a focused button, Enter and Space are that button's own (they used to move on whatever had the keyboard: Enter on Flag,
+       on Home or on Previous went to the next question). On the heading the answer moved the keyboard to, they still move on. */
+    const onControl=!!(ev.target&&ev.target.closest&&ev.target.closest('button,a[href],input,select,textarea,summary,[role="button"]'));
+    if(((ev.key===' '||ev.key==='Enter')&&!onControl)||ev.key==='ArrowRight'){ev.preventDefault();nextQ();}
     if(ev.key==='ArrowLeft'){ev.preventDefault();prevQ();}
     return;
   }

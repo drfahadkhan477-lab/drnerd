@@ -28,10 +28,12 @@
  *     a screen reader, and nothing throws.
  */
 'use strict';
+const fs = require('fs');
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted, onScreen, quiet, resized } = require('./_render.js');
+const { blankComments } = require('./_source.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-flags.js <build.html>'); process.exit(1); }
@@ -108,6 +110,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     return S.screen === 'quiz' && !!t && t.textContent.indexOf('Question ' + q.n + ' · ' + q.ch) >= 0 && !!document.getElementById('qFlag');
   }, id, { timeout: 6000 }).then(() => true, () => false);
   const settle = () => quiet(page);
+  /* A theme colour as the browser computes it (a token is a hex or a var, a style reads back rgb). */
+  const tokenColor = name => page.evaluate(n => { const s = document.createElement('span'); s.style.color = 'var(--' + n + ')'; document.body.appendChild(s); const c = getComputedStyle(s).color; s.remove(); return c; }, name);
   /* A colour is read when it has stopped changing: the buttons ease between states, and a value read mid-way is neither. */
   const stilled = () => page.waitForFunction(() => document.getAnimations().every(a => !(a.effect && Number.isFinite(a.effect.getTiming().iterations)) || a.playState !== 'running'), null, { timeout: 8000 }).catch(() => {});
   const deal = async ids => {
@@ -127,6 +131,24 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
   const [A, B, C, D] = first;
   const all = await page.evaluate(() => POOL.map(q => q.id));
 
+  head('the new styles keep the Safari floor');
+  {
+    /* overflow-wrap:anywhere is not understood before Safari 15.4: a rule that uses it needs the older words for the same job. */
+    const found = [], bad = [];
+    for (const f of ['study.css', 'home-quiz.css', 'figures.css']) {
+      const css = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'css', f), 'utf8'));
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const sel = m[1].trim().replace(/\s+/g, ' ');
+        if (!/\.anno|\.flag|\.rate-flag|\.btn-flag/.test(sel) || !/overflow-wrap\s*:\s*anywhere/.test(m[2])) continue;
+        found.push(sel.slice(0, 40));
+        const before = m[2].slice(0, m[2].search(/overflow-wrap\s*:\s*anywhere/));
+        if (!/overflow-wrap\s*:\s*break-word/.test(before) || !/word-break\s*:\s*break-word/.test(m[2])) bad.push(sel.slice(0, 40));
+      }
+    }
+    ok('the scan found the rules that use overflow-wrap:anywhere, which it is there to check', found.length >= 2, found.join(' | '));
+    ok('each has overflow-wrap:break-word before it and word-break:break-word with it, for Safari before 15.4', bad.length === 0, bad.join(' | '));
+  }
+
   head('the flag on the question on screen');
   await fresh();
   ok('a deck of three questions opens', await deal([A, B, C]));
@@ -139,6 +161,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('a Flag button is on the question, named Flag, a real button', r.word === 'Flag' && r.type === 'button', JSON.stringify(r));
     ok('and at least 44 px each way, so a thumb finds it', r.w >= 44 && r.h >= 44, r.w + 'x' + r.h);
     ok('it says the key: F', /\(F\)/.test(r.title), r.title);
+    const hint = await page.evaluate(() => document.querySelector('.kb-hint').textContent);
+    ok('and the hint under the options says F flags', /F to flag/.test(hint), hint);
     ok('nothing is flagged to begin with: not pressed, no badge, not in the set, not kept', before.pressed === 'false' && !before.on && !before.badge && !before.inSet && !before.saved && before.size === 0, JSON.stringify(before));
   }
   {
@@ -215,6 +239,17 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(() => document.activeElement.blur());
   }
 
+  {
+    await fresh();
+    const long = 'L'.repeat(120);
+    await page.evaluate(([a, id]) => { const q = Object.assign({}, QBYID[a], { id }); QBYID[id] = q; startAdhocQuiz([q], null); }, [A, long]);
+    await showing(long); await settle();
+    await page.keyboard.press('f');
+    const r = await flagRead();
+    await page.evaluate(id => { delete QBYID[id]; }, long);
+    ok('a question whose id is 120 characters, the longest a bank may give, can be flagged, and the reader is told so', r.id === long && r.inSet && r.saved && r.pressed === 'true' && r.live === 'Flagged. 1 question is in your Flagged list.', JSON.stringify([r.inSet, r.saved, r.live]));
+  }
+
   head('a flag is not an answer, and an answer does not take it off');
   await fresh();
   await deal([A, B]);
@@ -226,6 +261,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       pressed: document.getElementById('qFlag') && document.getElementById('qFlag').getAttribute('aria-pressed'), saved: JSON.parse(localStorage.getItem('accsap12.v2')).flagged }));
     ok('answering a flagged question right leaves it flagged: it is "right but unsure" that a flag holds', right.flagged && !right.missed && right.saved.includes(A), JSON.stringify(right));
     ok('and the Flag button is still there once the answer is shown, pressed', right.btn && right.pressed === 'true');
+    ok('and the hint under the answer says F flags', /F to flag/.test(await page.evaluate(() => document.querySelector('.kb-hint').textContent)));
     /* With the answer shown, the F line is the only thing in the key handler that reads the key's name. */
     const errs = errors.length;
     await page.evaluate(() => document.dispatchEvent(new Event('keydown')));
@@ -241,6 +277,65 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.keyboard.press('f');
     const un = await page.evaluate(() => ({ flagged: S.flagged.has(S.questions[S.qIdx].id), missed: S.missed.has(S.questions[S.qIdx].id) }));
     ok('unflagging an answered question does not put it right or wrong: the missed list is the same', !un.flagged && un.missed === true, JSON.stringify(un));
+  }
+
+  head('a review session: the flag is in the rating prompt');
+  await fresh();
+  {
+    await page.evaluate(([a, b]) => startQuiz(null, 'due', [QBYID[a], QBYID[b]]), [A, B]);
+    const up = await reached('quiz') && await showing(A); await settle();
+    await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci));
+    const inPrompt = await drawn('.rate-prompt #qFlag'); await settle();
+    const r = await page.evaluate(() => {
+      const b = document.getElementById('qFlag'), q = b ? b.getBoundingClientRect() : null, a = document.querySelector('.actions');
+      const p = b && b.closest('.rate-prompt'), pr = p ? p.getBoundingClientRect() : null;
+      return { n: document.querySelectorAll('#qFlag').length, inPrompt: !!p, row: a ? a.children.length : -1, w: q && Math.round(q.width), h: q && Math.round(q.height), pressed: b && b.getAttribute('aria-pressed'),
+        off: q && pr ? Math.round(Math.abs((q.left + q.right) / 2 - (pr.left + pr.right) / 2)) : null };
+    });
+    ok('a review session is up, and a card has been answered', up);
+    ok('the rating prompt holds the Flag button, which is the only one on the screen, while the action row is empty', inPrompt && r.inPrompt && r.n === 1 && r.row === 0, JSON.stringify(r));
+    ok('and it is at least 44 px each way, and not pressed', r.w >= 44 && r.h >= 44 && r.pressed === 'false', JSON.stringify(r));
+    ok('and it sits in the middle of the prompt, under the ratings', r.off !== null && r.off <= 3, JSON.stringify(r));
+    await page.click('#qFlag');
+    const on = await flagRead();
+    ok('tapping it there flags the question, before the card is rated', on.id === A && on.inSet && on.saved && on.pressed === 'true' && on.badge, JSON.stringify(on));
+    await page.locator('.rate-btn').nth(2).click();
+    const next = await showing(B); await settle();
+    ok('rating the card moves on and leaves the flag where it was put', next && await page.evaluate(a => S.flagged.has(a), A));
+    await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci));
+    await drawn('.rate-prompt #qFlag'); await settle();
+    await page.keyboard.press('f');
+    ok('the F key flags in the prompt too', (await flagRead()).id === B && (await flagRead()).inSet);
+  }
+
+  head('the keyboard on an answered question');
+  await fresh();
+  await deal([A, B, C]);
+  {
+    await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci)); await settle();
+    await page.focus('#qFlag'); await page.keyboard.press('Enter');
+    const enter = await page.evaluate(() => ({ i: S.qIdx, n: S.flagged.size }));
+    ok('Enter on the focused Flag button flags the question and stays on it', enter.i === 0 && enter.n === 1, JSON.stringify(enter));
+    await page.keyboard.press('Space');
+    const space = await page.evaluate(() => ({ i: S.qIdx, n: S.flagged.size }));
+    ok('Space on it takes the flag off and stays on the question', space.i === 0 && space.n === 0, JSON.stringify(space));
+    await page.evaluate(() => nextQ());
+    await showing(B); await settle();
+    await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci)); await settle();
+    await page.focus('.btn-prev'); await page.keyboard.press('Enter');
+    const prev = await showing(A); await settle();
+    ok('Enter on the focused Previous button goes back, as the button says, and not on', prev && (await page.evaluate(() => S.qIdx)) === 0);
+    await page.focus('#qFlag'); await page.keyboard.press('ArrowRight');
+    const right = await showing(B); await settle();
+    ok('the arrow keys are not a button\'s: Right moves on from a focused Flag button', right && (await page.evaluate(() => S.qIdx)) === 1);
+    await page.focus('#qFlag'); await page.keyboard.press('ArrowLeft');
+    const left = await showing(A); await settle();
+    ok('and Left goes back', left && (await page.evaluate(() => S.qIdx)) === 0);
+    await page.evaluate(() => focusEl('.reveal-header'));
+    const onHeading = await page.evaluate(() => document.activeElement && document.activeElement.className.indexOf('reveal-header') >= 0);
+    await page.keyboard.press('Enter');
+    const adv = await showing(B);
+    ok('Enter on the heading the answer moved the keyboard to still moves on', onHeading && adv && (await page.evaluate(() => S.qIdx)) === 1, String(onHeading));
   }
 
   head('flags are kept, and read back only as ids');
@@ -302,14 +397,16 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     const dirty = await exported();
     ok('an export leaves out what is not an id, as the import would refuse it', same((JSON.parse(dirty).stats || {}).flagged, ['keep']), JSON.stringify((JSON.parse(dirty).stats || {}).flagged));
     const verdicts = await page.evaluate(() => {
-      const run = f => { try { const p = validateAnnotationBackup({ stats: { flagged: f } }); return { ok: true, flagged: [...p.flagged] }; } catch (e) { return { ok: false, msg: e.message }; } };
-      return { good: run(['a', 'b']), dup: run(['a', 'a']), num: run(['a', 5]), str: run('abc'), obj: run({}), none: (() => { try { return { ok: true, flagged: [...validateAnnotationBackup({ stats: {} }).flagged] }; } catch (e) { return { ok: false, msg: e.message }; } })(), nul: run(null) };
+      const run = f => { try { const p = validateAnnotationBackup({ stats: { flagged: f } }); return { ok: true, has: 'flagged' in p, flagged: p.flagged ? [...p.flagged] : null }; } catch (e) { return { ok: false, msg: e.message }; } };
+      const bare = (() => { try { const p = validateAnnotationBackup({ stats: {} }); return { ok: true, has: 'flagged' in p }; } catch (e) { return { ok: false, msg: e.message }; } })();
+      return { good: run(['a', 'b']), dup: run(['a', 'a']), num: run(['a', 5]), str: run('abc'), obj: run({}), none: bare, nul: run(null), empty: run([]) };
     });
     ok('a backup with ids in its flagged list is accepted and gives them', verdicts.good.ok && same(verdicts.good.flagged, ['a', 'b']), JSON.stringify(verdicts.good));
     ok('and the same id twice is one flag', verdicts.dup.ok && same(verdicts.dup.flagged, ['a']), JSON.stringify(verdicts.dup));
     ok('a list with a number in it is refused, by name', !verdicts.num.ok && verdicts.num.msg === 'Invalid flagged list.', JSON.stringify(verdicts.num));
     ok('a flagged list that is a string or an object is refused, by name', !verdicts.str.ok && verdicts.str.msg === 'Invalid flagged list.' && !verdicts.obj.ok && verdicts.obj.msg === 'Invalid flagged list.', JSON.stringify([verdicts.str, verdicts.obj]));
-    ok('a backup from before flags, or with the list null, is accepted and gives none', verdicts.none.ok && same(verdicts.none.flagged, []) && verdicts.nul.ok && same(verdicts.nul.flagged, []), JSON.stringify([verdicts.none, verdicts.nul]));
+    ok('a backup from before flags, or with the list null, is accepted and says nothing of flags', verdicts.none.ok && verdicts.none.has === false && verdicts.nul.ok && verdicts.nul.has === false, JSON.stringify([verdicts.none, verdicts.nul]));
+    ok('a backup with an empty list is accepted and says there are none', verdicts.empty.ok && verdicts.empty.has === true && same(verdicts.empty.flagged, []), JSON.stringify(verdicts.empty));
     await page.evaluate(([a, c]) => { S.flagged = new Set([a, c]); save(); }, [A, C]);
     const restored = await page.evaluate(`(${RESTORE})(${JSON.stringify(JSON.stringify({ stats: { flagged: [B, D], chStats: {} } }))}).then(() => ({ flagged: [...S.flagged], saved: JSON.parse(localStorage.getItem('accsap12.v2')).flagged }))`);
     ok('importing a backup puts its flags where the live list and the storage both have them, in place of what was there', same(restored.flagged, [B, D]) && same(restored.saved, [B, D]), JSON.stringify(restored));
@@ -317,7 +414,11 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(`(${RESTORE})(${JSON.stringify(JSON.stringify({ stats: { flagged: ['ok', 5] } }))}).catch(() => {})`);
     ok('importing a backup whose list is not ids changes nothing', same(await page.evaluate(() => [...S.flagged]), refusedBefore) && same(await page.evaluate(() => JSON.parse(localStorage.getItem('accsap12.v2')).flagged), refusedBefore));
     await page.evaluate(`(${RESTORE})(${JSON.stringify(JSON.stringify({ stats: { chStats: {} } }))}).catch(() => {})`);
-    ok('importing an older backup, which has no flagged list, restores the state it had: none flagged', same(await page.evaluate(() => [...S.flagged]), []));
+    const older = await page.evaluate(() => ({ live: [...S.flagged], saved: JSON.parse(localStorage.getItem('accsap12.v2')).flagged }));
+    ok('importing an older backup, which has no flagged list, leaves the flags made since: it says nothing of them', same(older.live, [B, D]), JSON.stringify(older));
+    ok('and the record kept after the import still holds them, so a reload does not lose them', same(older.saved, [B, D]), JSON.stringify(older));
+    await page.evaluate(`(${RESTORE})(${JSON.stringify(JSON.stringify({ stats: { flagged: [], chStats: {} } }))}).catch(() => {})`);
+    ok('importing a backup with an empty list does empty the flags: a list, even an empty one, replaces them', same(await page.evaluate(() => [...S.flagged]), []) && same(await page.evaluate(() => JSON.parse(localStorage.getItem('accsap12.v2')).flagged), []));
   }
 
   head('the Flagged deck');
@@ -327,8 +428,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(([a, b, c, ghost]) => { QBYID[b].bad = true; S.flagged = new Set([a, b, ghost, 'constructor', c]); save(); }, [A, B, C, ghost]);
     const up = await page.evaluate(() => { startQuiz(null, 'flagged'); return true; });
     const dealt = up && await reached('quiz') && await drawn('#qFlag');
-    const d = await page.evaluate(() => ({ ids: S.questions.map(q => q.id).sort(), mode: S.mode, chapter: S.chapter, resumed: S.resumed, answers: Object.keys(S.answers).length }));
     ok('the Flagged deck opens on the quiz screen', dealt);
+    const d = await page.evaluate(() => ({ ids: S.questions.map(q => q && q.id).sort(), mode: S.mode, chapter: S.chapter, resumed: S.resumed, answers: Object.keys(S.answers).length }));
     ok('it holds the flagged questions the bank has and no others: not the quarantined one, not the id the bank lacks, not "constructor"', same(d.ids, [A, C].sort()), JSON.stringify(d.ids));
     ok('it is a Flagged deck of the whole bank, fresh, not a chapter\'s and not a resumed one', d.mode === 'flagged' && d.chapter === null && d.resumed === false && d.answers === 0, JSON.stringify(d));
     const before = JSON.stringify(await page.evaluate(() => S.resume));
@@ -392,27 +493,43 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('every button on them is at least 44 px tall', r.small.length === 0, r.small.join());
     ok('the Flagged card is a labelled group, and nothing spills out of it', r.role === 'group' && /Flagged/.test(r.label) && !r.spill, JSON.stringify([r.role, r.label, r.spill]));
     ok('the Annotated card is one button, which a keyboard reaches', r.annoTag === 'BUTTON');
+    const amber = await tokenColor('amber');
+    const badges = await page.evaluate(() => ['#flagCard .fc-badge', '#annoCard .fc-badge'].map(s => getComputedStyle(document.querySelector(s)).color));
+    ok('the badges on the two cards are amber', badges.every(c => c === amber), JSON.stringify([badges, amber]));
     await page.click('#flagGo');
     const go = await reached('quiz') && await drawn('#qFlag');
     const deck = await page.evaluate(() => ({ mode: S.mode, ids: S.questions.map(q => q.id).sort() }));
     ok('"Go through them" deals the Flagged deck', go && deck.mode === 'flagged' && same(deck.ids, [A, B, C].sort()), JSON.stringify(deck));
   }
   {
-    await page.evaluate(() => goStudy()); await onScreen(page, 'study', { marker: '#flagCard' }); await settle();
+    /* A flag on an id the bank has lost, which is kept; the card does not count it and Clear does not touch it. */
+    await page.evaluate(() => { S.flagged.add('GHOST_FLAG_ID_KEPT'); save(); goStudy(); });
+    await onScreen(page, 'study', { marker: '#flagCard' }); await settle();
     const log0 = await snap();
+    const dwelled = () => page.waitForFunction(() => Date.now() - _flagArmAt >= FLAG_DWELL_MS, null, { timeout: 4000 }).then(() => true, () => false);
+    const clearLook = () => page.evaluate(() => { const b = document.getElementById('flagClear'); return b ? getComputedStyle(b).color : null; });
+    await page.mouse.move(2, 2); await stilled();
+    const resting = await clearLook();
     await page.click('#flagClear');
-    await drawn('#flagClear.arm');
-    const armed = await page.evaluate(() => ({ text: document.getElementById('flagClear').textContent.trim(), n: S.flagged.size, focus: document.activeElement && document.activeElement.id, cls: document.getElementById('flagClear').className }));
-    ok('the first tap on Clear arms it, says how many, and clears nothing', armed.n === 3 && /Tap again to clear all 3/.test(armed.text), JSON.stringify(armed));
+    await drawn('#flagClear.arm'); await page.mouse.move(2, 2); await stilled();
+    const armed = await page.evaluate(() => { const b = document.getElementById('flagClear'); return { text: b ? b.textContent.trim() : null, n: flaggedQs().length, raw: S.flagged.size, focus: document.activeElement && document.activeElement.id, color: b ? getComputedStyle(b).color : null }; });
+    const red = await tokenColor('red');
+    ok('the first tap on Clear arms it, says how many the card counts, and clears nothing', armed.n === 3 && armed.raw === 4 && /^Tap again to clear all 3$/.test(armed.text || ''), JSON.stringify(armed));
+    ok('an armed Clear looks armed: red, and not the colour it rests in', armed.color === red && resting !== red, JSON.stringify([resting, armed.color, red]));
     ok('and the keyboard is still on the button that was pressed', armed.focus === 'flagClear', armed.focus);
-    await page.waitForFunction(() => !document.getElementById('flagClear') || !document.getElementById('flagClear').classList.contains('arm'), null, { timeout: 8000 }).catch(() => {});
-    const timed = await page.evaluate(() => ({ n: S.flagged.size, arm: document.getElementById('flagClear').classList.contains('arm') }));
-    ok('left alone for five seconds it puts itself back, with every flag still there', timed.n === 3 && !timed.arm, JSON.stringify(timed));
+    const echo = await page.evaluate(() => { _flagArmAt = Date.now(); clearFlags(); return { raw: S.flagged.size, armed: _flagArm }; });
+    ok('a second tap on its heels, the echo of the first, clears nothing and leaves it armed', echo.raw === 4 && echo.armed === true, JSON.stringify(echo));
+    await page.waitForFunction(() => !document.getElementById('flagClear') || !document.getElementById('flagClear').classList.contains('arm'), null, { timeout: 9000 }).catch(() => {});
+    const timed = await page.evaluate(() => { const b = document.getElementById('flagClear'); return { n: S.flagged.size, arm: b ? b.classList.contains('arm') : null, focus: document.activeElement && document.activeElement.id }; });
+    ok('left alone for five seconds it puts itself back, with every flag still there', timed.n === 4 && timed.arm === false, JSON.stringify(timed));
+    ok('and the keyboard is still on the button when it does', timed.focus === 'flagClear', timed.focus);
     await page.click('#flagClear'); await drawn('#flagClear.arm');
+    await dwelled();
     await page.click('#flagClear');
     await page.waitForFunction(() => !document.getElementById('flagCard'), null, { timeout: 4000 }).catch(() => {});
-    const cleared = await page.evaluate(() => ({ card: !!document.getElementById('flagCard'), n: S.flagged.size, saved: JSON.parse(localStorage.getItem('accsap12.v2')).flagged, notes: Object.keys(NOTES).length, anno: !!document.getElementById('annoCard'), live: document.getElementById('srLive').textContent }));
-    ok('the second tap clears every flag: the card goes, the set and the storage are empty', !cleared.card && cleared.n === 0 && same(cleared.saved, []), JSON.stringify(cleared));
+    const cleared = await page.evaluate(() => ({ card: !!document.getElementById('flagCard'), n: flaggedQs().length, raw: [...S.flagged], saved: JSON.parse(localStorage.getItem('accsap12.v2')).flagged, notes: Object.keys(NOTES).length, anno: !!document.getElementById('annoCard'), live: document.getElementById('srLive').textContent }));
+    ok('the second tap clears the flags the card counted: the card goes and none is dealt', !cleared.card && cleared.n === 0, JSON.stringify(cleared));
+    ok('a flag on a question the bank has lost is kept, in the set and in the storage', same(cleared.raw, ['GHOST_FLAG_ID_KEPT']) && same(cleared.saved, ['GHOST_FLAG_ID_KEPT']), JSON.stringify([cleared.raw, cleared.saved]));
     ok('and the notes are not touched', cleared.notes === 1 && cleared.anno === true);
     ok('a screen reader is told', cleared.live === 'All flags cleared.', cleared.live);
     ok('clearing the flags is not an answer', same(await snap(), log0));
@@ -540,8 +657,16 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       bold: document.querySelectorAll('#annoList .anno-text b').length, xss: window.__xss === undefined }));
     ok('a note with markup in it is shown as the characters it is, and runs nothing', x.text === evil && x.kids === 0 && x.xss, JSON.stringify({ kids: x.kids, xss: x.xss, text: x.text.slice(0, 40) }));
     ok('typing a word of it marks the word and still makes no markup of the note', x.bold <= 1 && x.kids === 0, JSON.stringify(x.bold));
+    const amp = 'Ampicillin & gentamicin "quoted" it\'s 39 mg';
+    await page.evaluate(([a, amp]) => { NOTES[a] = [{ id: 'n' + Date.now().toString(36), x: .1, y: .1, text: amp, color: '' }]; saveJSON(NOTE_KEY, NOTES); goAnnotations(); }, [A, amp]);
+    await drawn('#annoList .anno-row'); await settle();
+    const marks = async q => { await page.fill('#annoQ', q); return page.evaluate(() => ({ text: document.querySelector('.anno-text').textContent, marks: [...document.querySelectorAll('#annoList .anno-text mark')].map(m => m.textContent) })); };
+    const m1 = await marks('amp'), m2 = await marks('quot'), m3 = await marks('39');
+    ok('a note with an ampersand is not harmed by a search for "amp": the word is marked where it is written and the text is as typed', same(m1.marks, ['Amp']) && m1.text === amp, JSON.stringify(m1));
+    ok('nor by one for "quot", which is also the name of the entity of a quote', same(m2.marks, ['quot']) && m2.text === amp, JSON.stringify(m2));
+    ok('nor an apostrophe by "39", the number in its entity: the 39 that is written is marked, the one in the entity is not there to mark', same(m3.marks, ['39']) && m3.text === amp, JSON.stringify(m3));
     const raw = { s: 'Stem with <b>markup</b> & <i>more</i> text', ch: 'Chapter <u>x</u> & y' };
-    await page.evaluate(([a, raw]) => { const q = QBYID[a]; window.__was = { s: q.s, ch: q.ch }; q.s = raw.s; q.ch = raw.ch; goAnnotations(); }, [A, raw]);
+    await page.evaluate(([a, raw]) => { const q = QBYID[a]; window.__was = { s: q.s, ch: q.ch }; q.s = raw.s; q.ch = raw.ch; ANNO.q = ''; goAnnotations(); }, [A, raw]);
     await drawn('#annoList .anno-row'); await settle();
     const y = await page.evaluate(() => ({ stem: document.querySelector('.anno-stem').textContent, top: document.querySelector('.hit-ch').textContent,
       tags: document.querySelectorAll('#annoList .anno-stem b, #annoList .anno-stem i, #annoList .hit-ch u').length }));
@@ -581,7 +706,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('handing in adds the block\'s flagged questions to the Flagged list, a blank one too, and keeps what was there', same(after.flagged, [D, q1, q3, q4]), JSON.stringify(after.flagged));
     ok('a question answered and not flagged, and one flagged and unflagged, are not added', !after.flagged.includes(q0) && !after.flagged.includes(q2) && !after.flagged.includes(q5));
     ok('and they are in the saved record', same(after.saved, [D, q1, q3, q4]), JSON.stringify(after.saved));
-    ok('the report says they were added', after.line.some(t => /3 flagged/.test(t) && /Added to your Flagged list\./.test(t)), JSON.stringify(after.line));
+    ok('the report says how many of the three flagged are in the Flagged list: all three', after.line.some(t => /3 flagged/.test(t) && /In your Flagged list: 3 of 3\./.test(t)), JSON.stringify(after.line));
     await page.evaluate(() => mockReview('all'));
     const rev = await reached('quiz') && await showing(q0); await settle();
     const r0 = await flagRead();
@@ -593,6 +718,14 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.keyboard.press('f');
     const un = await flagRead();
     ok('a carried flag is taken off there as any flag is, and the other carried flags stay', !un.inSet && un.size === 3 && same(await page.evaluate(() => [...S.flagged]), [D, q3, q4]), JSON.stringify(un));
+    const reportLine = async () => { await page.evaluate(() => openMockReport()); await reached('mockreport'); await drawn('.mock-report'); await settle(); return page.evaluate(() => [...document.querySelectorAll('.mock-slow')].map(x => x.textContent.trim()).join(' | ')); };
+    const l2 = await reportLine();
+    ok('the report, opened again, says how many are in the list now: two of the three', /3 flagged/.test(l2) && /In your Flagged list: 2 of 3\./.test(l2), l2);
+    await page.evaluate(() => { S.flagged = new Set(); save(); });
+    const l0 = await reportLine();
+    ok('and with every flag gone, none of the three: it does not say they were added', /In your Flagged list: 0 of 3\./.test(l0) && !/Added/.test(l0), l0);
+    await page.evaluate(([a, b]) => { S.flagged = new Set([a]); save(); }, [q1, q3]);
+    ok('and with one of them flagged again, one of the three', /In your Flagged list: 1 of 3\./.test(await reportLine()));
   }
   {
     /* a block with no flag adds none, and says nothing of it; one thrown away adds none */
@@ -602,8 +735,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await reached('mock');
     await page.evaluate(() => { MockExam.go(S.mock, 0); mockPick(0); MockExam.go(S.mock, 1); mockPick(1); mockSubmit(); });
     await reached('mockreport'); await drawn('.mock-report'); await settle();
-    const none = await page.evaluate(() => ({ flagged: S.flagged.size, said: /Added to your Flagged list/.test(document.querySelector('.mock-report').textContent) }));
-    ok('a block with nothing flagged adds nothing, and the report does not say it added something', none.flagged === 0 && none.said === false, JSON.stringify(none));
+    const none = await page.evaluate(() => ({ flagged: S.flagged.size, said: /Flagged list/.test(document.querySelector('.mock-report').textContent) }));
+    ok('a block with nothing flagged adds nothing, and the report says nothing of a Flagged list', none.flagged === 0 && none.said === false, JSON.stringify(none));
     await fresh();
     await page.evaluate(ids => { const real = MockExam.build; MockExam.build = () => ids.slice(); _mockCfg.sec = 0; _mockCfg.n = 20; _mockCfg.ch = ''; try { startMock(); } finally { MockExam.build = real; } mockStopTicker(); }, [q0, q1, q2, q3]);
     await reached('mock');
@@ -629,6 +762,9 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     const flaggedRows = r.badges.filter(b => b[1]);
     ok('exactly the flagged hit carries the badge', flaggedRows.length === 1 && flaggedRows[0][0].indexOf(hits[0]) >= 0, JSON.stringify(flaggedRows));
     ok('and it says "flagged"', await page.evaluate(() => document.querySelector('.hit-flag.flagged').textContent.trim()) === 'flagged');
+    const amber = await tokenColor('amber'), red = await tokenColor('red');
+    const hc = await page.evaluate(() => getComputedStyle(document.querySelector('.hit-flag.flagged')).color);
+    ok('and it is amber, which is not the red of "previously missed"', hc === amber && hc !== red, JSON.stringify([hc, amber, red]));
   }
 
   head('the quiz\'s row of buttons, from a phone to an iPad');
