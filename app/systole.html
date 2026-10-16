@@ -135,6 +135,9 @@
 <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5 3.5 8 12 12.5 20.5 8Z"/><path d="m3.5 12 8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5"/></symbol>
 <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></symbol>
 <symbol id="i-waveform" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5.5 21V3.5"/><path d="M5.5 4.5h12.5l-2.7 4 2.7 4H5.5"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.4"/><rect x="13.5" y="5" width="4" height="14" rx="1.4"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.2v13.6a.6.6 0 0 0 .9.5l10.7-6.8a.6.6 0 0 0 0-1L8.9 4.7a.6.6 0 0 0-.9.5Z"/></symbol>
 </defs>
 </svg>
 <script>/* Adopt the saved theme before anything paints, so choosing light or
@@ -547,14 +550,15 @@ function setMissReason(k){
   });
   try{ saveLogSoon(); }catch(_){}
 }
-function logReview(q,grade,ok,mode){
+function logReview(q,grade,ok,mode,extra){
   try{
     const c=S.srs[q.id];
     LOG.push({t:Date.now(), q:q.id, ch:q.ch, g:grade, ok:ok?1:0, m:mode,
       /* ms, cf and why are the calibrate step's three signals. A row written
          before it exists simply lacks them — the same honesty the ef comment
          below settled on, rather than backfilling history nobody recorded. */
-      ms:answerMs(), cf:(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null, why:null,
+      ms:(extra&&'ms' in extra)?extra.ms:answerMs(),
+      cf:(extra&&'cf' in extra)?extra.cf:((S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null), why:null,
       /* ef was SM-2's ease factor and an FSRS card has never had one, so this
          wrote an empty field on every review since the scheduler changed —
          in the log that exists precisely to fit parameters to real history.
@@ -1599,6 +1603,7 @@ function refImportText(){
 @@SLOT[src:src/core/studyplan.js]@@
 @@SLOT[src:src/core/topicrun.js]@@
 @@SLOT[src:src/core/voicemode.js]@@
+@@SLOT[src:src/core/mockexam.js]@@
 
 /* ═══════════ SM-2 spaced repetition + active recall ═══════════
    Per-question card: {difficulty, stability, ivl, reps, due, lapses, last}.
@@ -1900,6 +1905,7 @@ function buildStats(){
     </div>`:''}
     ${retentionTile()}
     ${calibPanel()}
+    ${mockPanel()}
 
     <div class="panel">
       <div class="panel-h">Last 30 days</div>
@@ -4270,7 +4276,7 @@ const KEY='accsap12.v2';
 const DATA_SCHEMA_VERSION=1;
 const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'sessionCorrect','sessionTotal','srs','reviewStreak','lastReviewDay','daily',
-  'practice','sinceBackup','lastBackup','resume','focusMode','examDate'];
+  'practice','sinceBackup','lastBackup','resume','focusMode','examDate','exams'];
 let FOREIGN={};
 
 /* A calendar day as the app writes one (FSRS.localDateToISO): a daily key,
@@ -4312,6 +4318,7 @@ function usableStats(raw){
   const out=Object.assign({},raw);
   for(const k in STAT_ENTRY) if(statRecord(out[k]))
     out[k]=Object.fromEntries(Object.entries(out[k]).filter(([key,v])=>statEntryOk(k,v,key)));
+  if('exams' in out) out.exams=Array.isArray(out.exams)?out.exams.filter(MockExam.validEntry):[];
   return out;
 }
 
@@ -4323,11 +4330,13 @@ function progressFromBackup(raw){
     if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
   for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
   if(raw.missed!=null&&(!Array.isArray(raw.missed)||raw.missed.some(x=>typeof x!=='string'))) throw new Error('Invalid missed list.');
+  if(raw.exams!=null&&(!Array.isArray(raw.exams)||raw.exams.some(x=>!MockExam.validEntry(x)))) throw new Error('Invalid exam history.');
   return {resume:raw.resume||{},resumed:false,sessionCorrect:raw.sessionCorrect||0,sessionTotal:raw.sessionTotal||0,
     chStats:raw.chStats||{},missed:new Set(raw.missed||[]),srs:raw.srs||{},reviewStreak:raw.reviewStreak||0,
     lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
     sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
-    focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null};
+    focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null,
+    mocks:MockExam.cleanHistory(raw.exams)};
 }
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
@@ -4336,7 +4345,7 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOR
   sessionCorrect:S.sessionCorrect,sessionTotal:S.sessionTotal,
   srs:S.srs,reviewStreak:S.reviewStreak,lastReviewDay:S.lastReviewDay,daily:S.daily,
   practice:S.practice,sinceBackup:S.sinceBackup,lastBackup:S.lastBackup,
-  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null})));}
+  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null,exams:S.mocks})));}
   /* This holds the statistics and all 639 FSRS cards. It had a bare catch, so
      the one store whose loss you would most want to hear about was the only
      one that died without a word. */
@@ -4366,7 +4375,9 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
   sinceBackup:boot.sinceBackup||0,lastBackup:boot.lastBackup||null,
   mode:'all',zoomed:-1,theme:boot.theme||'auto',homeLayout:boot.homeLayout||'signal',
   focusMode:!!boot.focusMode,
-  examDate:/^\d{4}-\d{2}-\d{2}$/.test(boot.examDate||'')?boot.examDate:null};
+  examDate:/^\d{4}-\d{2}-\d{2}$/.test(boot.examDate||'')?boot.examDate:null,
+  /* What is kept of each finished mock block, newest last (src/core/mockexam.js). */
+  mocks:MockExam.cleanHistory(boot.exams)};
 
 /* ── theme ──
    A theme is a mode (which drives every existing component style) paired with
@@ -4760,25 +4771,33 @@ function hapticAnswer(ok){
   if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   navigator.vibrate(ok?30:[30,60,30]);
 }
-function selectOpt(idx){
-  if(S.answered)return;
-  const q=S.questions[S.qIdx];
-  if(!(idx>=0&&idx<q.o.length))return;                 // guard: key beyond option count
-  const ok=idx===q.ci;
+/* What one graded answer does to the record, in one place: the chapter's right and total, the session, the
+   missed list, the review log, the practice count and the day. selectOpt calls it as an answer is chosen; a
+   mock exam calls it for each question it answered when the block is handed in, so the two cannot count
+   differently. */
+function recordAnswer(q,ok,mode,extra){
   const st=S.chStats[q.ch]||(S.chStats[q.ch]={correct:0,total:0});
-  st.total++;S.sessionTotal++;S.quizTotal++;
-  if(ok){st.correct++;S.sessionCorrect++;S.quizCorrect++;S.missed.delete(q.id);}
+  st.total++;S.sessionTotal++;
+  if(ok){st.correct++;S.sessionCorrect++;S.missed.delete(q.id);}
   else S.missed.add(q.id);
   /* Practice and review are different signals. A chapter drill records that it
      happened; only the review queue is allowed to move a card's due date.
      Otherwise drilling a chapter silently rewrites the schedule for every card
      it touches, and answering twice in a day compresses its interval. */
-  logReview(q,null,ok,S.mode==='due'?'review-answer':'practice');
-  if(S.mode!=='due'){
+  logReview(q,null,ok,mode==='due'?'review-answer':mode==='exam'?'exam':'practice',extra);
+  if(mode!=='due'){
     const pr=S.practice[q.id]||(S.practice[q.id]={n:0,c:0,t:0});
     pr.n++; if(ok)pr.c++; pr.t=Date.now();
   }
   logAnswer(ok);
+}
+function selectOpt(idx){
+  if(S.answered)return;
+  const q=S.questions[S.qIdx];
+  if(!(idx>=0&&idx<q.o.length))return;                 // guard: key beyond option count
+  const ok=idx===q.ci;
+  S.quizTotal++; if(ok)S.quizCorrect++;
+  recordAnswer(q,ok,S.mode);
   S.selected=idx;S.answered=true;
   S.answers[S.qIdx]={selected:idx,rated:false,
     cf:(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null};
@@ -4829,7 +4848,7 @@ function nextQ(){
        it is cleared exactly once, by the one path that can finish a deck. */
     clearResume(S.chapter,S.mode);
     S.resumed=false;
-    S.screen='results';render();
+    S.screen=S.mode==='mockreview'&&S.mockLast?'mockreport':'results';render();
     try{ summariseSession(); }catch(_){}}
   else{S.qIdx++;restoreQuizState();render();clearAnnounce();focusEl('.q-card');markShown();saveResume();}
 }
@@ -4863,8 +4882,437 @@ function resetProgress(){
   S.chStats={};S.missed=new Set();S.sessionCorrect=0;S.sessionTotal=0;
   sessionSummarised=false;
   S.quizCorrect=0;S.quizTotal=0;S.srs={};S.reviewStreak=0;S.lastReviewDay=null;S.daily={};
-  S.resume={};S.resumed=false;save();goHome();
+  S.resume={};S.resumed=false;
+  S.mocks=[];S.mockLast=null;S.mock=null;mockWrite(MOCK_KEY,null);mockWrite(MOCK_LAST_KEY,null);
+  save();goHome();
 }
+/* ═══════════ Mock exam — the rules are src/core/mockexam.js; this is the screen ═══════════
+   A timed block, no feedback until it is handed in. The module decides what to ask, runs the clock and
+   scores the block; what only the page can do is here: keep the block across a closed page, stop the clock
+   while the app is hidden, take search and Apex away (either would hand over the answer), and count the
+   answers into the same record a practice answer counts into (recordAnswer), once, at hand-in.
+
+   Two small records outside the progress blob, because they are written every few seconds and are not
+   progress: the block in progress (MOCK_KEY) and the block last handed in (MOCK_LAST_KEY), kept so its
+   report can be opened again after a reload. What is kept of every finished block is in the blob (S.mocks). */
+const MOCK_KEY='accsap12.mock', MOCK_LAST_KEY='accsap12.mocklast';
+/* An id is a question only if QBYID owns it: a plain object also answers to "constructor" and "__proto__". */
+const mockHas=id=>Object.prototype.hasOwnProperty.call(QBYID,id);
+const mockLookup=id=>{ const q=mockHas(id)?QBYID[id]:null; return q?{ch:q.ch,ci:q.ci}:null; };
+/* Met before, by any route: a mock block takes questions never met first. */
+const mockSeen=id=>!!(S.practice[id]||S.srs[id]||S.missed.has(id));
+function mockRead(k){ try{ const t=localStorage.getItem(k); return t?JSON.parse(t):null; }catch(_){ return null; } }
+let _mockWarned=false;
+function mockWrite(k,v){
+  try{ if(v==null) localStorage.removeItem(k); else localStorage.setItem(k,JSON.stringify(v)); return true; }
+  catch(_){
+    if(!_mockWarned){ _mockWarned=true; toast('This device cannot store the block: it will be lost if the app closes.'); }
+    return false;
+  }
+}
+function mockEnv(last){
+  return {has:id=>mockHas(id)&&!QBYID[id].bad, nOpts:id=>mockHas(id)&&QBYID[id].o?QBYID[id].o.length:0,
+    lastStartedAt:last&&Number.isFinite(last.startedAt)?last.startedAt:null};
+}
+function mockLoadLast(){ return MockExam.restoreDone(mockRead(MOCK_LAST_KEY),mockEnv(null)); }
+let _mockLost=false;            // a block was open when the page closed and could not be carried on: the Study card says so until another is started
+function mockLoad(){
+  let text=null, raw=null;
+  try{ text=localStorage.getItem(MOCK_KEY); }catch(_){}
+  if(text==null) return null;
+  try{ raw=JSON.parse(text); }catch(_){}
+  const last=mockRead(MOCK_LAST_KEY);
+  const rec=MockExam.restore(raw,mockEnv(last));
+  if(!rec){
+    mockWrite(MOCK_KEY,null);          // a record this build cannot carry on, even one that is not JSON, is forgotten, not offered
+    /* The one handed in already (the page closed between its hand-in and the clearing of this record) is left over, not lost. */
+    if(!(raw&&last&&Number.isFinite(last.startedAt)&&raw.startedAt===last.startedAt)) _mockLost=true;
+  }
+  return rec;
+}
+function mockPersist(){ if(S.mock) mockWrite(MOCK_KEY,MockExam.serialize(S.mock)); }
+S.mock=mockLoad(); S.mockLast=mockLoadLast(); S.mockView='q';
+
+/* What the Study card is set to start. Not saved: a block is chosen each time, from the last choice this visit. */
+let _mockCfg={n:40,sec:MockExam.DEFAULT_PACE,ch:''}, _mockArm=false;
+function mockAvail(){ return POOL.filter(q=>!_mockCfg.ch||q.ch===_mockCfg.ch).length; }
+function mockSizes(){ const a=mockAvail(), s=MockExam.SIZES.filter(n=>n<=a); return s.length?s:[a]; }
+function mockSize(){ const s=mockSizes(); return s.includes(_mockCfg.n)?_mockCfg.n:(s.filter(x=>x<=_mockCfg.n).pop()||s[0]); }
+function mockStartText(){
+  const n=mockSize(), t=_mockCfg.sec?MockExam.fmtClock(n*_mockCfg.sec*1000,'down')+' on the clock':'no time limit';
+  return `Start a ${n}-question block · ${t}`;
+}
+function setMockCfg(k,v){
+  if(k==='n'&&Number.isInteger(+v)&&+v>0) _mockCfg.n=+v;
+  else if(k==='sec'&&(+v===0||MockExam.PACES.includes(+v))) _mockCfg.sec=+v;
+  else if(k==='ch') _mockCfg.ch=CHAPTERS.includes(v)?v:'';
+  else return;
+  const card=document.getElementById('mockCard'); if(!card){ return; }
+  const had=card.contains(document.activeElement);
+  const html=mockCardInner(); if(card.innerHTML!==html) card.innerHTML=html;
+  /* The control that was pressed is drawn again; the keyboard stays on it (the chip now marked, or the menu). */
+  if(had){ const el=card.querySelector(k==='n'?'[data-n].on':k==='sec'?'[data-sec].on':'#mockCh'); if(el) el.focus(); }
+}
+
+function mockQ(){ const r=S.mock; return r?QBYID[r.ids[r.i]]||null:null; }
+function mockClockText(r){ const rem=MockExam.remainingMs(r); return rem==null?MockExam.fmtClock(r.elapsedMs):MockExam.fmtClock(rem,'down'); }
+function mockPaceText(r){
+  const p=MockExam.pace(r); if(!p) return '';
+  return p.status==='ahead'?'Ahead of pace':p.status==='behind'?'Behind pace · aim for question '+p.expected:'On pace';
+}
+function mockCellLabel(c){ return 'Question '+c.n+(c.answered?', answered':', not answered')+(c.flagged?', flagged':'')+(c.current?', current':''); }
+
+function startMock(){
+  if(S.mock){ resumeMock(); return; }
+  try{ stopVoice(); }catch(_){}
+  const ch=_mockCfg.ch&&CHAPTERS.includes(_mockCfg.ch)?_mockCfg.ch:null;
+  const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen});
+  if(!ids.length){ toast('There are no questions to build a block from.'); return; }
+  S.mock=MockExam.start({ids,secPerQ:_mockCfg.sec,chapter:ch,now:Date.now()});
+  S.mockView='q'; _mockSaid=mockSaidNow(); _mockArm=false; _mockLost=false; mockFresh();
+  mockPersist();
+  S.screen='mock'; render(); toTop();
+}
+function resumeMock(){
+  if(!S.mock) return;
+  S.mockView='q'; _mockSaid=mockSaidNow(); _mockArm=false; mockFresh();
+  S.screen='mock'; render(); toTop();
+}
+/* Two taps, not a dialog: the first arms the button, the second throws the block away. */
+function discardMock(){
+  if(!S.mock) return;
+  if(!_mockArm){ _mockArm=true; setTimeout(()=>{ if(_mockArm){ _mockArm=false; if(S.screen==='study') render(); } },5000); if(S.screen==='study'){ render(); focusEl('#mockDiscard'); } return; }
+  _mockArm=false; S.mock=null; mockWrite(MOCK_KEY,null);
+  if(S.screen==='study') render();
+}
+
+/* ── the clock and what hides while a block is open ── */
+let _mockTimer=null, _mockBeat=0, _mockSaid={five:false,one:false}, _mockApex=null;
+/* What has been said for the clock as it stands. A block taken up again at 2:20 is past the five-minute mark, and
+   saying "five minutes left" now would be wrong, every time it was left and come back to. */
+function mockSaidNow(){ const u=S.mock?MockExam.urgency(S.mock):'none'; return {five:u==='low'||u==='critical',one:u==='critical'}; }
+/* Taking up a question as new: no verdict left in the live region from a quiz answer (a screen reader can still read it),
+   and no figure left enlarged from the question before. The kept figure is dropped too, or it would come back enlarged. */
+function mockFresh(){ clearAnnounce(); S.zoomed=-1; figCache={id:null,node:null}; }
+/* Called by every render. A block is "open" while its screen is up: attribute on, Apex put away, clock ticking.
+   Any other screen, however it was reached, finds the clock still running and stops it (mockLeave) — so no
+   navigation path has to remember to. The block stays, paused by its clock stopping, and the Study card offers it. */
+function mockMount(){
+  const on=S.screen==='mock'&&!!S.mock, h=document.documentElement;
+  const sh=document.getElementById('shell');
+  if(on){
+    /* Arriving, not redrawing: note how Apex was left, to give it back as it was when the block is left. An open
+       panel takes a column of the screen, which the stylesheet's hiding would not give back to the question. */
+    if(!h.hasAttribute('data-mock')&&sh) _mockApex={open:sh.classList.contains('ai-open'),full:sh.classList.contains('ai-full')};
+    h.setAttribute('data-mock','1');
+    if(sh) sh.classList.remove('ai-open','ai-full');
+    /* The bar was just drawn, with its three ways to the answers. They are taken out of it rather than drawn conditionally in
+       buildNav, whose markup suites cut out of this file by its text (verify-notesearch, verify-echo). */
+    const bar=document.getElementById('navbar');
+    if(bar) bar.querySelectorAll('[onclick="openSearch()"],[onclick="goNoteSearch()"],[onclick="goEcho()"]').forEach(b=>b.remove());
+    mockStartTicker();
+  } else {
+    if(h.hasAttribute('data-mock')){
+      const ap=_mockApex; _mockApex=null;
+      if(ap&&sh){ if(ap.open) sh.classList.add('ai-open'); if(ap.full) sh.classList.add('ai-full'); }
+    }
+    h.removeAttribute('data-mock');
+    if(_mockTimer) mockLeave();
+  }
+}
+function mockStartTicker(){
+  if(_mockTimer||!S.mock) return;
+  MockExam.resume(S.mock,Date.now());
+  _mockTimer=setInterval(()=>{ mockTick(); },1000);
+}
+function mockStopTicker(){ if(_mockTimer){ clearInterval(_mockTimer); _mockTimer=null; } }
+function mockLeave(){
+  mockStopTicker();
+  if(S.mock){ MockExam.tick(S.mock,Date.now(),true); MockExam.hold(S.mock); mockPersist(); }
+}
+function mockTick(now){
+  const r=S.mock;
+  if(!r){ mockStopTicker(); return; }
+  if(S.screen!=='mock'){ mockLeave(); return; }
+  MockExam.tick(r,now==null?Date.now():now,document.visibilityState!=='hidden');
+  if(++_mockBeat%5===0) mockPersist();
+  if(MockExam.expired(r)){ mockSubmit(true); return; }
+  mockPaintClock();
+  const u=MockExam.urgency(r);
+  if(u==='low'&&!_mockSaid.five){ _mockSaid.five=true; mockSay('Five minutes left.'); }
+  if(u==='critical'&&!_mockSaid.one){ _mockSaid.one=true; mockSay('One minute left.'); }
+}
+function mockSay(t){
+  const live=document.getElementById('srLive');
+  if(live){ live.textContent=''; live.textContent=t; }
+  toast(t);
+}
+function mockPaintClock(){
+  const r=S.mock; if(!r) return;
+  const c=document.getElementById('mockClock');
+  if(c){ c.textContent=mockClockText(r); c.setAttribute('data-urgency',MockExam.urgency(r)); }
+  const p=document.getElementById('mockPace');
+  if(p){ p.textContent=mockPaceText(r); p.setAttribute('data-status',(MockExam.pace(r)||{}).status||''); }
+}
+/* An iPad closes a hidden page without being asked: whatever is hidden or closing leaves the block as it stands. */
+function mockStop(){
+  const r=S.mock; if(!r||S.screen!=='mock') return;
+  MockExam.tick(r,Date.now(),true); MockExam.hold(r); mockPersist();
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden') mockStop();
+  else if(S.mock&&S.screen==='mock') MockExam.resume(S.mock,Date.now());
+});
+window.addEventListener('pagehide',mockStop);
+
+/* ── working the block ── */
+function mockPick(i){
+  const r=S.mock,q=mockQ(); if(!r||!q||S.mockView!=='q') return;
+  if(MockExam.select(r,i,q.o.length)){ mockPersist(); mockPaint(); }
+}
+function mockFlag(){
+  const r=S.mock; if(!r||S.mockView!=='q') return;
+  if(MockExam.toggleFlag(r)){ mockPersist(); mockPaint(); }
+}
+function mockGo(j){
+  const r=S.mock; if(!r) return;
+  S.mockView='q'; mockFresh();
+  if(MockExam.go(r,j)) mockPersist();
+  render(); toTop(); focusEl('.q-card');       // as the quiz does: the question that was asked for is where the keyboard and the screen reader are
+}
+function mockNext(){ const r=S.mock; if(!r) return; if(r.i>=r.ids.length-1) mockEnd(); else mockGo(r.i+1); }
+function mockPrev(){ const r=S.mock; if(r&&r.i>0) mockGo(r.i-1); }
+function mockEnd(){ if(!S.mock) return; S.mockView='end'; render(); toTop(); focusEl('.mock-end h2'); }
+function mockPause(){ const r=S.mock; if(!r) return; MockExam.tick(r,Date.now(),true); MockExam.pause(r); mockPersist(); render(); focusEl('.mock-paused .btn'); }
+function mockUnpause(){ const r=S.mock; if(!r) return; MockExam.unpause(r,Date.now()); mockPersist(); render(); focusEl('.q-card'); }
+/* Updates what a pick or a flag changed, in place: the whole screen redrawing (and its entrance animation
+   replaying) on every tap would make a timed block feel like it was reloading. */
+function mockPaint(){
+  const r=S.mock; if(!r||S.screen!=='mock') return;
+  const st=MockExam.states(r), chosen=r.sel[r.i];
+  document.querySelectorAll('.mock-opt').forEach(b=>{
+    const on=+b.dataset.mi===chosen; b.classList.toggle('picked',on); b.setAttribute('aria-pressed',on?'true':'false');
+  });
+  const f=document.getElementById('mockFlagBtn');
+  if(f){ const on=!!r.flag[r.i]; f.classList.toggle('on',on); f.setAttribute('aria-pressed',on?'true':'false'); }
+  const sub=document.getElementById('mockSub'); if(sub) sub.textContent=st.answered+' answered · '+st.flagged+' flagged';
+  const pf=document.getElementById('mockProg'); if(pf) pf.style.transform='scaleX('+(st.answered/Math.max(1,st.n)).toFixed(4)+')';
+  document.querySelectorAll('.mock-cell').forEach(el=>{
+    const c=st.cells[+el.dataset.mc]; if(!c) return;
+    el.classList.toggle('done',c.answered); el.classList.toggle('flag',c.flagged); el.classList.toggle('cur',c.current);
+    el.setAttribute('aria-label',mockCellLabel(c));
+  });
+}
+function mockKey(ev){
+  if(ev.metaKey||ev.ctrlKey||ev.altKey||S.mockView!=='q'||!S.mock||S.mock.paused) return;
+  const q=mockQ(), k=ev.key.length===1?ev.key.toLowerCase():ev.key, idx='abcde'.indexOf(k);
+  if(k.length===1&&idx>-1&&q&&idx<q.o.length){ ev.preventDefault(); if(!ev.repeat) mockPick(idx); }   // a held key must not pick and un-pick
+  else if(k==='f'){ ev.preventDefault(); if(!ev.repeat) mockFlag(); }
+  else if(k==='ArrowRight'){ ev.preventDefault(); mockNext(); }
+  else if(k==='ArrowLeft'){ ev.preventDefault(); mockPrev(); }
+}
+
+/* ── handing in ── */
+function mockSubmit(ranOut){
+  const r=S.mock; if(!r||r.done) return;
+  const now=Date.now();
+  mockStopTicker();
+  MockExam.finish(r,now,!!ranOut);
+  const res=MockExam.grade(r,mockLookup);
+  /* In this order, so a page that closes part-way never counts a block twice: the record of what was handed in
+     first (a block in progress with its start time is then recognised as handed in and dropped), then the counts. */
+  mockWrite(MOCK_LAST_KEY,MockExam.serialize(r));
+  for(const it of res.items){
+    if(it.state==='skipped') continue;
+    recordAnswer(QBYID[it.id],it.state==='correct','exam',{ms:it.ms>0?it.ms:null,cf:null});
+  }
+  S.mocks=MockExam.pushHistory(S.mocks,MockExam.summary(res,r,now));
+  save();
+  S.mockLast=r; S.mock=null; S.mockView='q';
+  mockWrite(MOCK_KEY,null);
+  S.screen='mockreport'; render(); toTop();
+  if(ranOut) mockSay('Time is up: the block was handed in.');
+}
+function openMockReport(){ if(!S.mockLast) return; S.screen='mockreport'; render(); toTop(); }
+/* The questions worth another look, on the ordinary quiz screen with the answers already given: it opens on the
+   reveal. Nothing is re-recorded (the counts were made at hand-in); a question left blank is answered now, and
+   counts as any practice answer does. */
+function mockReview(which){
+  const last=S.mockLast; if(!last) return;
+  const res=MockExam.grade(last,mockLookup);
+  const deck=MockExam.reviewIds(res,which).map(id=>QBYID[id]).filter(q=>q&&!q.bad);
+  if(!deck.length){ toast('Nothing to review: every question was answered correctly and none was flagged.'); return; }
+  const given={}; res.items.forEach(it=>{ if(it.sel!=null) given[it.id]=it.sel; });
+  const answers={}; deck.forEach((q,k)=>{ if(given[q.id]!=null) answers[k]={selected:given[q.id],rated:false,cf:null}; });
+  Object.assign(S,{screen:'quiz',chapter:null,questions:deck,qIdx:0,mode:'mockreview',zoomed:-1,
+    quizCorrect:0,quizTotal:0,answers,resumed:false});
+  restoreQuizState(); render(); toTop(); clearAnnounce(); markShown();
+}
+
+/* ── the screens ── */
+function buildMock(){
+  const r=S.mock, q=mockQ();
+  if(!r||!q) return `<div class="mock-wrap"><div class="mock-gone"><p>No block is open.</p>
+    <button class="btn btn-next" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Back to Chapters</button></div></div>`;
+  if(S.mockView==='end') return buildMockEnd();
+  const n=r.ids.length, st=MockExam.states(r), chosen=r.sel[r.i], lab=r.secPerQ?'left':'elapsed';
+  if(r.paused) return `<div class="quiz-wrap mock-wrap"><div class="mock-paused" role="status">
+      <span class="mock-pause-ic">${icon('pause')}</span><h2>Paused</h2>
+      <p>The clock is stopped and the question is hidden. Nothing is scored until you hand the block in.</p>
+      <div class="mock-clockbox big"><span class="mock-clock" id="mockClock" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span><span class="mock-clock-lab">${lab}</span></div>
+      <button class="btn btn-next" type="button" onclick="mockUnpause()">${icon('play','icon-sm')} Resume</button></div></div>`;
+  const pace=MockExam.pace(r);
+  const opts=q.o.map((o,i)=>`<button class="opt mock-opt${q.imgopt?' img-opt':''}${chosen===i?' picked':''}" type="button" data-mi="${i}"
+      onclick="mockPick(${i})" aria-pressed="${chosen===i}" style="--acc:var(--teal)">
+      <span class="opt-letter">${e(o.l)}</span><span class="opt-text">${e(o.t)}</span></button>`).join('');
+  const cells=st.cells.map(c=>`<button class="mock-cell${c.answered?' done':''}${c.flagged?' flag':''}${c.current?' cur':''}" type="button"
+      data-mc="${c.n-1}" onclick="mockGo(${c.n-1})" aria-label="${mockCellLabel(c)}"${c.current?' aria-current="true"':''}>${c.n}</button>`).join('');
+  const flagged=!!r.flag[r.i], lastQ=r.i>=n-1;
+  const isMobile=window.innerWidth<768;
+  return `<div class="quiz-wrap mock-wrap">
+    <div class="qbar mock-bar anim-slide">
+      <div class="mock-top">
+        <div class="mock-clockbox"><span class="mock-clock" id="mockClock" role="timer" aria-live="off" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span><span class="mock-clock-lab">${lab}</span></div>
+        <span class="q-counter">Question ${r.i+1} of ${n}</span>
+        <button class="mock-mini" type="button" onclick="mockPause()" aria-label="Pause the block">${icon('pause','icon-sm')}<span>Pause</span></button>
+      </div>
+      <div class="prog-track"><div class="prog-fill" id="mockProg" style="transform:scaleX(${(st.answered/n).toFixed(4)})"></div></div>
+      <div class="mock-subrow"><span id="mockSub">${st.answered} answered · ${st.flagged} flagged</span><span class="mock-pace" id="mockPace" data-status="${pace?pace.status:''}">${e(mockPaceText(r))}</span></div>
+    </div>
+    <div class="fig-zone"></div>
+    <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:var(--teal)">
+      <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:var(--teal)"></span>Question ${r.i+1}</div>
+      ${e(q.s)}
+      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
+      ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
+    </div>
+    <div class="opts" role="group" aria-label="Answer options">${opts}</div>
+    ${isMobile?'':'<div class="kb-hint kbd-row">Press <kbd>A</kbd>–<kbd>E</kbd> to answer · <kbd>F</kbd> to flag · <kbd>←</kbd> <kbd>→</kbd> to move</div>'}
+    <div class="actions mock-actions">
+      <button class="btn btn-prev" type="button" onclick="mockPrev()" aria-label="Previous question"${r.i===0?' disabled':''}>${icon('arrow-left','icon-sm')}</button>
+      <button class="btn mock-flag${flagged?' on':''}" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="${flagged}">${icon('flag','icon-sm')} <span class="mock-flag-l">Flag</span></button>
+      <button class="btn btn-next" type="button" onclick="mockNext()">${lastQ?'Review and hand in':'Next'} ${icon('arrow-right','icon-sm')}</button>
+    </div>
+    <div class="mock-navcard">
+      <div class="mock-navh"><span>Questions</span><button class="mock-mini" type="button" onclick="mockEnd()">${icon('check','icon-sm')}<span>End block</span></button></div>
+      <div class="mock-nav" role="group" aria-label="Questions in this block">${cells}</div>
+      <div class="mock-key"><span><i class="k done"></i>answered</span><span><i class="k flag"></i>flagged</span><span><i class="k"></i>not answered</span></div>
+    </div>
+  </div>`;
+}
+function buildMockEnd(){
+  const r=S.mock, st=MockExam.states(r), n=st.n;
+  const chip=(c,cls)=>`<button class="mock-chip ${cls}" type="button" onclick="mockGo(${c.n-1})" aria-label="Go to question ${c.n}">${c.n}</button>`;
+  const blank=st.cells.filter(c=>!c.answered), flagged=st.cells.filter(c=>c.flagged);
+  const left=r.secPerQ?`<span class="mock-clock sm" id="mockClock" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span> left`
+    :`<span class="mock-clock sm" id="mockClock" data-urgency="none">${mockClockText(r)}</span> so far`;
+  return `<div class="quiz-wrap mock-wrap"><div class="mock-end">
+    <h2 tabindex="-1">Hand in this block?</h2>
+    <div class="mock-end-sub">${st.answered} of ${n} answered · ${left}</div>
+    ${blank.length?`<div class="mock-end-sec"><b>${blank.length} not answered</b> — counted as wrong
+      <div class="mock-chips">${blank.map(c=>chip(c,'')).join('')}</div></div>`:'<div class="mock-end-sec ok">Every question has an answer.</div>'}
+    ${flagged.length?`<div class="mock-end-sec"><b>${flagged.length} flagged</b> — to look at again
+      <div class="mock-chips">${flagged.map(c=>chip(c,'flag')).join('')}</div></div>`:''}
+    <div class="actions mock-end-actions">
+      <button class="btn btn-prev wide" type="button" onclick="mockGo(S.mock.i)">${icon('arrow-left','icon-sm')} Back to the block</button>
+      <button class="btn btn-next" type="button" onclick="mockSubmit()">Hand in ${icon('check','icon-sm')}</button>
+    </div></div></div>`;
+}
+function buildMockReport(){
+  const r=S.mockLast;
+  if(!r) return `<div class="mock-wrap"><div class="mock-gone"><p>No block has been handed in yet.</p>
+    <button class="btn btn-next" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Back to Chapters</button></div></div>`;
+  const g=MockExam.grade(r,mockLookup), p=g.pct;
+  const col=p>=80?'var(--green)':p>=60?'var(--amber)':'var(--red)';
+  const msg=p>=80?'Outstanding!':p>=60?'Good Progress!':'Keep Studying!', msgIcon=p>=80?'trophy':p>=60?'target':'book';
+  const rad=50, circ=2*Math.PI*rad;
+  const ring=`<svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Score ${p} percent">
+    <circle cx="64" cy="64" r="${rad}" fill="none" stroke="var(--border)" stroke-width="10"/>
+    <circle cx="64" cy="64" r="${rad}" fill="none" stroke="${col}" stroke-width="10"
+      stroke-dasharray="${circ}" stroke-dashoffset="${circ*(1-p/100)}" stroke-linecap="round"
+      transform="rotate(-90 64 64)" style="transition:stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)"/></svg>`;
+  const rows=g.byCh.slice().sort((a,b)=>(a.correct/a.n)-(b.correct/b.n)||a.ch.localeCompare(b.ch)).map(c=>{
+    const cp=Math.round(c.correct/c.n*100), cc=cp>=70?'var(--green)':cp>=50?'var(--amber)':'var(--red)', bc=CH_COLORS[c.ch]||'var(--teal)';
+    return `<div class="chp-row mock-chrow" data-ch="${e(c.ch)}" style="--accent:${bc}"><span class="chp-icon">${chIcon(c.ch)}</span>
+      <div class="chp-info"><div class="chp-name">${e(c.ch)}</div><div class="chp-bar"><div class="chp-fill" style="transform:scaleX(${cp/100});background:${cc}"></div></div></div>
+      <div class="chp-score"><div class="chp-pct" style="color:${cc}">${cp}%</div><div class="chp-count">${c.correct}/${c.n}</div></div></div>`;
+  }).join('');
+  const used=MockExam.fmtClock(g.usedMs), lim=g.limitMs!=null?MockExam.fmtClock(g.limitMs,'down'):null;
+  const timeLine=g.expired?'Time ran out at '+lim:lim?used+' of '+lim:used+', no time limit';
+  const per=g.avgMs!=null?' · about '+Math.round(g.avgMs/1000)+' s a question':'';
+  const slow=g.slowest.length?`<div class="mock-slow"><b>Slowest</b> ${g.slowest.map(s=>'Q'+(s.i+1)+' ('+e(CH_SHORT[s.ch]||s.ch)+', '+MockExam.fmtClock(s.ms)+')').join(' · ')}</div>`:'';
+  const flagLine=g.flagged?`<div class="mock-slow"><b>${g.flagged} flagged</b> — ${g.flaggedWrong} of them not right</div>`:'';
+  const missed=MockExam.reviewIds(g,'missed').length;
+  return `<div class="results-wrap mock-report anim-fade">
+    <div class="score-hero">
+      <div class="score-circle">${ring}<div class="score-num"><span class="score-pct" style="color:${col}">${p}%</span><span class="score-label">Mock block</span></div></div>
+      <div class="score-msg">${icon(msgIcon,'icon-lg')} ${msg}</div>
+      <div class="score-sub" id="mockSummary">${g.correct} correct · ${g.wrong} wrong · ${g.skipped} not answered · of ${g.n}</div>
+      <div class="mock-timeline" id="mockTime">${e(timeLine)}${per}</div>
+    </div>
+    ${flagLine}${slow}
+    ${rows?`<div class="section-label">This block, by chapter</div><div class="ch-perf">${rows}</div>`:''}
+    <div class="results-btns">
+      ${missed?`<button class="btn btn-next" type="button" onclick="mockReview('missed')">${icon('repeat','icon-sm')} Review the ${missed} to learn from</button>`:''}
+      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="mockReview('all')">Review all ${g.n}</button>
+      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goStudy()">${icon('arrow-left','icon-sm')} Back to Chapters</button>
+    </div>
+  </div>`;
+}
+
+/* The Progress screen's record of the blocks handed in: the last eight, oldest to newest, each a bar as high as its score. */
+function mockPanel(){
+  const h=S.mocks.slice(-8);
+  if(!h.length) return '';
+  const pc=x=>Math.round(100*x.correct/x.n);
+  const bars=h.map(x=>{
+    const p=pc(x), cls=p>=80?'g':p>=60?'a':'r';
+    const d=new Date(x.ts).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    const t=x.limit!=null?MockExam.fmtClock(x.ms)+' of '+MockExam.fmtClock(x.limit,'down'):MockExam.fmtClock(x.ms);
+    return `<div class="mk-bar ${cls}" role="listitem" data-pct="${p}" title="${e(d)}: ${x.correct} of ${x.n}, ${p}%, ${e(t)}"><b>${p}%</b>
+      <span class="mk-col"><i style="height:${Math.max(4,p)}%"></i></span><span class="mk-d">${e(d)}</span><em>${x.n} q</em></div>`;
+  }).join('');
+  const last=S.mocks[S.mocks.length-1], per=Math.round(last.ms/last.n/1000);
+  return `<div class="panel" id="mockPanel"><div class="panel-h">Mock exam blocks · ${S.mocks.length}</div>
+    <div class="mk-hist" role="list">${bars}</div>
+    <div class="ref-hint">Last: ${pc(last)}%, ${last.correct} of ${last.n} in ${e(MockExam.fmtClock(last.ms))}, about ${per} s a question. A question left blank counts as wrong, as it does in the real exam.</div></div>`;
+}
+
+/* The card on the Study screen: set a block up, or carry on the one in progress. */
+function mockCardInner(){
+  const r=S.mock, lastH=S.mocks.length?S.mocks[S.mocks.length-1]:null;
+  /* The report kept is the last block's only if it was handed in at the moment the history says: an import replaces the
+     history and leaves the report, and a report that could not be written leaves the one before it. */
+  const hasReport=!!(lastH&&S.mockLast&&S.mockLast.submittedAt===lastH.ts);
+  const lastLine=lastH?`<button class="mock-quiet" type="button" onclick="openMockReport()"${hasReport?'':' disabled'}>Last block: ${Math.round(100*lastH.correct/lastH.n)}%${hasReport?' · see the report':''}</button>`:'';
+  if(r){
+    const st=MockExam.states(r), left=r.secPerQ?MockExam.fmtClock(MockExam.remainingMs(r),'down')+' left':MockExam.fmtClock(r.elapsedMs)+' so far';
+    return `<div class="fc-glow" aria-hidden="true"></div>
+      <div class="fc-top"><span class="fc-badge">${icon('alarm')} MOCK EXAM</span><span class="pace-pill ok">In progress</span></div>
+      <div class="fc-title">A block is open</div>
+      <div class="fc-sub" id="mockLive">${st.answered} of ${st.n} answered · ${left} · ${st.flagged} flagged</div>
+      <button class="mock-go" id="mockResume" type="button" onclick="resumeMock()">${icon('play')}<span>Resume the block</span></button>
+      <button class="mock-quiet${_mockArm?' arm':''}" id="mockDiscard" type="button" onclick="discardMock()">${_mockArm?'Tap again to discard it':'Discard this block'}</button>`;
+  }
+  const sizes=mockSizes();
+  const chip=(k,v,on,label)=>`<button class="mock-pick${on?' on':''}" type="button" data-${k}="${v}" aria-pressed="${on}" onclick="setMockCfg('${k}','${v}')">${label}</button>`;
+  return `<div class="fc-glow" aria-hidden="true"></div>
+    <div class="fc-top"><span class="fc-badge">${icon('alarm')} MOCK EXAM</span></div>
+    <div class="fc-title">A timed block, no feedback until you hand it in</div>
+    <div class="fc-sub">Like the real thing: choose, move on, come back, find out at the end. Questions you have not met come first.</div>
+    <div class="mock-row" role="group" aria-label="Questions in the block">${sizes.map(n=>chip('n',n,mockSize()===n,'<b>'+n+'</b><span>questions</span>')).join('')}</div>
+    <div class="mock-row" role="group" aria-label="Time for each question">${[...MockExam.PACES,0].map(s=>chip('sec',s,_mockCfg.sec===s,s?'<b>'+s+'</b><span>sec each</span>':'<b>No</b><span>limit</span>')).join('')}</div>
+    <label class="mock-chsel"><span>Chapter</span><select id="mockCh" onchange="setMockCfg('ch',this.value)">
+      <option value="">All chapters</option>${CHAPTERS.map(c=>`<option value="${e(c)}"${_mockCfg.ch===c?' selected':''}>${e(c)}</option>`).join('')}</select></label>
+    <button class="mock-go" id="mockStart" type="button" onclick="startMock()">${icon('alarm')}<span>${e(mockStartText())}</span></button>
+    <div class="mock-note">The clock runs only while Systole is on screen. Search, Echo and Apex are off while you are in the block.</div>
+    ${_mockLost?'<div class="mock-note lost">The block that was open could not be carried on, so it was set aside.</div>':''}
+    ${lastLine}`;
+}
+function mockCard(){
+  return `<div class="feed-card mock-card${S.mock?' live':''}" id="mockCard" role="group" aria-label="Mock exam">${mockCardInner()}</div>`;
+}
+
 function toggleZoom(i){
   S.zoomed = (S.zoomed===i) ? -1 : i;
   document.querySelectorAll('.fig-card').forEach((fc,j)=>{
@@ -4897,7 +5345,7 @@ function buildFigures(q){
     const on=S.zoomed===i;
     return `<div class="fig-card${on?' zoomed':''}" data-fig="${i}" role="button" tabindex="0"
         aria-label="${e(figLabel(q,i,n))} — tap to ${on?'shrink':'enlarge'}">
-      <img class="fig-img" src="${u}" alt="${e(figLabel(q,i,n))} for question ${q.n}"
+      <img class="fig-img" src="${u}" alt="${e(figLabel(q,i,n))} for question ${S.screen==='mock'&&S.mock?S.mock.i+1:q.n}"
         decoding="async" loading="eager"
         style="transform:${on?'scale(1.8) translateY(10%)':'scale(1)'};transform-origin:center top">
       <div class="fig-label"><span>\uD83D\uDCCA ${e(figLabel(q,i,n))}</span>
@@ -4967,9 +5415,13 @@ function render(){
     showCrashScreen(err);
   }
 }
+/* The question whose figures this render draws: the quiz's, or the mock block's. */
+function renderQ(){
+  return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:S.screen==='mock'?mockQ():null;
+}
 function renderNow(){
   const app=document.getElementById('app');
-  const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
+  const q=renderQ();
   const reuse=q&&figCache.id===q.id&&figCache.node&&S.zoomed===-1;
   /* The bar is painted into its own fixed header rather than into the screen:
      inside #app it could never be wider than the reading column. */
@@ -4992,6 +5444,7 @@ function renderNow(){
   if(typeof mountPhysio==='function') mountPhysio();
   if(typeof mountLab==='function'&&S.screen==='lab') mountLab();
   if(typeof mountInk==='function') mountInk();
+  if(typeof mockMount==='function') mockMount();
   if(typeof mountHomeProgress==='function') mountHomeProgress();
   if(typeof mountChapterBars==='function') mountChapterBars();
   mountScrollReveal();
@@ -5033,6 +5486,7 @@ function buildScreen(){
     :S.screen==='echo'?buildEchoScreen()
     :S.screen==='memory'?buildMemory():S.screen==='study'?buildStudy()
     :S.screen==='search'?buildSearch()
+    :S.screen==='mock'?buildMock():S.screen==='mockreport'?buildMockReport()
     :S.screen==='stats'?buildStats():S.screen==='lab'?buildLab():'';
 }
 function buildNav(){
@@ -5716,7 +6170,7 @@ function buildHome(){
     <div class="door-row">
       <button class="door door-wide" onclick="goStudy()">
         <span class="door-ic">${icon("book")}</span>
-        <span class="door-txt"><b>Chapters</b><i>${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}</i></span>
+        <span class="door-txt"><b>Chapters</b><i>${S.mock?'A mock block is open · resume it here':`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
         <span class="door-go">${icon('arrow-right','icon-sm')}</span>
       </button>
       <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
@@ -5903,6 +6357,7 @@ function buildStudy(){
     <div class="feed">
       ${reviewCard}
       ${planCard}
+      ${mockCard()}
       ${runCard}
       ${voiceCard}
       ${missCard}
@@ -6092,6 +6547,7 @@ function attachEvents(){
 document.addEventListener('keydown',ev=>{
   const t=ev.target.tagName;
   if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||ev.target.isContentEditable)return;
+  if(S.screen==='mock'){ mockKey(ev); return; }
   if(S.screen!=='quiz')return;
   if(S.answered){
     if(ev.key===' '||ev.key==='Enter'||ev.key==='ArrowRight'){ev.preventDefault();nextQ();}

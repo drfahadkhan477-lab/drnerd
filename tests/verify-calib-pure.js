@@ -113,5 +113,24 @@ const mixed = C.calibration([
 ok('a review answer is a real answer', mixed.bands[3].n === N, String(mixed.bands[3].n));
 ok('and an unrelated log row is not', mixed.bands[3].accuracy === 1, String(mixed.bands[3].accuracy));
 
+head('a mock exam block: its misses join the error mix, and its answers join nothing else');
+{
+  const exam = (o = {}) => row({ m: 'exam', ...o });
+  const em = C.reasons([
+    ...many(N, { ok: 0, why: 'gap' }),
+    ...many(3, exam({ ok: 0, why: 'misread' })),    // missed in a block, and the review asked why
+    ...many(2, exam({ ok: 0, why: null })),         // missed in a block, not asked about yet
+    ...many(4, exam({ ok: 1 })),                    // answered right in a block
+  ]);
+  const mis = em.counts.find(c => c.id === 'misread');
+  ok('a reason given for a miss in a block is counted in the error mix', mis.n === 3 && em.tagged === N + 3, `${mis.n} of ${em.tagged}`);
+  ok('a miss in a block that has no reason yet counts toward misses, like any other', em.misses === N + 3 + 2, String(em.misses));
+  ok('and a right answer in a block is never a miss', em.misses === N + 5, String(em.misses));
+  const ec = C.calibration(many(N, exam({ cf: 3, ok: 0 })));
+  const es = C.speed([...many(N, exam({ ok: 1, ms: 3000 })), ...many(N, exam({ ok: 0, ms: 9000 }))]);
+  ok('calibration leaves block answers out: no one was asked how sure they were', ec.bands[3].n === 0 && ec.rated === 0, `${ec.bands[3].n} / ${ec.rated}`);
+  ok('and so does the speed reading: a block\'s time is not a practice answer\'s', es.n === 0 && es.correctMs === null, JSON.stringify(es));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

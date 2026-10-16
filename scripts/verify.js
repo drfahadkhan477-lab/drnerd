@@ -87,6 +87,7 @@ const SUITES = [
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
+  ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
@@ -211,6 +212,7 @@ const SUITES = [
   ['lab-pure', 'each heart sound and murmur is on the valve events physio measures, with the shape and pitch of its lesion, and the heart map agrees with the audio on when it is heard'],
   /* The study planner and the readiness forecast, on real FSRS cards. */
   ['plan-pure', 'the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data'],
+  ['mockexam-pure', 'a timed block is the size asked, counts only the time the app is on screen, scores a blank as wrong once, and is read back from storage whole or not at all'],
   /* Topic runs: questions about the same thing, grouped by their distinctive words. */
   ['topicrun-pure', 'questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair'],
   /* Voice mode's logic: what is read, what is heard, what happens next. */
@@ -483,7 +485,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure', 'importbank-pure', 'suitecache', 'suitecache-pure'];
+const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure', 'importbank-pure', 'mockexam-pure', 'mockscreen', 'suitecache', 'suitecache-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

@@ -144,3 +144,107 @@ body.voice-on #app{padding-bottom:104px}
   .plan-card>.fc-glow,.pg-seen,.pg-recall,.mr-arc,.vo-ring,.voice-wave i,.vd-ring,#voiceDock,#voiceDock .vd-bars i{animation:none!important}
   .vo-ring{opacity:0}
 }
+
+/* ══ Mock exam: the Study card, the block, the hand-in page ══ */
+.mock-card{cursor:default}
+.mock-card>*{position:relative;z-index:1}
+.mock-card>.fc-glow{position:absolute;z-index:0}     /* the rule above makes every child relative; the glow is the one that must not be in the flow */
+.mock-card.live>.fc-glow{opacity:1;animation:glowSlide 5.5s ease-in-out infinite}
+.mock-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px;margin-top:12px}
+.mock-pick{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:52px;min-width:0;padding:6px 8px;
+  border-radius:14px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font:inherit;cursor:pointer;
+  font-variant-numeric:tabular-nums;transition:border-color .2s,background .2s,transform .2s var(--spring)}
+.mock-pick b{font-size:var(--t-lead);font-weight:800;letter-spacing:-.02em;line-height:1}
+.mock-pick span{font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
+.mock-pick.on{border-color:var(--teal);background:var(--teal4);background:color-mix(in srgb,var(--teal) 11%,var(--card))}
+.mock-pick.on b{color:var(--teal)}
+@media(hover:hover){.mock-pick:hover{border-color:var(--teal);transform:translateY(-1px)}}
+.mock-chsel{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mock-chsel select{flex:1;min-width:0;min-height:44px;padding:0 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);
+  font:inherit;font-size:var(--t-meta);font-weight:600;letter-spacing:0;text-transform:none}
+.mock-go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;margin-top:14px;padding:0 14px;border:0;border-radius:14px;
+  font:inherit;font-weight:800;font-size:var(--t-meta);color:#fff;background:var(--navy);cursor:pointer;transition:transform .2s var(--spring),box-shadow .2s}
+.mock-go .icon{width:18px;height:18px;flex:none}
+@media(hover:hover){.mock-go:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(15,30,61,.28)}}
+.mock-go:active{transform:scale(.98)}
+.mock-note{margin-top:10px;font-size:var(--t-tiny);line-height:1.5;color:var(--muted)}
+.mock-quiet{display:block;width:100%;min-height:44px;margin-top:6px;padding:0 10px;border:0;border-radius:12px;background:transparent;color:var(--muted);
+  font:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;text-align:center}
+.mock-quiet:disabled{opacity:.6;cursor:default}
+.mock-quiet.arm{color:var(--red);background:var(--red-bg)}
+
+/* the block: a bar with the clock, the question as the quiz draws it, a picked option instead of a verdict */
+.mock-bar .mock-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.mock-clockbox{display:flex;align-items:baseline;gap:6px;min-width:0}
+.mock-clockbox.big{justify-content:center;margin:var(--s4) 0}
+.mock-clock{font-size:var(--t-h4);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+.mock-clockbox.big .mock-clock{font-size:var(--t-h2)}
+.mock-clock.sm{font-size:var(--t-lead)}
+.mock-clock[data-urgency="low"]{color:var(--amber)}
+.mock-clock[data-urgency="critical"]{color:var(--red)}
+.mock-clock-lab{font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mock-mini{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:12px;border:1.5px solid var(--border);
+  background:var(--card);color:var(--muted);font:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;white-space:nowrap}
+@media(hover:hover){.mock-mini:hover{border-color:var(--teal);color:var(--teal)}}
+.mock-subrow{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
+.mock-pace[data-status="behind"]{color:var(--amber)}
+.mock-pace[data-status="ahead"]{color:var(--green)}
+.opt.mock-opt.picked{border-color:var(--teal);background:var(--teal4)}
+.opt.mock-opt.picked .opt-letter{background:var(--teal);color:#fff;border-color:var(--teal)}
+.opt.mock-opt.picked::before{background:var(--teal);transform:scaleY(1)}
+.mock-actions .mock-flag{flex:0 0 auto;min-width:112px;padding:15px 16px;background:var(--card);border:1.5px solid var(--border);color:var(--muted)}
+.mock-actions .mock-flag.on{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+/* The last question's row is Previous, Flag and "Review and hand in": 355 px, and a phone's row is 336. The word goes (it stays for a screen reader). */
+@media(max-width:380px){
+  .mock-actions .mock-flag{min-width:52px;padding-left:0;padding-right:0;justify-content:center}
+  .mock-flag-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+}
+.mock-actions .btn:disabled{opacity:.45;cursor:default}
+.mock-navcard{margin-top:var(--s2);padding:var(--s4);border-radius:var(--r);background:var(--card);border:1px solid var(--border)}
+.mock-navh{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:var(--s3);
+  font-size:var(--t-meta);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mock-nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:8px}
+.mock-cell{position:relative;min-height:44px;min-width:0;padding:0;border-radius:12px;border:1.5px solid var(--border);background:var(--card);color:var(--text);
+  font:inherit;font-size:var(--t-meta);font-weight:800;font-variant-numeric:tabular-nums;cursor:pointer}
+.mock-cell.done{background:var(--teal4);border-color:var(--teal);background:color-mix(in srgb,var(--teal) 14%,var(--card));border-color:color-mix(in srgb,var(--teal) 45%,var(--border))}
+.mock-cell.flag::after{content:"";position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.mock-cell.cur{outline:2px solid var(--text);outline-offset:1px}
+.mock-key{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin-top:var(--s3);font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
+.mock-key span{display:inline-flex;align-items:center;gap:6px}
+.mock-key .k{width:14px;height:14px;border-radius:5px;border:1.5px solid var(--border);background:var(--card);position:relative}
+.mock-key .k.done{background:var(--teal4);border-color:var(--teal);background:color-mix(in srgb,var(--teal) 14%,var(--card));border-color:color-mix(in srgb,var(--teal) 45%,var(--border))}
+.mock-key .k.flag::after{content:"";position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:var(--amber)}
+
+/* handing in, paused, nothing open */
+.mock-end,.mock-paused,.mock-gone{padding:var(--s6);border-radius:var(--r);background:var(--card);border:1px solid var(--border)}
+.mock-paused,.mock-gone{text-align:center}
+.mock-end h2,.mock-paused h2{margin:0 0 var(--s2);font-size:var(--t-h4);font-weight:800;letter-spacing:-.02em}
+.mock-paused p,.mock-gone p{color:var(--muted);font-size:var(--t-meta);line-height:1.5;margin:0 auto var(--s3);max-width:34ch}
+.mock-pause-ic{display:inline-grid;place-items:center;width:56px;height:56px;margin-bottom:var(--s3);border-radius:50%;color:var(--teal);background:var(--teal4);background:color-mix(in srgb,var(--teal) 12%,transparent)}
+.mock-pause-ic .icon{width:26px;height:26px}
+.mock-end-sub{font-size:var(--t-meta);font-weight:700;color:var(--muted);margin-bottom:var(--s4)}
+.mock-end-sec{margin-bottom:var(--s4);font-size:var(--t-meta);line-height:1.5}
+.mock-end-sec.ok{color:var(--green);font-weight:700}
+.mock-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:var(--s2)}
+.mock-chip{min-width:44px;min-height:44px;padding:0 10px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);color:var(--text);
+  font:inherit;font-size:var(--t-meta);font-weight:800;font-variant-numeric:tabular-nums;cursor:pointer}
+.mock-chip.flag{border-color:var(--amber-b);background:var(--amber-bg);color:var(--amber)}
+.mock-end-actions{margin-top:var(--s5);padding-bottom:0}
+.btn.wide{flex:1;min-width:0}
+.mock-report .mock-timeline{margin-top:var(--s2);font-size:var(--t-meta);font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.mock-slow{margin-bottom:var(--s2);padding:var(--s3) var(--s4);border-radius:var(--r2);background:var(--card);border:1px solid var(--border);font-size:var(--t-meta);line-height:1.5}
+
+/* the Progress screen's record of blocks handed in */
+.mk-hist{display:flex;align-items:flex-end;gap:8px;margin-top:var(--s3)}
+.mk-bar{flex:1 1 0;min-width:0;max-width:72px;display:flex;flex-direction:column;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
+.mk-bar b{font-size:var(--t-meta);font-weight:800}
+.mk-col{display:flex;align-items:flex-end;width:100%;height:84px}
+.mk-col i{display:block;width:100%;border-radius:8px 8px 3px 3px;background:var(--teal)}
+.mk-bar.g i{background:var(--green)}
+.mk-bar.a i{background:var(--amber)}
+.mk-bar.r i{background:var(--red)}
+.mk-d,.mk-bar em{font-size:var(--t-tiny);font-weight:700;font-style:normal;color:var(--muted);white-space:nowrap}
+
+/* While a block is open there is no Apex to ask and no panel to open: either would hand over the answer. */
+html[data-mock] .ai-fab,html[data-mock] #ai{display:none!important}
+@media(prefers-reduced-motion:reduce){.mock-card.live>.fc-glow{animation:none!important}}

@@ -10,9 +10,9 @@ A single-file study app for the ABIM cardiovascular boards, built from a
 personal ACCSAP 12 export. A procedural WebGL heart that beats on a real cardiac
 clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5–derived
-spaced repetition, and Apex — an AI tutor that can be grounded in your own
-reference notes, reads the figures they cite, and remembers you between
-sessions.
+spaced repetition, a timed mock exam that gives no feedback until you hand it in,
+and Apex — an AI tutor that can be grounded in your own reference notes, reads
+the figures they cite, and remembers you between sessions.
 
 The home screen says one thing: a live ECG, one pearl drawn from your own
 reference notes — broken at its own joints into a numbered ladder, over ECG
@@ -47,7 +47,7 @@ record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 91 suites that need neither a browser nor a build all stay green. See
+the 92 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 225 checks can't run here.
 
