@@ -30,7 +30,9 @@
   background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
 .echo-field input{font:inherit;width:100%;background:transparent;color:var(--text);
   border:0;border-bottom:1px solid var(--border3)}
-.echo-label{font-size:.85em}
+.echo-label{font-size:.85em;grid-column:1/-1}
+.echo-field input{grid-column:1;min-width:0}
+.echo-units{grid-column:2}
 .echo-units,.echo-where{color:var(--muted);font-size:.78em}
 .echo-where{grid-column:1/-1}
 .echo-results,.echo-measures{width:100%;border-collapse:collapse;font-size:.92em}
@@ -44,6 +46,28 @@
 .echo-grade[data-grade="severe"],.echo-grade[data-grade="very severe"]{color:var(--accent);font-weight:600}
 .echo-empty,.echo-missing{color:var(--muted)}
 .echo-missing{margin-top:16px;font-size:.9em}
+/* Echo shares the app palette, including contrast mode. */
+.echo-header{margin:18px 0;padding:22px;border:1px solid var(--border);border-radius:18px;background:var(--card)}
+.echo-header h2{margin:4px 0;font-size:clamp(1.8rem,4vw,2.6rem)}
+.echo-header p{margin:8px 0;color:var(--muted)}
+.echo-eyebrow{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase}
+.echo-guidance{border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin:16px 0}
+.echo-guidance summary{cursor:pointer;font-weight:600;min-height:24px}
+.echo-guidance article{padding:10px 0;border-top:1px solid var(--border)}
+.echo-guidance a{color:var(--accent);text-decoration:underline}
+.echo-guidance p,.echo-cautions p{line-height:1.6}
+.echo-group{min-width:0;margin:0 0 20px;padding:14px;border:1px solid var(--border);border-radius:14px}
+.echo-group legend{padding:0 8px;font-weight:600}
+.echo-group .echo-fields{margin-bottom:0}
+.echo-cautions{padding:16px;border-left:3px solid var(--accent);background:var(--card);margin:16px 0}
+.echo-warning{padding:12px;border:2px solid var(--accent);border-radius:8px}
+.echo-tab,.echo-pick,.echo-field input{min-height:44px;box-sizing:border-box}
+.echo-tab:focus-visible,.echo-pick:focus-visible,.echo-field input:focus-visible,.echo-guidance summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.echo-detail,.echo-panel,.echo-out{min-width:0}
+.echo-detail h4{margin:20px 0 8px}
+.echo-detail li{margin:6px 0;line-height:1.6}
+.echo-results,.echo-measures{display:block;overflow-x:auto}
+@media(max-width:480px){.echo-views,.echo-fields{grid-template-columns:minmax(0,1fr)}.echo-header{padding:16px}.echo-view dl{grid-template-columns:1fr}.echo-view dd{margin-bottom:6px}}
 .ns-screen{padding:0 max(20px,var(--sal)) 40px max(20px,var(--sar));max-width:var(--measure);margin:0 auto}
 .ns-bar{padding:14px 0 10px}
 .ns-q{font:inherit;font-size:1.05em;width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;

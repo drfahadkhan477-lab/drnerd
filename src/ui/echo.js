@@ -81,9 +81,9 @@
     for (i = 0; i < TABS.length; i++) {
       var t = TABS[i], on = t.id === a;
       out += '<button class="echo-tab' + (on ? ' on' : '') + '" data-echo-tab="' + esc(t.id) + '"' +
-        ' role="tab" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(t.label) + '</button>';
+        ' id="echo-tab-' + esc(t.id) + '" aria-controls="echo-panel" tabindex="' + (on ? '0' : '-1') + '" role="tab" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(t.label) + '</button>';
     }
-    return '<div class="echo-tabs" role="tablist">' + out + '</div>';
+    return '<div class="echo-tabs" role="tablist" aria-label="Echo Studio">' + out + '</div>';
   }
 
   /* ── reference tab ──────────────────────────────────────────────────── */
@@ -125,6 +125,7 @@
       var p = Math.max(places(r[0]), places(r[1]));
       return esc(r[0].toFixed(p)) + '–' + esc(r[1].toFixed(p)) + ' ' + esc(m.units);
     };
+    if (m.normalText) return esc(m.normalText);
     if (!m.normalF) return one(m.normal);
     return one(m.normal) + ' <span class="echo-sex">men</span><br>' +
       one(m.normalF) + ' <span class="echo-sex">women</span>';
@@ -164,7 +165,7 @@
 
     if (d.measures.length) {
       out += '<h4>Measured where</h4><table class="echo-measures"><thead><tr>' +
-        '<th>Measurement</th><th>Normal</th><th>View</th><th>Source</th></tr></thead><tbody>';
+        '<th>Measurement</th><th>Reference / interpretation</th><th>View</th><th>Source</th></tr></thead><tbody>';
       for (i = 0; i < d.measures.length; i++) out += measureRowHtml(d.measures[i]);
       out += '</tbody></table>';
     }
@@ -258,15 +259,23 @@
     return { rows: rows, missing: missing };
   }
 
-  function fieldsHtml(fields) {
+  var GROUPS = [
+    { title: 'Flow & aortic valve', ids: ['lvotD', 'lvotVti', 'avVti', 'avVmax', 'hr'] },
+    { title: 'LV volumes', ids: ['edv', 'esv'] },
+    { title: 'Right-heart pressure', ids: ['trVmax', 'ivcD', 'ivcCollapse'] },
+    { title: 'Mitral valve', ids: ['pisaR', 'alias', 'regVmax', 'regVti', 'pht'] }
+  ];
+
+  function fieldsHtml(fields, ids) {
     var f = fields || {}, out = '', i;
     for (i = 0; i < FIELDS.length; i++) {
       var x = FIELDS[i];
+      if (ids && ids.indexOf(x.id) < 0) continue;
       var v = num(f[x.id]) ? String(f[x.id]) : '';
       var view = byId(E.VIEWS, x.view);
       out += '<label class="echo-field">' +
         '<span class="echo-label">' + esc(x.label) + '</span>' +
-        '<input type="number" inputmode="decimal" step="any" data-echo-field="' + esc(x.id) + '"' +
+        '<input type="number" inputmode="decimal" step="any" min="0" data-echo-field="' + esc(x.id) + '"' +
         ' value="' + esc(v) + '" aria-label="' + esc(x.label + ' in ' + x.units) + '">' +
         '<span class="echo-units">' + esc(x.units) + '</span>' +
         '<span class="echo-where">' + esc(view ? view.name : x.view) + '</span>' +
@@ -277,11 +286,15 @@
 
   function resultsHtml(fields) {
     var r = compute(fields), out = '', i;
+    var invalid = FIELDS.filter(function (f) { return num((fields || {})[f.id]) &&
+      (fields[f.id] < 0 || (f.id === 'ivcCollapse' && fields[f.id] > 100)); });
+    if (invalid.length) out += '<p class="echo-warning" role="status">Check measurements: ' +
+      esc(invalid.map(function (f) { return f.label; }).join(', ')) + '. Use non-negative magnitudes; IVC collapse must be a percentage within its valid range.</p>';
     if (!r.rows.length) {
       out += '<p class="echo-empty">Enter measurements and the derived values appear here.</p>';
     } else {
       out += '<table class="echo-results"><thead><tr><th>Derived</th><th>Value</th>' +
-        '<th>Grade</th><th>Source</th></tr></thead><tbody>';
+        '<th>Single-metric band</th><th>Source</th></tr></thead><tbody>';
       for (i = 0; i < r.rows.length; i++) {
         var row = r.rows[i];
         out += '<tr><td>' + esc(row.label) + '</td>' +
@@ -310,8 +323,12 @@
   }
 
   function calculatorHtml(fields) {
-    return '<div class="echo-calc">' + fieldsHtml(fields) +
-      '<div class="echo-out">' + resultsHtml(fields) + '</div></div>';
+    var groups = GROUPS.map(function (g) {
+      return '<fieldset class="echo-group"><legend>' + esc(g.title) + '</legend>' + fieldsHtml(fields, g.ids) + '</fieldset>';
+    }).join('');
+    return '<div class="echo-calc"><p class="echo-note">Enter measured magnitudes in the displayed units. Blank means not measured. Results update as you type.</p>' + groups +
+      '<aside class="echo-cautions"><strong>Interpret together</strong><p>Valve bands describe one measurement, not an integrated severity diagnosis. Check flow, acquisition quality and discordant measurements.</p><p>PASP assumes no RV outflow or pulmonary valve obstruction. IVC-based RA pressure assumes spontaneous breathing. PISA assumes hemispheric convergence; its displayed bands are for primary MR. Pressure half-time can be unreliable after valvuloplasty or with significant AR.</p></aside>' +
+      '<div class="echo-out" aria-live="polite" aria-atomic="true">' + resultsHtml(fields) + '</div></div>';
   }
 
   /* ── the screen ─────────────────────────────────────────────────────── */
@@ -321,9 +338,11 @@
     var active = tabId(s.tab);
     var body = active === 'calculator' ? calculatorHtml(s.fields) : referenceHtml(s);
     return '<section class="echo-studio">' +
-      '<h2>Echo Studio</h2>' +
+      '<header class="echo-header"><p class="echo-eyebrow">Acquire · Measure · Interpret</p><h2>Echo Studio</h2><p>Explore views, connect findings and practise the arithmetic.</p></header>' +
+      '<details class="echo-guidance"><summary>Current guidance &amp; study scope</summary><p>Teaching reference, not a diagnostic report. Valve bands retain their named guideline editions; diastolic teaching reflects the ASE update. Sources open online; this summary works offline.</p>' +
+      E.GUIDANCE.map(function (g) { return '<article><a href="' + esc(g.url) + '" target="_blank" rel="noopener noreferrer">' + esc(g.title) + '</a><p>' + esc(g.note) + '</p></article>'; }).join('') + '</details>' +
       tabsHtml(active) +
-      '<div class="echo-panel" role="tabpanel">' + body + '</div>' +
+      '<div class="echo-panel" id="echo-panel" role="tabpanel" aria-labelledby="echo-tab-' + esc(active) + '">' + body + '</div>' +
       '</section>';
   }
 

@@ -3043,7 +3043,27 @@ document.addEventListener('click', function(e){
   if (!el) return;
   if (el.hasAttribute('data-echo-tab')) ECHO.tab = EchoUI.tabId(el.getAttribute('data-echo-tab'));
   else ECHO.disease = el.getAttribute('data-echo-disease');
+  var attribute = el.hasAttribute('data-echo-tab') ? 'data-echo-tab' : 'data-echo-disease';
+  var value = el.getAttribute(attribute);
   render();
+  var replacement = document.querySelector('[' + attribute + '="' + value + '"]');
+  if (replacement) replacement.focus();
+});
+
+// Manual tab activation: arrows move focus, Enter/Space use the native button.
+document.addEventListener('keydown', function(e){
+  var el = e.target;
+  if (!el || !el.matches || !el.matches('[data-echo-tab]')) return;
+  var tabs = Array.prototype.slice.call(el.parentNode.querySelectorAll('[data-echo-tab]'));
+  var i = tabs.indexOf(el), next;
+  if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+  else if (e.key === 'ArrowLeft') next = (i + tabs.length - 1) % tabs.length;
+  else if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = tabs.length - 1;
+  else return;
+  e.preventDefault();
+  tabs.forEach(function(t, n){ t.tabIndex = n === next ? 0 : -1; });
+  tabs[next].focus();
 });
 
 document.addEventListener('input', function(e){

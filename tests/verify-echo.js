@@ -352,6 +352,23 @@ const MARK = 'echomark';
   ok('and no error was raised by any of it', errors.length === 0,
      errors.slice(0, 2).join(' | ') || 'clean');
 
+  head('keyboard navigation and small-screen layout');
+  await page.click('[data-echo-tab="reference"]');
+  await page.focus('[data-echo-tab="reference"]');
+  await page.keyboard.press('ArrowRight');
+  ok('arrow navigation moves focus without activating a tab', await page.evaluate(() =>
+    document.activeElement.getAttribute('data-echo-tab') === 'calculator' &&
+    document.querySelector('[aria-selected="true"]').getAttribute('data-echo-tab') === 'reference'));
+  await page.keyboard.press('Enter');
+  ok('Enter activates the focused tab and preserves focus with linked panel semantics', await page.evaluate(() => {
+    const t = document.activeElement, p = document.querySelector('.echo-panel');
+    return t.getAttribute('data-echo-tab') === 'calculator' && t.getAttribute('aria-selected') === 'true' &&
+      p.id === t.getAttribute('aria-controls') && p.getAttribute('aria-labelledby') === t.id;
+  }));
+  await page.setViewportSize({width: 375, height: 812});
+  ok('grouped calculator fits a phone viewport', await page.evaluate(() =>
+    document.querySelectorAll('.echo-group').length === 4 && document.documentElement.scrollWidth <= innerWidth));
+  if (process.env.SYSTOLE_ECHO_SCREENSHOT) await page.screenshot({path: process.env.SYSTOLE_ECHO_SCREENSHOT, fullPage: true});
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
