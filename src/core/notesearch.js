@@ -69,11 +69,11 @@ function plain(body) {
 function results(query, notes, searchFn, max) {
   var q = String(query || '').trim();
   if (q.length < MIN_QUERY || typeof searchFn !== 'function') return [];
-  var byId = {};
+  var byId = Object.create(null);
   (notes || []).forEach(function (n) { if (n && n.id != null) byId[n.id] = n; });
   var hits;
   try { hits = searchFn(q, { limit: 80 }) || []; } catch (_) { hits = []; }
-  var seen = {}, ordered = [];
+  var seen = Object.create(null), ordered = [];
   hits.forEach(function (h) {
     var m = h && h.meta;
     if (!m || m.kind !== 'r' || seen[m.id] || !byId[m.id]) return;

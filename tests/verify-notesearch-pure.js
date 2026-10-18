@@ -71,6 +71,15 @@ head('results: which notes, in what order');
   ok('the list stops at MAX_RESULTS', N.results('zz', many, () => many.map(n => ({ meta: { kind: 'r', id: n.id } }))).length === N.MAX_RESULTS);
 }
 
+head('note ids do not collide with inherited object properties');
+{
+  const names = ['constructor', '__proto__', 'toString'];
+  const notes = names.map(id => ({ id, title: 'Test', body: 'Test body' }));
+  const hits = names.concat(names).map(id => ({ meta: { kind: 'r', id } }));
+  ok('reserved-looking note ids are found once each', N.results('test', notes, () => hits).map(n => n.id).join(',') === names.join(','));
+  ok('a deleted note cannot resolve to an inherited property', N.results('test', [], () => hits).length === 0);
+}
+
 head('snippet: the words around the match, not markup');
 {
   const s = N.snippet(NOTES[1].body, 'hospital');

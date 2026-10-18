@@ -101,6 +101,30 @@ head('the weak-chapter share goes to chapters below your own average');
   ok('and when every chapter is equal none is called weak', even.weakChapters.length === 0 && even.counts.weak === 0);
 }
 
+head('chapter ranking uses accuracy before display rounding');
+{
+  const tied = { Alpha: { correct: 10, total: 30 }, Beta: { correct: 10, total: 30 } };
+  ok('equal one-third accuracy does not make either chapter weak', SP.weakChapters(tied).length === 0);
+  ok('a single chapter cannot be weaker than itself', SP.weakChapters({ Alpha: tied.Alpha }).length === 0);
+  const close = SP.weakChapters({ Alpha: { correct: 506, total: 1000 }, Beta: { correct: 505, total: 1000 } });
+  ok('a weaker chapter is found even when rounded percentages hide the difference', close.length === 1 && close[0].ch === 'Beta');
+  const ranked = SP.weakChapters({ Alpha: { correct: 504, total: 1000 }, Beta: { correct: 501, total: 1000 }, Strong: { correct: 900, total: 1000 } });
+  ok('weak chapters with the same display percentage are ordered by measured accuracy', ranked.length === 2 && ranked[0].ch === 'Beta');
+}
+
+head('chapter names are data, including inherited object names');
+{
+  const special = ['constructor', '__proto__', 'toString'];
+  const sample = special.map((ch, i) => ({ id: 'special-' + i, ch }));
+  let fresh, weak, freshError, weakError;
+  try { fresh = SP.plan({ pool: sample, today: TODAY }); } catch (e) { freshError = e.message; }
+  const chStats = Object.fromEntries(special.map(ch => [ch, { correct: 1, total: 10 }]));
+  chStats.Strong = { correct: 90, total: 100 };
+  try { weak = SP.plan({ pool: sample, chStats, today: TODAY }); } catch (e) { weakError = e.message; }
+  ok('new-question planning accepts chapter names that exist on Object.prototype', !freshError && fresh.items.length === 3 && new Set(ids(fresh)).size === 3, freshError || '');
+  ok('weak-chapter planning accepts those chapter names too', !weakError && weak.items.some(i => i.reason === 'weak'), weakError || '');
+}
+
 head('a fresh start spreads across chapters');
 {
   const p = SP.plan({ minutes: 20, pool, srs: {}, chStats: {}, today: TODAY });
@@ -157,6 +181,13 @@ head('readiness follows the numbers');
   ok('finishing with little to spare is on track, not ahead', edge.status === 'on-track', `${edge.status}: ${edge.daysToFinish} of ${edge.daysLeft}`);
   ok('no pace given gives the pace needed', SP.readiness(Object.assign({}, base, { examDate: day(30) })).status === 'pace-unknown');
   ok('no exam date gives no countdown', SP.readiness(base).status === 'no-exam-date');
+  const invalidDates = ['next week', '2099-02-30', '2099-13-01', '2100-02-29'];
+  ok('invalid calendar dates give no forecast countdown', invalidDates.every(examDate => {
+    const r = SP.readiness(Object.assign({}, base, { examDate }));
+    return r.status === 'no-exam-date' && r.daysLeft === null;
+  }));
+  ok('a valid leap day remains usable', SP.readiness(Object.assign({}, base, { examDate: '2028-02-29' })).daysLeft > 0);
+
   ok('too little data gives no forecast at all', SP.readiness({ pool, srs: {}, chStats: {}, today: TODAY }).status === 'no-data');
   ok('an exam date in the past says so', SP.readiness(Object.assign({}, base, { examDate: day(-2) })).status === 'exam-day');
   ok('the verdict reads as a sentence with the real numbers', /60 of 120/.test(r0.text) && /60 days left/.test(r0.text), r0.text);

@@ -72,7 +72,8 @@ function chapterRows(chStats, minAttempts) {
 function weakChapters(chStats, limit) {
   const { rows, mean } = chapterRows(chStats, 5);
   if (mean === null) return [];
-  return rows.filter(r => r.pct < mean).sort((a, b) => a.pct - b.pct || (a.ch < b.ch ? -1 : 1)).slice(0, limit || 3);
+  // Compare the measured ratio; pct is rounded only for display.
+  return rows.filter(r => r.correct / r.total * 100 < mean).sort((a, b) => a.correct / a.total - b.correct / b.total || (a.ch < b.ch ? -1 : 1)).slice(0, limit || 3);
 }
 
 /* One question at a time from each chapter's queue in turn. */
@@ -112,7 +113,7 @@ function plan(o) {
   /* 2. weak chapters: missed first, then never seen */
   const weak = weakChapters(o.chStats, 3);
   const weakNames = weak.map(w => w.ch);
-  const byWeak = {};
+  const byWeak = Object.create(null);
   for (const q of pool) {
     if (used.has(q.id) || !weakNames.includes(q.ch)) continue;
     const seen = !!srs[q.id];
@@ -125,7 +126,7 @@ function plan(o) {
   const weakItems = roundRobin(byWeak, weakNames, weakQuota).map(q => take(q, 'weak'));
 
   /* 3. new, round-robin across chapters */
-  const byNew = {};
+  const byNew = Object.create(null);
   const chOrder = [];
   for (const q of pool) {
     if (used.has(q.id) || srs[q.id]) continue;
@@ -185,7 +186,13 @@ function readiness(o) {
 
   let daysLeft = null;
   if (typeof o.examDate === 'string') {
-    try { const d = FSRS.daysBetween(today, o.examDate); if (Number.isFinite(d)) daysLeft = d; } catch (_) { /* no date, no countdown */ }
+    try {
+      const date = FSRS.isoToLocalDate(o.examDate);
+      if (date && FSRS.localDateToISO(date) === o.examDate) {
+        const d = FSRS.daysBetween(today, o.examDate);
+        if (Number.isFinite(d)) daysLeft = d;
+      }
+    } catch (_) { /* no date, no countdown */ }
   }
   const pace = num(o.recentPerDay, null);
   let status, needPerDay = null, daysToFinish = null;

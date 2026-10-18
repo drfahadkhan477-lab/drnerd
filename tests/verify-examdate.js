@@ -119,6 +119,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   r = await read();
   ok('a saved blob holding junk loads as no date, and the screen is intact', r.mem === null && r.has === true && r.left === '', JSON.stringify({ m: r.mem, has: r.has }));
 
+  head('saved dates must be real calendar days');
+  for (const invalid of ['2099-02-30', '2099-13-01', '2100-02-29']) {
+    await page.evaluate(v => { const b = JSON.parse(localStorage.getItem(KEY)); b.examDate = v; localStorage.setItem(KEY, JSON.stringify(b)); }, invalid);
+    await page.reload({ waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+    await toStudy();
+    r = await read();
+    ok('saved impossible date ' + invalid + ' loads without a misleading countdown', r.mem === null && r.has && r.left === '' && !r.clear);
+  }
+  const restored = await page.evaluate(() => ['2099-02-30', '2099-13-01', '2100-02-29'].map(examDate => progressFromBackup({ examDate }).examDate));
+  ok('backup dates are checked against the calendar before restoration', restored.every(d => d === null));
+  const leap = await page.evaluate(() => progressFromBackup({ examDate: '2028-02-29' }).examDate);
+  ok('a real leap day survives backup restoration', leap === '2028-02-29');
+
   ok('nothing threw throughout', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);

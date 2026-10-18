@@ -4373,7 +4373,7 @@ function progressFromBackup(raw){
     chStats:raw.chStats||{},missed:new Set(raw.missed||[]),srs:raw.srs||{},reviewStreak:raw.reviewStreak||0,
     lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
     sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
-    focusMode:!!raw.focusMode,examDate:/^\d{4}-\d{2}-\d{2}$/.test(raw.examDate||'')?raw.examDate:null,
+    focusMode:!!raw.focusMode,examDate:validExamDate(raw.examDate)?raw.examDate:null,
     mocks:MockExam.cleanHistory(raw.exams),
     /* Absent says nothing: a backup made before flags must not empty the flags made since. A list, even an empty one, replaces them. */
     ...(raw.flagged!=null?{flagged:new Set(FlagSet.clean(raw.flagged))}:{})};
@@ -4415,7 +4415,7 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
   sinceBackup:boot.sinceBackup||0,lastBackup:boot.lastBackup||null,
   mode:'all',zoomed:-1,theme:boot.theme||'auto',homeLayout:boot.homeLayout||'signal',
   focusMode:!!boot.focusMode,
-  examDate:/^\d{4}-\d{2}-\d{2}$/.test(boot.examDate||'')?boot.examDate:null,
+  examDate:validExamDate(boot.examDate)?boot.examDate:null,
   /* What is kept of each finished mock block, newest last (src/core/mockexam.js). */
   mocks:MockExam.cleanHistory(boot.exams),
   /* Question ids flagged to come back to, oldest flag first (src/core/flagset.js). Reset leaves them: they are
