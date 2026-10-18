@@ -332,6 +332,15 @@
       '<div class="echo-out" aria-live="polite" aria-atomic="true">' + resultsHtml(fields) + '</div></div>';
   }
 
+  // Source links are navigation, not remote app resources. Keep literal
+  // anchors here so the CSP audit can distinguish them from fetch/image URLs.
+  var SOURCE_ANCHORS = {
+    'diastolic': '<a href="https://www.asecho.org/guideline/left-ventricular-diastolic-function-by-echo/" target="_blank" rel="noopener noreferrer">',
+    'right-heart': '<a href="https://www.asecho.org/guideline/right-heart-in-adults-pulmonary-hypertension/" target="_blank" rel="noopener noreferrer">',
+    'reporting': '<a href="https://www.asecho.org/guideline/guidelines-for-the-standardization-of-adult-echocardiography-reporting/" target="_blank" rel="noopener noreferrer">',
+    'artifacts': '<a href="https://www.asecho.org/news/ase-publishes-guideline-document-dedicated-to-cardiac-ultrasound-artifacts/" target="_blank" rel="noopener noreferrer">'
+  };
+
   function visualHtml(state) {
     var phase = state.phase || 'auto', media = root.ECHO_MEDIA || {};
     return '<div class="echo-visual">' +
@@ -370,7 +379,7 @@
     return '<section class="echo-studio">' +
       '<header class="echo-header"><p class="echo-eyebrow">Acquire · Measure · Interpret</p><h2>Echo Studio</h2><p>Explore views, connect findings and practise the arithmetic.</p></header>' +
       '<details class="echo-guidance"><summary>Current guidance &amp; study scope</summary><p>Teaching reference, not a diagnostic report. Valve bands retain their named guideline editions; diastolic teaching reflects the ASE update. Sources open online; this summary works offline.</p>' +
-      E.GUIDANCE.map(function (g) { return '<article><a href="' + esc(g.url) + '" target="_blank" rel="noopener noreferrer">' + esc(g.title) + '</a><p>' + esc(g.note) + '</p></article>'; }).join('') + '</details>' +
+      E.GUIDANCE.map(function (g) { return '<article>' + SOURCE_ANCHORS[g.link] + esc(g.title) + '</a><p>' + esc(g.note) + '</p></article>'; }).join('') + '</details>' +
       tabsHtml(active) +
       '<div class="echo-panel" id="echo-panel" role="tabpanel" aria-labelledby="echo-tab-' + esc(active) + '">' + body + '</div>' +
       '</section>';

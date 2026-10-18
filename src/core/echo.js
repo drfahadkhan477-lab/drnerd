@@ -499,16 +499,16 @@
   // Original teaching summaries; source documents remain on their publishers’ sites.
   var GUIDANCE = [
     { title: 'Diastolic function · ASE 2025',
-      url: 'https://www.asecho.org/guideline/left-ventricular-diastolic-function-by-echo/',
+      link: 'diastolic',
       note: 'Updated assessment of relaxation and filling pressure, including LA strain and special-population pathways. Read the complete algorithm before applying it.' },
     { title: 'Right heart · ASE 2025',
-      url: 'https://www.asecho.org/guideline/right-heart-in-adults-pulmonary-hypertension/',
+      link: 'right-heart',
       note: 'Integrate RV size, function and pulmonary-pressure findings. A pressure estimate or TAPSE alone is not a complete right-heart assessment.' },
     { title: 'Structured reporting · ASE 2025',
-      url: 'https://www.asecho.org/guideline/guidelines-for-the-standardization-of-adult-echocardiography-reporting/',
+      link: 'reporting',
       note: 'Record image quality, acquisition method and units; explain limitations and compare with prior studies when available.' },
     { title: 'Ultrasound artifacts · ASE',
-      url: 'https://www.asecho.org/news/ase-publishes-guideline-document-dedicated-to-cardiac-ultrasound-artifacts/',
+      link: 'artifacts',
       note: 'Check unexpected findings in another view and adjust acquisition settings before accepting an apparent abnormality.' }
   ];
 

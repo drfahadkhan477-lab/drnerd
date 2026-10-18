@@ -98,7 +98,7 @@
 .echo-flow{list-style:none;padding:0;counter-reset:echo-step}
 .echo-flow>li{position:relative;counter-increment:echo-step;border:1px solid var(--border);border-radius:12px;padding:16px 16px 16px 54px;margin:0 0 30px}
 .echo-flow>li:before{content:counter(echo-step);position:absolute;left:14px;top:14px;color:var(--accent);font-size:1.25rem;font-weight:700}
-.echo-flow>li:not(:last-child):after{content:'↓';position:absolute;bottom:-29px;left:50%;font-size:24px;color:var(--muted)}
+.echo-flow>li:not(:last-child):after{content:'↓';position:absolute;bottom:-29px;left:50%;font-size:23px;color:var(--muted)}
 .echo-flow strong,.echo-flow span{display:block;margin-bottom:6px}
 .echo-flow-branches{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .echo-flow-branches p{padding:12px;background:var(--ground);border-radius:8px;margin:6px 0}
