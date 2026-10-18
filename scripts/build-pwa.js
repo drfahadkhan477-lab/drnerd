@@ -652,6 +652,21 @@ step('pull the heart image out of the splash', () => {
   if (leftover) throw new Error(`${leftover.length} inline WebP data: URI(s) survived into the split build`);
 });
 
+// Public teaching media ships separately, with content-addressed names. The
+// single-file export keeps its embedded copies; the PWA precaches these assets.
+const echoAssets = [];
+step('split public echo teaching images', () => {
+  appCode = appCode.replace(/(window\.ECHO_MEDIA = \{)([\s\S]*?)(\};)/, (all, start, body, end) =>
+    start + body.replace(/data:image\/jpeg;base64,([A-Za-z0-9+/=]+)/g, (_, b64) => {
+      const bytes = Buffer.from(b64, 'base64');
+      if (bytes[0] !== 255 || bytes[1] !== 216) throw new Error('echo teaching image is not JPEG');
+      const name = 'echo-' + crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 12) + '.jpg';
+      echoAssets.push([name, bytes]);
+      return 'echo/' + name;
+    }) + end);
+  if (echoAssets.length !== 2) throw new Error('expected both public echo teaching images');
+});
+
 /* ── 3.6 the reference seed ───────────────────────────────────────────────
    The build bakes the reference notes in as a seed (the REF_SEED slot,
    scripts/ref-seed.js) so the app opens with
@@ -837,6 +852,14 @@ step('ship src/\'s modules without their comments', () => {
   if (!strippedModules.stripped.includes('src/core/heart3d.js')) {
     throw new Error('the heart\'s module was not found verbatim in app.js — a chain step edited it after its mesh was baked');
   }
+});
+
+// App-shell handlers have grown alongside src modules. Strip their comments
+// too, without removing source documentation or relaxing the transfer budget.
+step('ship application handlers without comments', () => {
+  const lean = require('./strip-comments.js').strip(appCode);
+  new (require('vm').Script)(lean, { filename: 'app.js' });
+  appCode = lean;
 });
 
 /* ── 3.8. the fonts ───────────────────────────────────────────────────────
@@ -1040,6 +1063,10 @@ step('every answer key matches the single-file build', () => {
 });
 
 
+const echoDir = path.join(DIST, 'echo');
+fs.mkdirSync(echoDir, { recursive: true });
+for (const [name, bytes] of echoAssets) fs.writeFileSync(path.join(echoDir, name), bytes);
+
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
 for (const [name, body] of splashAssets) fs.writeFileSync(path.join(splashDir, name), body);
@@ -1208,7 +1235,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest'${NO_CONTENT ? '' : ", 'content/questions.json'"}];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.

@@ -42,6 +42,7 @@
   var TABS = [
     { id: 'reference', label: 'Reference' },
     { id: 'calculator', label: 'Calculator' },
+    { id: 'visual', label: 'Visual guide' },
   ];
 
   /* Markup is built from our own tables, but escaping is not optional just
@@ -81,9 +82,9 @@
     for (i = 0; i < TABS.length; i++) {
       var t = TABS[i], on = t.id === a;
       out += '<button class="echo-tab' + (on ? ' on' : '') + '" data-echo-tab="' + esc(t.id) + '"' +
-        ' role="tab" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(t.label) + '</button>';
+        ' id="echo-tab-' + esc(t.id) + '" aria-controls="echo-panel" tabindex="' + (on ? '0' : '-1') + '" role="tab" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(t.label) + '</button>';
     }
-    return '<div class="echo-tabs" role="tablist">' + out + '</div>';
+    return '<div class="echo-tabs" role="tablist" aria-label="Echo Studio">' + out + '</div>';
   }
 
   /* ── reference tab ──────────────────────────────────────────────────── */
@@ -125,6 +126,7 @@
       var p = Math.max(places(r[0]), places(r[1]));
       return esc(r[0].toFixed(p)) + '–' + esc(r[1].toFixed(p)) + ' ' + esc(m.units);
     };
+    if (m.normalText) return esc(m.normalText);
     if (!m.normalF) return one(m.normal);
     return one(m.normal) + ' <span class="echo-sex">men</span><br>' +
       one(m.normalF) + ' <span class="echo-sex">women</span>';
@@ -164,7 +166,7 @@
 
     if (d.measures.length) {
       out += '<h4>Measured where</h4><table class="echo-measures"><thead><tr>' +
-        '<th>Measurement</th><th>Normal</th><th>View</th><th>Source</th></tr></thead><tbody>';
+        '<th>Measurement</th><th>Reference / interpretation</th><th>View</th><th>Source</th></tr></thead><tbody>';
       for (i = 0; i < d.measures.length; i++) out += measureRowHtml(d.measures[i]);
       out += '</tbody></table>';
     }
@@ -258,15 +260,23 @@
     return { rows: rows, missing: missing };
   }
 
-  function fieldsHtml(fields) {
+  var GROUPS = [
+    { title: 'Flow & aortic valve', ids: ['lvotD', 'lvotVti', 'avVti', 'avVmax', 'hr'] },
+    { title: 'LV volumes', ids: ['edv', 'esv'] },
+    { title: 'Right-heart pressure', ids: ['trVmax', 'ivcD', 'ivcCollapse'] },
+    { title: 'Mitral valve', ids: ['pisaR', 'alias', 'regVmax', 'regVti', 'pht'] }
+  ];
+
+  function fieldsHtml(fields, ids) {
     var f = fields || {}, out = '', i;
     for (i = 0; i < FIELDS.length; i++) {
       var x = FIELDS[i];
+      if (ids && ids.indexOf(x.id) < 0) continue;
       var v = num(f[x.id]) ? String(f[x.id]) : '';
       var view = byId(E.VIEWS, x.view);
       out += '<label class="echo-field">' +
         '<span class="echo-label">' + esc(x.label) + '</span>' +
-        '<input type="number" inputmode="decimal" step="any" data-echo-field="' + esc(x.id) + '"' +
+        '<input type="number" inputmode="decimal" step="any" min="0" data-echo-field="' + esc(x.id) + '"' +
         ' value="' + esc(v) + '" aria-label="' + esc(x.label + ' in ' + x.units) + '">' +
         '<span class="echo-units">' + esc(x.units) + '</span>' +
         '<span class="echo-where">' + esc(view ? view.name : x.view) + '</span>' +
@@ -277,11 +287,15 @@
 
   function resultsHtml(fields) {
     var r = compute(fields), out = '', i;
+    var invalid = FIELDS.filter(function (f) { return num((fields || {})[f.id]) &&
+      (fields[f.id] < 0 || (f.id === 'ivcCollapse' && fields[f.id] > 100)); });
+    if (invalid.length) out += '<p class="echo-warning" role="status">Check measurements: ' +
+      esc(invalid.map(function (f) { return f.label; }).join(', ')) + '. Use non-negative magnitudes; IVC collapse must be a percentage within its valid range.</p>';
     if (!r.rows.length) {
       out += '<p class="echo-empty">Enter measurements and the derived values appear here.</p>';
     } else {
       out += '<table class="echo-results"><thead><tr><th>Derived</th><th>Value</th>' +
-        '<th>Grade</th><th>Source</th></tr></thead><tbody>';
+        '<th>Single-metric band</th><th>Source</th></tr></thead><tbody>';
       for (i = 0; i < r.rows.length; i++) {
         var row = r.rows[i];
         out += '<tr><td>' + esc(row.label) + '</td>' +
@@ -310,8 +324,50 @@
   }
 
   function calculatorHtml(fields) {
-    return '<div class="echo-calc">' + fieldsHtml(fields) +
-      '<div class="echo-out">' + resultsHtml(fields) + '</div></div>';
+    var groups = GROUPS.map(function (g) {
+      return '<fieldset class="echo-group"><legend>' + esc(g.title) + '</legend>' + fieldsHtml(fields, g.ids) + '</fieldset>';
+    }).join('');
+    return '<div class="echo-calc"><p class="echo-note">Enter measured magnitudes in the displayed units. Blank means not measured. Results update as you type.</p>' + groups +
+      '<aside class="echo-cautions"><strong>Interpret together</strong><p>Valve bands describe one measurement, not an integrated severity diagnosis. Check flow, acquisition quality and discordant measurements.</p><p>PASP assumes no RV outflow or pulmonary valve obstruction. IVC-based RA pressure assumes spontaneous breathing. PISA assumes hemispheric convergence; its displayed bands are for primary MR. Pressure half-time can be unreliable after valvuloplasty or with significant AR.</p></aside>' +
+      '<div class="echo-out" aria-live="polite" aria-atomic="true">' + resultsHtml(fields) + '</div></div>';
+  }
+
+  // Source links are navigation, not remote app resources. Keep literal
+  // anchors here so the CSP audit can distinguish them from fetch/image URLs.
+  var SOURCE_ANCHORS = {
+    'diastolic': '<a href="https://www.asecho.org/guideline/left-ventricular-diastolic-function-by-echo/" target="_blank" rel="noopener noreferrer">',
+    'right-heart': '<a href="https://www.asecho.org/guideline/right-heart-in-adults-pulmonary-hypertension/" target="_blank" rel="noopener noreferrer">',
+    'reporting': '<a href="https://www.asecho.org/guideline/guidelines-for-the-standardization-of-adult-echocardiography-reporting/" target="_blank" rel="noopener noreferrer">',
+    'artifacts': '<a href="https://www.asecho.org/news/ase-publishes-guideline-document-dedicated-to-cardiac-ultrasound-artifacts/" target="_blank" rel="noopener noreferrer">'
+  };
+
+  function visualHtml(state) {
+    var phase = state.phase || 'auto', media = root.ECHO_MEDIA || {};
+    return '<div class="echo-visual">' +
+      '<section class="echo-visual-card"><p class="echo-eyebrow">See the cycle</p><h3>From filling to contraction</h3>' +
+      '<p>Ventricles fill during diastole and eject during systole. Compare chamber size across the cycle before measuring volumes.</p>' +
+      '<div class="echo-cycle" data-phase="' + esc(phase) + '">' +
+      '<svg viewBox="0 0 520 350" role="img" aria-label="Simplified four-chamber diagram: right ventricle and atrium on the left, left ventricle and atrium on the right. Ventricles become smaller during contraction.">' +
+      '<path class="echo-sector" d="M260 12 L28 326 Q260 374 492 326 Z"/>' +
+      '<g class="echo-ventricle echo-rv"><path d="M244 52 Q128 70 120 202 Q160 222 244 207 Z"/></g>' +
+      '<g class="echo-ventricle echo-lv"><path d="M274 52 Q378 68 390 204 Q340 226 274 207 Z"/></g>' +
+      '<path class="echo-atrium" d="M126 233 Q102 321 232 318 L244 235 Z"/>' +
+      '<path class="echo-atrium" d="M276 235 L288 318 Q410 321 386 233 Z"/>' +
+      '<path class="echo-valve" d="M126 221 L180 229 L241 220 M277 220 L330 229 L386 221"/>' +
+      '<g class="echo-diagram-labels"><text x="184" y="155">RV</text><text x="330" y="155">LV</text><text x="179" y="278">RA</text><text x="332" y="278">LA</text><text x="260" y="28">Apex</text></g></svg>' +
+      '<div class="echo-phase-key"><span>Diastole · filling</span><span>Systole · contraction</span></div></div>' +
+      '<div class="echo-phase-controls" role="group" aria-label="Cardiac cycle animation">' +
+      [['auto','Play cycle'],['diastole','Freeze filling'],['systole','Freeze contraction']].map(function(x){return '<button data-echo-phase="' + x[0] + '" aria-pressed="' + (phase === x[0]) + '">' + x[1] + '</button>';}).join('') + '</div>' +
+      '<p class="echo-note">Original teaching schematic, not a patient scan or a measurement model. Motion is illustrative; anatomy is simplified. Reduced-motion settings stop playback.</p></section>' +
+      '<section class="echo-visual-card"><p class="echo-eyebrow">Connect image &amp; anatomy</p><h3>Recognise the view</h3><div class="echo-image-grid">' +
+      '<figure><img class="echo-teaching-image" src="' + esc(media.fourChamber || '') + '" alt="Real four-chamber echocardiogram with the apex pointing down and the left heart on the right of the image" loading="lazy" width="636" height="434"><figcaption><strong>Real echo · four chambers</strong><p>Notice the dark cavities and brighter tissue borders. This example displays the apex down; orientation varies between acquisitions.</p><a href="https://commons.wikimedia.org/wiki/File:Echocardiogram_4chambers.jpg" target="_blank" rel="noopener noreferrer">Kjetil Lenes · public domain · original image</a></figcaption></figure>' +
+      '<figure><img class="echo-teaching-image" src="' + esc(media.plax || '') + '" alt="Anatomical illustration of a parasternal long-axis section showing the left ventricle, mitral valve, left atrium and aortic root" loading="lazy" width="960" height="640"><figcaption><strong>Anatomy illustration · long axis</strong><p>Trace the LV cavity to the mitral valve and atrium, then identify the outflow tract and aortic root.</p><a href="https://commons.wikimedia.org/wiki/File:Heart_lpla_echo_view.jpg" target="_blank" rel="noopener noreferrer">Patrick J. Lynch &amp; C. Carl Jaffe · source (resized by Wikimedia)</a> · <a href="https://creativecommons.org/licenses/by/2.5/" target="_blank" rel="noopener noreferrer">CC BY 2.5</a></figcaption></figure></div></section>' +
+      '<section class="echo-visual-card"><p class="echo-eyebrow">A practical reading path</p><h3>From a clinical question to an integrated answer</h3><ol class="echo-flow">' +
+      '<li><strong>Start with the question</strong><span>Define what the study needs to explain; note rhythm and relevant context.</span></li>' +
+      '<li><strong>Is image quality adequate?</strong><div class="echo-flow-branches"><p><b>No / uncertain</b> Optimise the window and settings. Check another view; record limitations if uncertainty remains.</p><p><b>Yes</b> Acquire the relevant views and Doppler envelopes. Avoid foreshortening and off-axis measurements.</p></div></li>' +
+      '<li><strong>Measure consistently</strong><span>Use the correct phase, method and units. Compare chamber size, function, valve morphology and haemodynamics.</span></li>' +
+      '<li><strong>Do the findings agree?</strong><div class="echo-flow-branches"><p><b>No</b> Recheck acquisition, loading conditions and measurement assumptions. Use the relevant guideline pathway.</p><p><b>Yes</b> Integrate the findings with the clinical picture and available prior studies.</p></div></li>' +
+      '<li><strong>Explain the conclusion</strong><span>State the findings, limitations and unresolved questions. One measurement does not establish the whole diagnosis.</span></li></ol><p class="echo-note">Study workflow, not a diagnostic algorithm. See Current guidance for the complete society documents.</p></section></div>';
   }
 
   /* ── the screen ─────────────────────────────────────────────────────── */
@@ -319,11 +375,13 @@
   function screenHtml(state) {
     var s = state || {};
     var active = tabId(s.tab);
-    var body = active === 'calculator' ? calculatorHtml(s.fields) : referenceHtml(s);
+    var body = active === 'calculator' ? calculatorHtml(s.fields) : active === 'visual' ? visualHtml(s) : referenceHtml(s);
     return '<section class="echo-studio">' +
-      '<h2>Echo Studio</h2>' +
+      '<header class="echo-header"><p class="echo-eyebrow">Acquire · Measure · Interpret</p><h2>Echo Studio</h2><p>Explore views, connect findings and practise the arithmetic.</p></header>' +
+      '<details class="echo-guidance"><summary>Current guidance &amp; study scope</summary><p>Teaching reference, not a diagnostic report. Valve bands retain their named guideline editions; diastolic teaching reflects the ASE update. Sources open online; this summary works offline.</p>' +
+      E.GUIDANCE.map(function (g) { return '<article>' + SOURCE_ANCHORS[g.link] + esc(g.title) + '</a><p>' + esc(g.note) + '</p></article>'; }).join('') + '</details>' +
       tabsHtml(active) +
-      '<div class="echo-panel" role="tabpanel">' + body + '</div>' +
+      '<div class="echo-panel" id="echo-panel" role="tabpanel" aria-labelledby="echo-tab-' + esc(active) + '">' + body + '</div>' +
       '</section>';
   }
 
@@ -333,7 +391,7 @@
     diseaseListHtml: diseaseListHtml, viewCardHtml: viewCardHtml, diseaseHtml: diseaseHtml,
     rangeHtml: rangeHtml, measureRowHtml: measureRowHtml,
     referenceHtml: referenceHtml, compute: compute, fieldsHtml: fieldsHtml,
-    resultsHtml: resultsHtml, calculatorHtml: calculatorHtml, screenHtml: screenHtml,
+    resultsHtml: resultsHtml, calculatorHtml: calculatorHtml, visualHtml: visualHtml, screenHtml: screenHtml,
   };
 
 })(typeof window !== 'undefined' ? window : this);

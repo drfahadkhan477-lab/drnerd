@@ -24,7 +24,8 @@
    Valve severity follows the 2020 ACC/AHA Valvular Heart Disease guideline
    and the ASE recommendations for native valve regurgitation (2017);
    chamber quantification follows the ASE/EACVI 2015 update; diastolic
-   function follows the ASE/EACVI 2016 algorithm. Each band carries the
+   teaching follows the ASE 2025 update. Older valve and chamber
+   references retain their explicitly named editions. Each band carries the
    reference that defines it in `ref`, because a cutoff without a source is a
    number somebody will eventually change on a hunch.
 
@@ -147,11 +148,11 @@
     { id: 'e-vel', name: 'Mitral E velocity', view: 'a4c', units: 'm/s',
       normal: [0.6, 1.3], note: 'Pulsed wave at the leaflet tips', ref: 'ASE 2016' },
     { id: 'e-prime', name: "Mitral annular e'", view: 'a4c', units: 'cm/s',
-      normal: [7, 15], note: "Septal e' below 7 or lateral below 10 is abnormal", ref: 'ASE 2016' },
+      normalText: 'Age and sampling site dependent', note: "ASE 2025 Figure 2: reduced relaxation at septal e’ ≤6, lateral ≤7 or average ≤6.5 cm/s; interpret with age and other findings.", ref: 'ASE 2025, Figure 2' },
     { id: 'e-over-e', name: "E/e' ratio, average", view: 'a4c', units: 'ratio',
-      normal: [4, 14], note: 'Above 14 suggests raised LV filling pressure', ref: 'ASE 2016' },
+      normalText: 'Interpret within the filling-pressure algorithm', note: 'ASE 2025 Figure 3 uses average E/e’ ≥14 as one input; this is not a standalone diagnosis.', ref: 'ASE 2025, Figure 3' },
     { id: 'tr-vmax', name: 'Tricuspid regurgitant peak velocity', view: 'a4c', units: 'm/s',
-      normal: [0, 2.8], note: 'Drives the pulmonary pressure estimate', ref: 'ASE 2016' },
+      normalText: 'Interpret with right-heart findings', note: 'A complete TR envelope supports pressure estimation; absent or poor-quality TR does not exclude pulmonary hypertension.', ref: 'ASE right heart 2025' },
     { id: 'tapse', name: 'Tricuspid annular plane systolic excursion', view: 'a4c', units: 'mm',
       normal: [17, 30], note: 'Below 17 mm indicates RV systolic dysfunction', ref: 'ASE 2015' },
     { id: 'ivc-d', name: 'IVC diameter', view: 'ivc', units: 'cm',
@@ -169,7 +170,7 @@
   /* Simplified Bernoulli. Valid where the proximal velocity is negligible;
      above roughly 1.5 m/s proximally the full equation is needed and this
      overestimates, which is why `gradientFull` exists beside it. */
-  function gradient(v) { return num(v) ? 4 * v * v : null; }
+  function gradient(v) { return num(v) && v >= 0 ? 4 * v * v : null; }
 
   function gradientFull(v, vProximal) {
     if (!num(v) || !num(vProximal)) return null;
@@ -202,12 +203,12 @@
      without the squared error the diameter carries. Useful exactly when the
      LVOT cannot be measured confidently. */
   function dimensionlessIndex(lvotVti, avVti) {
-    if (!num(lvotVti) || !num(avVti) || avVti <= 0) return null;
+    if (!num(lvotVti) || !num(avVti) || lvotVti <= 0 || avVti <= 0) return null;
     return lvotVti / avVti;
   }
 
   function cardiacOutput(sv, hr) {
-    if (!num(sv) || !num(hr) || hr <= 0) return null;
+    if (!num(sv) || !num(hr) || sv <= 0 || hr <= 0) return null;
     return sv * hr / 1000;
   }
 
@@ -242,7 +243,7 @@
      convergence zone, which a constrained or eccentric jet violates. */
   function pisaEro(radius, aliasVelocity, peakRegurgVelocity) {
     if (!num(radius) || !num(aliasVelocity) || !num(peakRegurgVelocity)) return null;
-    if (radius <= 0 || peakRegurgVelocity <= 0) return null;
+    if (radius <= 0 || aliasVelocity <= 0 || peakRegurgVelocity <= 0) return null;
     return 2 * Math.PI * radius * radius * aliasVelocity / peakRegurgVelocity;
   }
 
@@ -260,14 +261,15 @@
      when there is no pulmonic stenosis or RVOT obstruction. */
   function pasp(trVmax, raPressure) {
     var g = gradient(trVmax);
-    if (g === null || !num(raPressure)) return null;
+    if (g === null || !num(raPressure) || raPressure < 0) return null;
     return g + raPressure;
   }
 
   /* Right atrial pressure from the IVC, as the three-band estimate the ASE
      recommends rather than a continuous function it does not support. */
   function raPressure(ivcDiameterCm, collapsePercent) {
-    if (!num(ivcDiameterCm) || !num(collapsePercent)) return null;
+    if (!num(ivcDiameterCm) || !num(collapsePercent) || ivcDiameterCm <= 0 ||
+        collapsePercent < 0 || collapsePercent > 100) return null;
     var small = ivcDiameterCm <= 2.1;
     var collapses = collapsePercent > 50;
     if (small && collapses) return 3;
@@ -489,11 +491,29 @@
         'Normal cavity size with increased relative wall thickness',
         'Left atrial enlargement in the absence of atrial fibrillation or valve disease' ],
       quantitative: [
-        'Three or four of: average E/e\' above 14, septal e\' below 7 or lateral below 10, TR velocity above 2.8 m/s, LA volume index above 34 mL/m2',
-        'Two of four positive is indeterminate and warrants exercise haemodynamics' ] },
+        'ASE 2025 replaces the 2016 four-variable vote. Assess relaxation, filling pressure and the clinical syndrome separately.',
+        'Combine e’, E/e’ and TR velocity or PASP; discordant findings need supplemental measurements such as LA reservoir strain, pulmonary venous flow or LA volume.',
+        'Use the guideline’s separate pathways for atrial fibrillation, significant mitral disease, constriction and other special populations. Persistent symptoms may require exercise assessment; preserved EF alone does not diagnose HFpEF.' ] },
+  ];
+
+  // Original teaching summaries; source documents remain on their publishers’ sites.
+  var GUIDANCE = [
+    { title: 'Diastolic function · ASE 2025',
+      link: 'diastolic',
+      note: 'Updated assessment of relaxation and filling pressure, including LA strain and special-population pathways. Read the complete algorithm before applying it.' },
+    { title: 'Right heart · ASE 2025',
+      link: 'right-heart',
+      note: 'Integrate RV size, function and pulmonary-pressure findings. A pressure estimate or TAPSE alone is not a complete right-heart assessment.' },
+    { title: 'Structured reporting · ASE 2025',
+      link: 'reporting',
+      note: 'Record image quality, acquisition method and units; explain limitations and compare with prior studies when available.' },
+    { title: 'Ultrasound artifacts · ASE',
+      link: 'artifacts',
+      note: 'Check unexpected findings in another view and adjust acquisition settings before accepting an apparent abnormality.' }
   ];
 
   root.Echo = {
+    GUIDANCE: GUIDANCE,
     VIEWS: VIEWS, MEASUREMENTS: MEASUREMENTS, LESIONS: LESIONS, DISEASES: DISEASES,
     gradient: gradient, gradientFull: gradientFull, csa: csa, strokeVolume: strokeVolume,
     continuityArea: continuityArea, dimensionlessIndex: dimensionlessIndex,

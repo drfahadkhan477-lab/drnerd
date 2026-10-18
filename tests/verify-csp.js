@@ -119,18 +119,31 @@ head('the allowlist covers every host the shipped app can reach');
   ok('a script excused from the scan is one nothing in the build names',
      loaders.length === 0 && Object.keys(NOT_SHIPPED).every(t => files.some(f => relPath(f) === t)), loaders.join('; ') || 'none');
 
+  // Literal anchor hrefs navigate when clicked; connect-src governs fetch,
+  // not navigation. Mask only anchor destinations, preserving image/src URLs
+  // and direct fetches even when they use the same host as a source link.
+  const resourceHosts = text => {
+    const resources = blankComments(text).replace(/(<a\b[^<>]*?\bhref\s*=\s*(["']))https:\/\/[^"'<>\s]*\2/gi, (_, head, quote) => head + quote);
+    return new Set([...resources.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].map(m => m[1]));
+  };
+  const sourceLink = '<a href="https://example.org/guideline">Source</a>';
+  ok('source hyperlinks are navigation while same-host fetches and images remain audited',
+     resourceHosts(sourceLink).size === 0 &&
+     resourceHosts(sourceLink + ' fetch("https://example.org/api")').has('example.org') &&
+     resourceHosts(sourceLink + ' <img src="https://example.org/image.jpg">').has('example.org') &&
+     resourceHosts('<a style="background:url(https://example.org/image.jpg)" href="https://example.org/guideline">').has('example.org'));
   const hosts = new Set();
   for (const f of files) {
     if (relPath(f) in NOT_SHIPPED) continue;
-    for (const m of fs.readFileSync(f, 'utf8').matchAll(/https:\/\/([a-z0-9.-]+)/gi)) hosts.add(m[1]);
+    for (const host of resourceHosts(fs.readFileSync(f, 'utf8'))) hosts.add(host);
   }
   const allowed = new Set(CSP.CONNECT.filter(s => s.startsWith('https://'))
                                      .map(s => s.replace('https://', '')));
   const unaccounted = [...hosts].filter(h => !allowed.has(h) && !(h in REMOVED));
-  ok('every https host in the tree is either allowed or removed by a named step',
+  ok('every resource https host is either allowed or removed by a named step',
      unaccounted.length === 0, unaccounted.join(', ') || 'none');
   ok('and the allowlist is not empty', allowed.size > 0, [...allowed].join(', '));
-  /* The host check reads every URL as a connection, and img-src is narrower
+  /* The resource-host check audits connections, and img-src is narrower
      than connect-src: it allows no other host at all. So a picture fetched
      from the one host connect-src allows passes the check above and is
      refused by the browser at runtime, on the owner's device, with no test

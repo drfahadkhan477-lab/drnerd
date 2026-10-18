@@ -198,6 +198,8 @@ const B64_MANY = 8;
    a path listed here is exempt from this rule and no other. */
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|heic|svg|pdf)$/i;
 const KNOWN_BINARIES = [
+  'assets/echo/four-chamber.jpg', // Kjetil Lenes, public-domain ultrasound; assets/echo/ATTRIBUTION.md
+  'assets/echo/plax.jpg', // Lynch/Jaffe, CC BY 2.5 anatomy illustration; assets/echo/ATTRIBUTION.md
   'assets/hero-heart/heart.webp',   // the home screen's heart, drawn for this app
 ];
 /* Every format IMAGE_EXT names is recognised renamed too, by its first bytes

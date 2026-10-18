@@ -243,5 +243,16 @@ head('what the core holds, the screen shows');
      septum === '0.6–1.0', septum || 'septal range not found');
 }
 
+ok('calculator groups contain every measurement once',
+   (U.calculatorHtml({}).match(/<fieldset/g) || []).length === 4 &&
+   U.FIELDS.every(f => U.calculatorHtml({}).split('data-echo-field="' + f.id + '"').length === 2));
+ok('invalid IVC input displays a correction and no pressure row',
+   U.resultsHtml({ivcD: 2, ivcCollapse: 101}).includes('Check measurements:') &&
+   !U.compute({ivcD: 2, ivcCollapse: 101}).rows.some(r => r.id === 'rap'));
+ok('contextual measurements render interpretation instead of a fabricated normal range',
+   U.measureRowHtml('e-prime').includes('Age and sampling site dependent'));
+ok('guidance links and calculator limitations reach the screen',
+   U.screenHtml({}).includes('https://www.asecho.org/guideline/left-ventricular-diastolic-function-by-echo/') &&
+   U.calculatorHtml({}).includes('spontaneous breathing') && U.calculatorHtml({}).includes('primary MR'));
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -87,11 +87,11 @@ head('the tables carry what a reader needs');
                                        || !v.sees.length || !v.forWhat).map(v => v.id);
   ok('every view names its window, position, index mark and angle', viewGaps.length === 0,
      viewGaps.join(', ') || 'none');
-  const measGaps = E.MEASUREMENTS.filter(m => !m.units || !m.ref || !Array.isArray(m.normal)
-                                              || m.normal.length !== 2).map(m => m.id);
-  ok('every measurement has units, a normal range and a source', measGaps.length === 0,
+  const measGaps = E.MEASUREMENTS.filter(m => !m.units || !m.ref || !(Array.isArray(m.normal) && m.normal.length === 2) &&
+    !(typeof m.normalText === 'string' && m.normalText.trim().length > 0)).map(m => m.id);
+  ok('every measurement has units, a range or contextual interpretation, and a source', measGaps.length === 0,
      measGaps.join(', ') || 'none');
-  const unordered = E.MEASUREMENTS.filter(m => !(m.normal[0] < m.normal[1])).map(m => m.id);
+  const unordered = E.MEASUREMENTS.filter(m => m.normal && !(m.normal[0] < m.normal[1])).map(m => m.id);
   ok('every normal range runs low to high', unordered.length === 0, unordered.join(', ') || 'none');
   const noRef = E.LESIONS.filter(l => !l.ref).map(l => l.id);
   /* A weaker claim than "the cutoff is right", and the header says so. */
@@ -349,5 +349,13 @@ head('every number traces to its source, including the ones no sweep reaches');
      `table: 1.0 → ${atCut}; profile: "${sevLine.slice(0, 90)}"`);
 }
 
+ok('impossible IVC measurements cannot produce pressure estimates',
+   E.raPressure(-1, 60) === null && E.raPressure(2, 101) === null && E.raPressure(2, -1) === null);
+ok('negative Doppler magnitudes cannot produce plausible derived values',
+   E.gradient(-4) === null && E.dimensionlessIndex(-20, 80) === null &&
+   E.cardiacOutput(-70, 60) === null && E.pisaEro(1, -30, 500) === null && E.pasp(3, -3) === null);
+ok('HFpEF teaching identifies the current guidance and retires the four-variable vote',
+   E.DISEASES.find(d => d.id === 'hfpef').quantitative.join(' ').includes('ASE 2025 replaces') &&
+   !E.DISEASES.find(d => d.id === 'hfpef').quantitative.join(' ').includes('Three or four of:'));
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
