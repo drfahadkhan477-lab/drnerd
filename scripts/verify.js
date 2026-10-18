@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 152 suites and roughly 7167 checks, and they
+ * WHY THIS EXISTS. There are 162 suites and roughly 8186 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -488,7 +488,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['bankbuild-pure', 'bankname', 'buildbank-pure', 'flags', 'flagset-pure', 'importbank-pure', 'mockexam-pure', 'mockscreen', 'suitecache', 'suitecache-pure'];
+const PENDING_RECORD = [];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
