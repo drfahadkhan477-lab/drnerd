@@ -122,7 +122,7 @@ let pieces = null, cutError = '';
 try {
   pieces = {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
-      '/* ══════════ Search your notes — see src/core/notesearch.js'),
+      '/* ══════════ Search your notes — see src/core/notesearch.js').replace(/@@SLOT\[asset:(assets\/echo\/[^\]]+)\]@@/g, (_, file) => fs.readFileSync(path.join(ROOT, file)).toString('base64')),
     door: cut('app/systole.html', '      <button class="icon-btn" onclick="goEcho()" title="Echo Studio"',
       '      <div class="theme-wrap">'),
     css: cutStylesheet('.echo-studio{', '.ns-screen{'),
@@ -368,6 +368,39 @@ const MARK = 'echomark';
   await page.setViewportSize({width: 375, height: 812});
   ok('grouped calculator fits a phone viewport', await page.evaluate(() =>
     document.querySelectorAll('.echo-group').length === 4 && document.documentElement.scrollWidth <= innerWidth));
+  await page.click('[data-echo-tab="visual"]');
+  ok('the visual guide renders an accessible schematic and a branched study flow',
+    await $('.echo-cycle svg[role="img"][aria-label]').count() === 1 &&
+    await $('.echo-flow>li').count() === 5 && await $('.echo-flow-branches').count() === 2);
+  for (const image of await $('.echo-teaching-image').all()) {
+    await image.scrollIntoViewIfNeeded();
+    await image.evaluate(i => i.decode().catch(() => null));
+  }
+  ok('both attributed teaching images decode from the embedded public assets', await page.evaluate(() => {
+    const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
+    return images.length === 2 && images.every(i => i.naturalWidth > 100) &&
+      document.querySelector('.echo-image-grid').textContent.includes('Kjetil Lenes') &&
+      !!document.querySelector('a[href="https://creativecommons.org/licenses/by/2.5/"]');
+  }));
+  const animation = () => page.evaluate(() => {
+    const v = document.querySelector('.echo-ventricle');
+    return v && {name: getComputedStyle(v).animationName, transform: getComputedStyle(v).transform,
+      running: v.getAnimations().some(a => a.playState === 'running')};
+  });
+  const playing = await animation();
+  ok('the schematic runs its contraction animation', !!playing && playing.name === 'echo-contract' && playing.running);
+  await page.click('[data-echo-phase="diastole"]');
+  const filling = await animation();
+  await page.click('[data-echo-phase="systole"]');
+  const contracting = await animation();
+  ok('freeze controls stop motion at different chamber sizes', !!filling && !!contracting &&
+    filling.name === 'none' && contracting.name === 'none' && filling.transform !== contracting.transform);
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.click('[data-echo-phase="auto"]');
+  const reduced = await animation();
+  ok('reduced motion stops the automatic animation', !!reduced && reduced.name === 'none' && !reduced.running);
+  ok('the visual guide fits a phone viewport', await page.evaluate(() =>
+    !!document.querySelector('.echo-visual') && document.documentElement.scrollWidth <= innerWidth));
   if (process.env.SYSTOLE_ECHO_SCREENSHOT) await page.screenshot({path: process.env.SYSTOLE_ECHO_SCREENSHOT, fullPage: true});
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);

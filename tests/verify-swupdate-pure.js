@@ -300,7 +300,7 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
        template, as in a build: B's code differs from A's, C's does not. */
     const open = 'const SW = `', at = SRC.indexOf(open), end = SRC.indexOf('\n`;', at);
     const template = new Function('contentVersion', 'path', 'DIST', 'contentManifest', 'shellDigest',
-      'BUILD_ID', 'COMMIT', 'NO_CONTENT', 'fontAssets', 'return `' + SRC.slice(at + open.length, end) + '\n`;');
+      'BUILD_ID', 'COMMIT', 'NO_CONTENT', 'fontAssets', 'echoAssets', 'return `' + SRC.slice(at + open.length, end) + '\n`;');
     const shellDigest = { A: 'aaaaaaaaaaaaaaaa', B: 'bbbbbbbbbbbbbbbb', C: 'aaaaaaaaaaaaaaaa' };
     /* Run in a sandbox over a CacheStorage holding what a device already has;
        activate's deletions are recorded. */
@@ -322,7 +322,7 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
       const x = spawnSync(process.execPath, [S('extract-content.js'), html, dc], { encoding: 'utf8' });
       if (x.status !== 0) throw new Error(`extract-content refused build ${k} (exit ${x.status})`);
       const manifest = JSON.parse(fs.readFileSync(path.join(dc, 'manifest.json'), 'utf8'));
-      const sw = template(contentVersion, path, dist, manifest, shellDigest[k], '0123456789abcdef', 'abc123def456', false, []);
+      const sw = template(contentVersion, path, dist, manifest, shellDigest[k], '0123456789abcdef', 'abc123def456', false, [], []);
       const figs = fs.readdirSync(path.join(dc, 'figures')).sort();
       b[k] = { sw, manifest, figs, names: (await deploy(sw, [])).names,
                bank: fs.readFileSync(path.join(dc, 'questions.json')),

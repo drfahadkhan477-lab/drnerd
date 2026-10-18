@@ -37,3 +37,18 @@ checks failed with the old UI restored. Reversing a numerical range and removing
 a range each failed the corresponding data-contract check. Restoring the old
 navigation failed keyboard behavior, and removing group markup failed the
 phone-layout check. Sources were restored before final validation.
+
+## Visual guide
+
+The chamber animation is an original schematic with freeze controls and
+reduced-motion support. It illustrates contraction, not patient motion or
+quantitative ventricular mechanics. The branching infographic is a study
+workflow, not a replacement for a society diagnostic algorithm.
+
+A real ultrasound example and a separately labelled anatomical illustration
+are bundled with their attribution and license links; see
+[asset credits](../assets/echo/ATTRIBUTION.md). The standalone file embeds them;
+the PWA extracts content-addressed JPEG files and precaches them for first-use
+offline viewing. The split app also strips comments from its application
+handlers to preserve the existing transfer budget without changing source
+documentation or weakening the test.

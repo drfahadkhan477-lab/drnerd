@@ -20,7 +20,7 @@ const fs = require('fs');
 const { splitBank, readStaging } = require('./_olderbank.js');
 const { launch, heapUsedBytes, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, resolved } = require('./_render.js');
+const { booted, resolved, settled } = require('./_render.js');
 const SYN = require('../scripts/synthetic-export.js');
 const { originTransport } = require('./_origintransport.js');
 
@@ -597,6 +597,18 @@ async function heapAfterBoot(page, url) {
       return !!img && img.complete && img.naturalWidth > 0;
     }, null, { timeout: 30000 }).then(()=>true,()=>false);
     ok('a figure seen before is still there offline', decoded);
+    // First visit to Echo happens AFTER the outage: this measures installation
+    // caching, rather than images a previous visit happened to cache.
+    await page.evaluate(() => { ECHO.tab = 'visual'; goEcho(); });
+    await settled(page, () => !!document.querySelector('.echo-panel'));
+    for (const image of await page.locator('.echo-teaching-image').all()) {
+      await image.scrollIntoViewIfNeeded();
+      await image.evaluate(i => i.decode().catch(() => null));
+    }
+    ok('public echo teaching images decode on their first visit offline', await page.evaluate(() => {
+      const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
+      return images.length === 2 && images.every(i => i.naturalWidth > 100 && /\/echo\/echo-/.test(i.src));
+    }));
     transport.resume();
     await ctx.close();
     transport.close();
