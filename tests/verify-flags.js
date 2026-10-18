@@ -776,20 +776,33 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
   head('a search hit says it is flagged');
   {
     await fresh();
-    /* "arr" is in the Arrhythmias questions and in no reference note: the search drops a question that a note outscores. */
-    await page.evaluate(() => { searchGo('arr'); });
-    await reached('search'); await drawn('.hit'); await settle();
-    const hits = await page.evaluate(() => SQ.hits.map(h => h.q.id));
-    ok('the search has hits to look at', hits.length >= 2, String(hits.length));
-    await page.evaluate(id => { S.flagged = new Set([id]); searchGo('arr'); }, hits[0]);
-    await drawn('.hit-flag.flagged'); await settle();
-    const r = await page.evaluate(() => ({ badges: [...document.querySelectorAll('.hit')].map(h => [h.getAttribute('onclick'), !!h.querySelector('.hit-flag.flagged')]) }));
-    const flaggedRows = r.badges.filter(b => b[1]);
-    ok('exactly the flagged hit carries the badge', flaggedRows.length === 1 && flaggedRows[0][0].indexOf(hits[0]) >= 0, JSON.stringify(flaggedRows));
-    ok('and it says "flagged"', await page.evaluate(() => document.querySelector('.hit-flag.flagged').textContent.trim()) === 'flagged');
-    const amber = await tokenColor('amber'), red = await tokenColor('red');
-    const hc = await page.evaluate(() => getComputedStyle(document.querySelector('.hit-flag.flagged')).color);
-    ok('and it is amber, which is not the red of "previously missed"', hc === amber && hc !== red, JSON.stringify([hc, amber, red]));
+    /* Make the search evidence independent of the installed bank and note
+       corpus. Keep the real questions/ids and real index; restore their stems
+       afterward without sending any private text out of the browser. */
+    await page.evaluate(ids => {
+      window.__flagSearchOriginal = ids.map(id => ({ q: QBYID[id], stem: QBYID[id].s }));
+      window.__flagSearchOriginal.forEach((x, i) => { x.q.s = 'systoleflagfixture public search example ' + i; });
+      invalidateIndex(); SQ.ch = ''; searchGo('systoleflagfixture');
+    }, [A, B]);
+    try {
+      await reached('search'); await drawn('.hit'); await settle();
+      const hits = await page.evaluate(() => SQ.hits.map(h => h.q.id));
+      ok('the search has hits to look at', hits.length >= 2, String(hits.length));
+      await page.evaluate(id => { S.flagged = new Set([id]); searchGo('systoleflagfixture'); }, hits[0]);
+      await drawn('.hit-flag.flagged'); await settle();
+      const r = await page.evaluate(() => ({ badges: [...document.querySelectorAll('.hit')].map(h => [h.getAttribute('onclick'), !!h.querySelector('.hit-flag.flagged')]) }));
+      const flaggedRows = r.badges.filter(b => b[1]);
+      ok('exactly the flagged hit carries the badge', flaggedRows.length === 1 && flaggedRows[0][0].indexOf(hits[0]) >= 0, JSON.stringify(flaggedRows));
+      ok('and it says "flagged"', await page.evaluate(() => document.querySelector('.hit-flag.flagged')?.textContent.trim()) === 'flagged');
+      const amber = await tokenColor('amber'), red = await tokenColor('red');
+      const hc = await page.evaluate(() => { const badge = document.querySelector('.hit-flag.flagged'); return badge ? getComputedStyle(badge).color : null; });
+      ok('and it is amber, which is not the red of "previously missed"', hc === amber && hc !== red, JSON.stringify([hc, amber, red]));
+    } finally {
+      await page.evaluate(() => {
+        (window.__flagSearchOriginal || []).forEach(x => { x.q.s = x.stem; });
+        delete window.__flagSearchOriginal; invalidateIndex();
+      });
+    }
   }
 
   head('the quiz\'s row of buttons, from a phone to an iPad');

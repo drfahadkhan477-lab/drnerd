@@ -21,9 +21,9 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7167 checks in
-# `node scripts/verify.js` plus 142 more under `--pwa`, this workflow runs 7084.
-# The other 225 all drive something this workflow does not have: the real
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 8186 checks in
+# `node scripts/verify.js` plus 143 more under `--pwa`, this workflow runs 8103.
+# The other 226 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
 # the ACCSAP 12 export — the licensed question bank, deliberately never
@@ -35,7 +35,7 @@
 # and verify-cachebuckets hold it to the synthetic generator's own totals.
 # They are not in these counts, because the record counts the split build only
 # from a run on the real bank, and on the real bank
-# there is no way to run those 225 checks here.
+# there is no way to run those 226 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -86,7 +86,7 @@
 #                run adds, not only the tree checked out: a licensed file
 #                added and deleted again inside a pull request would still
 #                reach master's history if it were merged.
-#                Across every job but split-build, 7084 real checks, up
+#                Across every job but split-build, 8103 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -112,7 +112,7 @@
 #                skipped, not passed. split-build follows the synthetic
 #                answer. Master and manual runs get both.
 #
-# Adding the other 225 checks to this file is possible — GitHub Actions
+# Adding the other 226 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -226,7 +226,7 @@ jobs:
         run: node tests/verify-leads-pure.js
       - name: the ZIP reader's memory ceiling (16 checks)
         run: node tests/verify-zip.js
-      - name: the calibration arithmetic (26 checks)
+      - name: the calibration arithmetic (31 checks)
         run: node tests/verify-calib-pure.js
       - name: the figure viewer's zoom arithmetic (16 checks)
         run: node tests/verify-figzoom-pure.js
@@ -246,7 +246,7 @@ jobs:
         run: node tests/verify-conductionwave-pure.js
       - name: the coronary tree's branch geometry and flow-glow curve (29 checks)
         run: node tests/verify-coronarytree-pure.js
-      - name: the engine is a flag, not thirty-four hardcoded copies of one (113 checks)
+      - name: the engine is a flag, not thirty-four hardcoded copies of one (118 checks)
         run: node tests/verify-engine.js
       - name: the licensed question bank cannot be committed (114 checks)
         run: node tests/verify-leakguard.js
@@ -312,7 +312,7 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
-      - name: a splash that cannot load the bank says which failure it was (69 checks)
+      - name: a splash that cannot load the bank says which failure it was (70 checks)
         run: node tests/verify-loader-pure.js
       - name: a split build cannot be half of one build and half of another (56 checks)
         run: node tests/verify-provenance-pure.js
@@ -322,15 +322,15 @@ jobs:
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (17 checks)
         run: node tests/verify-refscheck-pure.js
-      - name: the echo tables and the echo arithmetic (59 checks)
+      - name: the echo tables and the echo arithmetic (62 checks)
         run: node tests/verify-echo-pure.js
-      - name: Echo Studio computes only what was measured (58 checks)
+      - name: Echo Studio computes only what was measured (62 checks)
         run: node tests/verify-echoui-pure.js
       - name: the notes search ranks, quotes and escapes (35 checks)
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (39 checks)
         run: node tests/verify-heartbake-pure.js
-      - name: the pearls found at build time are the ones the search finds (23 checks)
+      - name: the pearls found at build time are the ones the search finds (33 checks)
         run: node tests/verify-pearlbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
@@ -346,7 +346,7 @@ jobs:
         run: node tests/verify-extract-pure.js
       - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
         run: node tests/verify-bankpack-pure.js
-      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (51 checks)
+      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (56 checks)
         run: node tests/verify-testpublic-pure.js
       - name: a browser suite's pass is reused only when nothing it depended on has changed, and a failure is never kept (139 checks)
         run: node tests/verify-suitecache-pure.js
@@ -354,9 +354,9 @@ jobs:
         run: node tests/verify-cichanges-pure.js
       - name: the counts record in two halves — Systole's written from a run where every Systole suite passed, the Memorizer's likewise, the other half kept (31 checks)
         run: node tests/verify-record-pure.js
-      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (51 checks)
+      - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (53 checks)
         run: node tests/verify-suitetime-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (51 checks)
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (54 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (262 checks)
         run: node tests/verify-memorizer-chunk-pure.js
@@ -597,7 +597,7 @@ jobs:
         name: the figure Apex is reasoning from is one you can see (41 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home screen opens with something worth knowing (69 checks)
+        name: the home screen opens with something worth knowing (75 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
@@ -672,10 +672,10 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the policy contains an injection without breaking anything the app does (27 checks)
+        name: the policy contains an injection without breaking anything the app does (28 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
+        name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
         run: node tests/verify-echo.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a figure that never rendered is told apart from one that rendered invisibly (10 checks)
@@ -693,7 +693,7 @@ jobs:
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home hero beats on the rhythm, and the home screen spends no WebGL (31 checks)
+        name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
@@ -859,7 +859,7 @@ jobs:
         name: the figure Apex is reasoning from is one you can see (41 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home screen opens with something worth knowing (69 checks)
+        name: the home screen opens with something worth knowing (75 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
@@ -928,10 +928,10 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the policy contains an injection without breaking anything the app does (27 checks)
+        name: the policy contains an injection without breaking anything the app does (28 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: Echo Studio routes, delegates and keeps the caret where it was (26 checks)
+        name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
         run: node tests/verify-echo.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a figure that never rendered is told apart from one that rendered invisibly (10 checks)
@@ -949,7 +949,7 @@ jobs:
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home hero beats on the rhythm, and the home screen spends no WebGL (31 checks)
+        name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
