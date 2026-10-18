@@ -141,23 +141,18 @@ head('(b) new shell + old app.js is caught — and an unstamped one is too');
   ok('an app.js with no stamp at all is a mismatch, not a free pass',
      pairVerdict(NEW, null, false) === 'reload');
   ok('and it still stops rather than looping', pairVerdict(NEW, null, true) === 'tell');
-  /* HALF OF THIS PROPERTY LIVES AT THE CALL SITE, and that half can only be
-     checked as wiring. pairVerdict() decides what an absent stamp means; the
-     loader decides what to HAND it when APP_BUILD_ID was never declared, and
-     a typeof has to happen there or the read is a ReferenceError.
-
-     Injecting the obvious defect — the call site passing SHELL_BUILD_ID in
-     place of the missing stamp, so every unstamped app.js pairs perfectly
-     with whatever shell it met — left every behavioural check above green.
-     Only these two go red, which is exactly what they are for. Two of them
-     rather than one: the first says what it should pass, the second says what
-     it must never pass, and the second is the one that catches a substitution
-     that still looks like a normalisation. */
-  const appIdLine = (/var appId = [^;]+;/.exec(LOADER) || [''])[0];
-  ok('the loader normalises a missing stamp to null',
-     /\(typeof APP_BUILD_ID === 'undefined'\) \? null : APP_BUILD_ID/.test(appIdLine), appIdLine);
+  /* Read the stamp as data before app.js can execute. Blank comments so a
+     quoted example cannot stand in for the loader's actual call site. */
+  const code = require('./_source.js').blankComments(LOADER);
+  const appIdLine = (/var appId = [^;]+;/.exec(code) || [''])[0];
+  const readAppId = code.includes('function appBuildId(') ? lift(code, 'appBuildId') : () => undefined;
+  ok('the loader normalises a missing preflight stamp to null',
+     /var appId = appBuildId\(appText\);/.test(appIdLine) && readAppId('no build stamp') === null, appIdLine);
   ok('and never substitutes the shell stamp for a missing one',
      !!appIdLine && !/SHELL_BUILD_ID/.test(appIdLine), appIdLine);
+  ok('the preflight reads the actual application stamp', readAppId("var APP_BUILD_ID='" + NEW + "';\npublic code") === NEW);
+  const checkAt = code.indexOf('var verdict = pairVerdict('), executeAt = code.indexOf("s.src = 'app.js'");
+  ok('the pair is checked before any application script is inserted', checkAt >= 0 && executeAt >= 0 && checkAt < executeAt);
   /* AND THE OTHER WAY, which is what makes the null deliberate rather than
      incidental: two absent stamps must not compare equal and run. Written as
      a bare `appId === shellId` this answered 'run' to every one of these —

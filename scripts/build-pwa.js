@@ -447,28 +447,6 @@ const LOADER = `<script>
   }catch(err){
     return fail(whyContentFailed(stage, res && res.status, location.protocol), err);
   }
-  /* STOPS HERE WHEN app.js DOES NOT LOAD. It used to be a trailing
-     .catch(function(err){ fail(...) }) with nothing else, so the splash showed
-     the error and execution carried straight on into the service-worker
-     registration below — installing a worker whose whole job is to cache a
-     shell that never ran. The first attempt at this put a return inside that
-     callback, which reads like the content-fetch path above but is not the
-     same thing at all: it returns from the CALLBACK, the awaited promise then
-     resolves normally, and the registration runs exactly as before.
-     tests/verify-pwa.js caught it by blocking app.js at the network and
-     counting registrations, which is the only reason this is a try/catch and
-     not a plausible-looking one-liner. */
-  if(heartMesh) await Promise.race([heartMesh, new Promise(function(r){ setTimeout(r, 5000); })]);
-  try{
-    await new Promise(function(resolve, reject){
-      var s = document.createElement('script');
-      s.src = 'app.js'; s.onload = resolve; s.onerror = reject;
-      document.body.appendChild(s);
-    });
-  }catch(err){
-    return fail('The application code failed to load.', err);
-  }
-
   /* THE SHELL AND THE CODE HAVE TO BE FROM THE SAME BUILD, and until this ran
      nothing checked. sw.js serves the shell cache-first and refreshes it in the
      background, per request — so a deploy landing between the request for
@@ -508,35 +486,58 @@ const LOADER = `<script>
     if(appId === shellId) return 'run';
     return alreadyTried ? 'tell' : 'reload';
   }
+  /* Inspect the response before executing it. A post-execution check lets
+     a rejected build boot and dismiss the warning splash. */
+  function appBuildId(text){
+    var m = /^var APP_BUILD_ID='([a-f0-9]{16})';/.exec(text);
+    return m ? m[1] : null;
+  }
+  var codeResponse = null, appText = null;
   try{
-    /* AN UNSTAMPED app.js IS A MISMATCH, and it used to be a free pass. The
-       condition here was
+    codeResponse = await fetch('app.js');
+    if(!codeResponse.ok) throw new Error('HTTP ' + codeResponse.status);
+    appText = await codeResponse.text();
+  }catch(err){
+    return fail('The application code failed to load.', err);
+  }
+  var appId = appBuildId(appText);
+  appText = null; codeResponse = null;
+  var alreadyTried = true;
+  try{ alreadyTried = !!sessionStorage.getItem('accsap-mixed-build'); }catch(_){}
+  var verdict = pairVerdict(SHELL_BUILD_ID, appId, alreadyTried);
+  var mixedMessage = 'This app updated while it was opening. Close it completely and open it again.';
+  if(verdict === 'tell'){
+    return fail(mixedMessage, new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + appId));
+  }
+  if(verdict === 'reload'){
+    try{ sessionStorage.setItem('accsap-mixed-build','1'); }catch(_){ return fail(mixedMessage); }
+    location.reload();
+    return;
+  }
+  try{ sessionStorage.removeItem('accsap-mixed-build'); }catch(_){}
 
-           typeof APP_BUILD_ID !== 'undefined' && APP_BUILD_ID !== SHELL_BUILD_ID
+  /* STOPS HERE WHEN app.js DOES NOT LOAD. It used to be a trailing
+     .catch(function(err){ fail(...) }) with nothing else, so the splash showed
+     the error and execution carried straight on into the service-worker
+     registration below — installing a worker whose whole job is to cache a
+     shell that never ran. The first attempt at this put a return inside that
+     callback, which reads like the content-fetch path above but is not the
+     same thing at all: it returns from the CALLBACK, the awaited promise then
+     resolves normally, and the registration runs exactly as before.
+     tests/verify-pwa.js caught it by blocking app.js at the network and
+     counting registrations, which is the only reason this is a try/catch and
+     not a plausible-looking one-liner. */
+  if(heartMesh) await Promise.race([heartMesh, new Promise(function(r){ setTimeout(r, 5000); })]);
+  try{
+    await new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = 'app.js'; s.integrity = '__APP_INTEGRITY__'; s.onload = resolve; s.onerror = reject;
+      document.body.appendChild(s);
+    });
+  }catch(err){
+    return fail('The application code failed to load.', err);
+  }
 
-       so an app.js carrying no stamp at all skipped the check entirely. That
-       is not a hypothetical shape: it is precisely what a cached app.js from
-       a build older than the stamp looks like, which is the worst case of the
-       pairing this whole block exists to catch — a new shell running old
-       code. The check that was meant to catch it was the one thing that let
-       it through, because the guard against a ReferenceError had quietly
-       become a guard against the test.
-
-       null rather than undefined so the comparison below is a comparison and
-       not a typeof, and so nothing can ever equal it by being absent too. */
-    var appId = (typeof APP_BUILD_ID === 'undefined') ? null : APP_BUILD_ID;
-    var verdict = pairVerdict(SHELL_BUILD_ID, appId, !!sessionStorage.getItem('accsap-mixed-build'));
-    if(verdict === 'tell'){
-      return fail('This app updated while it was opening. Close it completely and open it again.',
-                  new Error('build mismatch: shell ' + SHELL_BUILD_ID + ', app ' + appId));
-    }
-    if(verdict === 'reload'){
-      sessionStorage.setItem('accsap-mixed-build','1');
-      location.reload();
-      return;
-    }
-    sessionStorage.removeItem('accsap-mixed-build');
-  }catch(_){ /* private mode: the check is a safety net, not a requirement */ }
 
   if('serviceWorker' in navigator){
     /* THE UPDATE THAT ARRIVES UNDER A RUNNING APP. sw.js calls skipWaiting on
@@ -977,6 +978,12 @@ appCode = `var APP_BUILD_ID='${BUILD_ID}';\nvar APP_COMMIT='${COMMIT}';\n` + app
 if (!/^var APP_BUILD_ID='[0-9a-f]{16}';\n/.test(appCode)) {
   throw new Error('app.js did not receive its build stamp');
 }
+
+/* Bind execution to these exact code bytes, so a deploy between preflight
+   and the script request cannot run a different response with this shell. */
+const APP_INTEGRITY = 'sha256-' + crypto.createHash('sha256').update(appCode).digest('base64');
+if (html.split('__APP_INTEGRITY__').length !== 2) throw new Error('the loader lost its unique app integrity placeholder');
+html = html.replace('__APP_INTEGRITY__', APP_INTEGRITY);
 
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);

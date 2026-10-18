@@ -51,15 +51,16 @@ function loaderText() {
   if (body.includes('${')) throw new Error('the loader grew an interpolation; lift it differently');
   return new Function('return `' + body + '`;')();
 }
+const BUILD_ID = '1111111111111111';
 function page(noContent) {
   const mods = noContent ? '<script>\n' + ['zipread.js', 'bankpack.js', 'bankstore.js'].map(f => read('src/core/' + f)).join('\n') + '\n</script>\n' : '';
   return '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="splash"><span class="sp-word"></span><span class="sp-sub"></span></div>' + mods +
-    loaderText().replace('__BUILD_ID__', 'B1').replace('__COMMIT__', 'c1').replace('__HEART_MESH__', '').replace('__NO_CONTENT__', noContent ? 'true' : 'false') +
+    loaderText().replace('__BUILD_ID__', BUILD_ID).replace('__APP_INTEGRITY__', 'sha256-' + require('crypto').createHash('sha256').update(APP).digest('base64')).replace('__COMMIT__', 'c1').replace('__HEART_MESH__', '').replace('__NO_CONTENT__', noContent ? 'true' : 'false') +
     '</body></html>';
 }
 /* The stand-in app does what the real one does with the notes: fetches the
    reference seed and a unit's figure file from content/. */
-const APP = "var APP_BUILD_ID='B1'; window.__appRan = { q: ALL_Q.length, ids: ALL_Q.map(function(q){return q.id;}), imgs: IMGS, split: window.SPLIT_BUILD, bank: window.SYSTOLE_BANK || null };" +
+const APP = "var APP_BUILD_ID='" + BUILD_ID + "'; window.__appRan = { q: ALL_Q.length, ids: ALL_Q.map(function(q){return q.id;}), imgs: IMGS, split: window.SPLIT_BUILD, bank: window.SYSTOLE_BANK || null };" +
   "Promise.all(['content/refs-seed.json','./content/refs-images/hf.json'].map(function(u){ return fetch(u).then(function(r){ return r.ok ? r.json() : 'status ' + r.status; }).catch(function(e){ return 'error'; }); }))" +
   ".then(function(v){ window.__refs = v; });";
 
