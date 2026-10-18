@@ -5084,7 +5084,7 @@ function mockPersist(){ if(S.mock) mockWrite(MOCK_KEY,MockExam.serialize(S.mock)
 S.mock=mockLoad(); S.mockLast=mockLoadLast(); S.mockView='q';
 
 /* What the Study card is set to start. Not saved: a block is chosen each time, from the last choice this visit. */
-let _mockCfg={n:40,sec:MockExam.DEFAULT_PACE,ch:''}, _mockArm=false;
+let _mockCfg={n:40,sec:MockExam.DEFAULT_PACE,ch:''}, _mockArm=false, _mockArmTimer=null;
 function mockAvail(){ return POOL.filter(q=>!_mockCfg.ch||q.ch===_mockCfg.ch).length; }
 function mockSizes(){ const a=mockAvail(), s=MockExam.SIZES.filter(n=>n<=a); return s.length?s:[a]; }
 function mockSize(){ const s=mockSizes(); return s.includes(_mockCfg.n)?_mockCfg.n:(s.filter(x=>x<=_mockCfg.n).pop()||s[0]); }
@@ -5131,7 +5131,13 @@ function resumeMock(){
 /* Two taps, not a dialog: the first arms the button, the second throws the block away. */
 function discardMock(){
   if(!S.mock) return;
-  if(!_mockArm){ _mockArm=true; setTimeout(()=>{ if(_mockArm){ _mockArm=false; if(S.screen==='study') render(); } },5000); if(S.screen==='study'){ render(); focusEl('#mockDiscard'); } return; }
+  if(!_mockArm){
+    _mockArm=true;
+    clearTimeout(_mockArmTimer);
+    _mockArmTimer=setTimeout(()=>{ _mockArmTimer=null; if(_mockArm){ _mockArm=false; if(S.screen==='study') render(); } },5000);
+    if(S.screen==='study'){ render(); focusEl('#mockDiscard'); } return;
+  }
+  clearTimeout(_mockArmTimer); _mockArmTimer=null;
   _mockArm=false; S.mock=null; mockWrite(MOCK_KEY,null);
   if(S.screen==='study') render();
 }
