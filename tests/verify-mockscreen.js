@@ -572,10 +572,35 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.evaluate(() => goHome());
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await toStudy();
+    const timerProof = await page.evaluate(() => {
+      const set = window.setTimeout, clear = window.clearTimeout, held = [];
+      window.setTimeout = function (fn, ms, ...args) {
+        if (ms !== 5000) return set(fn, ms, ...args);
+        const id = set(() => {}, 60000);
+        held.push({ id, fn: () => fn(...args), active: true }); return id;
+      };
+      window.clearTimeout = function (id) {
+        const t = held.find(t => t.id === id); if (t) t.active = false;
+        return clear(id);
+      };
+      try {
+        discardMock(); resumeMock(); goStudy(); discardMock();
+        const before = _mockArm;
+        if (held[0] && held[0].active) held[0].fn();
+        return { before, after: _mockArm, timers: held.length };
+      } finally {
+        window.setTimeout = set; window.clearTimeout = clear;
+        held.forEach(t => clear(t.id)); _mockArm = false; render();
+      }
+    });
+    await onScreen(page, 'study', { marker: '#mockDiscard' });
+    ok('an earlier discard expiry cannot cancel a new confirmation after Resume', timerProof.before && timerProof.after && timerProof.timers === 2, JSON.stringify(timerProof));
     await page.click('#mockDiscard');
+    await quiet(page);
     await page.click('#mockDiscard');
+    await quiet(page);
     const d = await page.evaluate(() => ({ mock: S.mock, key: localStorage.getItem('accsap12.mock'), start: !!document.getElementById('mockStart') }));
-    ok('the second tap throws the block away: nothing in memory, nothing stored, the card offers a new one', d.mock === null && d.key === null && d.start);
+    ok('the second tap throws the block away: nothing in memory, nothing stored, the card offers a new one', d.mock === null && d.key === null && d.start, JSON.stringify({ hasBlock: d.mock !== null, hasSavedBlock: d.key !== null, offersStart: d.start }));
   }
 
   head('reloading the page in the middle of a block');

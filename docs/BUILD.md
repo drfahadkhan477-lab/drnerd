@@ -5,7 +5,7 @@ Build the standalone app, then extract its content before verifying the split PW
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
 node scripts/extract-content.js build/systole.html # refresh content for the split build
-node scripts/verify.js --pwa                           # → 8186 + 143 checks
+node scripts/verify.js --pwa                           # → 8213 + 143 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -67,7 +67,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```
 
   Without it that one suite refuses with the install command and the other 161
-  run normally — it is 35 of the 8186 checks. The suite tries `python3`,
+  run normally — it is 35 of the 8213 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -348,7 +348,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 162 suites, 8186 checks, plus 143 more on the split build. Those numbers are
+Across 162 suites, 8213 checks, plus 143 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`

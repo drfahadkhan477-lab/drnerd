@@ -37,6 +37,26 @@ head('what is read out');
   ok('a question with nothing in it does not throw', V.speakable(null).parts.length === 0 && V.speakable({}).optionCount === 0);
 }
 
+head('clinical comparisons survive being spoken');
+{
+  const text = V.clean('<p>EF <35% and HR >100; troponin <ULN.</p>');
+  ok('angle comparisons are spoken without dropping measurements', text === 'EF less than 35% and HR greater than 100; troponin less than ULN.', text);
+  ok('inclusive comparisons stay inclusive', V.clean('EF ≤35% or HR ≥100') === 'EF less than or equal to 35% or HR greater than or equal to 100');
+}
+
+head('every supported option can be answered, and unknown words are safe');
+{
+  const choices = [['g', 6], ['gee', 6], ['option golf', 6], ['h', 7], ['aitch', 7], ['option hotel', 7], ['number seven', 6], ['number eight', 7]];
+  ok('seven- and eight-option questions accept their last choices', choices.every(([text, index]) => {
+    const r = V.parseAnswer(text, index + 1); return r.type === 'answer' && r.index === index;
+  }));
+  ok('those choices are refused when the question has fewer options', ['option g', 'option h', 'number seven', 'number eight'].every(t => V.parseAnswer(t, 6).reason === 'out-of-range'));
+  let r, error;
+  try { r = V.parseAnswer('constructor', 8); } catch (e) { error = e.message; }
+  ok('a word matching an inherited property is unclear rather than a crash or answer', !error && r.type === 'unclear', error || '');
+  ok('G or A is ambiguous, never a guessed G', V.parseAnswer('g or a', 8).reason === 'ambiguous');
+}
+
 head('a spoken answer is understood as speech recognition delivers it');
 {
   const ans = (t, i, n) => { const r = V.parseAnswer(t, n || 5); return r.type === 'answer' && r.index === i; };

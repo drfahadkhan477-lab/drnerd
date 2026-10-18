@@ -327,6 +327,16 @@ head('what is kept of a finished block');
   }
 }
 
+head('chapter names cannot disappear from an exam summary');
+{
+  const r = M.start({ ids: ['public-history-check'], now: 1 });
+  M.select(r, 0, 2); M.finish(r, 2, false);
+  const g = M.grade(r, () => ({ ch: '__proto__', ci: 0 }));
+  const summary = M.summary(g, r, 2);
+  ok('a prototype-like chapter remains an own summary row and reaches history',
+    Object.prototype.hasOwnProperty.call(summary.by, '__proto__') && M.validEntry(summary) && M.pushHistory([], summary).length === 1);
+}
+
 head('surviving a closed page');
 {
   const ids = ['ALP_1', 'ALP_2', 'BET_1', 'GAM_1', 'GAM_2'];
