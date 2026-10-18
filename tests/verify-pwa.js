@@ -952,6 +952,30 @@ async function heapAfterBoot(page, url) {
       try { return sessionStorage.getItem('accsap-mixed-build'); } catch (_) { return 'unreadable'; }
     });
     ok('the retry is remembered per tab, so the reload cannot loop', flagged === '1', String(flagged));
+    ok('mismatched code never initializes the application', await page.evaluate(() => typeof S === 'undefined'));
+    ok('the mismatch warning remains visible after the retry settles', await page.evaluate(mixedPairNotice));
+    await ctx.close();
+  }
+
+  head('a deploy between preflight and execution cannot run different bytes');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+    const page = watch(await ctx.newPage(), events, 'code changed after preflight', errors);
+    let requests = 0;
+    await page.route('**/app.js', async route => {
+      const response = await route.fetch();
+      const original = await response.text();
+      requests++;
+      const body = requests === 1 ? original : original + '\nwindow.__pwaRaceExecuted = true;';
+      await route.fulfill({ response, body });
+    });
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await page.waitForFunction(() => window.__pwaRaceExecuted === true ||
+      !!document.body && /application code failed to load/i.test(document.body.innerText || ''), null, { timeout: 30000 });
+    const refused = await page.evaluate(() => ({ executed: window.__pwaRaceExecuted === true,
+      started: typeof S !== 'undefined', warned: /application code failed to load/i.test(document.body.innerText || '') }));
+    ok('the second response is integrity checked and refused before it can initialize',
+      requests >= 2 && !refused.executed && !refused.started && refused.warned, JSON.stringify({ requests, ...refused }));
     await ctx.close();
   }
 
