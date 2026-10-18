@@ -375,6 +375,20 @@ async function completenessChecks() {
   ok('the normal --pwa runner passes its independent assembled source', /verify-pwa\.js'\),\s*`http:\/\/localhost:\$\{PORT\}`,\s*TARGET/.test(runner));
 }
 
+head('the mixed-build wait across a retry navigation');
+{
+  const source = require('./_source.js').blankComments(fs.readFileSync(path.join(__dirname, 'verify-pwa.js'), 'utf8'));
+  const match = source.match(/function mixedPairNotice\(\)\s*\{[\s\S]*?\n\}/);
+  let correct = false;
+  try {
+    const probe = new Function('document', 'return (' + (match && match[0]) + ')();');
+    correct = probe({body: null}) === false &&
+      probe({body: {innerText: 'Loading'}}) === false &&
+      probe({body: {innerText: 'The app updated while it was opening'}}) === true;
+  } catch (_) {}
+  ok('the actual mismatch wait tolerates an absent body and then recognises the rendered notice', correct);
+}
+
 splitChecks().then(transportChecks).then(completenessChecks).catch(e => { failed++; console.log('  FAIL  the split checks threw  → ' + e.message); }).then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

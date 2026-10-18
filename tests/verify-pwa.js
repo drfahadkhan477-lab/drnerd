@@ -24,6 +24,12 @@ const { booted, resolved, settled } = require('./_render.js');
 const SYN = require('../scripts/synthetic-export.js');
 const { originTransport } = require('./_origintransport.js');
 
+// A retry navigation can temporarily have no body. That is not a failed
+// mismatch detector: keep polling until the rendered message can be read.
+function mixedPairNotice() {
+  return !!document.body && /updated while it was opening/i.test(document.body.innerText || '');
+}
+
 const target = process.argv[2];
 const baseline = process.argv[3];
 if (!target || !/^https?:\/\//.test(target)) {
@@ -931,10 +937,10 @@ async function heapAfterBoot(page, url) {
        context went with it, and the suite died without a summary.
 
        innerText is the rendered text: no script source, nothing hidden. */
-    const told = await page.waitForFunction(
-      () => /updated while it was opening/i.test(document.body.innerText || ''),
-      null, { timeout: 30000 }).then(() => true, () => false);
-    ok('a mixed pair is noticed rather than run', told);
+    let noticeError = '';
+    const told = await page.waitForFunction(mixedPairNotice,
+      null, { timeout: 30000 }).then(() => true, err => { noticeError = String(err.message || err).split('\n')[0]; return false; });
+    ok('a mixed pair is noticed rather than run', told, noticeError);
     /* The loop guard, which is the half that makes this safe to ship: exactly
        one retry. A reload that does not fix it must never become a reload
        that never stops. AND IT MUST HAVE HAPPENED: `loads <= 3` alone passed
