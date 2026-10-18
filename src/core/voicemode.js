@@ -26,11 +26,16 @@
 const arr = v => Array.isArray(v) ? v : [];
 const LETTERS = 'ABCDEFGH';
 
-/* Markup out, whitespace collapsed: what a speaker should be handed. */
+/* Common HTML out, clinical comparisons spoken, whitespace collapsed. */
 function clean(s) {
   return String(s == null ? '' : s)
-    .replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, ' and ').replace(/&lt;/g, ' less than ').replace(/&gt;/g, ' greater than ')
-    .replace(/[*`#>]/g, ' ').replace(/(^|\s)_+|_+(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();   // _ only as emphasis, at a word's edge
+    // Remove known markup, not a pair of clinical comparison operators.
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/?(?:p|br|b|i|u|em|strong|ul|ol|li|div|span|sup|sub|table|thead|tbody|tr|td|th|h[1-6]|a|font|blockquote|hr|img|figure|figcaption|pre|code|small|s|del|ins|mark|dl|dt|dd)\b[^<>]*>/gi, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, ' and ').replace(/&lt;/g, ' less than ').replace(/&gt;/g, ' greater than ')
+    .replace(/≤/g, ' less than or equal to ').replace(/≥/g, ' greater than or equal to ')
+    .replace(/</g, ' less than ').replace(/>/g, ' greater than ')
+    .replace(/[*`#]/g, ' ').replace(/(^|\s)_+|_+(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();   // _ only as emphasis, at a word's edge
 }
 
 /* No lookbehind: it is a parse-time SyntaxError on iPadOS Safari below 16.4 and
@@ -59,10 +64,11 @@ function speakable(q) {
 const HEARD = {
   a: ['a', 'ay', 'eh', 'alpha'], b: ['b', 'be', 'bee', 'bravo'], c: ['c', 'see', 'sea', 'charlie'],
   d: ['d', 'dee', 'delta'], e: ['e', 'ee', 'echo'], f: ['f', 'eff', 'foxtrot'],
+  g: ['g', 'gee', 'golf'], h: ['h', 'aitch', 'haitch', 'hotel'],
 };
-const WORD2LETTER = {};
+const WORD2LETTER = Object.create(null);
 Object.keys(HEARD).forEach(l => HEARD[l].forEach(w => { WORD2LETTER[w] = l; }));
-const NUMBER = { one: 0, two: 1, to: 1, too: 1, three: 2, four: 3, for: 3, five: 4, six: 5 };
+const NUMBER = { one: 0, two: 1, to: 1, too: 1, three: 2, four: 3, for: 3, five: 4, six: 5, seven: 6, eight: 7 };
 const TRIGGER = new Set(['option', 'letter', 'answer', 'choose', 'pick', 'select', 'is', 'its', "it's", 'go', 'with', 'say', 'number', 'final']);
 const COMMANDS = [
   ['repeat', /\b(repeat|say (that )?again|once more|read (it|that|the question) again|come again|pardon|what was that)\b/],
@@ -94,12 +100,12 @@ function parseAnswer(transcript, n) {
     letters.push(l);
   });
   tokens.forEach((t, i) => {
-    if (NUMBER[t] === undefined) return;
+    if (!Object.prototype.hasOwnProperty.call(NUMBER, t)) return;
     if (tokens.length <= 2 || (i > 0 && ['option', 'number', 'answer'].includes(tokens[i - 1]))) letters.push(LETTERS[NUMBER[t]].toLowerCase());
   });
   const distinct = [...new Set(letters)];
   /* "both a and b", "either c or d": two choices were named, whatever happened to the first. */
-  if (distinct.length >= 1 && (/\b(both|either|between)\b/.test(text) || /\b(a|b|c|d|e|f|be|bee|see|dee)\s+(and|or)\s+\S/.test(text)))
+  if (distinct.length >= 1 && (/\b(both|either|between)\b/.test(text) || /\b(a|b|c|d|e|f|g|h|be|bee|see|dee|gee|aitch|haitch)\s+(and|or)\s+\S/.test(text)))
     return { type: 'unclear', reason: 'ambiguous' };
 
   if (distinct.length === 1 && (tokens.length <= 6 || hasTrigger)) {

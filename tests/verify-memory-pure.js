@@ -55,6 +55,16 @@ function fresh(seed) {
   return { M: root.Memory, dump: () => store };
 }
 
+head('duplicate detection preserves non-ASCII memories');
+{
+  const { M, dump } = fresh();
+  M.add('تعلم ألفا', 'preference'); M.add('تعلم بيتا', 'preference');
+  ok('different Arabic memories are retained separately and persisted', M.count() === 2 && dump().length === 2);
+  const { M: chinese } = fresh();
+  chinese.add('学习甲', 'preference'); chinese.add('学习乙', 'preference');
+  ok('different Chinese memories are retained separately', chinese.count() === 2);
+}
+
 head('a memory records where it came from');
 {
   const { M } = fresh();

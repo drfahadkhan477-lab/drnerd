@@ -82,7 +82,7 @@ function persist() {
 /* Compared for duplicates, not displayed: case, punctuation and spacing all
    differ between two models saying the same thing on two different days. */
 function norm(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(s || '').toLowerCase().replace(/[^\p{L}\p{M}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function newId() {

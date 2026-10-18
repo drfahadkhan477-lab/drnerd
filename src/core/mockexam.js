@@ -252,7 +252,7 @@ function reviewIds(result, which) {
 
 /* ── what is kept of a finished block ──────────────────────────────────────── */
 function summary(result, rec, now) {
-  const by = {};
+  const by = Object.create(null);
   for (const r of arr(result && result.byCh)) by[r.ch] = [r.correct, r.n];
   return {
     ts: num(now, 0), n: result.n, answered: result.answered, correct: result.correct,

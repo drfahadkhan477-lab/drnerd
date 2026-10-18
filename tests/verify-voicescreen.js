@@ -400,6 +400,40 @@ const STUB = () => {
   ok('a tap while listening closes the microphone at the listen’s next look, not at its 9 s timeout', tapClosed.stopped, JSON.stringify(tapClosed));
   ok('and the dock no longer says Listening, the session over, the card unrated', tapClosed.dock !== 'Listening' && !tapClosed.live && !tapClosed.rated, JSON.stringify(tapClosed));
 
+  head('clinical comparisons and an eight-option answer reach the real voice flow');
+  await fresh();
+  await toStudy(page);
+  await page.evaluate(() => {
+    const q = QBYID[planNow(10).items[0].id];
+    window.__voicePublicFixture = { q, s: q.s, o: q.o, ci: q.ci, ex: q.ex };
+    q.s = 'EF <35% and HR >100. Choose the public example.';
+    q.o = Array.from({ length: 8 }, (_, i) => ({ t: 'Public example ' + (i + 1) }));
+    q.ci = 7; q.ex = 'Public explanation.';
+  });
+  try {
+    await page.click('#voiceStart');
+    await onScreen(page, 'quiz', { marker: '.q-card' });
+    await waitFor(page, () => window.__listens >= 1);
+    const spoken = await page.evaluate(() => window.__said.join(' '));
+    ok('the actual speaker receives both clinical comparisons and their measurements',
+      spoken.includes('EF less than 35% and HR greater than 100.'));
+    await page.evaluate(() => { window.__heard.push('option h'); });
+    await waitFor(page, () => S.srs[window.__voicePublicFixture.q.id] != null || window.__listens > 1);
+    const graded = await page.evaluate(() => {
+      const q = window.__voicePublicFixture.q;
+      return { rated: S.srs[q.id] != null, missed: S.missed.has(q.id), correct: (S.chStats[q.ch] || {}).correct, total: (S.chStats[q.ch] || {}).total };
+    });
+    ok('spoken H records and rates the eighth option through the ordinary answer path exactly once',
+      graded.rated && !graded.missed && graded.correct === 1 && graded.total === 1);
+  } finally {
+    await page.evaluate(() => {
+      stopVoice();
+      const f = window.__voicePublicFixture;
+      Object.assign(f.q, { s: f.s, o: f.o, ci: f.ci, ex: f.ex });
+      delete window.__voicePublicFixture;
+    });
+  }
+
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
