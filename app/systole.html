@@ -1126,7 +1126,18 @@ const STOP=new Set(('a an the and or but if then than that this these those of i
 
 /* conservative stemmer — medical morphology is unforgiving */
 const KEEP=/^(stenosis|sclerosis|thrombosis|fibrosis|necrosis|diagnosis|prognosis|anastomosis|apoptosis|stasis|crisis|axis|basis)$/;
+/* The index stems every token of every document, and a few thousand words make up nearly all of them: each is stemmed
+   once. The answer is a function of the word alone, so what is kept can never be stale. */
+const STEMMED=new Map();
 function stem(w){
+  let s=STEMMED.get(w);
+  if(s===undefined){
+    if(STEMMED.size>60000) STEMMED.clear();
+    s=stemWord(w); STEMMED.set(w,s);
+  }
+  return s;
+}
+function stemWord(w){
   if(w.length<=4) return w;
   if(KEEP.test(w)) return w;
   // fold clinical morphology: amyloidosis/amyloid, ischemia/ischemic, stenotic/stenosis
@@ -1155,7 +1166,9 @@ const SHORTOK=new Set(['qt','av','mi','pe','lv','rv','la','ra','pa','bp','hr','e
 function tok(s){
   const out=[];
   for(let t of String(s||'').toLowerCase().split(/[^a-z0-9₀-₉+/-]+/)){
-    t=t.replace(/^[-+/]+|[-+/]+$/g,'');
+    /* Only a token with a - + or / at an end has anything to trim; most have none. */
+    const a=t.charCodeAt(0), z=t.charCodeAt(t.length-1);
+    if(a===45||a===43||a===47||z===45||z===43||z===47) t=t.replace(/^[-+/]+|[-+/]+$/g,'');
     if(!t||STOP.has(t)||/^\d+$/.test(t)) continue;
     if(t.length<3 && !SHORTOK.has(t)) continue;
     out.push(t.length<=4&&SHORTOK.has(t)?t:stem(t));
