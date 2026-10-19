@@ -569,8 +569,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     /* The mark on C is drawn with the pencil tool and a pointer, as a fellow draws one: a stroke written by hand in a shape the
        app does not write ({t,c,p:[[x,y,pressure]]}) makes the question's canvas throw when that question is next drawn. */
     await page.evaluate(id => jumpTo(id), C); await showing(C); await settle();
-    await drawn('.q-card .ink-canvas');
     await page.evaluate(() => railAction('pen'));
+    await drawn('.q-card .ink-canvas');
     /* A pointer reaches the canvas only when the canvas is what is under it. A change of screen starts a view transition (Chromium;
        WebKit runs with them off) and while one runs the page is not hit-tested: the pointer lands on <html> and makes no stroke. This
        section's first jumpTo is such a change, so on a quick machine the pencil came down in the middle of it. The point it touches
