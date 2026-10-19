@@ -238,6 +238,28 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('an F typed into a sticky note is a letter in the note and is not the flag', typed.text === 'fish' && typed.flagged === 0, JSON.stringify(typed));
     await page.evaluate(() => document.activeElement.blur());
   }
+  {
+    /* The x on a sticky note takes a press. The note's header captures the pointer so the note can be dragged, and a
+       header that captured a press that began on the x sent the release to itself: no click reached the x, which
+       answered a script's b.click() and nothing a hand did. These presses go through the browser's own hit test, as a
+       finger, a Pencil and a mouse do; the drag is held too, because the fix must not take the header from the grip. */
+    const spot = sel => page.evaluate(s => {
+      const el = document.querySelector(s); el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, sel);
+    const read = () => page.evaluate(() => { const l = NOTES[currentQ().id] || []; return { n: l.length, shown: document.querySelectorAll('.note-layer .sticky').length, at: l.length ? [l[0].x, l[0].y] : null }; });
+    const before = await read();
+    const grip = await spot('.note-layer .sticky .sticky-grip');
+    await page.mouse.move(grip.x, grip.y); await page.mouse.down();
+    await page.mouse.move(grip.x + 90, grip.y + 50, { steps: 6 }); await page.mouse.up();
+    const dragged = await read();
+    ok('a sticky note is dragged by its grip', before.at && dragged.at && dragged.at[0] > before.at[0] + 0.02 && dragged.at[1] > before.at[1] + 0.02, JSON.stringify([before.at, dragged.at]));
+    const x = await spot('.note-layer .sticky .sticky-x');
+    await page.mouse.click(x.x, x.y);
+    const gone = await read();
+    ok('a click on the x of a sticky note deletes the note, from the list the notes are kept in and from the screen',
+       before.n > 0 && gone.n === before.n - 1 && gone.shown === before.shown - 1, JSON.stringify({ before, gone }));
+  }
 
   {
     await fresh();
