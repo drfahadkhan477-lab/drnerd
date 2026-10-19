@@ -46,6 +46,12 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
+  /* Boot does not wait for the database. It answers a moment later and redraws the screen once if what it holds differs from
+     what the app already has, and starting a quiz is such a difference (the question's ink is keyed in memory before it is
+     stored). A quiz started inside that moment is redrawn in place before anything is chosen, and the first reading below
+     would be of a quiz that already wears .again. The database is waited for here, so that the first draw of the quiz is the
+     only one until it is answered. */
+  await page.evaluate(() => new Promise(done => { const go = () => setTimeout(done, 0); Store.ready().then(go, go); }));
 
   /* A quiz of four questions, and the entrance they have finished before anything is chosen. */
   const arrived = async () => {
