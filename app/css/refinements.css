@@ -158,3 +158,13 @@ html[data-theme="dark"]{
   ::view-transition-old(root),::view-transition-new(root){animation:none!important}
 }
 
+/* ── touch targets ───────────────────────────────────────────────────────────
+   A thumb is about 44 px, which is Apple's minimum and the size the newer controls here are held to, and these were 24 to
+   36. The confidence and mistake chips are on the way through every question, and the back and dismiss buttons on every screen
+   they appear on, so they are made 44 px tall: they wrap and have nothing to overflow. The navigation's icon buttons and the
+   brand keep the size they are drawn at and take a press a few pixels outside it, because a bar of them has the room (they
+   are 8 px apart, so the two slops meet and do not cross) and a bar is where a wider button would crowd the title. */
+.cf-chip,.miss-chip,.study-back,.hello-x{min-height:44px}
+.icon-btn,.nav-brand{position:relative}
+.icon-btn::before{content:'';position:absolute;inset:-5px}   /* from the padding box: 1 px of border is inside the 4 px the press may stray */
+.nav-brand::before{content:'';position:absolute;inset:-1px 0}

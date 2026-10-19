@@ -657,6 +657,9 @@ jobs:
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone (18 checks)
+        run: node tests/verify-taps.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -915,6 +918,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone (18 checks)
+        run: node tests/verify-taps.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
