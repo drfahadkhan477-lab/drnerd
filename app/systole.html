@@ -830,11 +830,17 @@ function buildRail(){
   rail.classList.toggle('mini',T.min);
   if(T.min){
     const n=(()=>{const q=currentQ();return q&&hasMarkup(q.id);})();
-    rail.innerHTML=`<button class="tool rail-open${n?' has-ink':''}" data-a="expand"
+    const html=`<button class="tool rail-open${n?' has-ink':''}" data-a="expand"
         title="Annotation tools" aria-label="Show annotation tools">${icon('pencil')}</button>`;
-    rail.querySelector('[data-a]').onclick=()=>railMin(false);
+    /* Every draw of a screen asks for the rail, and a rail already as it should be is left alone: a new button runs its
+       entrance, so the pencil popped again on every answer and every question. */
+    if(rail.__html!==html){
+      rail.__html=html; rail.innerHTML=html;
+      rail.querySelector('[data-a]').onclick=()=>railMin(false);
+    }
     return rail;
   }
+  rail.__html=null;
   rail.innerHTML=`
     <button class="tool rail-min" data-a="min" title="Minimise" aria-label="Minimise tools">${icon('chevron-down')}</button>
     <button class="tool${T.autoMin?' auto-on':''} tool-auto" data-a="automin"

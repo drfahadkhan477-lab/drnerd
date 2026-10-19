@@ -85,7 +85,7 @@ const SUITES = [
   ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
   ['store',        'the big stores live in a database, and nothing is ever in neither place'],
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
-  ['quietquiz',    'answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before'],
+  ['quietquiz',    'answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again'],
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
