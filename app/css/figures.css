@@ -53,6 +53,10 @@ html[data-theme="dark"]{--glass:rgba(17,30,53,.74)}
 .opt{transition:transform .18s var(--spring),background .2s,border-color .2s}
 .opt:not(:disabled):active{transform:scale(.985)}
 @media (hover:hover){.opt:not(:disabled):hover{transform:translateX(3px)}}
+/* A redraw that leaves the fellow where they were (an answer chosen, a rating given: renderNow() marks it .again) does not replay
+   what was already on the screen. The question dropped to nothing and came back, the bar slid up and the options slid in, on every
+   answer. What is new still arrives: the verdict, the bars of what others chose, the right option and the wrong one. */
+#app.again .q-card,#app.again .qbar,#app.again .opts>.opt:not(.correct):not(.wrong){animation:none}
 .opt.correct{animation:popIn .42s var(--spring) both}
 .opt.correct .opt-letter{position:relative}
 .opt.correct .opt-letter::after{content:'';position:absolute;inset:-4px;border-radius:50%;

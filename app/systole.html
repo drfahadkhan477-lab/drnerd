@@ -5579,10 +5579,17 @@ function render(){
 function renderQ(){
   return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:S.screen==='mock'?mockQ():null;
 }
+/* Where the fellow is: the screen, and on a quiz or a mock block the question. */
+let lastView='';
 function renderNow(){
   const app=document.getElementById('app');
   const q=renderQ();
   const reuse=q&&figCache.id===q.id&&figCache.node&&S.zoomed===-1;
+  /* A redraw that changes none of it (an answer chosen, a rating given) is the same view redrawn, and wears .again: the CSS
+     does not let what was already on the screen make its entrance a second time. The question dropped to nothing and came
+     back, and the options slid in again, on every answer. */
+  const view=S.screen+(q?':'+q.id:'');
+  const again=view===lastView; lastView=view;
   /* The bar is painted into its own fixed header rather than into the screen:
      inside #app it could never be wider than the reading column. */
   const bar=document.getElementById('navbar');
@@ -5591,6 +5598,7 @@ function renderNow(){
      the whole iPad; every other screen is prose and keeps its measure. */
   app.dataset.screen=S.screen;
   app.innerHTML=buildScreen();
+  app.classList.toggle('again',again);
   document.body.classList.toggle('rating-active',
     S.screen==='quiz'&&S.answered&&S.mode==='due');
   const zone=app.querySelector('.fig-zone');
