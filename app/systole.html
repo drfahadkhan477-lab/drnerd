@@ -2599,9 +2599,15 @@ function jumpTo(id){
 
 /* ── the reference library screen ─────────────────────────────────────────── */
 let refEditing=null, refViewing=null;
-function buildRefs(){
-  const viewed=refViewing&&REF.find(r=>r.id===refViewing);
-  const rows=(viewed?[viewed]:REF.slice().sort((a,b)=>b.ts-a.ts)).map(r=>`
+/* The library is drawn a page at a time. All of it at once was 1,144 cards, 20,000 elements and 9 MB of markup on a
+   library the size of the real one: a second and a half of the main thread each time the screen was drawn, and every
+   card below the fold dimmed and watched for the moment it scrolled into view. A page is the newest REF_PAGE notes. The
+   next is added in place as the end of the list comes within reach, so what is typed in the form above it survives, or
+   by the button where the browser cannot say when the end is near. */
+const REF_PAGE=24;
+let refShown=REF_PAGE, refPageWatch=null;
+function refCard(r){
+  return `
     <div class="ref-card">
       <div class="ref-top">
         <div class="ref-title">${e(r.title||'Untitled note')}</div>
@@ -2617,7 +2623,39 @@ function buildRefs(){
         return `<div class="ref-tags">${shown}${rest>0?`<span class="ref-more" title="${T.slice(8).join(', ')}">+${rest} more</span>`:''}</div>`;
       })():''}
       <div class="ref-body">${md(r.body)}</div>
-    </div>`).join('');
+    </div>`;
+}
+const refsNewestFirst=()=>REF.slice().sort((a,b)=>b.ts-a.ts);
+function refPager(left){
+  return left>0?`<div class="ref-pager" id="refPager"><button class="chip" type="button" onclick="refMore()">Show ${Math.min(REF_PAGE,left)} more</button><span>${left} more in your library</span></div>`:'';
+}
+function refMore(){
+  const pager=document.getElementById('refPager');
+  if(!pager||S.screen!=='refs'||refViewing) return;
+  const all=refsNewestFirst(), next=all.slice(refShown,refShown+REF_PAGE);
+  if(next.length) pager.insertAdjacentHTML('beforebegin',next.map(refCard).join(''));
+  refShown+=next.length;
+  const left=all.length-Math.min(refShown,all.length);
+  if(left<=0){ pager.remove(); if(refPageWatch){ refPageWatch.disconnect(); refPageWatch=null; } return; }
+  pager.querySelector('button').textContent='Show '+Math.min(REF_PAGE,left)+' more';
+  pager.querySelector('span').textContent=left+' more in your library';
+  /* An observer speaks when the row crosses the line, not while it stays across it: asked again, it says where the row is now. */
+  if(refPageWatch){ refPageWatch.unobserve(pager); refPageWatch.observe(pager); }
+}
+function mountRefPager(){
+  if(refPageWatch){ refPageWatch.disconnect(); refPageWatch=null; }
+  const pager=document.getElementById('refPager');
+  if(!pager||!window.IntersectionObserver) return;
+  const app=document.getElementById('app');
+  const root=/auto|scroll/.test(getComputedStyle(app).overflowY)?app:null;
+  refPageWatch=new IntersectionObserver(es=>{ if(es.some(x=>x.isIntersecting)) refMore(); },{root,rootMargin:'0px 0px 900px 0px'});
+  refPageWatch.observe(pager);
+}
+function buildRefs(){
+  const viewed=refViewing&&REF.find(r=>r.id===refViewing);
+  const sorted=viewed?[viewed]:refsNewestFirst();
+  const drawn=viewed?sorted:sorted.slice(0,refShown);
+  const rows=drawn.map(refCard).join('')+(viewed?'':refPager(sorted.length-drawn.length));
   return `<div class="home-wrap anim-fade">
     <div class="hero" style="padding:26px 22px">
       <div class="hero-badge">${icon('folder','icon-sm')} Your reference library</div>
@@ -2672,7 +2710,7 @@ function refExport(){
   a.download='accsap12-reference-notes.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
-function goRefs(id){ S.screen='refs'; refEditing=null; refViewing=typeof id==='string'?id:null; render(); toTop(); }
+function goRefs(id){ S.screen='refs'; refEditing=null; refViewing=typeof id==='string'?id:null; refShown=REF_PAGE; render(); toTop(); }
 function goMemory(){ S.screen='memory'; render(); toTop(); }
 function memForget(id){
   if(!confirm('Delete this memory? Apex will stop knowing it.'))return;
@@ -5607,6 +5645,7 @@ function renderNow(){
   if(typeof mockMount==='function') mockMount();
   if(typeof mountHomeProgress==='function') mountHomeProgress();
   if(typeof mountChapterBars==='function') mountChapterBars();
+  if(typeof mountRefPager==='function') mountRefPager();
   mountScrollReveal();
   if(typeof applyFocus==='function') applyFocus();
   if(typeof buildAI==='function' && document.getElementById('shell').classList.contains('ai-open')) buildAI();
