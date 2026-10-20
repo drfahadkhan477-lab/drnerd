@@ -27,6 +27,7 @@ const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted, settled, onScreen, quiet, resized, watchTransitions } = require('./_render.js');
+const { impliesHover } = require('./_hover.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-taps.js <build.html>'); process.exit(1); }
@@ -148,14 +149,17 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     /* A finger leaves :hover behind. On a touch screen the element that was tapped goes on matching :hover until something else
        is tapped, so a hover style that is not asked for only where a pointer can hover stays on the screen after the tap: the
        Flag button, tapped on and then off, stayed amber with no flag set. The stylesheets are walked as the browser holds them,
-       and a :hover rule counts as asked-for only if a media query on the way down says (hover: hover). */
+       and a :hover rule counts as asked-for only if a media query on the way down applies only where a device can hover, which
+       tests/_hover.js decides (a query that merely mentions the words does not: a negation, an "or", a list with a query that
+       every device satisfies). The same function reads the stylesheets as text in tests/verify-hover-pure.js. */
     const WALK = `(() => {
+      const impliesHover = ${impliesHover.toString()};
       const guarded = [], bare = []; let sheets = 0, rules = 0;
       const visit = (list, safe) => {
         for (const r of list) {
           rules++;
           if (r.selectorText && /:hover/.test(r.selectorText)) (safe ? guarded : bare).push(r.selectorText);
-          if (r.cssRules && r.cssRules.length) visit(r.cssRules, safe || !!(r.media && /hover\\s*:\\s*hover/.test(r.media.mediaText)));
+          if (r.cssRules && r.cssRules.length) visit(r.cssRules, safe || !!(r.media && impliesHover(r.media.mediaText)));
         }
       };
       for (const s of document.styleSheets) { let list; try { list = s.cssRules; } catch (_) { continue; } sheets++; visit(list, false); }
@@ -165,12 +169,14 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
        that finds neither, or both on the same side, measures nothing. */
     await page.evaluate(() => {
       const s = document.createElement('style'); s.id = 'hoverProbe';
-      s.textContent = '.zz-bare:hover{color:red}@media (hover:hover){.zz-guarded:hover{color:red}}';
+      s.textContent = '.zz-bare:hover{color:red}@media (hover:hover){.zz-guarded:hover{color:red}}' +
+                      '@media not (hover:hover){.zz-not:hover{color:red}}@media (hover:hover), (min-width:1px){.zz-list:hover{color:red}}';
       document.head.appendChild(s);
     });
     const probe = await page.evaluate(WALK);
     await page.evaluate(() => document.getElementById('hoverProbe').remove());
-    ok('the walk tells a :hover rule nothing guards from one a media query does', probe.bare.includes('.zz-bare:hover') && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
+    ok('the walk tells a :hover rule nothing guards from one a media query does, and takes neither the negation of the query nor a list holding a query every device satisfies for a guard',
+       probe.bare.includes('.zz-bare:hover') && probe.bare.includes('.zz-not:hover') && probe.bare.includes('.zz-list:hover') && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
        `bare ${probe.bare.length}, guarded ${probe.guarded.length}`);
     const walk = await page.evaluate(WALK);
     ok('and it reads the app\'s own stylesheets, which hold :hover rules that are guarded', walk.sheets >= 1 && walk.guarded.length > 0, `${walk.sheets} sheets, ${walk.rules} rules, ${walk.guarded.length} guarded`);
