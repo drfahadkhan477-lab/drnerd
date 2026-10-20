@@ -85,10 +85,12 @@ const SUITES = [
   ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
   ['store',        'the big stores live in a database, and nothing is ever in neither place'],
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
+  ['quietquiz',    'answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to'],
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
   ['flags',        'a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block\'s flags join the list when it is handed in'],
+  ['reflist',      'the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
@@ -149,6 +151,7 @@ const SUITES = [
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['lazyink',      'a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
+  ['taps',         'the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -321,6 +324,7 @@ const SUITES = [
   ['pearlbake-pure', 'the pearls found at build time are the ones the search finds, and an entry that does not fit is searched afresh'],
   ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
   ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
+  ['indexwarm-pure', 'the search index built a slice at a time is the index built at once, is cut into slices, is finished by a search that cannot wait, and is dropped when a note changes'],
   ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
   ['extract-pure', 'extraction refuses an id that could leave figures/, bytes that are not the image their mime claims, and damaged base64 — and a refusal leaves the last good content/ untouched'],
   ['bankpack-pure', 'the code-only deploy\'s package: packed, read back through the page\'s own reader and checker, and every bad package refused, naming why'],
@@ -340,6 +344,7 @@ const SUITES = [
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
+  ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -489,7 +494,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['lazyink'];
+const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

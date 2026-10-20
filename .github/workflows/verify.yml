@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 93 suites that are pure Node with no Playwright and no
+#   logic        the 94 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -340,6 +340,8 @@ jobs:
         run: node tests/verify-refsmerge-pure.js
       - name: word order counts in the ranker — the note holding the phrase outranks one holding its words scattered, and questions rank as before (9 checks)
         run: node tests/verify-phrase-pure.js
+      - name: the search index built a slice at a time is the index built at once, is cut into slices, is finished by a search that cannot wait, and is dropped when a note changes (33 checks)
+        run: node tests/verify-indexwarm-pure.js
       - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (176 checks)
         run: node tests/verify-olderacc-pure.js
       - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (33 checks)
@@ -612,6 +614,9 @@ jobs:
         name: going back never re-grades a question or re-schedules a card (24 checks)
         run: node tests/verify-quiznav.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to (25 checks)
+        run: node tests/verify-quietquiz.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the progress card counts up in step with the bar it sits beside (27 checks)
         run: node tests/verify-homeprog.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -623,6 +628,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (171 checks)
         run: node tests/verify-flags.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page (18 checks)
+        run: node tests/verify-reflist.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
@@ -660,6 +668,9 @@ jobs:
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone (18 checks)
+        run: node tests/verify-taps.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -695,6 +706,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it (10 checks)
+        run: node tests/verify-searchwarm.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
@@ -877,6 +891,9 @@ jobs:
         name: going back never re-grades a question or re-schedules a card (24 checks)
         run: node tests/verify-quiznav.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to (25 checks)
+        run: node tests/verify-quietquiz.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -885,6 +902,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (171 checks)
         run: node tests/verify-flags.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page (18 checks)
+        run: node tests/verify-reflist.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
@@ -922,6 +942,9 @@ jobs:
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone (18 checks)
+        run: node tests/verify-taps.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -954,6 +977,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it (10 checks)
+        run: node tests/verify-searchwarm.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
