@@ -16,7 +16,8 @@
  *   · reaching the end of the list loads the next page without a press, and then stops: the end is no longer
  *     at the edge, and the rest of the library is not drawn behind the reader's back;
  *   · leaving and coming back starts again at the first page; deleting a note keeps what was loaded; a note
- *     added from the form is at the top; one note opened from its source link is one card and no button;
+ *     added from the form is at the top; one note opened from its source link is one card and no button, and
+ *     if that note is deleted while it is looked at, the library that is left still pages;
  *   · nothing keeps watching the end of a list once the screen is left, and nothing throws.
  */
 'use strict';
@@ -129,13 +130,28 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const one = lib.newest[PAGE * 3];
     await toLibrary(one);
     ok('one note opened from its source link is one card and no button', (await drawnIds()).length === 1 && !(await pager()) && (await drawnIds())[0] === one);
+
+    /* That note is deleted while it is the one being looked at. The id it was opened by is left behind, and there is no note
+       under it: what is left to look at is the library, and the library pages. */
+    await page.evaluate(id => refRemove(id), one);
+    await quiet(page);
+    const lone = await page.evaluate(() => ({ cards: document.querySelectorAll('.ref-card').length, button: !!document.querySelector('#refPager button'), notes: REF.length }));
+    ok('a note deleted while it was looked at on its own leaves the library, a page of it, and the button for the rest', lone.cards === PAGE && lone.button && lone.notes === TOTAL - 1, JSON.stringify(lone));
+    await page.click('#refPager button');
+    ok('and the button adds the next page', await waitCards(PAGE * 2), `${await page.evaluate(() => document.querySelectorAll('.ref-card').length)} drawn`);
+    /* The press scrolled to the foot of two pages, and a screen opened afresh scrolls back to the top smoothly. For the first
+       frames of that the end of the list is in reach of the observer in the next section, which draws a second page before
+       anyone asked. That section is about a fresh visit, so it is left at the top of the screen, at once. */
+    await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
+    await page.waitForFunction(() => window.scrollY === 0, null, { timeout: 5000 });
+    await quiet(page);
   }
 
   await observer(true);
   head('reaching the end of the list loads the next page by itself, and then stops');
   {
     await toLibrary();
-    ok('a fresh visit is the first page', (await drawnIds()).length === PAGE);
+    { const n = (await drawnIds()).length; ok('a fresh visit is the first page', n === PAGE, `${n} drawn`); }
     await page.evaluate(() => { document.getElementById('refPager').scrollIntoView({ block: 'end' }); });
     const more = await page.waitForFunction(n => document.querySelectorAll('.ref-card').length > n, PAGE, { timeout: 5000 }).then(() => true, () => false);
     await quiet(page);

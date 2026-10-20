@@ -2720,12 +2720,15 @@ function refCard(r){
     </div>`;
 }
 const refsNewestFirst=()=>REF.slice().sort((a,b)=>b.ts-a.ts);
+/* The note being looked at on its own, if it is still there. A note deleted while it was looked at leaves its id in refViewing,
+   and an id with no note is no view: the library is what the screen shows then, and what it pages. */
+const refViewed=()=>(refViewing&&REF.find(r=>r.id===refViewing))||null;
 function refPager(left){
   return left>0?`<div class="ref-pager" id="refPager"><button class="chip" type="button" onclick="refMore()">Show ${Math.min(REF_PAGE,left)} more</button><span>${left} more in your library</span></div>`:'';
 }
 function refMore(){
   const pager=document.getElementById('refPager');
-  if(!pager||S.screen!=='refs'||refViewing) return;
+  if(!pager||S.screen!=='refs'||refViewed()) return;
   const all=refsNewestFirst(), next=all.slice(refShown,refShown+REF_PAGE);
   if(next.length) pager.insertAdjacentHTML('beforebegin',next.map(refCard).join(''));
   refShown+=next.length;
@@ -2746,7 +2749,7 @@ function mountRefPager(){
   refPageWatch.observe(pager);
 }
 function buildRefs(){
-  const viewed=refViewing&&REF.find(r=>r.id===refViewing);
+  const viewed=refViewed();
   const sorted=viewed?[viewed]:refsNewestFirst();
   const drawn=viewed?sorted:sorted.slice(0,refShown);
   const rows=drawn.map(refCard).join('')+(viewed?'':refPager(sorted.length-drawn.length));
