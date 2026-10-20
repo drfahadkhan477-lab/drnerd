@@ -47,6 +47,10 @@ libraries those browsers need. WebKit is required for iPad-sensitive changes;
 Chromium alone does not establish iPad compatibility. Report unavailable
 measurements and checks that did not run, with their reasons.
 
+`git push` runs the leak guard and then the pure suites (`.githooks/pre-push`,
+installed by `npm run hooks`). On a loaded machine that can outlast a short
+command timeout, so run a push as a background command rather than retrying it.
+
 `npm test` does not measure a browser suite again when everything its last pass
 read is byte-identical (`docs/BUILD.md`, "Reusing a pass"). It prints that suite
 `REUSED`, never `PASS`, and its last line says how many were measured now. The
@@ -105,6 +109,21 @@ The code's comments cite these rules; each was broken at least once.
   proposition under test. `render()` swaps the DOM inside an async
   `startViewTransition` callback, a gap that has caused suite races again and
   again.
+- **Step days by the calendar.** A local day is not always twenty-four hours,
+  and `toISOString()` is the UTC day, not the reader's. Move a date with
+  `setDate` (or by arithmetic on the `YYYY-MM-DD` string) and read it back with
+  `FSRS.localDateToISO`; never add a milliseconds-per-day product to a local
+  moment or slice its `toISOString()`. CI runs in UTC, where this is invisible,
+  so its `logic` job runs the pure suites a second time under
+  `TZ=America/New_York`. A suite that handles dates has not been checked until
+  it has run in a zone whose clocks change.
+- **A hover style is asked for only where a device can hover.** On a touch
+  screen the element that was tapped keeps matching `:hover` until something
+  else is tapped, so every `:hover` rule goes inside `@media (hover:hover)`
+  (the primary input; `any-hover` is not a guard). `tests/verify-hover-pure.js`
+  reads every shipped stylesheet, `tests/verify-taps.js` walks the Systole
+  app's as the engine holds them, and both decide what a guard is through
+  `tests/_hover.js`.
 
 ## Boundaries
 
