@@ -52,7 +52,7 @@ li { margin: .25em 0; }
 
 .btn { font: inherit; font-size: var(--t-body); border: 1px solid var(--edge); background: var(--surface); color: var(--ink);
   padding: .625rem 1rem; border-radius: .625rem; cursor: pointer; min-height: 2.75rem; }
-.btn:hover { border-color: var(--accent); }
+@media (hover:hover){.btn:hover{ border-color: var(--accent); }}
 .btn:focus-visible, .nav-btn:focus-visible, .chip:focus-within, .option:focus-visible, .section-card:focus-visible, .jump-card:focus-visible, .unit-open:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, .drop:focus-within, .swatch:focus-visible, .seg button:focus-visible {
   outline: 3px solid var(--accent); outline-offset: 2px; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
@@ -64,7 +64,7 @@ li { margin: .25em 0; }
 .btn.tonal { background: var(--accent-soft); color: var(--ink); border-color: transparent; font-size: var(--t-meta); font-weight: 600;
   padding: .4375rem .875rem; min-height: 2.25rem; border-radius: 999px; }
 .btn.tonal > span[aria-hidden] { color: var(--accent); }
-.btn.tonal:hover { border-color: var(--accent); }
+@media (hover:hover){.btn.tonal:hover{ border-color: var(--accent); }}
 
 .bar { height: .375rem; border-radius: .1875rem; background: var(--surface-2); overflow: hidden; margin: var(--s-3) 0 var(--s-2); }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: .1875rem; }
@@ -162,7 +162,7 @@ table.data tbody tr:last-child td { border-bottom: 0; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--s-3); margin-top: var(--s-2); }
 .swatch { display: flex; flex-direction: column; align-items: stretch; gap: var(--s-2); font: inherit; font-size: var(--t-meta); text-align: left; padding: var(--s-2); border: 2px solid var(--edge); border-radius: 1rem; background: var(--surface); color: var(--ink); cursor: pointer; min-height: 2.75rem;
   transition: transform .2s var(--ease-out), border-color .2s, box-shadow .2s; }
-.swatch:hover { transform: translateY(-2px); }
+@media (hover:hover){.swatch:hover{ transform: translateY(-2px); }}
 .swatch[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .sw-minis { display: flex; gap: .375rem; }
 .sw-mini { flex: 1 1 0; display: block; height: 4.25rem; border-radius: .625rem; border: 1px solid; padding: .5rem; }
@@ -294,7 +294,7 @@ main[data-enter] .pearl-steps li { animation: pearl-rung .5s ease-out both; }
 .ch-icon { flex: none; width: 5.5rem; display: flex; flex-direction: column; align-items: center; gap: .5rem; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); cursor: pointer; }
 .ci-ring { width: 4rem; height: 4rem; border-radius: 50%; display: grid; place-items: center; color: hsl(var(--hue) 62% 56%);
   border: 3px solid hsla(var(--hue), 60%, 55%, .35); background: hsla(var(--hue), 70%, 55%, .08); transition: transform .2s var(--ease-out), border-color .2s; }
-.ch-icon:hover .ci-ring, .ch-icon:focus-visible .ci-ring { transform: translateY(-2px); border-color: hsl(var(--hue) 62% 56%); }
+.ch-icon:focus-visible .ci-ring{ transform: translateY(-2px); border-color: hsl(var(--hue) 62% 56%); }@media (hover:hover){.ch-icon:hover .ci-ring{ transform: translateY(-2px); border-color: hsl(var(--hue) 62% 56%); }}
 .ci-label { font-size: var(--t-meta); font-weight: 650; text-align: center; line-height: 1.2; color: var(--muted); }
 .unit-open { font: inherit; color: var(--ink); text-align: left; background: none; border: 0; padding: var(--s-2) 0; display: flex; flex-direction: column; cursor: pointer; min-width: 0; }
 .doc-name { font-size: var(--t-lead); overflow-wrap: anywhere; }
@@ -378,7 +378,7 @@ details.menu summary::-webkit-details-marker { display: none; }
   font: inherit; color: var(--ink); text-align: left; padding: var(--s-3) var(--s-4) var(--s-3) 0; cursor: pointer; min-height: 3.5rem;
   background: transparent; border: 0; border-radius: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 :root[data-contrast="high"] .sections .section-row .section-card { border: 0; }
-.sections .section-row .section-card:hover { transform: none; box-shadow: none; background: var(--surface-2); }
+@media (hover:hover){.sections .section-row .section-card:hover{ transform: none; box-shadow: none; background: var(--surface-2); }}
 .sections .section-row .section-card:active { transform: none; }
 .section-row.next .section-title::after { content: " · next"; color: var(--accent); font-weight: 700; font-size: var(--t-meta); }
 /* Each section's colour is a line down its left, not a block of it. */
@@ -394,7 +394,7 @@ details.menu summary::-webkit-details-marker { display: none; }
 .section-card .badge { position: static; }
 .section-card[data-state="drilled"] .band { border-left-color: var(--good); }
 .section-del { flex: none; width: 3rem; display: grid; place-items: center; background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; }
-.section-del:hover, .section-del:focus-visible { color: var(--bad); background: var(--bad-soft); }
+.section-del:focus-visible{ color: var(--bad); background: var(--bad-soft); }@media (hover:hover){.section-del:hover{ color: var(--bad); background: var(--bad-soft); }}
 .trash-icon { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .exam-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-top: var(--s-5); }
 .exam-card p { margin: 0; }
@@ -447,7 +447,7 @@ blockquote.quote { margin: var(--s-3) 0; padding: var(--s-3) var(--s-4); border-
 .options { display: grid; gap: var(--s-3); margin-top: var(--s-4); }
 .option { font: inherit; color: var(--ink); text-align: left; display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); min-height: 3.5rem;
   background: var(--surface); border: 2px solid var(--line); border-radius: 1rem; cursor: pointer; font-size: var(--t-lead); }
-.option:hover:not([disabled]) { border-color: var(--accent); }
+@media (hover:hover){.option:hover:not([disabled]){ border-color: var(--accent); }}
 .opt-letter { flex: none; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-weight: 800; }
 .option.right { border-color: var(--good); background: var(--good-soft); }
 .option.right .opt-letter { background: var(--good); color: #FFFFFF; }
@@ -599,7 +599,7 @@ details.fold > summary .eyebrow { margin: 0; }
 .fold-btn::after { content: '−'; }
 details.fold:not([open]) .fold-btn::after { content: '+'; }
 details.fold[open] > summary.fold-head { margin-bottom: var(--s-3); }
-summary.fold-head:hover .fold-btn { color: var(--accent); border-color: currentColor; }
+@media (hover:hover){summary.fold-head:hover .fold-btn{ color: var(--accent); border-color: currentColor; }}
 
 /* ── the robot coach: bottom right, above the dock ─────────────────────────
    It moves — a slow float, a blink, its antenna glowing — so it reads as
@@ -810,8 +810,8 @@ body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointe
   box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 6px 16px -10px var(--accent); }
 .btn.primary::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; pointer-events: none;
   background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent); transform: skewX(-18deg); transition: left .6s var(--ease-out); }
-.btn.primary:hover::after { left: 120%; }
-.btn:hover:not([disabled]) { transform: translateY(-1px); }
+@media (hover:hover){.btn.primary:hover::after{ left: 120%; }}
+@media (hover:hover){.btn:hover:not([disabled]){ transform: translateY(-1px); }}
 .btn:active:not([disabled]) { transform: translateY(0) scale(.98); }
 .bar i { position: relative; overflow: hidden; background: var(--accent); }
 .bar i::after { content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -821,7 +821,7 @@ body::before { content: ""; position: fixed; inset: -20vmax; z-index: -1; pointe
 
 /* Lift on hover, for the things that open something. */
 .jump-card, .unit-row, .section-card, .learn-box, .option:not([disabled]) { transition: transform .25s var(--ease-out), box-shadow .25s, border-color .25s; }
-.jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), var(--lift); border-color: var(--accent); }
+@media (hover:hover){.jump-card:hover,.unit-row:hover,.section-card:hover,.learn-box:hover{ transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), var(--lift); border-color: var(--accent); }}
 /* Pressed, it gives under the finger. */
 .jump-card:active, .unit-row:active, .section-card:active, .learn-box:active, .option:not([disabled]):active { transform: scale(.975); transition-duration: .08s; }
 
@@ -860,7 +860,7 @@ main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) b
   font-size: var(--t-lead); color: var(--hero-ink); background: var(--hero-pill); border: 1px solid var(--hero-pill-edge);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 0 1px 0 var(--hero-pill-edge); }
 .home-hero button.pill.stat { cursor: pointer; transition: transform .2s var(--ease-out), background-color .2s; }
-.home-hero button.pill.stat:hover { transform: translateY(-2px); background: var(--hero-pill-edge); }
+@media (hover:hover){.home-hero button.pill.stat:hover{ transform: translateY(-2px); background: var(--hero-pill-edge); }}
 .stat-label { display: block; font-size: var(--t-tiny); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--hero-muted); }
 .home-hero .pill.stat-ring { flex-direction: row; align-items: center; gap: var(--s-2); }
 .home-hero .stat-ring .ring-wrap { width: 2.75rem; height: 2.75rem; }
@@ -886,7 +886,7 @@ main[data-enter] .hero-trace path { animation: trace-draw 3.2s var(--ease-out) b
   background: radial-gradient(40% 120% at 100% 50%, var(--aura-2), transparent 70%); }
 .learn-plus { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; color: var(--accent-ink);
   background: var(--accent); box-shadow: 0 6px 16px -8px var(--accent); position: relative; }
-.chip:hover { border-color: var(--accent); }
+@media (hover:hover){.chip:hover{ border-color: var(--accent); }}
 
 /* ── home is three things; the chapters are their own page ───────────── */
 /* A tighter hero, so the brain is in view on opening. */
@@ -954,7 +954,7 @@ main.home:not(.shelf) .home-hero .mascot { width: 3.5rem; height: 3.5rem; }
 main[data-enter] .pearl-visual { animation: rise-in .6s .2s var(--ease-out) both; }
 .pearl-fig { display: block; width: 100%; padding: 0; border: 0; border-radius: .875rem; overflow: hidden; background: #FFFFFF; cursor: zoom-in; flex: 1 1 auto; }
 .pearl-fig img { display: block; width: 100%; height: auto; max-height: 24rem; object-fit: contain; transition: transform .5s var(--ease-out); }
-.pearl-fig:hover img { transform: scale(1.03); }
+@media (hover:hover){.pearl-fig:hover img{ transform: scale(1.03); }}
 .pearl-visual figcaption { font-size: var(--t-meta); color: var(--muted); padding: 0 var(--s-2) var(--s-1); }
 .pearl-visual .table-wrap { margin: 0; background: var(--surface); }
 .pearl-visual table.data { font-size: var(--t-meta); }
@@ -997,8 +997,7 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 @media (prefers-reduced-motion: reduce) {
   body::before, .home-hero::after, .hero-dot, .hero-trace path, .pearl-gem, .pearl-visual, .bar i::after, main[data-enter] { animation: none !important; }
   main.home, main.home *, nav.dock, nav.dock *, .btn, .btn::after, .section-card, .option { transition: none !important; animation: none !important; }
-  .jump-card:hover, .unit-row:hover, .section-card:hover, .learn-box:hover, .btn:hover:not([disabled]), .pearl-fig:hover img,
-  .jump-card:active, .unit-row:active, .section-card:active, .learn-box:active, .option:active { transform: none; }
+  .jump-card:active,.unit-row:active,.section-card:active,.learn-box:active,.option:active{ transform: none; }@media (hover:hover){.jump-card:hover,.unit-row:hover,.section-card:hover,.learn-box:hover,.btn:hover:not([disabled]),.pearl-fig:hover img{ transform: none; }}
   .jump-card, .unit-row, .learn-box { transition: none !important; }
   [data-lit] { --lit: transparent; }
 }
@@ -1173,7 +1172,7 @@ main[data-enter] .home-side .jump-card, main[data-enter] .home-side .weak-list l
 .neuron[data-state="weak"] .soma { fill: var(--brain-n-weak); stroke: var(--brain-n-weak); }
 .neuron[data-state="solid"] .dendrite { stroke: var(--brain-n-solid); } .neuron[data-state="fading"] .dendrite { stroke: var(--brain-n-fading); } .neuron[data-state="weak"] .dendrite { stroke: var(--brain-n-weak); }
 .neuron:not([data-state="new"]) .nucleus { fill: #FFFFFF; opacity: .85; }
-.neuron:hover, .neuron.sel, .neuron:focus-visible { transform: scale(1.3); }
+.neuron.sel,.neuron:focus-visible{ transform: scale(1.3); }@media (hover:hover){.neuron:hover{ transform: scale(1.3); }}
 .neuron.sel .soma, .neuron:focus-visible .soma { stroke: var(--accent); stroke-width: 4; }
 .neuron.next .next-ring { fill: none; stroke: var(--accent); stroke-width: 2.5; transform-box: fill-box; transform-origin: center; animation: next-ring 2.2s ease-out infinite; }
 @keyframes next-ring { from { transform: scale(.8); opacity: .9; } to { transform: scale(2.4); opacity: 0; } }
@@ -1265,7 +1264,7 @@ main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation:
    Socratic chain and rounds as cards; the one-screen review in a dialog;
    exam conditions' held choice; focus hides everything but the lesson. */
 .pg-open { border: 0; cursor: pointer; font-family: inherit; line-height: inherit; }
-.pg-open:hover, .pg-open:focus-visible { color: var(--accent); text-decoration: underline; }
+.pg-open:focus-visible{ color: var(--accent); text-decoration: underline; }@media (hover:hover){.pg-open:hover{ color: var(--accent); text-decoration: underline; }}
 .stage-strip { list-style: none; display: flex; flex-wrap: nowrap; gap: .375rem; margin: 0 0 var(--s-3); padding: 0 0 .25rem; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .stage-strip::-webkit-scrollbar { display: none; }
 .stage-strip li { flex: 0 0 auto; }
@@ -1314,7 +1313,7 @@ main[data-enter] .brain-axons path, main[data-enter] .brain-signals { animation:
 .import-head h2 { margin: 0; font-size: var(--t-h4); }
 .import-drop { display: flex; flex-direction: column; gap: var(--s-1); align-items: center; text-align: center; cursor: pointer;
   padding: var(--s-5) var(--s-3); border: 2px dashed var(--line); border-radius: .75rem; background: var(--surface-2); }
-.import-drop:hover, .import-drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.import-drop.over{ border-color: var(--accent); background: var(--accent-soft); }@media (hover:hover){.import-drop:hover{ border-color: var(--accent); background: var(--accent-soft); }}
 .import-drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .import-drop-main { font-weight: 600; color: var(--ink); }
 .import-drop-hint { font-size: var(--t-meta); }

@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 95 suites that are pure Node with no Playwright and no
+#   logic        the 96 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -328,6 +328,8 @@ jobs:
         run: node tests/verify-swupdate-pure.js
       - name: the service worker keeps the event alive for each cache write it makes, including the refresh behind a cache hit that the network answers late (23 checks)
         run: node tests/verify-swlifetime-pure.js
+      - name: no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind (16 checks)
+        run: node tests/verify-hover-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (17 checks)
