@@ -85,10 +85,12 @@ const SUITES = [
   ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
   ['store',        'the big stores live in a database, and nothing is ever in neither place'],
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
+  ['quietquiz',    'answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to'],
   ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
   ['flags',        'a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block\'s flags join the list when it is handed in'],
+  ['reflist',      'the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
@@ -148,6 +150,7 @@ const SUITES = [
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
+  ['taps',         'the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -490,7 +493,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['indexwarm-pure', 'searchwarm'];
+const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

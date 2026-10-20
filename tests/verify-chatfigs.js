@@ -297,6 +297,18 @@ const sse = text => [
   ok('Escape closes it and gives the page back',
      view.afterEsc === '' && view.unlocked, JSON.stringify(view.afterEsc));
   ok('and so does a tap outside the picture', view.afterBackdrop === '', JSON.stringify(view.afterBackdrop));
+  /* The same figure from the keyboard. The checks above open it with fig.click(), which is not what a keyboard does: Enter
+     and Space on a focused figure are key presses, and they have to reach a handler. The figures in a reply are drawn after
+     the render pass that bound the page's key handlers, and had none. */
+  const keyed = {};
+  for (const key of ['Enter', 'Space']) {
+    await page.evaluate(() => { closePeek(); document.querySelector('.msg.bot figure.ref-fig').focus(); });
+    await page.keyboard.press(key);
+    keyed[key] = await page.waitForFunction(() => /fig-open/.test(document.getElementById('peek').className), null, { timeout: 1500 }).then(() => true, () => false);
+  }
+  await page.evaluate(() => closePeek());
+  ok('Enter on a focused figure in a reply opens it, as a tap does', keyed.Enter === true, JSON.stringify(keyed));
+  ok('and so does Space', keyed.Space === true, JSON.stringify(keyed));
   await resized(page, 1280, 1000);
   await page.waitForTimeout(250);
 
