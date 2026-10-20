@@ -1338,7 +1338,20 @@ self.addEventListener('fetch', e => {
        the app "not opening" rather than opening from cache. Any navigation
        that misses falls back to the cached shell, which is what a single-page
        app wants for every route anyway. */
-    if (hit) return hit;
+    if (hit) {
+      /* net is handed to the event here, while respondWith's promise is still
+         pending, and not only by the waitUntil inside it. That one runs when
+         the network answers, and by then a cache hit has long been returned,
+         the promise has settled, and nothing is keeping the event alive:
+         waitUntil throws InvalidStateError ("already finished and no extend
+         lifetime promises are outstanding" in Chromium, "no longer being
+         dispatched" in WebKit), the catch above swallows it, and the write is
+         left to run with nothing holding the worker up — which is the very
+         thing the waitUntil was there to prevent. With net registered, the
+         event is alive when the answer comes and that call is legal. */
+      e.waitUntil(net);
+      return hit;
+    }
     const res = await net;
     if (res) return res;
     if (req.mode === 'navigate') {
