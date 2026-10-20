@@ -55,7 +55,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
 
-  const startAndWait = async () => page.evaluate(async () => {
+  const startAndWait = async (pg = page) => pg.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     goHome(); render();
     startQuiz(CHAPTERS[0], 'all');
@@ -273,6 +273,37 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }); await showStats();
     return page.evaluate(() => (document.getElementById('app').textContent || '').includes('needs')); })();
   ok('an under-filled band says how many more it needs', thin === true, String(thin));
+
+  head('the days since the last review are days on the calendar, whatever the hour');
+  {
+    /* A card last seen yesterday and rated at half past three in the afternoon was last seen one day ago. The row used to carry
+       the hours since the last review's midnight over twenty-four, rounded, which made that two. The log is kept to fit the
+       scheduler to real history and this is the one number it is fitted on. The date is the page's, held still for the length
+       of each reading and put back. The page is in Auckland, thirteen hours ahead of UTC: in UTC the day on the calendar and the
+       day in the UTC date are the same one, and a row that took the wrong one would pass. */
+    const tz = await browser.newPage({ viewport: { width: 900, height: 1000 }, timezoneId: 'Pacific/Auckland' });
+    tz.on('pageerror', e => errors.push(e.message));
+    await tz.goto(URL, { waitUntil: 'load', timeout: 250000 });
+    await booted(tz, { timeout: 150000 });
+    await startAndWait(tz);
+    const got = await tz.evaluate(() => {
+      const Real = Date, q = S.questions[S.qIdx], had = S.srs[q.id], out = [];
+      try {
+        for (const [at, last] of [[[2026, 2, 10, 15, 30], '2026-03-09'], [[2026, 2, 10, 9, 0], '2026-03-09'], [[2026, 2, 10, 23, 50], '2026-03-10'], [[2026, 2, 10, 0, 10], '2026-03-03']]) {
+          const now = new Real(...at).getTime();
+          globalThis.Date = class extends Real { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } };
+          S.srs[q.id] = FSRS.update(null, 3, last);
+          logReview(q, 3, true, 'review');
+          out.push(LOG[LOG.length - 1].el);
+          LOG.pop();
+        }
+      } finally { globalThis.Date = Real; if (had) S.srs[q.id] = had; else delete S.srs[q.id]; }
+      return out;
+    });
+    const zone = await tz.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+    await tz.close();
+    ok('yesterday at half past three is one day, yesterday at nine is one, today at ten to midnight is none, and a week ago at ten past midnight is seven', zone === 'Pacific/Auckland' && JSON.stringify(got) === JSON.stringify([1, 1, 0, 7]), `${zone}: ${JSON.stringify(got)}`);
+  }
 
   head('no stray errors');
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
