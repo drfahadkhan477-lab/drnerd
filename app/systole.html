@@ -834,11 +834,17 @@ function buildRail(){
   rail.classList.toggle('mini',T.min);
   if(T.min){
     const n=(()=>{const q=currentQ();return q&&hasMarkup(q.id);})();
-    rail.innerHTML=`<button class="tool rail-open${n?' has-ink':''}" data-a="expand"
+    const html=`<button class="tool rail-open${n?' has-ink':''}" data-a="expand"
         title="Annotation tools" aria-label="Show annotation tools">${icon('pencil')}</button>`;
-    rail.querySelector('[data-a]').onclick=()=>railMin(false);
+    /* Every draw of a screen asks for the rail, and a rail already as it should be is left alone: a new button runs its
+       entrance, so the pencil popped again on every answer and every question. */
+    if(rail.__html!==html){
+      rail.__html=html; rail.innerHTML=html;
+      rail.querySelector('[data-a]').onclick=()=>railMin(false);
+    }
     return rail;
   }
+  rail.__html=null;
   rail.innerHTML=`
     <button class="tool rail-min" data-a="min" title="Minimise" aria-label="Minimise tools">${icon('chevron-down')}</button>
     <button class="tool${T.autoMin?' auto-on':''} tool-auto" data-a="automin"
@@ -5645,10 +5651,37 @@ function render(){
 function renderQ(){
   return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:S.screen==='mock'?mockQ():null;
 }
+/* A screen redrawn in place (a query typed into it, a note saved, the theme changed) is the screen the fellow was looking at, and its
+   new elements would each run their entrance from the start: the search results rose in again at every pause in typing, the box
+   they were typing in with them, and the doors and cards of home and Study when the theme changed. An animation that is running
+   is put at its end, which is where the one that was there had got to; one that goes on for ever is left alone. WebKit answers
+   the end of an entrance with a transition of the transform, from the value it rests at to the same one, which moves nothing
+   and is an animation all the same: so they are asked for again until a pass finds none to finish. Each pass reads them all
+   before it finishes any: finishing one and asking the next for its timing made the page work its styles out again between. */
+function settleEntrances(root){
+  try{
+    if(!document.getAnimations) return;
+    for(let pass=0;pass<4;pass++){
+      const ending=document.getAnimations().filter(a=>{
+        const fx=a.effect, t=fx&&fx.target;
+        return a.playState==='running'&&t&&root.contains(t)&&fx.getComputedTiming().iterations!==Infinity;
+      });
+      if(!ending.length) break;
+      for(const a of ending){ try{ a.finish(); }catch(_){} }
+    }
+  }catch(_){}   // a screen that has been drawn is drawn: an engine that cannot list its animations does not take the draw down with it
+}
+/* Where the fellow is: the screen, and on a quiz or a mock block the question. */
+let lastView='';
 function renderNow(){
   const app=document.getElementById('app');
   const q=renderQ();
   const reuse=q&&figCache.id===q.id&&figCache.node&&S.zoomed===-1;
+  /* A redraw that changes none of it (an answer chosen, a rating given) is the same view redrawn, and wears .again: the CSS
+     does not let what was already on the screen make its entrance a second time. The question dropped to nothing and came
+     back, and the options slid in again, on every answer. */
+  const view=S.screen+(q?':'+q.id:'');
+  const again=view===lastView; lastView=view;
   /* The bar is painted into its own fixed header rather than into the screen:
      inside #app it could never be wider than the reading column. */
   const bar=document.getElementById('navbar');
@@ -5657,6 +5690,7 @@ function renderNow(){
      the whole iPad; every other screen is prose and keeps its measure. */
   app.dataset.screen=S.screen;
   app.innerHTML=buildScreen();
+  app.classList.toggle('again',again);
   document.body.classList.toggle('rating-active',
     S.screen==='quiz'&&S.answered&&S.mode==='due');
   const zone=app.querySelector('.fig-zone');
@@ -5681,6 +5715,8 @@ function renderNow(){
     const pf=document.querySelector('.prog-fill');
     if(pf)pf.style.transition='width .4s cubic-bezier(.16,1,.3,1)';
   });
+  /* A quiz and a mock block say what is new in a redraw (the verdict, the right option) and the style sheet lets only that arrive. */
+  if(again&&S.screen!=='quiz'&&S.screen!=='mock') settleEntrances(app);
 }
 /* Reveal below-fold surfaces once, using the browser's actual scroll root.
    No scroll handler or perpetual animation loop is needed. Every render
