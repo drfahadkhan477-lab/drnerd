@@ -283,6 +283,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        day in the UTC date are the same one, and a row that took the wrong one would pass. */
     const tz = await browser.newPage({ viewport: { width: 900, height: 1000 }, timezoneId: 'Pacific/Auckland' });
     tz.on('pageerror', e => errors.push(e.message));
+    tz.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await tz.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(tz, { timeout: 150000 });
     await startAndWait(tz);
