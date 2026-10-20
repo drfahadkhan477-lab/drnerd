@@ -68,6 +68,7 @@ const SUITES = [
   ['bankname',     'the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP\'s data cannot back'],
   ['leads',        'the 12-lead morphology falls out of one dipole'],
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
+  ['loops',        'no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere'],
   ['theme',        'nine palettes, two axes, unthemed semantics'],
   ['home',         'the welcome bar, the progress bar, three layouts'],
   ['splash-heart', 'the photographed heart paints before the app parses'],
@@ -494,7 +495,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink'];
+const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
