@@ -149,7 +149,9 @@ const SUITES = [
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['lazyink',      'a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
+  ['taps',         'the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -322,6 +324,7 @@ const SUITES = [
   ['pearlbake-pure', 'the pearls found at build time are the ones the search finds, and an entry that does not fit is searched afresh'],
   ['refsmerge-pure', 'a reference unit adds only sections that are new and high yield, and what it writes splits back into notes'],
   ['phrase-pure', 'a note holding the query\'s words in the query\'s order outranks one holding them scattered; questions, one-word queries and stubs rank as before'],
+  ['indexwarm-pure', 'the search index built a slice at a time is the index built at once, is cut into slices, is finished by a search that cannot wait, and is dropped when a note changes'],
   ['olderacc-pure', 'an older ACC bank\'s questions parse in each layout, keep their answer or are left out, skip what the bank has, and print no word of it'],
   ['extract-pure', 'extraction refuses an id that could leave figures/, bytes that are not the image their mime claims, and damaged base64 — and a refusal leaves the last good content/ untouched'],
   ['bankpack-pure', 'the code-only deploy\'s package: packed, read back through the page\'s own reader and checker, and every bad package refused, naming why'],
@@ -341,6 +344,7 @@ const SUITES = [
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
+  ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -490,7 +494,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['reflist', 'quietquiz'];
+const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

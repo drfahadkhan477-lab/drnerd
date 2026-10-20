@@ -583,7 +583,7 @@ function sweepInkHosts(){
     if(h.isConnected) continue;
     if(h.__ro){ h.__ro.disconnect(); h.__ro=null; }
     if(h.__onResize){ window.removeEventListener('resize',h.__onResize); h.__onResize=null; }
-    h.__ink=null; h.__notes=null; h.__redraw=null; h.__fit=null; h.__noteLayer=null;
+    h.__ink=null; h.__notes=null; h.__redraw=null; h.__fit=null; h.__make=null; h.__noteLayer=null;
     INK_HOSTS.delete(h);
   }
 }
@@ -647,28 +647,59 @@ function railMin(v){ T.min=v; if(!v)T.active=T.active;
 let penSeen=0;                                    // Apple-Pencil detection
 
 /* ── canvas layer bound to one host element ───────────────────────────────── */
+/* THE CANVAS IS MADE WHEN THERE IS SOMETHING TO SHOW ON IT OR A HAND TO DRAW WITH, and not before. Every draw of a question
+   attached one to each of its hosts (the card, the explanation, each figure), and a canvas the size of its host at the screen's
+   density is megabytes: about 23 MB made and thrown away for every question on an iPad, for ink that was never there, and 10 to 30 ms
+   of the answer's own draw. A host with no strokes and the pen off has nothing to show and nothing under a pen, so it has no
+   canvas until the pen is picked up (syncInkMode) or strokes are put back (repaintAll). */
 function attachInk(host,key){
   if(!host||host.__ink)return;
   host.__ink=key; host.classList.add('ink-host');
-  const cv=document.createElement('canvas');
-  cv.className='ink-canvas'; cv.setAttribute('aria-hidden','true');
-  host.appendChild(cv);
-  const ctx=cv.getContext('2d');
-  let cur=null;
+  let cv=null, ctx=null, cur=null;
+  const saved=()=>INK[key]||[];                      // read without making an entry: a question looked at is not a question marked
 
+  function make(){
+    if(cv) return;
+    cv=document.createElement('canvas');
+    cv.className='ink-canvas'; cv.setAttribute('aria-hidden','true');
+    host.appendChild(cv);
+    ctx=cv.getContext('2d');
+    cv.addEventListener('pointerdown',down);
+    cv.addEventListener('pointermove',move);
+    cv.addEventListener('pointerup',end);
+    cv.addEventListener('pointercancel',end);
+    cv.addEventListener('pointerleave',()=>{ if(cur)end(); });
+    if(typeof ResizeObserver!=='undefined'){
+      host.__ro=new ResizeObserver(fit); host.__ro.observe(host);
+    } else {
+      host.__onResize=fit; window.addEventListener('resize',fit);   // fallback
+    }
+    fit();
+  }
+  let fitted=false;
+  /* The canvas is the host's padding box (inset 0), and is measured as the layout has it: a host that is part way through its
+     entrance is scaled, and a bounding rectangle takes the scale with it, which made a canvas made at that moment a little small
+     for ever (the observer does not call again when only a transform changed). */
+  const box=()=>({width:host.clientWidth,height:host.clientHeight});
   function fit(){
-    const r=host.getBoundingClientRect();
+    if(!cv) return;
+    const r=box();
     if(!r.width||!r.height)return;                   // not laid out yet
-    const dpr=Math.min(window.devicePixelRatio||1,3);
-    cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
+    const dpr=Math.min(window.devicePixelRatio||1,3), w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
+    /* Setting a canvas's size clears it and allocates it again, and the observer calls this once as soon as it starts to watch,
+       when the size is what it was a moment ago. */
+    if(fitted&&cv.width===w&&cv.height===h) return;
+    fitted=true;
+    cv.width=w; cv.height=h;
     ctx.setTransform(dpr,0,0,dpr,0,0);
     redraw();
   }
   function strokes(){ return INK[key]||(INK[key]=[]); }
   function redraw(){
-    const r=host.getBoundingClientRect();
+    if(!cv) return;
+    const r=box();
     ctx.clearRect(0,0,r.width,r.height);
-    for(const s of strokes()) paint(s,r);
+    for(const s of saved()) paint(s,r);
     if(cur) paint(cur,r);
   }
   function paint(s,r){
@@ -713,15 +744,15 @@ function attachInk(host,key){
     if(e.pointerType==='mouse') return true;
     return Date.now()-penSeen>4000;      // palm rejection while the Pencil is in use
   }
-  cv.addEventListener('pointerdown',e=>{
+  function down(e){
     disarmAutoMinimize();
     if(e.pointerType==='pen'&&T.min&&T.autoMin){ T.active=true; railMin(false); }
     if(!T.active||!allow(e))return;
     e.preventDefault(); cv.setPointerCapture(e.pointerId);
     if(T.erase){ eraseAt(pos(e)); return; }
     cur={t:T.tool,c:T.color,p:[pos(e)],sz:T.sizeKey}; redraw();
-  });
-  cv.addEventListener('pointermove',e=>{
+  }
+  function move(e){
     if(!T.active)return;
     if(T.erase&&e.buttons){ if(allow(e))eraseAt(pos(e)); return; }
     if(!cur||!allow(e))return;
@@ -729,14 +760,11 @@ function attachInk(host,key){
     const evts=e.getCoalescedEvents?e.getCoalescedEvents():[e];
     for(const ev of evts) cur.p.push(pos(ev));
     redraw();
-  });
+  }
   function end(){
     if(cur&&cur.p.length){ strokes().push(simplifyStroke(cur)); saveJSON(INK_KEY,INK); }
     cur=null; redraw(); refreshRail(); armAutoMinimize();
   }
-  cv.addEventListener('pointerup',end);
-  cv.addEventListener('pointercancel',end);
-  cv.addEventListener('pointerleave',()=>{ if(cur)end(); });
 
   function eraseAt(pt){
     const arr=strokes();
@@ -746,14 +774,9 @@ function attachInk(host,key){
       }
     }
   }
-  host.__redraw=redraw; host.__fit=fit;
+  host.__redraw=redraw; host.__fit=fit; host.__make=make;
   INK_HOSTS.add(host);
-  if(typeof ResizeObserver!=='undefined'){
-    host.__ro=new ResizeObserver(fit); host.__ro.observe(host);
-  } else {
-    host.__onResize=fit; window.addEventListener('resize',fit);   // fallback
-  }
-  fit();
+  if(T.active||saved().length) make();
 }
 
 /* ── sticky notes ─────────────────────────────────────────────────────────── */
@@ -913,10 +936,13 @@ function railAction(a){
   buildRail(); syncInkMode(); armAutoMinimize();
 }
 function syncInkMode(){
-  document.querySelectorAll('.ink-host').forEach(h=>h.classList.toggle('ink-on',T.active));
+  document.querySelectorAll('.ink-host').forEach(h=>{ if(T.active&&h.__make)h.__make(); h.classList.toggle('ink-on',T.active); });
 }
 function repaintAll(){
-  document.querySelectorAll('.ink-host').forEach(h=>{ if(h.__redraw)h.__redraw(); });
+  document.querySelectorAll('.ink-host').forEach(h=>{
+    if(h.__make&&(T.active||(INK[h.__ink]&&INK[h.__ink].length)))h.__make();
+    if(h.__redraw)h.__redraw();
+  });
   const q=currentQ();
   document.querySelectorAll('.ink-host').forEach(h=>{ if(h.__noteLayer&&q)drawNotes(h,q.id); });
 }
@@ -1189,6 +1215,8 @@ function tok(s){
 
 let IDX=null;      // {df, docs:[{key,len,tf}], avg, N}
 let VOCAB=null;    // IDX.df's keys, sorted — rebuilt with IDX, never apart
+let IDXJOB=null;   // an index half built by warmIndex(): a search that cannot wait finishes it where it stands
+let IDXWARM=null;  // the job a chain of slices is working on
 
 /* A query token the index has never seen is a STUB, and a stub stands for
    every vocabulary term it prefixes — not for two of them chosen by length.
@@ -1209,38 +1237,81 @@ function stubTerms(t){
   while(end<VOCAB.length&&VOCAB[end].startsWith(t)) end++;
   return end>lo?VOCAB.slice(lo,end):null;
 }
-function buildIndex(){
-  const docs=[], df=Object.create(null), post=Object.create(null), bgdf=Object.create(null);
-  const add=(key,text,meta)=>{
-    const ts=tok(text); if(!ts.length) return;
-    const tf=Object.create(null);
-    for(const t of ts) tf[t]=(tf[t]||0)+1;
-    /* POSTINGS. df already needs a pass over the document's distinct terms;
-       recording WHICH document, in the same pass, is what lets a prefix be
-       scored from the postings of the terms it covers rather than by walking
-       the whole collection once per stub. */
-    const di=docs.length;
-    for(const t in tf){ df[t]=(df[t]||0)+1; (post[t]||(post[t]=[])).push(di); }
-    /* ADJACENT PAIRS, over tok()'s own output, so a pair is two scored terms
-       side by side. Presence only: order is the evidence, not repetition. */
-    const bg=Object.create(null);
-    for(let i=0;i+1<ts.length;i++) bg[ts[i]+'\u0001'+ts[i+1]]=1;
-    for(const k in bg) bgdf[k]=(bgdf[k]||0)+1;
-    docs.push({key,len:ts.length,tf,meta,bg});
-  };
-  for(const q of ALL_Q){
-    const correct=q.o[q.ci]?q.o[q.ci].t:'';
-    add('q:'+q.id, q.s+' '+q.o.map(o=>o.t).join(' ')+' '+correct+' '+q.ex,
-        {kind:'q',id:q.id,ch:q.ch,n:q.n});
+/* THE INDEX IS BUILT A SLICE AT A TIME when nobody is waiting for it, and all at once when somebody is. Building it takes about
+   a second on a library the size of the real one (1,785 documents), and an iPad takes longer: done in the one call that the
+   first search made, the screen froze under the first letter typed. warmIndex() does the same work in slices of a few
+   milliseconds from the moment the search screen opens, which is time the reader spends on the first word; a search that
+   arrives before it is done finishes what is left, in the same job, and gets the same index either way. */
+function indexJob(){
+  return {i:0, qs:ALL_Q, refs:REF.slice(), docs:[], df:Object.create(null), post:Object.create(null), bgdf:Object.create(null)};
+}
+function indexAdd(job,key,text,meta){
+  const docs=job.docs, df=job.df, post=job.post, bgdf=job.bgdf;
+  const ts=tok(text); if(!ts.length) return;
+  const tf=Object.create(null);
+  for(const t of ts) tf[t]=(tf[t]||0)+1;
+  /* POSTINGS. df already needs a pass over the document's distinct terms;
+     recording WHICH document, in the same pass, is what lets a prefix be
+     scored from the postings of the terms it covers rather than by walking
+     the whole collection once per stub. */
+  const di=docs.length;
+  for(const t in tf){ df[t]=(df[t]||0)+1; (post[t]||(post[t]=[])).push(di); }
+  /* ADJACENT PAIRS, over tok()'s own output, so a pair is two scored terms
+     side by side. Presence only: order is the evidence, not repetition. */
+  const bg=Object.create(null);
+  for(let i=0;i+1<ts.length;i++) bg[ts[i]+'\u0001'+ts[i+1]]=1;
+  for(const k in bg) bgdf[k]=(bgdf[k]||0)+1;
+  docs.push({key,len:ts.length,tf,meta,bg});
+}
+/* Adds documents to the job until the time `until` has passed, or all of them when it is 0. True when the index is whole. */
+function indexStep(job,until){
+  const nq=job.qs.length, n=nq+job.refs.length;
+  while(job.i<n){
+    if(until&&performance.now()>=until) return false;
+    const k=job.i++;
+    if(k<nq){
+      const q=job.qs[k], correct=q.o[q.ci]?q.o[q.ci].t:'';
+      indexAdd(job,'q:'+q.id, q.s+' '+q.o.map(o=>o.t).join(' ')+' '+correct+' '+q.ex,
+          {kind:'q',id:q.id,ch:q.ch,n:q.n});
+    } else {
+      const r=job.refs[k-nq];
+      indexAdd(job,'r:'+r.id, (r.title||'')+' '+(r.tags||'')+' '+(r.body||''),
+          {kind:'r',id:r.id,title:r.title||'Untitled note'});
+    }
   }
-  REF.forEach(r=>add('r:'+r.id, (r.title||'')+' '+(r.tags||'')+' '+(r.body||''),
-        {kind:'r',id:r.id,title:r.title||'Untitled note'}));
+  const docs=job.docs, df=job.df, post=job.post, bgdf=job.bgdf;
   const avg=docs.reduce((a,d)=>a+d.len,0)/Math.max(docs.length,1);
   IDX={df,docs,avg,N:docs.length,post,bgdf};
+  return true;
+}
+function buildIndex(){
+  const job=IDXJOB||indexJob(); IDXJOB=null;
+  indexStep(job,0);
   return IDX;
 }
+const INDEX_SLICE_MS=8;
+/* The next slice runs as a message, not as setTimeout(…,0): a browser holds a timer that sets itself again to at least 4 ms, which
+   made a build of a second take a second and a half, and runs timers late in low-power mode. Input and drawing still go first. */
+const indexYield=(function(){
+  if(typeof MessageChannel!=='function') return fn=>setTimeout(fn,0);
+  const ch=new MessageChannel(), next=[];
+  ch.port1.onmessage=()=>{ const fn=next.shift(); if(fn) fn(); };
+  return fn=>{ next.push(fn); ch.port2.postMessage(0); };
+})();
+function warmIndex(){
+  if(IDX||(IDXJOB&&IDXWARM===IDXJOB)) return;
+  const job=IDXJOB||(IDXJOB=indexJob());
+  IDXWARM=job;
+  const slice=()=>{
+    /* Thrown away since (a note was changed), or finished by a search that could not wait: it is not this job's turn. */
+    if(IDXJOB!==job){ if(IDXWARM===job) IDXWARM=null; return; }
+    if(indexStep(job,performance.now()+INDEX_SLICE_MS)){ IDXJOB=null; IDXWARM=null; }
+    else indexYield(slice);
+  };
+  indexYield(slice);
+}
 function invalidateIndex(){
-  pearlCache=null; IDX=null; VOCAB=null; }
+  pearlCache=null; IDX=null; VOCAB=null; IDXJOB=null; }
 
 function search(query,{exclude=null,limit=5}={}){
   if(!IDX) buildIndex();
@@ -2888,7 +2959,7 @@ function searchInput(v){
 }
 function searchGo(t){ runSearch(t); S.screen='search'; render(); toTop(); }
 function searchChapter(c){ runSearch(SQ.q,c); render(); }
-function openSearch(){ S.screen='search'; if(!SQ.ran)runSearch(''); render(); toTop();
+function openSearch(){ S.screen='search'; if(!SQ.ran)runSearch(''); render(); toTop(); warmIndex();
   setTimeout(()=>{const el=document.getElementById('sQ'); if(el)el.focus();},80); }
 function quizFromSearch(){
   const qs=SQ.hits.map(h=>h.q);
