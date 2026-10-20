@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 93 suites that are pure Node with no Playwright and no
+#   logic        the 94 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -340,6 +340,8 @@ jobs:
         run: node tests/verify-refsmerge-pure.js
       - name: word order counts in the ranker — the note holding the phrase outranks one holding its words scattered, and questions rank as before (9 checks)
         run: node tests/verify-phrase-pure.js
+      - name: the search index built a slice at a time is the index built at once, is cut into slices, is finished by a search that cannot wait, and is dropped when a note changes (33 checks)
+        run: node tests/verify-indexwarm-pure.js
       - name: an older ACC bank imports by layout, answer keys map back to their questions, a question is kept only with its answer, what the bank has is skipped, a page that fails says which rule failed it, no word of it is printed, a key its own commentary contradicts is refused, a question with no explanation says so, a merged build carries exactly the staging, a bold heading naming no "Question" starts one, every figure type is served as an image, and an unanswered explanation is probed letter by letter (176 checks)
         run: node tests/verify-olderacc-pure.js
       - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (33 checks)
@@ -702,6 +704,9 @@ jobs:
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it (10 checks)
+        run: node tests/verify-searchwarm.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -966,6 +971,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it (10 checks)
+        run: node tests/verify-searchwarm.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
