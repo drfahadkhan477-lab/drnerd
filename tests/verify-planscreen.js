@@ -68,7 +68,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('a fellow with history: the plan is run as planned');
   const seeded = await page.evaluate(() => {
-    const day = n => FSRS.localDateToISO(new Date(Date.now() + n * 86400000));
+    /* Calendar days: n times 86400000 ms from now is a day out in the first local hour of a day when the clocks fall back in between. */
+    const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return FSRS.localDateToISO(d); };
     S.srs = {}; S.chStats = {}; S.missed = new Set(); S.daily = {};
     POOL.slice(0, 30).forEach((q, i) => {
       const due = i < 20;                                   // twenty due, ten not yet

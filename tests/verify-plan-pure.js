@@ -30,7 +30,9 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const TODAY = '2026-10-10';
-const day = n => FSRS.localDateToISO(new Date(FSRS.isoToLocalDate(TODAY).getTime() + n * 86400000));
+/* Calendar days, not 24-hour steps: where the clocks change, a day is 23 or 25 hours, and TODAY plus n times 86400000 ms lands on the
+   day before once a change has been crossed (2026-10-10 plus 60 is 2026-12-08 in New York). setDate() steps the calendar. */
+const day = n => { const d = FSRS.isoToLocalDate(TODAY); d.setDate(d.getDate() + n); return FSRS.localDateToISO(d); };
 const CH = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'];
 const pool = [];
 for (const ch of CH) for (let i = 1; i <= 24; i++) pool.push({ id: `${ch.slice(0, 3).toUpperCase()}_${i}`, ch });

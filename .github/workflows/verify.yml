@@ -86,6 +86,14 @@
 #                run adds, not only the tree checked out: a licensed file
 #                added and deleted again inside a pull request would still
 #                reach master's history if it were merged.
+#                After them, the same suites again with TZ=America/New_York
+#                (scripts/test-public.js --pure). The runners are in UTC, where
+#                a day is always 24 hours and the date is the same date for
+#                everyone, so a date stepped by milliseconds, or read back with
+#                toISOString(), is right here and a day out for a fellow where
+#                the clocks change. verify-plan-pure was, in New York, London
+#                and Berlin; it was found by running the suites there, not by
+#                this file.
 #                Across every job but split-build, 8130 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
@@ -404,6 +412,9 @@ jobs:
         run: node tests/verify-memorizer-recall-pure.js
       - name: Memorizer — the review's layout rules — a lesson's first five points, a unit's one next step and why (14 checks)
         run: node tests/verify-memorizer-layout-pure.js
+      - name: the same pure suites again in New York, where the clocks change inside the dates they use, so a day stepped by milliseconds that lands a day out is found where UTC never shows it
+        if: ${{ !cancelled() }}
+        run: TZ=America/New_York node scripts/test-public.js --pure
 
   # ── Memorizer in a real browser ────────────────────────────────────────────
   #
