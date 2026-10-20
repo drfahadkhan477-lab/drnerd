@@ -30,7 +30,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, engineName } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, afterRender } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -294,9 +294,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('a diagram that is not moving is not redrawn');
   /* A draw is one clearRect on the diagram's canvas. The window asks for its own frames, as the clock check above does, and reports the draws
-     with the frames that came in it: a headless page that delivers few frames cannot turn "no draws" into a pass, because the claim is made
-     only where frames flowed. Before this, the loop drew on every frame whatever the state: a paused Wiggers view, or the Curves view, which
-     has no time in it, cost three milliseconds sixty times a second to put the same picture on the canvas. */
+     with the frames that came in it. Before this, the loop drew on every frame whatever the state: a paused Wiggers view, or the Curves view,
+     which has no time in it, cost three milliseconds sixty times a second to put the same picture on the canvas.
+
+     A CLAIM ABOUT FRAMES IS MADE ONLY WHERE THE FRAMES CAME, and for every window, the later ones too: a window is a number of frames, not a
+     number of milliseconds (how many a headless page delivers in a second varies by engine and by load), it gives up at six seconds, and then
+     the check says "not measurable" instead of passing or failing on almost nothing. What does not need a frame (the chip, the state the panel
+     reports, a drag) is checked apart from what does. */
   const COUNT_DRAWS = () => {
     window.__physioDraws = 0;
     const clear = CanvasRenderingContext2D.prototype.clearRect;
@@ -308,29 +312,33 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       requestAnimationFrame(step);
     });
   };
-  /* A window is a number of frames, not a number of milliseconds: how many frames a headless page delivers in a second varies by engine and by
-     load, and a check that needs a count of them would be measurable on one run and not on the next. It gives up at six seconds, and then says so. */
   const FRAMES = 30, GIVE_UP_MS = 6000;
-  const windowOn = pg => (n = FRAMES) => pg.evaluate(([n, ms]) => window.__physioWindow(n, ms), [n, GIVE_UP_MS]);
-  const enough = (r, n = FRAMES) => r.frames >= n;
+  const inFrames = (n = FRAMES) => page.evaluate(([n, ms]) => window.__physioWindow(n, ms), [n, GIVE_UP_MS]);
+  const measure = (label, r, cond, detail, n = FRAMES) =>
+    r.frames >= n ? ok(label, cond, detail) : unmeasurable(label, `${r.frames} of ${n} frames in ${GIVE_UP_MS} ms`);
+  const panel = () => page.evaluate(() => ({ playing: physio.playing(), chip: (document.querySelector('[data-physio-play]') || {}).textContent || null,
+                                              media: matchMedia('(prefers-reduced-motion: reduce)').matches }));
+  /* render() swaps the DOM inside a view transition, and the panel is mounted again on a new canvas afterwards: wait for that canvas, and for
+     the markup to go quiet (tests/_render.js), rather than for a time. */
+  const remounted = async (act, label) => {
+    await page.evaluate(() => { window.__oldPhysioCanvas = document.getElementById('physioCanvas'); });
+    await page.evaluate(act);
+    await afterRender(page, () => { const cv = document.getElementById('physioCanvas'); return !!cv && cv !== window.__oldPhysioCanvas && !!physio && physioCanvasEl === cv; },
+                      { label: `the panel mounted again on a new canvas (${label})`, timeout: 30000 });
+  };
+  const click = sel => page.evaluate(sel => document.querySelector(sel).click(), sel);
   {
     await page.evaluate(COUNT_DRAWS);
-    const inFrames = windowOn(page);
-    const panel = () => page.evaluate(() => ({ playing: physio.playing(), chip: (document.querySelector('[data-physio-play]') || {}).textContent || null }));
-    /* The preconditions, as checks of their own: that it is playing and draws, or "draws nothing" below would be true of a counter that counts nothing. */
+    /* The precondition, as a check of its own: that it is playing and draws, or "draws nothing" below would be true of a counter that counts nothing. */
     const running = await inFrames();
-    if (!enough(running)) unmeasurable('playing, it draws on the frames that come', `${running.frames} of ${FRAMES} frames in ${GIVE_UP_MS} ms`);
-    else ok('playing, it draws on the frames that come', running.draws >= running.frames * 0.8, `${running.draws} draws in ${running.frames} frames`);
-    const measurable = enough(running);
+    measure('playing, it draws on the frames that come', running, running.draws >= running.frames * 0.8, `${running.draws} draws in ${running.frames} frames`);
 
-    await page.evaluate(() => document.querySelector('[data-physio-play]').click());
-    await page.waitForTimeout(150);                                  // a frame may be in flight
+    await click('[data-physio-play]');
     const afterPause = await panel();
+    ok('the Pause chip pauses it, and the chip says Play', afterPause.playing === false && afterPause.chip === 'Play', `playing ${afterPause.playing}, chip ${afterPause.chip}`);
+    await page.waitForTimeout(150);                                  // a frame may be in flight
     const still = await inFrames();
-    if (!measurable) unmeasurable('the Pause chip pauses it, and a paused diagram draws nothing', 'no frames here');
-    else ok('the Pause chip pauses it, the chip says Play, and a paused diagram draws nothing over the frames that come',
-            afterPause.playing === false && afterPause.chip === 'Play' && still.draws === 0 && enough(still),
-            `playing ${afterPause.playing}, chip ${afterPause.chip}, ${still.draws} draws in ${still.frames} frames`);
+    measure('and a paused diagram draws nothing over the frames that come', still, still.draws === 0, `${still.draws} draws in ${still.frames} frames`);
 
     /* The loop no longer draws for a paused diagram, so everything that changes the picture has to draw for itself. A drag is the one a hand uses. */
     const cvBox = await page.locator('#physioCanvas').boundingBox();
@@ -349,13 +357,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const before = await page.evaluate(() => window.__physioDraws);            // counted from before the stimulus: the next frame can be the one that draws
     await page.evaluate(() => { document.querySelector('.physio-stage').style.maxWidth = '320px'; });
     const resized = await inFrames(10);
-    const size = await page.evaluate(() => { const c = document.getElementById('physioCanvas'), b = c.getBoundingClientRect(); return { w: c.width, want: Math.round(b.width * Math.min(devicePixelRatio || 1, 3)), draws: window.__physioDraws }; });
-    resized.draws = size.draws - before;
+    const size = await page.evaluate(() => { const c = document.getElementById('physioCanvas'), b = c.getBoundingClientRect();
+                                             return { w: c.width, want: Math.round(b.width * Math.min(devicePixelRatio || 1, 3)), draws: window.__physioDraws }; });
     await page.evaluate(() => { document.querySelector('.physio-stage').style.maxWidth = ''; });
+    measure('a paused diagram follows its canvas when that is resized: it is redrawn, at the size the canvas now has', resized,
+            size.draws - before >= 1 && size.w === size.want && size.w < wide, `${wide} → ${size.w} px wide (wanted ${size.want}), ${size.draws - before} draws`, 10);
     await page.waitForTimeout(200);
 
     /* A diagram mounted where it cannot be laid out yet, and shown later, is drawn once it can. 150 by 75 points at two device pixels to the point
-       is 300 by 150, the size a canvas has before anything is done to it, so the size alone would never say that it needs drawing. */
+       is 300 by 150, the size a canvas has before anything is done to it, so the size alone would never say that it needs drawing. It counts
+       eight frames of its own, and waits as long as they take. */
     const late = await page.evaluate(async () => {
       const host = document.createElement('div');
       host.style.cssText = 'display:none;position:fixed;left:0;top:0;width:150px;height:75px;z-index:-1';
@@ -374,28 +385,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('and a diagram mounted where it could not be laid out is drawn once it can, though its canvas never changed size',
        late.before === true && late.after === false && late.dims === '300×150' && late.dpr === 2,
        `blank at mount ${late.before}, blank after it was shown ${late.after}, canvas ${late.dims} at ${late.dpr}x`);
-    if (!enough(resized, 10)) unmeasurable('a paused diagram follows its canvas when that is resized', `${resized.frames} of 10 frames in ${GIVE_UP_MS} ms`);
-    else ok('a paused diagram follows its canvas when that is resized: it is redrawn, at the size the canvas now has',
-            resized.draws >= 1 && size.w === size.want && size.w < wide, `${wide} → ${size.w} px wide (wanted ${size.want}), ${resized.draws} draws`);
 
-    await page.evaluate(() => document.querySelector('[data-physio-play]').click());
+    await click('[data-physio-play]');
+    const afterPlay = await panel();
+    ok('the Play chip plays it again, and the chip says Pause', afterPlay.playing === true && afterPlay.chip === 'Pause', `playing ${afterPlay.playing}, chip ${afterPlay.chip}`);
     await page.waitForTimeout(150);
     const resumed = await inFrames();
-    const afterPlay = await panel();
-    if (!measurable) unmeasurable('the Play chip plays it again', 'no frames here');
-    else ok('the Play chip plays it again, the chip says Pause, and it draws on the frames that come',
-            afterPlay.playing === true && afterPlay.chip === 'Pause' && resumed.draws >= resumed.frames * 0.8,
-            `playing ${afterPlay.playing}, chip ${afterPlay.chip}, ${resumed.draws} draws in ${resumed.frames} frames`);
+    measure('and it draws on the frames that come', resumed, resumed.draws >= resumed.frames * 0.8, `${resumed.draws} draws in ${resumed.frames} frames`);
 
     /* The Curves view has no time in it: "playing" there moves nothing. */
-    await page.evaluate(() => document.querySelector('[data-physio-view="curves"]').click());
-    await page.waitForTimeout(300);
+    await remounted(() => document.querySelector('[data-physio-view="curves"]').click(), 'Curves');
     const curves = await inFrames();
-    if (!measurable) unmeasurable('the Curves view is not redrawn while it is playing', 'no frames here');
-    else ok('the Curves view, which has no time in it, is not redrawn while it is playing',
-            (await panel()).playing === true && curves.draws === 0 && enough(curves), `${curves.draws} draws in ${curves.frames} frames`);
-    await page.evaluate(() => document.querySelector('[data-physio-view="wiggers"]').click());
-    await page.waitForTimeout(300);
+    measure('the Curves view, which has no time in it, is not redrawn while it is playing', curves, (await panel()).playing === true && curves.draws === 0, `${curves.draws} draws in ${curves.frames} frames`);
+    await remounted(() => document.querySelector('[data-physio-view="wiggers"]').click(), 'Wiggers');
   }
 
   head('Reduce Motion starts the cycle paused');
@@ -404,36 +406,26 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        plays only when asked; the panel above, without it, mounted playing. The setting is emulated on this page and the panel is mounted again as
        it is on a first visit, with nothing yet decided, rather than on a second page: headless WebKit hands the page behind the front one one
        frame in a second, and a claim about frames cannot be made there. */
-    const inFrames = windowOn(page);
-    const state = () => page.evaluate(() => ({ playing: physio.playing(), chip: (document.querySelector('[data-physio-play]') || {}).textContent || null,
-                                                 media: matchMedia('(prefers-reduced-motion: reduce)').matches }));
-    const remount = async () => {
-      await page.evaluate(() => { window.__oldPhysioCanvas = document.getElementById('physioCanvas'); physioPlaying = null; render(); });
-      await page.waitForFunction(() => { const cv = document.getElementById('physioCanvas'); return cv && cv !== window.__oldPhysioCanvas && physio && physioCanvasEl === cv; }, null, { timeout: 30000 });
-      await page.waitForTimeout(300);
-    };
     await page.emulateMedia({ reducedMotion: 'reduce' });
     try {
-      await remount();
-      const first = await state();
+      await remounted(() => { physioPlaying = null; render(); }, 'Reduce Motion on');
+      const first = await panel();
+      ok('with Reduce Motion on the diagram mounts paused, and the chip says Play', first.media === true && first.playing === false && first.chip === 'Play',
+         `reduce ${first.media}, playing ${first.playing}, chip ${first.chip}`);
       const idle = await inFrames();
-      if (!enough(idle)) unmeasurable('with Reduce Motion on the diagram mounts paused and draws nothing', `${idle.frames} of ${FRAMES} frames in ${GIVE_UP_MS} ms`);
-      else ok('with Reduce Motion on the diagram mounts paused, the chip says Play, and it draws nothing over the frames that come',
-              first.media === true && first.playing === false && first.chip === 'Play' && idle.draws === 0,
-              `reduce ${first.media}, playing ${first.playing}, chip ${first.chip}, ${idle.draws} draws in ${idle.frames} frames`);
+      measure('and it draws nothing over the frames that come', idle, idle.draws === 0, `${idle.draws} draws in ${idle.frames} frames`);
       const t0 = await page.evaluate(() => physio.time());
-      await page.evaluate(() => document.querySelector('[data-physio-play]').click());
+      await click('[data-physio-play]');
+      const after = await panel();
+      ok('and Play plays it, and the chip says Pause', after.playing === true && after.chip === 'Pause', `playing ${after.playing}, chip ${after.chip}`);
       await page.waitForTimeout(150);
-      const after = await state();
       const moving = await inFrames();
       const t1 = await page.evaluate(() => physio.time());
-      if (!enough(moving)) unmeasurable('and Play plays it', `${moving.frames} of ${FRAMES} frames in ${GIVE_UP_MS} ms`);
-      else ok('and Play plays it: the chip says Pause, the cursor moves, and it draws on the frames that come',
-              after.playing === true && after.chip === 'Pause' && t1 !== t0 && moving.draws >= moving.frames * 0.8,
-              `playing ${after.playing}, chip ${after.chip}, cursor ${t0.toFixed(3)} → ${t1.toFixed(3)}, ${moving.draws} draws in ${moving.frames} frames`);
+      measure('and the cursor moves, and it draws on the frames that come', moving, t1 !== t0 && moving.draws >= moving.frames * 0.8,
+              `cursor ${t0.toFixed(3)} → ${t1.toFixed(3)}, ${moving.draws} draws in ${moving.frames} frames`);
     } finally {
       await page.emulateMedia({ reducedMotion: 'no-preference' });
-      await remount();
+      await remounted(() => { physioPlaying = null; render(); }, 'Reduce Motion off again');
     }
   }
 
