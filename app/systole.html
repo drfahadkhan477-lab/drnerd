@@ -791,6 +791,10 @@ function buildSticky(host,qid,n){
   const head=el.querySelector('.sticky-head');
   let drag=null;
   head.addEventListener('pointerdown',e=>{
+    /* The x lives in this header, and a press that began on it is a click on it. Capturing the pointer here sent the
+       release to the header, so the click landed on the header: the x answered a script's .click() and nothing a
+       finger, a Pencil or a mouse did. */
+    if(e.target.closest&&e.target.closest('.sticky-x')) return;
     head.setPointerCapture(e.pointerId);
     const r=host.getBoundingClientRect();
     drag={dx:e.clientX-(n.x*r.width)-r.left, dy:e.clientY-(n.y*r.height)-r.top, r};
@@ -6717,19 +6721,24 @@ function attachEvents(){
   document.querySelectorAll('[data-fig]').forEach(fc=>{
     if(fc.__bound)return; fc.__bound=true;
     fc.addEventListener('click',()=>toggleZoom(parseInt(fc.dataset.fig,10)));
-    fc.addEventListener('keydown',ev=>{
-      if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();toggleZoom(parseInt(fc.dataset.fig,10));}
-    });
   });
   document.querySelectorAll('[data-idx]').forEach(b=>{
     b.addEventListener('click',()=>{if(!S.answered)selectOpt(parseInt(b.dataset.idx,10));});
   });
-  document.querySelectorAll('[role="button"][tabindex="0"]').forEach(el=>{
-    el.addEventListener('keydown',ev=>{
-      if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();el.click();}
-    });
-  });
 }
+
+/* Enter and Space press anything that says role="button" the way they press a <button>. One listener for the page,
+   not one per element bound after each render: the Apex panel and the figure viewer are drawn after that pass, so a
+   figure in a reply had no key handler at all, and a figure card had two (its own, and this one's through click),
+   which zoomed it and unzoomed it in the same keypress. Only the element that has the keyboard counts: a key typed
+   in a field inside it is the field's. A native control already answers these keys, and a held key presses once. */
+document.addEventListener('keydown',ev=>{
+  if(ev.defaultPrevented||ev.repeat||ev.isComposing||ev.ctrlKey||ev.metaKey||ev.altKey) return;
+  if(ev.key!=='Enter'&&ev.key!==' ') return;
+  const el=ev.target;
+  if(!el||!el.matches||!el.matches('[role="button"]')||/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(el.tagName)) return;
+  ev.preventDefault(); el.click();
+});
 
 document.addEventListener('keydown',ev=>{
   const t=ev.target.tagName;
