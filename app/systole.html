@@ -583,7 +583,7 @@ function sweepInkHosts(){
     if(h.isConnected) continue;
     if(h.__ro){ h.__ro.disconnect(); h.__ro=null; }
     if(h.__onResize){ window.removeEventListener('resize',h.__onResize); h.__onResize=null; }
-    h.__ink=null; h.__notes=null; h.__redraw=null; h.__fit=null; h.__noteLayer=null;
+    h.__ink=null; h.__notes=null; h.__redraw=null; h.__fit=null; h.__make=null; h.__noteLayer=null;
     INK_HOSTS.delete(h);
   }
 }
@@ -647,28 +647,59 @@ function railMin(v){ T.min=v; if(!v)T.active=T.active;
 let penSeen=0;                                    // Apple-Pencil detection
 
 /* ── canvas layer bound to one host element ───────────────────────────────── */
+/* THE CANVAS IS MADE WHEN THERE IS SOMETHING TO SHOW ON IT OR A HAND TO DRAW WITH, and not before. Every draw of a question
+   attached one to each of its hosts (the card, the explanation, each figure), and a canvas the size of its host at the screen's
+   density is megabytes: about 23 MB made and thrown away for every question on an iPad, for ink that was never there, and 10 to 30 ms
+   of the answer's own draw. A host with no strokes and the pen off has nothing to show and nothing under a pen, so it has no
+   canvas until the pen is picked up (syncInkMode) or strokes are put back (repaintAll). */
 function attachInk(host,key){
   if(!host||host.__ink)return;
   host.__ink=key; host.classList.add('ink-host');
-  const cv=document.createElement('canvas');
-  cv.className='ink-canvas'; cv.setAttribute('aria-hidden','true');
-  host.appendChild(cv);
-  const ctx=cv.getContext('2d');
-  let cur=null;
+  let cv=null, ctx=null, cur=null;
+  const saved=()=>INK[key]||[];                      // read without making an entry: a question looked at is not a question marked
 
+  function make(){
+    if(cv) return;
+    cv=document.createElement('canvas');
+    cv.className='ink-canvas'; cv.setAttribute('aria-hidden','true');
+    host.appendChild(cv);
+    ctx=cv.getContext('2d');
+    cv.addEventListener('pointerdown',down);
+    cv.addEventListener('pointermove',move);
+    cv.addEventListener('pointerup',end);
+    cv.addEventListener('pointercancel',end);
+    cv.addEventListener('pointerleave',()=>{ if(cur)end(); });
+    if(typeof ResizeObserver!=='undefined'){
+      host.__ro=new ResizeObserver(fit); host.__ro.observe(host);
+    } else {
+      host.__onResize=fit; window.addEventListener('resize',fit);   // fallback
+    }
+    fit();
+  }
+  let fitted=false;
+  /* The canvas is the host's padding box (inset 0), and is measured as the layout has it: a host that is part way through its
+     entrance is scaled, and a bounding rectangle takes the scale with it, which made a canvas made at that moment a little small
+     for ever (the observer does not call again when only a transform changed). */
+  const box=()=>({width:host.clientWidth,height:host.clientHeight});
   function fit(){
-    const r=host.getBoundingClientRect();
+    if(!cv) return;
+    const r=box();
     if(!r.width||!r.height)return;                   // not laid out yet
-    const dpr=Math.min(window.devicePixelRatio||1,3);
-    cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
+    const dpr=Math.min(window.devicePixelRatio||1,3), w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
+    /* Setting a canvas's size clears it and allocates it again, and the observer calls this once as soon as it starts to watch,
+       when the size is what it was a moment ago. */
+    if(fitted&&cv.width===w&&cv.height===h) return;
+    fitted=true;
+    cv.width=w; cv.height=h;
     ctx.setTransform(dpr,0,0,dpr,0,0);
     redraw();
   }
   function strokes(){ return INK[key]||(INK[key]=[]); }
   function redraw(){
-    const r=host.getBoundingClientRect();
+    if(!cv) return;
+    const r=box();
     ctx.clearRect(0,0,r.width,r.height);
-    for(const s of strokes()) paint(s,r);
+    for(const s of saved()) paint(s,r);
     if(cur) paint(cur,r);
   }
   function paint(s,r){
@@ -713,15 +744,15 @@ function attachInk(host,key){
     if(e.pointerType==='mouse') return true;
     return Date.now()-penSeen>4000;      // palm rejection while the Pencil is in use
   }
-  cv.addEventListener('pointerdown',e=>{
+  function down(e){
     disarmAutoMinimize();
     if(e.pointerType==='pen'&&T.min&&T.autoMin){ T.active=true; railMin(false); }
     if(!T.active||!allow(e))return;
     e.preventDefault(); cv.setPointerCapture(e.pointerId);
     if(T.erase){ eraseAt(pos(e)); return; }
     cur={t:T.tool,c:T.color,p:[pos(e)],sz:T.sizeKey}; redraw();
-  });
-  cv.addEventListener('pointermove',e=>{
+  }
+  function move(e){
     if(!T.active)return;
     if(T.erase&&e.buttons){ if(allow(e))eraseAt(pos(e)); return; }
     if(!cur||!allow(e))return;
@@ -729,14 +760,11 @@ function attachInk(host,key){
     const evts=e.getCoalescedEvents?e.getCoalescedEvents():[e];
     for(const ev of evts) cur.p.push(pos(ev));
     redraw();
-  });
+  }
   function end(){
     if(cur&&cur.p.length){ strokes().push(simplifyStroke(cur)); saveJSON(INK_KEY,INK); }
     cur=null; redraw(); refreshRail(); armAutoMinimize();
   }
-  cv.addEventListener('pointerup',end);
-  cv.addEventListener('pointercancel',end);
-  cv.addEventListener('pointerleave',()=>{ if(cur)end(); });
 
   function eraseAt(pt){
     const arr=strokes();
@@ -746,14 +774,9 @@ function attachInk(host,key){
       }
     }
   }
-  host.__redraw=redraw; host.__fit=fit;
+  host.__redraw=redraw; host.__fit=fit; host.__make=make;
   INK_HOSTS.add(host);
-  if(typeof ResizeObserver!=='undefined'){
-    host.__ro=new ResizeObserver(fit); host.__ro.observe(host);
-  } else {
-    host.__onResize=fit; window.addEventListener('resize',fit);   // fallback
-  }
-  fit();
+  if(T.active||saved().length) make();
 }
 
 /* ── sticky notes ─────────────────────────────────────────────────────────── */
@@ -913,10 +936,13 @@ function railAction(a){
   buildRail(); syncInkMode(); armAutoMinimize();
 }
 function syncInkMode(){
-  document.querySelectorAll('.ink-host').forEach(h=>h.classList.toggle('ink-on',T.active));
+  document.querySelectorAll('.ink-host').forEach(h=>{ if(T.active&&h.__make)h.__make(); h.classList.toggle('ink-on',T.active); });
 }
 function repaintAll(){
-  document.querySelectorAll('.ink-host').forEach(h=>{ if(h.__redraw)h.__redraw(); });
+  document.querySelectorAll('.ink-host').forEach(h=>{
+    if(h.__make&&(T.active||(INK[h.__ink]&&INK[h.__ink].length)))h.__make();
+    if(h.__redraw)h.__redraw();
+  });
   const q=currentQ();
   document.querySelectorAll('.ink-host').forEach(h=>{ if(h.__noteLayer&&q)drawNotes(h,q.id); });
 }

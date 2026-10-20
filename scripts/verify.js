@@ -149,6 +149,7 @@ const SUITES = [
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
   ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['lazyink',      'a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['taps',         'the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, and the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
@@ -493,7 +494,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm'];
+const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

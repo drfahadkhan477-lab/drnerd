@@ -662,6 +662,9 @@ jobs:
         name: a figure can be examined, and still has four ways out (44 checks)
         run: node tests/verify-figzoom.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host (11 checks)
+        run: node tests/verify-lazyink.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -932,6 +935,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: a figure can be examined, and still has four ways out (44 checks)
         run: node tests/verify-figzoom.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host (11 checks)
+        run: node tests/verify-lazyink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
