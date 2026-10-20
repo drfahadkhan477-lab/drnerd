@@ -16,6 +16,11 @@
  * fixture in a repo is a thing nobody can review, and because building it in
  * the test is what proves the reader handles a real archive — including the
  * deflate path, which is the half most likely to be wrong.
+ *
+ * The last section before the regression check picks a note, its figure and
+ * that zip on a page made to lack Blob.arrayBuffer() and Blob.text(), which
+ * Safari has from 14 and the floor (iPadOS 13.4) does not, and holds that every
+ * one of them is read.
  */
 'use strict';
 const fs = require('fs');
@@ -359,6 +364,59 @@ function zip(entries) {
      swept.before === 2 && swept.mid === 1, `${swept.before} → ${swept.mid}`);
   ok('a figure another note still cites is not swept with it', swept.survivorStillThere);
   ok('and when the last citation goes, so does the figure', swept.after === 0, String(swept.after));
+
+  head('on a Safari that has no Blob.arrayBuffer() or Blob.text()');
+  {
+    /* Both came in Safari 14, and the floor is iPadOS 13.4, where calling either is a TypeError that the importer counts as "could not be read",
+       for every file picked. The page is made to lack them as that Safari does (they are taken off Blob.prototype, which a File inherits from),
+       and a note, the figure beside it and the zip above are picked together. The scan of the floor cannot see this: a Response has both
+       methods from Safari 10 and they are spelled the same. */
+    const LOOSE_NOTE = '---\ntitle: A loose note\ntags: loose, test\n---\n\n' +
+      'A note picked on its own, with a figure beside it: ischémie — ✓ (the accents have to survive the read).\n\n![A loose figure](loose.png)\n';
+    const PNG_C = Buffer.from(PNG_A); PNG_C[PNG_C.length - 9] ^= 0xff;                // not PNG_A, so the figure is a third one
+    const old = await page.evaluate(async ({ zipB64, zipName, noteText, pngB64 }) => {
+      const had = { arrayBuffer: Blob.prototype.arrayBuffer, text: Blob.prototype.text };
+      const give = () => {
+        for (const k of ['arrayBuffer', 'text']) Object.defineProperty(Blob.prototype, k, { value: had[k], writable: true, configurable: true, enumerable: false });
+      };
+      const create = document.createElement;
+      try {
+        delete Blob.prototype.arrayBuffer; delete Blob.prototype.text;
+        const probe = new File(['x'], 'probe.txt');
+        const lacks = typeof probe.arrayBuffer === 'undefined' && typeof probe.text === 'undefined';
+        REF.length = 0; invalidateIndex();
+        for (const k of RefAssets.keys()) await RefAssets.drop(k);
+        const bytes = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([noteText], 'loose.md', { type: 'text/markdown' }));
+        dt.items.add(new File([bytes(pngB64)], 'loose.png', { type: 'image/png' }));
+        dt.items.add(new File([bytes(zipB64)], zipName, { type: 'application/zip' }));
+        let input = null;
+        document.createElement = function (tag) {
+          const el = create.call(document, tag);
+          if (tag === 'input') { input = el; el.click = () => {}; }
+          return el;
+        };
+        refImportText();
+        document.createElement = create;
+        Object.defineProperty(input, 'files', { value: dt.files, configurable: true });
+        await input.onchange();
+        const loose = REF.find(r => r.title === 'A loose note');
+        const key = loose && (loose.body.match(/refimg:\/\/(u\/[a-z0-9]+-[a-z0-9]+\.png)/) || [])[1];
+        return { lacks, notes: REF.length, assets: RefAssets.count(), loose: loose ? loose.body : null, stored: key ? RefAssets.get(key) : '',
+                 toast: (document.getElementById('toast') || {}).textContent || '' };
+      } finally {
+        document.createElement = create;
+        give();
+      }
+    }, { zipB64: fs.readFileSync(zipPath).toString('base64'), zipName: 'Braunwald_chapter.zip', noteText: LOOSE_NOTE, pngB64: PNG_C.toString('base64') });
+
+    ok('the page lacks both methods, as Safari 13 does', old.lacks === true);
+    ok('no file is reported unreadable', !/could not be read/.test(old.toast), old.toast);
+    ok('the note picked on its own is in, with its accents', !!old.loose && old.loose.includes('ischémie — ✓'), old.loose ? old.loose.slice(0, 70) : 'no such note');
+    ok('and the figure picked beside it is stored, byte for byte', old.stored === 'data:image/png;base64,' + PNG_C.toString('base64'), old.stored.slice(0, 40) || 'not stored');
+    ok('the zip came in with them: its two notes and two figures, and the loose ones, make three of each', old.notes === 3 && old.assets === 3, `${old.notes} notes, ${old.assets} figures`);
+  }
 
   head('regression');
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

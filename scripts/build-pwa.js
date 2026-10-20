@@ -386,6 +386,17 @@ const LOADER = `<script>
       };
     }
   }
+  /* The package the picker hands over, read. The arrayBuffer method of a Blob came in Safari 14 and the floor is iPadOS 13.4, where calling it is a
+     TypeError and this screen would say that the package could not be read, before the app could ever open; FileReader is on every Safari. */
+  function packageBytes(file){
+    if(typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+    return new Promise(function(ok, no){
+      var r = new FileReader();
+      r.onload = function(){ ok(r.result); };
+      r.onerror = function(){ no(r.error || new Error('the file could not be read')); };
+      r.readAsArrayBuffer(file);
+    });
+  }
   /* The import screen: its own layer over the splash, a file picker, and a
      line that says what happened in counts — never a word of the bank. On a
      good import the page reloads into the app. */
@@ -407,7 +418,7 @@ const LOADER = `<script>
       if(!file) return;
       try{
         status.textContent = 'Reading the package…';
-        var zip = await ZipRead.read(await file.arrayBuffer());
+        var zip = await ZipRead.read(await packageBytes(file));
         status.textContent = 'Checking ' + zip.files.length + ' files…';
         var verdict = BankPack.validate(zip.files);
         if(!verdict.ok){
