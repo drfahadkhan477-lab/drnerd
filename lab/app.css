@@ -32,7 +32,7 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: var(--gap); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
 .tile { text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-height: 120px; display: flex; flex-direction: column; gap: 6px; }
-.tile:hover { border-color: var(--accent); }
+@media (hover:hover){.tile:hover{ border-color: var(--accent); }}
 .tile .count { margin-top: auto; font-size: 0.88rem; color: var(--muted); }
 .tile .due { color: var(--warn); font-weight: 600; }
 .stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 10px 0 0; }
@@ -51,7 +51,7 @@ canvas.view { width: 100%; display: block; border: 1px solid var(--line); border
 
 .options { display: grid; gap: 10px; margin: 14px 0; }
 .option { display: flex; gap: 12px; align-items: center; text-align: left; width: 100%; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; min-height: 52px; }
-.option:hover:not(:disabled) { border-color: var(--accent); }
+@media (hover:hover){.option:hover:not(:disabled){ border-color: var(--accent); }}
 .option .num { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: 0.82rem; color: var(--muted); }
 .option.right { background: var(--good-bg); border-color: var(--good); }
 .option.wrong { background: var(--bad-bg); border-color: var(--bad); }

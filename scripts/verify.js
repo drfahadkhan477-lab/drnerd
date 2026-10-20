@@ -296,6 +296,7 @@ const SUITES = [
      become a guard against the test. */
   ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
   ['swlifetime-pure', 'the service worker keeps the event alive for each cache write it makes, including the refresh behind a cache hit that the network answers late'],
+  ['hover-pure', 'no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind'],
   /* Two facts that were true when an audit looked and had nothing holding
      them that way: four native dialogs, all deliberate, and no icon-only
      button without an accessible name. Written down where they fail. */
@@ -496,7 +497,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure'];
+const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
