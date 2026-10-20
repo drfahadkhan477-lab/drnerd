@@ -193,6 +193,56 @@ ok('a trial readout gives way to the teaching rule', P.harvest([{id:'trial',body
 head('the build bakes the seed it ships, and the app passes the table on');
 const seed = J(NOTES.map(n => ({ title: n.title, body: n.body, source: n.source })));
 ok('pearl-bake over the seed is pearl.js\'s own bake of it', bakePearls(seed) === J(P.bake(JSON.parse(seed))));
+
+head('the passage is found where the pattern it replaced found it');
+{
+  /* passageSpan() compiled a pattern of the passage's words for every note, at every launch and after every edit to the
+     library, and that was most of what harvest() cost: 150 ms of the 220 the home screen waited for on a library the size of
+     the real one. It looks for the words one after another now. The pattern is written out here as the oracle, and the two are
+     held to each other on notes written for it: words that are a pattern's own punctuation, accents, words that touch with nothing between them, whitespace of every kind
+     between the words (a newline, a tab, a non-breaking space, a line separator, a byte-order mark), a passage found by
+     different whitespace than it was written with, one that is not there, one with whitespace at either end, none at all. */
+  const oracle = (body, run) => new RegExp(run.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')).exec(String(body || ''));
+  const WS = [' ', '  ', '\n', '\t', ' \n ', String.fromCharCode(0xa0), String.fromCharCode(0x2003), String.fromCharCode(0x2028), String.fromCharCode(0xfeff), '\r\n'];
+  const POOL = ['alpha', 'beta', 'Alpha', 'ALPHA', 'a.b', 'c*d', '(e)', '[f]', 'g\\h', 'i|j', 'k+l', 'm?n', 'o^p', 'q$r', '{s}', 'tt', 'x-y', 'été', '**bold**', '#', '![x](y)', '1.5', 'mmHg'];
+  let seed = 4242;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const pick = a => a[(rnd() * a.length) | 0];
+  let cases = 0, found = 0, differing = null, edge = 0;
+  for (let round = 0; round < 3000 && !differing; round++) {
+    const words = Array.from({ length: 4 + ((rnd() * 40) | 0) }, () => pick(POOL));
+    let body = words.map((w, i) => (i ? (rnd() < 0.12 ? '' : pick(WS)) : '') + w).join('');       // some words stand touching
+    if (rnd() < 0.3) body = '## Heading one\n\n' + body + '\n\n## Heading two\n\nmore ' + body;     // a second place the same words stand
+    const at = (rnd() * words.length) | 0, len = 1 + ((rnd() * 8) | 0);
+    const slice = words.slice(at, at + len);
+    const kind = (rnd() * 8) | 0;
+    let run;
+    if (kind === 0) run = slice.join(' ');                                                       // the same words, other whitespace
+    else if (kind === 1) run = slice.map((w, i) => (i ? pick(WS) : '') + w).join('');            // any whitespace
+    else if (kind === 2) run = slice.join(' ').replace(/a/, 'z');                                // a word that is not there
+    else if (kind === 3) run = pick(WS) + slice.join(' ');                                       // whitespace at the start
+    else if (kind === 4) run = slice.join(' ') + pick(WS);                                       // and at the end
+    else if (kind === 5) run = pick(['', ' ', '\n\n', String.fromCharCode(0xa0)]);               // nothing, or only whitespace
+    else if (kind === 6) run = slice.join('');                                                   // no whitespace between them
+    else run = slice.join(pick(['-', ',', '/']));                                                // some other joiner
+    if (kind === 3 || kind === 4 || kind === 5) edge++;
+    cases++;
+    const want = oracle(body, run), got = P.passageSpan(body, run);
+    if (want) found++;
+    if ((want ? want.index : null) !== (got ? got.index : null)) differing = { round, kind, run: JSON.stringify(run).slice(0, 80), want: want && want.index, got: got && got.index };
+  }
+  ok(`${cases} passages in invented bodies are found at the index the pattern gave, or not at all`, !differing, differing ? J(differing) : `${cases} compared, ${edge} with whitespace at an end or nothing`);
+  ok('and many of them are found, so the comparison is not nothing against nothing', found > cases * 0.4, `${found} of ${cases} found`);
+  ok('a body that is not a string is read as the empty one, as before', P.passageSpan(undefined, 'a') === null && P.passageSpan(null, 'a') === null && (P.passageSpan(5, '5') || {}).index === 0);
+
+  /* The figure harvest() gives a note is the one matchingFigure() gives for the same passage, which it works out on its own. */
+  const fig = { id: 'fig', title: 'Unit · Findings — Zebratitis', source: 's',
+    body: '## Zebratitis\n\n![Zebratitis quagga mane figure](refimg://z/1.png)\n\nIn zebratitis, the quagga mane should be examined within 24 hours of the stripes appearing,\nwhereas the hooves should be left alone until the tail has changed colour.\n\n## Elsewhere\n\n![Okapi spots](refimg://z/2.png)' };
+  const h = P.harvest([fig])[0], own = h && P.matchingFigure(fig.body, h.text);
+  ok('the figure on a pearl is the figure matchingFigure() finds for its passage, with the passage found across a line break',
+     !!h && !!own && h.figKey === own.key && h.figCap === own.caption && h.figKey === 'z/1.png', J([h && h.figKey, own && own.key]));
+}
+
 ok('an empty seed bakes to an empty table', bakePearls('[]') === '{}' && bakePearls('') === '{}');
 const asm = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'assemble-app.js'), 'utf8'));
 ok('assemble-app fills REF_PEARLS from the REF_SEED it builds',

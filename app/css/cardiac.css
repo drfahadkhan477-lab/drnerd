@@ -509,6 +509,9 @@ body{background-image:
   background:linear-gradient(145deg,var(--gl-shine),transparent 42%),color-mix(in srgb,var(--card) 88%,transparent);
   backdrop-filter:blur(20px) saturate(1.35);-webkit-backdrop-filter:blur(20px) saturate(1.35);
   border-color:var(--border2);box-shadow:inset 0 1px 0 var(--gl-rim),inset 0 -1px 0 var(--gl-edge),0 12px 32px -24px rgba(3,12,24,.28)}
+/* A note is a long reading surface on a flat ground, and the library can hold a thousand of them. There is nothing behind
+   one to refract, and a blur per card was a compositing layer per card. */
+.ref-card{backdrop-filter:none;-webkit-backdrop-filter:none}
 .door{border-radius:20px;transition:transform .3s var(--spring),box-shadow .3s var(--ease),border-color .3s var(--ease)}
 .door-ic{padding:9px;border-radius:12px;background:color-mix(in srgb,var(--teal) 9%,transparent);
   box-shadow:inset 0 1px 0 var(--gl-rim)}
@@ -536,8 +539,11 @@ body{background-image:
   transform:rotate(-28deg) scaleX(.8);animation:orbitDrift 22s ease-in-out infinite alternate}
 .hero-orbit span+span{inset:4px 34px;border-color:color-mix(in srgb,var(--hero-accent) 7%,transparent);animation-delay:-8s}
 @keyframes orbitDrift{to{transform:rotate(24deg) scaleX(.8)}}
-.scroll-reveal{opacity:0;translate:0 18px;transition:opacity .6s var(--glide),translate .6s var(--glide)}
-.scroll-reveal.is-visible{opacity:1;translate:0 0}
+/* The transition is on the revealed state. On the hidden one, every card below the fold ran two transitions at every draw, to
+   the values it had just been given: invisible, a pair for each card, and on a long list of notes they held the frames after
+   the draw to a crawl while they ran. A card is hidden at once and fades in when it is scrolled to (tests/verify-quietquiz.js). */
+.scroll-reveal{opacity:0;translate:0 18px}
+.scroll-reveal.is-visible{opacity:1;translate:0 0;transition:opacity .6s var(--glide),translate .6s var(--glide)}
 @supports not (translate:0 1px){.scroll-reveal{opacity:1}}
 @media(max-width:520px){.hero-description{font-size:13px;max-width:calc(100% - 112px)}
   .hero-live-status{right:16px;bottom:14px}.hero-heart-plate,.hero-heart-3d{right:0;top:28px}}

@@ -13,6 +13,8 @@
  *   - a word every question in the chapter uses means nothing and is not "shared";
  *   - a run never crosses chapters, repeats a question, or is only a pair;
  *   - seeds are what you most need (missed, then due), and the order says so;
+ *   - the answer is exactly what scoring every seed against every question gives, however it is reached, and the
+ *     chapter's kept vectors never answer for text that has changed;
  *   - damaged input never throws.
  */
 'use strict';
@@ -98,6 +100,126 @@ head('seeds are what you most need');
   ok('with nothing missed or due, the seeds are in bank order', first[0] === 'ALP_1', first.join(','));
   const both = T.runs({ pool, missed: ['ALP_8'], due: ['BET_2'] });
   ok('missed outranks due', both[0].seed === 'ALP_8' && both[1].seed === 'BET_2', both.map(r => r.seed).join(','));
+}
+
+head('the answer is what scoring every pair gives, only faster');
+{
+  /* runs() used to score each seed against every question of its chapter, which is a square: on the bank's own size
+     (639 questions in uneven chapters) the Study screen waited about 0.4 s for it each time an answer changed what was
+     missed or due. It now reads only the lists of the seed's own terms, and keeps a chapter's vectors between calls.
+     Both are claims about speed that must not move an answer, so the answer is held against the scan they replaced,
+     written out here from the module's own vectorise() and cosine(): the same sum in the same order, which is the same
+     number to the last bit, so the same ties broken the same way. */
+  const reference = o => {
+    const pool = o.pool.filter(q => q && typeof q.id === 'string' && typeof q.ch === 'string');
+    const missed = new Set(o.missed instanceof Set ? [...o.missed] : o.missed || []);
+    const due = new Set(o.due instanceof Set ? [...o.due] : o.due || []);
+    const size = Math.max(2, Math.min(8, Number.isInteger(o.size) ? o.size : 4));
+    const floor = Number.isFinite(o.minSimilarity) ? o.minSimilarity : 0.12;
+    const max = Number.isInteger(o.max) ? o.max : Infinity;
+    const byCh = new Map();
+    for (const q of pool) { if (!byCh.has(q.ch)) byCh.set(q.ch, []); byCh.get(q.ch).push(q); }
+    const result = [];
+    for (const ch of [...byCh.keys()].sort()) {
+      const qs = byCh.get(ch);
+      if (qs.length < 2) continue;
+      const vec = T.vectorise(qs), taken = new Set();
+      const rank = i => missed.has(qs[i].id) ? 0 : due.has(qs[i].id) ? 1 : 2;
+      for (const s of qs.map((_, i) => i).sort((a, b) => rank(a) - rank(b) || a - b)) {
+        if (taken.has(s) || !vec[s].size) continue;
+        const near = [];
+        for (let j = 0; j < qs.length; j++) {
+          if (j === s || taken.has(j)) continue;
+          const sim = T.cosine(vec[s], vec[j]);
+          if (sim >= floor) near.push({ j, sim });
+        }
+        near.sort((a, b) => b.sim - a.sim || a.j - b.j);
+        const picked = near.slice(0, size - 1);
+        if (picked.length < 2) continue;
+        const members = [s, ...picked.map(p => p.j)];
+        members.forEach(m => taken.add(m));
+        const shared = [...vec[s].keys()].filter(t => members.every(m => vec[m].has(t)));
+        result.push({ ch, seed: qs[s].id, ids: members.map(m => qs[m].id), shared: shared.sort() });
+      }
+    }
+    const need = r => missed.has(r.seed) ? 0 : due.has(r.seed) ? 1 : 2;
+    result.sort((a, b) => need(a) - need(b) || b.ids.length - a.ids.length || (a.seed < b.seed ? -1 : 1));
+    return result.slice(0, max);
+  };
+  let seed = 12345;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const syll = ['zeb', 'ra', 'quag', 'ga', 'mon', 'goose', 'co', 'bra', 'wal', 'rus', 'pel', 'i', 'can', 'nar', 'whal', 'oce', 'lot', 'sa', 'van', 'nah'];
+  const makeVocab = n => { const v = []; for (let i = 0; i < n; i++) { let w = ''; for (let k = 2 + ((rnd() * 3) | 0); k > 0; k--) w += syll[(rnd() * syll.length) | 0]; v.push(w); } return v; };
+  let cases = 0, withRuns = 0, differing = null;
+  for (let round = 0; round < 300 && !differing; round++) {
+    const vocab = makeVocab(20 + ((rnd() * 400) | 0)), skew = 1 + rnd() * 2.5;
+    const word = () => vocab[Math.min(vocab.length - 1, Math.floor(Math.pow(rnd(), skew) * vocab.length))];
+    const para = n => Array.from({ length: n }, word).join(' ');
+    const rows = [];
+    /* chapter names repeat from round to round with different text, which is how a kept vector goes stale */
+    for (let c = 0, nch = 1 + ((rnd() * 6) | 0); c < nch; c++) {
+      const n = rnd() < 0.33 ? (rnd() * 3) | 0 : 2 + ((rnd() * 60) | 0);
+      for (let i = 0; i < n; i++) {
+        const twin = rows.length && rnd() < 0.08 ? rows[rows.length - 1] : null;   /* identical text: scores that tie */
+        rows.push({ id: `Q${c}_${i}`, ch: `Ch${c}`, s: twin ? twin.s : (rnd() < 0.04 ? '' : para(3 + ((rnd() * 40) | 0))),
+                    o: [0, 1, 2, 3].map(() => ({ t: para(1 + ((rnd() * 6) | 0)) })), ci: twin ? twin.ci : (rnd() * 4) | 0 });
+      }
+    }
+    const some = p => rows.filter(() => rnd() < p).map(q => q.id);
+    for (const o of [
+      { pool: rows, missed: new Set(some(0.2)), due: new Set(some(0.3)) },
+      { pool: rows, missed: new Set(some(0.5)), due: new Set(some(0.5)), size: 3 + ((rnd() * 5) | 0), max: 1 + ((rnd() * 4) | 0) },
+      { pool: rows, missed: some(0.1), due: some(0.1), minSimilarity: [0, -1, 0.05, 0.12, 0.3, 0.6, 1e-9][(rnd() * 7) | 0], size: 2 + ((rnd() * 7) | 0) },
+    ]) {
+      cases++;
+      const want = JSON.stringify(reference(o)), got = JSON.stringify(T.runs(o));
+      if (want !== '[]') withRuns++;
+      if (want !== got) differing = { round, size: o.size, max: o.max, floor: o.minSimilarity, want: want.slice(0, 160), got: got.slice(0, 160) };
+    }
+  }
+  ok(`${cases} invented banks (ties, empty stems, chapters of none or one, every floor from below zero to above one) give the runs the full scan gives, to the id and the shared word`,
+     !differing, differing ? JSON.stringify(differing) : `${cases} compared`);
+  ok('and most of them have runs in them, so the comparison is not an empty list against an empty list', withRuns > cases * 0.6, `${withRuns} of ${cases} have runs`);
+
+  /* Two questions exactly as near a seed as each other come in bank order, not in the order the seed's words happened to
+     reach them. Here the seed's first word is X's (T_2) and its second is Y's (T_1); each is as like the seed as the
+     other, to the last bit, and the run has to read T_0, T_1, T_2. Identical twins would not show this: they are reached
+     together, in order, by every word they share. */
+  {
+    const tie = [mk('T_0', 'T', 'alphaword betaword'), mk('T_1', 'T', 'betaword epsilonword'), mk('T_2', 'T', 'alphaword deltaword'),
+                 mk('T_3', 'T', 'fillerone fillertwo'), mk('T_4', 'T', 'fillerthree fillerfour'), mk('T_5', 'T', 'fillerfive fillersix')];
+    const r = T.runs({ pool: tie });
+    ok('questions equally near a seed come in bank order, whichever of the seed\'s words reached them first', r.length === 1 && r[0].ids.join() === 'T_0,T_1,T_2' && JSON.stringify(r) === JSON.stringify(reference({ pool: tie })), JSON.stringify(r.map(x => x.ids)));
+  }
+
+  /* A chapter keeps its vectors between calls, so the same chapter with other words in it has to be worked out afresh. */
+  {
+    const grouped = r => r.map(x => [...x.ids].sort().join('')).sort().join('|');
+    const zeb = 'zebratitis quagga hooves stripes', mon = 'mongoose cobra venom burrow';
+    const mixed = [mk('M_1', 'M', zeb), mk('M_2', 'M', zeb), mk('M_3', 'M', zeb), mk('M_4', 'M', mon), mk('M_5', 'M', mon), mk('M_6', 'M', mon)];
+    const before = grouped(T.runs({ pool: mixed }));
+    /* the same six ids in the same chapter and the same order, with two of them rewritten to trade topics */
+    const moved = mixed.map(q => q.id === 'M_3' ? mk('M_3', 'M', mon) : q.id === 'M_4' ? mk('M_4', 'M', zeb) : q);
+    const after = grouped(T.runs({ pool: moved }));
+    ok('a question rewritten between calls moves to the group its new words belong to: the kept vectors do not answer for text that is gone',
+       before === 'M_1M_2M_3|M_4M_5M_6' && after === 'M_1M_2M_4|M_3M_5M_6' && after === grouped(reference({ pool: moved })), JSON.stringify([before, after]));
+    ok('and putting the old text back gives the old groups again', grouped(T.runs({ pool: mixed })) === before, grouped(T.runs({ pool: mixed })));
+  }
+
+  /* Speed, as a ratio to the scan it replaced in the same process, so a slow machine slows both: on a bank the size of the real one the
+     lists need a fraction of the scan, and a ratio under 3 means the square is back. */
+  {
+    const vocab = makeVocab(6000), word = () => vocab[Math.min(vocab.length - 1, Math.floor(Math.pow(rnd(), 2.2) * vocab.length))];
+    const para = n => Array.from({ length: n }, word).join(' ');
+    const big = [];
+    [110, 100, 90, 80, 60, 50, 40, 40, 30, 25, 14].forEach((n, c) => { for (let i = 0; i < n; i++) big.push({ id: `B${c}_${i}`, ch: `Big${c}`, s: para(140), o: [0, 1, 2, 3, 4].map(() => ({ t: para(10) })), ci: 2 }); });
+    const o = { pool: big, missed: new Set(big.filter(() => rnd() < 0.15).map(q => q.id)), due: new Set(big.filter(() => rnd() < 0.25).map(q => q.id)), size: 4, max: 3 };
+    const time = f => { let best = Infinity; for (let i = 0; i < 3; i++) { const t = process.hrtime.bigint(); f(o); best = Math.min(best, Number(process.hrtime.bigint() - t) / 1e6); } return best; };
+    T.runs(o); reference(o);
+    const was = time(reference), now = time(T.runs);
+    ok('on 639 questions in 11 uneven chapters a call takes at most a third of the time the full scan takes', now * 3 <= was && JSON.stringify(T.runs(o)) === JSON.stringify(reference(o)),
+       `${now.toFixed(0)} ms against ${was.toFixed(0)} ms, ${(was / now).toFixed(1)}x`);
+  }
 }
 
 head('damaged input never throws');

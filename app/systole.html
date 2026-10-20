@@ -791,6 +791,10 @@ function buildSticky(host,qid,n){
   const head=el.querySelector('.sticky-head');
   let drag=null;
   head.addEventListener('pointerdown',e=>{
+    /* The x lives in this header, and a press that began on it is a click on it. Capturing the pointer here sent the
+       release to the header, so the click landed on the header: the x answered a script's .click() and nothing a
+       finger, a Pencil or a mouse did. */
+    if(e.target.closest&&e.target.closest('.sticky-x')) return;
     head.setPointerCapture(e.pointerId);
     const r=host.getBoundingClientRect();
     drag={dx:e.clientX-(n.x*r.width)-r.left, dy:e.clientY-(n.y*r.height)-r.top, r};
@@ -830,11 +834,17 @@ function buildRail(){
   rail.classList.toggle('mini',T.min);
   if(T.min){
     const n=(()=>{const q=currentQ();return q&&hasMarkup(q.id);})();
-    rail.innerHTML=`<button class="tool rail-open${n?' has-ink':''}" data-a="expand"
+    const html=`<button class="tool rail-open${n?' has-ink':''}" data-a="expand"
         title="Annotation tools" aria-label="Show annotation tools">${icon('pencil')}</button>`;
-    rail.querySelector('[data-a]').onclick=()=>railMin(false);
+    /* Every draw of a screen asks for the rail, and a rail already as it should be is left alone: a new button runs its
+       entrance, so the pencil popped again on every answer and every question. */
+    if(rail.__html!==html){
+      rail.__html=html; rail.innerHTML=html;
+      rail.querySelector('[data-a]').onclick=()=>railMin(false);
+    }
     return rail;
   }
+  rail.__html=null;
   rail.innerHTML=`
     <button class="tool rail-min" data-a="min" title="Minimise" aria-label="Minimise tools">${icon('chevron-down')}</button>
     <button class="tool${T.autoMin?' auto-on':''} tool-auto" data-a="automin"
@@ -1126,7 +1136,18 @@ const STOP=new Set(('a an the and or but if then than that this these those of i
 
 /* conservative stemmer — medical morphology is unforgiving */
 const KEEP=/^(stenosis|sclerosis|thrombosis|fibrosis|necrosis|diagnosis|prognosis|anastomosis|apoptosis|stasis|crisis|axis|basis)$/;
+/* The index stems every token of every document, and a few thousand words make up nearly all of them: each is stemmed
+   once. The answer is a function of the word alone, so what is kept can never be stale. */
+const STEMMED=new Map();
 function stem(w){
+  let s=STEMMED.get(w);
+  if(s===undefined){
+    if(STEMMED.size>60000) STEMMED.clear();
+    s=stemWord(w); STEMMED.set(w,s);
+  }
+  return s;
+}
+function stemWord(w){
   if(w.length<=4) return w;
   if(KEEP.test(w)) return w;
   // fold clinical morphology: amyloidosis/amyloid, ischemia/ischemic, stenotic/stenosis
@@ -1155,7 +1176,9 @@ const SHORTOK=new Set(['qt','av','mi','pe','lv','rv','la','ra','pa','bp','hr','e
 function tok(s){
   const out=[];
   for(let t of String(s||'').toLowerCase().split(/[^a-z0-9₀-₉+/-]+/)){
-    t=t.replace(/^[-+/]+|[-+/]+$/g,'');
+    /* Only a token with a - + or / at an end has anything to trim; most have none. */
+    const a=t.charCodeAt(0), z=t.charCodeAt(t.length-1);
+    if(a===45||a===43||a===47||z===45||z===43||z===47) t=t.replace(/^[-+/]+|[-+/]+$/g,'');
     if(!t||STOP.has(t)||/^\d+$/.test(t)) continue;
     if(t.length<3 && !SHORTOK.has(t)) continue;
     out.push(t.length<=4&&SHORTOK.has(t)?t:stem(t));
@@ -2599,9 +2622,15 @@ function jumpTo(id){
 
 /* ── the reference library screen ─────────────────────────────────────────── */
 let refEditing=null, refViewing=null;
-function buildRefs(){
-  const viewed=refViewing&&REF.find(r=>r.id===refViewing);
-  const rows=(viewed?[viewed]:REF.slice().sort((a,b)=>b.ts-a.ts)).map(r=>`
+/* The library is drawn a page at a time. All of it at once was 1,144 cards, 20,000 elements and 9 MB of markup on a
+   library the size of the real one: a second and a half of the main thread each time the screen was drawn, and every
+   card below the fold dimmed and watched for the moment it scrolled into view. A page is the newest REF_PAGE notes. The
+   next is added in place as the end of the list comes within reach, so what is typed in the form above it survives, or
+   by the button where the browser cannot say when the end is near. */
+const REF_PAGE=24;
+let refShown=REF_PAGE, refPageWatch=null;
+function refCard(r){
+  return `
     <div class="ref-card">
       <div class="ref-top">
         <div class="ref-title">${e(r.title||'Untitled note')}</div>
@@ -2617,7 +2646,39 @@ function buildRefs(){
         return `<div class="ref-tags">${shown}${rest>0?`<span class="ref-more" title="${T.slice(8).join(', ')}">+${rest} more</span>`:''}</div>`;
       })():''}
       <div class="ref-body">${md(r.body)}</div>
-    </div>`).join('');
+    </div>`;
+}
+const refsNewestFirst=()=>REF.slice().sort((a,b)=>b.ts-a.ts);
+function refPager(left){
+  return left>0?`<div class="ref-pager" id="refPager"><button class="chip" type="button" onclick="refMore()">Show ${Math.min(REF_PAGE,left)} more</button><span>${left} more in your library</span></div>`:'';
+}
+function refMore(){
+  const pager=document.getElementById('refPager');
+  if(!pager||S.screen!=='refs'||refViewing) return;
+  const all=refsNewestFirst(), next=all.slice(refShown,refShown+REF_PAGE);
+  if(next.length) pager.insertAdjacentHTML('beforebegin',next.map(refCard).join(''));
+  refShown+=next.length;
+  const left=all.length-Math.min(refShown,all.length);
+  if(left<=0){ pager.remove(); if(refPageWatch){ refPageWatch.disconnect(); refPageWatch=null; } return; }
+  pager.querySelector('button').textContent='Show '+Math.min(REF_PAGE,left)+' more';
+  pager.querySelector('span').textContent=left+' more in your library';
+  /* An observer speaks when the row crosses the line, not while it stays across it: asked again, it says where the row is now. */
+  if(refPageWatch){ refPageWatch.unobserve(pager); refPageWatch.observe(pager); }
+}
+function mountRefPager(){
+  if(refPageWatch){ refPageWatch.disconnect(); refPageWatch=null; }
+  const pager=document.getElementById('refPager');
+  if(!pager||!window.IntersectionObserver) return;
+  const app=document.getElementById('app');
+  const root=/auto|scroll/.test(getComputedStyle(app).overflowY)?app:null;
+  refPageWatch=new IntersectionObserver(es=>{ if(es.some(x=>x.isIntersecting)) refMore(); },{root,rootMargin:'0px 0px 900px 0px'});
+  refPageWatch.observe(pager);
+}
+function buildRefs(){
+  const viewed=refViewing&&REF.find(r=>r.id===refViewing);
+  const sorted=viewed?[viewed]:refsNewestFirst();
+  const drawn=viewed?sorted:sorted.slice(0,refShown);
+  const rows=drawn.map(refCard).join('')+(viewed?'':refPager(sorted.length-drawn.length));
   return `<div class="home-wrap anim-fade">
     <div class="hero" style="padding:26px 22px">
       <div class="hero-badge">${icon('folder','icon-sm')} Your reference library</div>
@@ -2672,7 +2733,7 @@ function refExport(){
   a.download='accsap12-reference-notes.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
-function goRefs(id){ S.screen='refs'; refEditing=null; refViewing=typeof id==='string'?id:null; render(); toTop(); }
+function goRefs(id){ S.screen='refs'; refEditing=null; refViewing=typeof id==='string'?id:null; refShown=REF_PAGE; render(); toTop(); }
 function goMemory(){ S.screen='memory'; render(); toTop(); }
 function memForget(id){
   if(!confirm('Delete this memory? Apex will stop knowing it.'))return;
@@ -4183,7 +4244,9 @@ function md(t){
   s=s.replace(/^###\s+(.+)$/gm,'<h3>$1</h3>');
   s=s.replace(/^##\s+(.+)$/gm,'<h3>$1</h3>');
   s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
-  s=s.replace(/(^|[\s(])\*([^*\n]+)\*/g,'$1<em>$2</em>');
+  /* A mark opens on a word and closes on one. A * with a space after it is a bullet or a times sign, which this used to take for
+     the start of an emphasis: "* a *very* point" lost its bullet and italicised the wrong words, and "5 * 3 * 2" was set in italics. */
+  s=s.replace(/(^|[\s(])\*(?=[^\s*])([^*\n]*[^\s*])\*/g,'$1<em>$2</em>');
   /* GFM pipe tables. Runs after the inline marks so cells keep their bold,
      and before the list rules so a |---|---| divider is never read as a
      bullet. The wrapper scrolls sideways: a drug-dose table is wider than a
@@ -4206,7 +4269,8 @@ function md(t){
      The rule still fired; the <hr> just ended up inside the paragraph it was
      supposed to separate. */
   s=s.replace(/^[ \t]*(?:---+|___+)[ \t]*$/gm,'<hr>');
-  s=s.replace(/^\s*[-•]\s+(.+)$/gm,'<li>$1</li>');
+  /* The * is the bullet Gemini, the default model here, writes. */
+  s=s.replace(/^\s*[-•*]\s+(.+)$/gm,'<li>$1</li>');
   s=s.replace(/^\s*\d+\.\s+(.+)$/gm,'<li data-o>$1</li>');
   /* THE ORDER IS THE CONTENT. Both kinds used to become a bare <li> and every
      run was wrapped in <ul>, so "1. 2. 3." came out as three bullets with the
@@ -4228,7 +4292,15 @@ function md(t){
      hard-wrapped at ~78 characters; turning each of those into a <br> gave
      paragraphs a ragged false margin that tracked the .md file rather than
      the column it was being read in. A blank line still starts a paragraph. */
-  s=s.split(/\n{2,}/).map(p=>/^<(ul|ol|h3|h4|pre|div|table|figure|blockquote|hr)/.test(p.trim())?p:`<p>${p.replace(/\n/g,' ')}</p>`).join('');
+  const para=p=>/^<(ul|ol|h3|h4|pre|div|table|figure|blockquote|hr)/.test(p.trim())?p:`<p>${p.replace(/\n/g,' ')}</p>`;
+  const BLOCK=/(<ul>[\s\S]*?<\/ul>|<ol>[\s\S]*?<\/ol>|<h[34]>[\s\S]*?<\/h[34]>|<pre>[\s\S]*?<\/pre>|<div class="tw">[\s\S]*?<\/div>|<figure[\s\S]*?<\/figure>|<blockquote>[\s\S]*?<\/blockquote>|<hr>)/;
+  /* A block is never inside a paragraph. One written straight under a line of prose, or with a line of prose straight under it,
+     is cut out of the paragraph it was in: a <ul> inside a <p> is not markup, and the browser closes the <p> in front of it and
+     leaves what followed with no paragraph at all. */
+  s=s.split(/\n{2,}/).map(p=>{
+    const parts=p.split(BLOCK);
+    return parts.length===1?para(p):parts.map((x,k)=>k%2?x:(x.trim()?para(x.trim()):'')).join('');
+  }).join('');
   return s;
 }
 function apexIsFull(){
@@ -5579,10 +5651,37 @@ function render(){
 function renderQ(){
   return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:S.screen==='mock'?mockQ():null;
 }
+/* A screen redrawn in place (a query typed into it, a note saved, the theme changed) is the screen the fellow was looking at, and its
+   new elements would each run their entrance from the start: the search results rose in again at every pause in typing, the box
+   they were typing in with them, and the doors and cards of home and Study when the theme changed. An animation that is running
+   is put at its end, which is where the one that was there had got to; one that goes on for ever is left alone. WebKit answers
+   the end of an entrance with a transition of the transform, from the value it rests at to the same one, which moves nothing
+   and is an animation all the same: so they are asked for again until a pass finds none to finish. Each pass reads them all
+   before it finishes any: finishing one and asking the next for its timing made the page work its styles out again between. */
+function settleEntrances(root){
+  try{
+    if(!document.getAnimations) return;
+    for(let pass=0;pass<4;pass++){
+      const ending=document.getAnimations().filter(a=>{
+        const fx=a.effect, t=fx&&fx.target;
+        return a.playState==='running'&&t&&root.contains(t)&&fx.getComputedTiming().iterations!==Infinity;
+      });
+      if(!ending.length) break;
+      for(const a of ending){ try{ a.finish(); }catch(_){} }
+    }
+  }catch(_){}   // a screen that has been drawn is drawn: an engine that cannot list its animations does not take the draw down with it
+}
+/* Where the fellow is: the screen, and on a quiz or a mock block the question. */
+let lastView='';
 function renderNow(){
   const app=document.getElementById('app');
   const q=renderQ();
   const reuse=q&&figCache.id===q.id&&figCache.node&&S.zoomed===-1;
+  /* A redraw that changes none of it (an answer chosen, a rating given) is the same view redrawn, and wears .again: the CSS
+     does not let what was already on the screen make its entrance a second time. The question dropped to nothing and came
+     back, and the options slid in again, on every answer. */
+  const view=S.screen+(q?':'+q.id:'');
+  const again=view===lastView; lastView=view;
   /* The bar is painted into its own fixed header rather than into the screen:
      inside #app it could never be wider than the reading column. */
   const bar=document.getElementById('navbar');
@@ -5591,6 +5690,7 @@ function renderNow(){
      the whole iPad; every other screen is prose and keeps its measure. */
   app.dataset.screen=S.screen;
   app.innerHTML=buildScreen();
+  app.classList.toggle('again',again);
   document.body.classList.toggle('rating-active',
     S.screen==='quiz'&&S.answered&&S.mode==='due');
   const zone=app.querySelector('.fig-zone');
@@ -5607,6 +5707,7 @@ function renderNow(){
   if(typeof mockMount==='function') mockMount();
   if(typeof mountHomeProgress==='function') mountHomeProgress();
   if(typeof mountChapterBars==='function') mountChapterBars();
+  if(typeof mountRefPager==='function') mountRefPager();
   mountScrollReveal();
   if(typeof applyFocus==='function') applyFocus();
   if(typeof buildAI==='function' && document.getElementById('shell').classList.contains('ai-open')) buildAI();
@@ -5614,6 +5715,8 @@ function renderNow(){
     const pf=document.querySelector('.prog-fill');
     if(pf)pf.style.transition='width .4s cubic-bezier(.16,1,.3,1)';
   });
+  /* A quiz and a mock block say what is new in a redraw (the verdict, the right option) and the style sheet lets only that arrive. */
+  if(again&&S.screen!=='quiz'&&S.screen!=='mock') settleEntrances(app);
 }
 /* Reveal below-fold surfaces once, using the browser's actual scroll root.
    No scroll handler or perpetual animation loop is needed. Every render
@@ -6717,19 +6820,24 @@ function attachEvents(){
   document.querySelectorAll('[data-fig]').forEach(fc=>{
     if(fc.__bound)return; fc.__bound=true;
     fc.addEventListener('click',()=>toggleZoom(parseInt(fc.dataset.fig,10)));
-    fc.addEventListener('keydown',ev=>{
-      if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();toggleZoom(parseInt(fc.dataset.fig,10));}
-    });
   });
   document.querySelectorAll('[data-idx]').forEach(b=>{
     b.addEventListener('click',()=>{if(!S.answered)selectOpt(parseInt(b.dataset.idx,10));});
   });
-  document.querySelectorAll('[role="button"][tabindex="0"]').forEach(el=>{
-    el.addEventListener('keydown',ev=>{
-      if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();el.click();}
-    });
-  });
 }
+
+/* Enter and Space press anything that says role="button" the way they press a <button>. One listener for the page,
+   not one per element bound after each render: the Apex panel and the figure viewer are drawn after that pass, so a
+   figure in a reply had no key handler at all, and a figure card had two (its own, and this one's through click),
+   which zoomed it and unzoomed it in the same keypress. Only the element that has the keyboard counts: a key typed
+   in a field inside it is the field's. A native control already answers these keys, and a held key presses once. */
+document.addEventListener('keydown',ev=>{
+  if(ev.defaultPrevented||ev.repeat||ev.isComposing||ev.ctrlKey||ev.metaKey||ev.altKey) return;
+  if(ev.key!=='Enter'&&ev.key!==' ') return;
+  const el=ev.target;
+  if(!el||!el.matches||!el.matches('[role="button"]')||/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(el.tagName)) return;
+  ev.preventDefault(); el.click();
+});
 
 document.addEventListener('keydown',ev=>{
   const t=ev.target.tagName;
