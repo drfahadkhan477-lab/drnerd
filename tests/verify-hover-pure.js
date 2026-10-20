@@ -14,8 +14,12 @@
  * the at-rules the walk is inside. A style rule whose selector list holds :hover counts as asked for if some @media rule on the stack
  * applies only where the device's primary input can hover, which tests/_hover.js decides: every query in its list must be a plain
  * conjunction holding (hover: hover), so that a negation, an "or", a list with a query every device satisfies, or (any-hover: hover),
- * which a touch screen with a mouse beside it satisfies while the finger can still leave :hover behind, is not taken for a guard (the first version took any media text that contained the words, and was shown the first two of those by the review). A
- * list that mixes :hover with :focus-visible, :active or a class is one rule and is bare, so the others have to be split out of it.
+ * which a touch screen with a mouse beside it satisfies while the finger can still leave :hover behind, is not taken for a guard (the
+ * first version took any media text that contained the words, and was shown the first two of those by the review). A list that mixes
+ * :hover with :focus-visible, :active or a class is one rule and is bare, so the others have to be split out of it. CSS reads :HOVER
+ * as :hover, @MEDIA as @media and NOT as not, and so does this (a browser hands its own walk all three in lower case, and this
+ * reader is handed the text as written); what it does not read is a selector spelt with an escape (:\68 over), which no stylesheet
+ * here holds and which is not worth the code to read.
  * The reader is tried on small stylesheets first, one for each way it could be wrong, because a reader that finds nothing, or finds
  * everything guarded, would pass over every file below.
  */
@@ -48,7 +52,7 @@ function hoverRules(css) {
     else if (c === '}') {
       const sel = stack.pop(); prelude = '';
       if (sel === undefined) { balanced = false; continue; }
-      if (!sel.startsWith('@') && /:hover/.test(sel)) {
+      if (!sel.startsWith('@') && /:hover/i.test(sel)) {
         found.push({ sel: sel.replace(/\s+/g, ' '), guarded: stack.some(s => /^@media\b/i.test(s) && impliesHover(s.replace(/^@media/i, ''))) });
       }
     } else if (c === ';') prelude = '';
@@ -62,6 +66,7 @@ head('the reader, on small stylesheets');
 {
   const one = '{color:red}';
   ok('a :hover rule that nothing guards is found', bare('.a:hover' + one).join() === '.a:hover');
+  ok('and it is found however the pseudo-class is cased, which CSS reads as the same one', bare('.a:HOVER' + one + '.b:Hover' + one).join() === '.a:HOVER,.b:Hover');
   ok('one inside @media (hover:hover) is not', bare('@media (hover:hover){.a:hover' + one + '}').length === 0);
   ok('but one inside (any-hover: hover) is, because a mouse beside a touch screen satisfies it and the finger can still leave :hover behind', bare('@media (any-hover: hover){.a:hover' + one + '}').join() === '.a:hover');
   ok('nor one inside a conjunction that holds it', bare('@media screen and (hover:hover){.a:hover' + one + '}@media (hover: hover) and (pointer: fine){.b:hover' + one + '}').length === 0);
@@ -73,6 +78,7 @@ head('the reader, on small stylesheets');
   ok('and one inside a list that a query every device satisfies is in, however the list is written, is', bare('@media (hover:hover), (min-width:1px){.a:hover' + one + '}@media (min-width:1px), (hover:hover){.b:hover' + one + '}@media (min-width:1px), screen and (hover:hover){.c:hover' + one + '}').length === 3);
   ok('and one inside an "or", or an "or" mixed with "and", is', bare('@media (hover:hover) or (min-width:1px){.a:hover' + one + '}@media (min-width:1px) or (max-width:5px) and (hover:hover){.b:hover' + one + '}').length === 2);
   ok('but not one inside a list whose every query holds it', bare('@media (hover:hover), screen and (hover: hover){.a:hover' + one + '}').length === 0);
+  ok('and a guard is a guard however it is cased, @MEDIA (HOVER: HOVER) and (hover:hover) AND (pointer:fine) included', bare('@MEDIA (HOVER: HOVER){.a:hover' + one + '}@media (hover:hover) AND (pointer:fine){.b:hover' + one + '}').length === 0);
   ok('and @supports is not a guard', bare('@supports (hover:hover){.a:hover' + one + '}').join() === '.a:hover');
   ok('a list that mixes :hover with :focus-visible is one rule, and is found', bare('.a:hover,.a:focus-visible' + one).length === 1);
   ok('a rule after a guarded one is not taken for guarded', bare('@media (hover:hover){.a:hover' + one + '}.b:hover' + one).join() === '.b:hover');

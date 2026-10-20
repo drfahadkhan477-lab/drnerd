@@ -151,7 +151,10 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
        Flag button, tapped on and then off, stayed amber with no flag set. The stylesheets are walked as the browser holds them,
        and a :hover rule counts as asked-for only if a media query on the way down applies only where a device can hover, which
        tests/_hover.js decides (a query that merely mentions the words does not: a negation, an "or", a list with a query that
-       every device satisfies). The same function reads the stylesheets as text in tests/verify-hover-pure.js. */
+       every device satisfies). The same function reads the stylesheets as text in tests/verify-hover-pure.js. CSS reads :HOVER as
+       :hover, and the engine hands the walk the selector in lower case whichever the sheet wrote (measured on Chromium and WebKit),
+       so the test below is on lower case; the sheet it is tried on holds a rule written :HOVER, so that an engine that stopped
+       doing so would fail that check and not let a capitalised rule through. */
     const WALK = `(() => {
       const impliesHover = ${impliesHover.toString()};
       const guarded = [], bare = []; let sheets = 0, rules = 0;
@@ -171,13 +174,13 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
       const s = document.createElement('style'); s.id = 'hoverProbe';
       s.textContent = '.zz-bare:hover{color:red}@media (hover:hover){.zz-guarded:hover{color:red}}' +
                       '@media not (hover:hover){.zz-not:hover{color:red}}@media (hover:hover), (min-width:1px){.zz-list:hover{color:red}}' +
-                      '@media (any-hover:hover){.zz-any:hover{color:red}}';
+                      '@media (any-hover:hover){.zz-any:hover{color:red}}.zz-upper:HOVER{color:red}';
       document.head.appendChild(s);
     });
     const probe = await page.evaluate(WALK);
     await page.evaluate(() => document.getElementById('hoverProbe').remove());
-    ok('the walk tells a :hover rule nothing guards from one a media query does, and takes none of the negation of the query, a list holding a query every device satisfies, or (any-hover: hover), which a mouse beside a touch screen satisfies, for a guard',
-       ['.zz-bare:hover', '.zz-not:hover', '.zz-list:hover', '.zz-any:hover'].every(s => probe.bare.includes(s)) && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
+    ok('the walk tells a :hover rule nothing guards from one a media query does, finds one written :HOVER, and takes none of the negation of the query, a list holding a query every device satisfies, or (any-hover: hover), which a mouse beside a touch screen satisfies, for a guard',
+       ['.zz-bare:hover', '.zz-not:hover', '.zz-list:hover', '.zz-any:hover', '.zz-upper:hover'].every(s => probe.bare.includes(s)) && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
        `bare ${probe.bare.length}, guarded ${probe.guarded.length}`);
     const walk = await page.evaluate(WALK);
     ok('and it reads the app\'s own stylesheets, which hold :hover rules that are guarded', walk.sheets >= 1 && walk.guarded.length > 0, `${walk.sheets} sheets, ${walk.rules} rules, ${walk.guarded.length} guarded`);

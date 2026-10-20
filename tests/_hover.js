@@ -19,10 +19,13 @@
  *     (hover: none)                            the wrong way round
  *     (any-hover: hover)                       true on a touch screen with a mouse beside it, where the primary input is the finger
  *
- * It refuses a few forms that are in fact fine (a conjunction with a nested "or" in it, say): the cost of that is a failure that
- * asks for the simpler form, and the cost of the alternative is a guard with a hole in it. The substring test this replaced
- * (/hover\s*:\s*hover/ somewhere in the rule's media text) accepted the first six. Every line of the function has a fixture in
- * tests/verify-hover-pure.js that fails without it.
+ * It refuses a few forms that are in fact fine (a conjunction with a nested "or" in it, and the boolean (hover), say): the cost of
+ * that is a failure that asks for the simpler form, and the cost of the alternative is a guard with a hole in it. The substring
+ * test this replaced (/hover\s*:\s*hover/ somewhere in the rule's media text) accepted the first six. Every line of the function
+ * has a fixture in tests/verify-hover-pure.js that fails without it.
+ *
+ * The query is read lower-cased, as CSS reads it: NOT (HOVER: HOVER) is the negation and (HOVER: HOVER) is a guard. A browser hands
+ * its own walk the text lower-cased already (measured on Chromium and WebKit), and the text reader is handed it as written.
  */
 function impliesHover(mediaText) {
   var text = String(mediaText || ''), queries = [], depth = 0, cur = '', i, c;
