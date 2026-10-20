@@ -255,6 +255,31 @@ head(`no script Safari parses needs a Safari newer than the floor (iPadOS ${FLOO
        : ' — missed: ' + ABOVE_FLOOR.filter(x => !matched.includes(x)).map(x => x[0]).join(', ')));
 }
 
+head('and a file is read through the fallbacks, because the list cannot tell a Blob from a Response');
+{
+  /* Blob.arrayBuffer(), Blob.text() and Blob.stream() came in Safari 14. A Response has the first two from Safari 10 and spells them the same,
+     so the list above cannot name the spelling without flagging every fetch (memorizer/src/ocr.js says as much). The sites are counted
+     instead: in the shell each is the line in blobBytes() or blobText() that uses the method only where it exists, and anywhere else it is a
+     Response. A site that is neither fails here until somebody says which it is, which for a file the picker hands over means those two
+     helpers. The import that uses them is run on a page made to lack the methods in tests/verify-assets.js. */
+  const SITE = /\.(?:arrayBuffer|text|stream)\s*\(\s*\)/;
+  const GUARDED = /typeof\s+f\.(arrayBuffer|text)\s*===\s*'function'\s*\)\s*return\s+f\.\1\(\)/;
+  const RESPONSE = /\(await fetchOk\([^)\n]*\)\)\.arrayBuffer\(\)/;
+  const at = f => blanked(f).split('\n').map((line, i) => ({ at: `${rel(f)}:${i + 1}`, line })).filter(s => SITE.test(s.line));
+  const shell = at(SHELL), elsewhere = SAFARI_FILES.flatMap(at);
+  ok('the shell reads a Blob only in blobBytes() and blobText(), where the method is used only if it exists',
+     shell.length === 2 && shell.every(s => GUARDED.test(s.line)),
+     shell.map(s => `${s.at}: ${s.line.trim().slice(0, 70)}`).join('; ') || 'no site');
+  ok('and nothing else Safari parses calls them on anything but a Response',
+     elsewhere.every(s => RESPONSE.test(s.line)),
+     elsewhere.filter(s => !RESPONSE.test(s.line)).map(s => `${s.at}: ${s.line.trim().slice(0, 70)}`).join('; ') || `${elsewhere.length} Response`);
+  const fixture = ['const t = await file.text();', 'new Uint8Array(await f.arrayBuffer())', 'const bin = await (await fetchOk(src.bin)).arrayBuffer();',
+                   "if(typeof f.text==='function') return f.text();"];
+  const verdict = fixture.map(l => SITE.test(l) && (GUARDED.test(l) || RESPONSE.test(l)));
+  ok('and the two patterns tell them apart: a Blob\'s call is refused, a Response\'s and the fallback\'s are not',
+     verdict.join() === 'false,false,true,true', verdict.join());
+}
+
 head('and the floor is written down where somebody will find it');
 {
   /* Prose follows the record here too. A floor that lives only in this file is
