@@ -680,6 +680,9 @@ jobs:
         name: a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host (11 checks)
         run: node tests/verify-lazyink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: a move of the pen paints the segments it added and not every stroke on the canvas again, and the picture is the one a full repaint draws (8 checks)
+        run: node tests/verify-inkpaint.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere (17 checks)
         run: node tests/verify-loops.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -956,6 +959,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host (11 checks)
         run: node tests/verify-lazyink.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a move of the pen paints the segments it added and not every stroke on the canvas again, and the picture is the one a full repaint draws (8 checks)
+        run: node tests/verify-inkpaint.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere (17 checks)
         run: node tests/verify-loops.js build/synthetic/systole.html

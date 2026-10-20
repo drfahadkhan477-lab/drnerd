@@ -704,7 +704,8 @@ function attachInk(host,key){
     for(const s of saved()) paint(s,r);
     if(cur) paint(cur,r);
   }
-  function paint(s,r){
+  /* from: the first point not yet on the canvas, so that a stroke that has grown is painted from where it had got to, over what is there. */
+  function paint(s,r,from){
     const cfg=INK_TOOLS[s.t]||INK_TOOLS.pen;
     const sz=s.sz||'M';                                  // strokes saved before this feature default to Medium, reproducing the old fixed width exactly
     ctx.globalAlpha=cfg.alpha; ctx.globalCompositeOperation=inkComp(cfg);
@@ -716,7 +717,7 @@ function attachInk(host,key){
       ctx.fillStyle=s.c; ctx.fill(); ctx.globalAlpha=1;
       ctx.globalCompositeOperation='source-over'; return;
     }
-    for(let i=1;i<p.length;i++){
+    for(let i=Math.max(1,from||1);i<p.length;i++){
       const a=p[i-1],b=p[i];
       /* A chisel tip lays a near-constant band. Keeping the full pen response
          here made highlights look ragged rather than expressive, so the
@@ -760,8 +761,14 @@ function attachInk(host,key){
     if(!cur||!allow(e))return;
     e.preventDefault();
     const evts=e.getCoalescedEvents?e.getCoalescedEvents():[e];
+    const had=cur.p.length;
     for(const ev of evts) cur.p.push(pos(ev));
-    redraw();
+    /* THE SEGMENTS THIS MOVE ADDED, over what is on the canvas, and not every stroke on it again. A repaint strokes every segment of every
+       saved stroke, so a move cost more with each stroke written: at three hundred strokes on a card about 8 ms in WebKit, a frame at 120 Hz
+       gone before the Pencil's line was drawn. The segments painted here are the ones a repaint lays down last and in the same order, so
+       the picture is the same one. A stroke that has been a dot until now is repainted whole, because the dot is no part of a stroke of two
+       points and has to go. The repaint at the end of the stroke, with the stroke simplified, is unchanged. */
+    if(had<2) redraw(); else paint(cur,box(),had);
   }
   function end(){
     if(cur&&cur.p.length){ strokes().push(simplifyStroke(cur)); saveJSON(INK_KEY,INK); }
