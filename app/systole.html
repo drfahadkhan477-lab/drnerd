@@ -568,7 +568,9 @@ function logReview(q,grade,ok,mode,extra){
       d:(c&&isFinite(c.difficulty))?Math.round(c.difficulty*100)/100:null,
       s:(c&&isFinite(c.stability))?Math.round(c.stability*100)/100:null,
       ivl:c?c.ivl:0, reps:c?c.reps:0,
-      el:(c&&c.last)?Math.round((Date.now()-Date.parse(c.last+'T00:00:00'))/86400000):null});
+      /* Days on the calendar, as the scheduler counts them: a card last seen yesterday and rated at half past three is one day
+         since its last review, where hours over twenty-four rounded it up to two. This is the number the log is kept to fit on. */
+      el:(c&&c.last)?FSRS.daysBetween(c.last,todayISO()):null});
     if(LOG.length>LOG_CAP) LOG.splice(0,LOG.length-LOG_CAP);
     saveLogSoon();
   }catch(_){}
