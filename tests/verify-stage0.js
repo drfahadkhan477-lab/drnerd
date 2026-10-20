@@ -325,6 +325,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     decoded: [...document.querySelectorAll('.fig-img')].every(i => i.complete && i.naturalWidth > 0),
   }));
   ok('figures render and decode', figs.n > 0 && figs.decoded, figs.n + ' figure(s)');
+  /* A figure card zooms from the keyboard: Enter zooms it, Space puts it back. It had two key handlers, its own and the
+     page's role="button" one through click, and so zoomed it and unzoomed it inside the same key press. */
+  const zoomOf = () => page.evaluate(() => document.querySelector('.fig-card[data-fig]').classList.contains('zoomed'));
+  const focusedCard = await page.evaluate(() => { const c = document.querySelector('.fig-card[data-fig]'); c.focus(); return document.activeElement === c; });
+  const zoom0 = await zoomOf();
+  await page.keyboard.press('Enter');
+  const zoom1 = await zoomOf();
+  await page.keyboard.press('Space');
+  const zoom2 = await zoomOf();
+  ok('Enter on a figure card zooms it, once', focusedCard && zoom0 === false && zoom1 === true, JSON.stringify([focusedCard, zoom0, zoom1]));
+  ok('and Space puts it back', zoom1 === true && zoom2 === false, JSON.stringify([zoom1, zoom2]));
   const inkPersist = await page.evaluate(async () => {
     const q = currentQ();
     INK[q.id + ':q'] = [{ t: 'pen', c: '#EF4444', p: [[0.1, 0.1, 0.5], [0.5, 0.5, 0.5]] }];
