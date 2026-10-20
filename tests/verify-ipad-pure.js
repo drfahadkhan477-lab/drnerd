@@ -298,11 +298,17 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      iPad 11" in portrait ended at 1553 px on a 1194 px screen, with no way to reach the rest. The way out is the one base.css already takes for
      the body: the same property in vh first, which the older Safari reads and the newer one overrides.
 
-     WHAT IS HELD IS THE ORDER AND THE PROPERTY. An earlier declaration of the same property in the same block, whose value holds no such unit.
-     After the dvh it would override it in a Safari that knows it; on another property it is not a fallback; in another rule it is a cascade that
-     the next edit to either rule can break. A custom property holding the unit is not a declaration that can fall back at all: it parses, and
-     the declaration that uses it fails later, past every earlier one. None is in use; the reader finds one if it is added. */
+     WHAT IS HELD IS THE ORDER, THE PROPERTY AND THE VALUE. An earlier declaration of the same property in the same block, whose value is the
+     dvh one in the older spelling (dvh, svh and lvh as vh; the same for w, min and max). After the dvh it would override it in a Safari that
+     knows it; on another property it is not a fallback; in another rule it is a cascade that the next edit to either rule can break; and a
+     value that merely has no new unit in it is not one either (`height:not-a-value` is dropped by the same Safari, and takes the fallback with
+     it). The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not a declaration that
+     can fall back at all: it parses, and the declaration that uses it fails later, past every earlier one. None is in use; the reader finds one
+     if it is added. */
   const NEW_UNIT = /(?:\d|\.)[dsl]v(?:h|w|i|b|min|max)\b/i;
+  const OLDER = { dvh: 'vh', svh: 'vh', lvh: 'vh', dvw: 'vw', svw: 'vw', lvw: 'vw', dvmin: 'vmin', svmin: 'vmin', lvmin: 'vmin', dvmax: 'vmax', svmax: 'vmax', lvmax: 'vmax' };
+  const older = v => v.replace(new RegExp('(\\d|\\.)(' + Object.keys(OLDER).join('|') + ')\\b', 'gi'), (m, d, u) => d + OLDER[u.toLowerCase()]);
+  const squash = v => v.trim().replace(/\s+/g, ' ').toLowerCase();
   const lineOf = (text, i) => text.slice(0, i).split('\n').length;
   function newUnitsWithoutFallback(css) {
     const blank = blankComments(css).replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
@@ -319,11 +325,12 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
       for (const d of decls) {
         const m = /^\s*([-\w]+)\s*:([\s\S]*)$/.exec(d.text);
         if (!m) continue;
-        const prop = m[1].toLowerCase();
-        if (!NEW_UNIT.test(m[2])) { known.push(prop); continue; }
+        const prop = m[1].toLowerCase(), value = squash(m[2]);
+        if (!NEW_UNIT.test(value)) { known.push({ prop, value }); continue; }
         used++;
-        if (prop.startsWith('--') || !known.includes(prop))
-          bad.push(`${prop}:${m[2].trim().replace(/\s+/g, ' ').slice(0, 40)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
+        const want = older(value);
+        if (prop.startsWith('--') || !known.some(k => k.prop === prop && k.value === want))
+          bad.push(`${prop}:${value.slice(0, 40)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
       }
     }
     return { bad, used };
@@ -333,15 +340,20 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
   ok('and not one with the same property in vh before it, in a calc or not', bad('.a{height:100vh;height:100dvh}') === 0 && bad('.a{min-height:calc(100vh - 4px);min-height:calc(100dvh - 4px)}') === 0);
   ok('but a vh after it is no fallback: a browser that knows dvh then uses the vh', bad('.a{height:100dvh;height:100vh}') === 1);
   ok('nor is a vh on another property', bad('.a{min-height:100vh;height:100dvh}') === 1);
+  ok('nor is a value that is merely not a new unit, or a vh that is not the same one',
+     bad('.a{height:not-a-value;height:100dvh}') === 1 && bad('.a{height:auto;height:100dvh}') === 1 && bad('.a{height:90vh;height:100dvh}') === 1 &&
+     bad('.a{height:calc(100vh - 4px);height:calc(100dvh - 8px)}') === 1);
   ok('nor a vh in another rule', bad('.a{height:100vh}.a{height:100dvh}') === 1);
-  ok('svh and lvh are as new as dvh, and so are the width, inline, block and min and max forms',
-     bad('.a{height:100svh}.b{height:100lvh}') === 2 && bad('.a{width:100dvw}.b{width:100svi}.c{height:100lvb}.d{width:50dvmin}.e{width:50svmax}') === 5);
+  ok('svh and lvh are as new as dvh, and so are the width, inline, block and min and max forms, each cleared by its own older spelling',
+     bad('.a{height:100svh}.b{height:100lvh}') === 2 && bad('.a{width:100dvw}.b{width:100svi}.c{height:100lvb}.d{width:50dvmin}.e{width:50svmax}') === 5 &&
+     bad('.a{height:100vh;height:100svh}.b{height:100vh;height:100lvh}.c{width:100vw;width:100dvw}.d{width:50vmin;width:50dvmin}.e{width:50vmax;width:50svmax}') === 0);
+  ok('but the inline and block forms have no older spelling, so a vi or a vb does not clear them', bad('.a{width:100vi;width:100dvi}') === 1 && bad('.a{height:100vb;height:100svb}') === 1);
   ok('a rule inside @media is read like any other', bad('@media (min-width:700px){.a{height:100dvh}}') === 1 && bad('@media (min-width:700px){.a{height:100vh;height:100dvh}}') === 0);
   ok('a custom property holding the unit is found even after one that does not, because it cannot fall back', bad(':root{--h:100dvh}') === 1 && bad(':root{--h:100vh;--h:100dvh}') === 1);
   ok('a unit in a comment or a string is not a declaration, and vh, % and px are not new',
      bad('/* height:100dvh */ .a{content:"height:100dvh"}') === 0 && bad('.a{height:100vh;width:50%;top:4px}') === 0);
   ok('and a semicolon inside parentheses does not end a declaration, so a fallback written inside a url() is none',
-     bad('.a{background:url(data:image/png;height:100vh);height:100dvh}') === 1 && bad('.a{background:url(data:image/png;base64,AAAA);height:100vh;height:100dvh}') === 0);
+     bad('.a{background:url(data:image/png;height:100vh;);height:100dvh}') === 1 && bad('.a{background:url(data:image/png;base64,AAAA);height:100vh;height:100dvh}') === 0);
 
   const FAMILIES = [['the Systole app', CSS_FILES],
                     ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]],

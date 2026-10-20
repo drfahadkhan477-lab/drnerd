@@ -55,7 +55,7 @@
 
 /* AI panel */
 /* The bar is out of the flow now, so the panes have to step around it.
-   EVERY dvh IN THESE STYLESHEETS HAS THE SAME PROPERTY IN vh BEFORE IT. Safari before 15.4 does not know the unit and drops the declaration
+   EVERY dvh IN THESE STYLESHEETS HAS THE SAME PROPERTY AND VALUE IN vh BEFORE IT. Safari before 15.4 does not know the unit and drops the declaration
    that uses it, whole; in portrait, where html and body are overflow:hidden and #shell takes its height from this unit, the shell then grows
    to its content, the body clips it, and nothing scrolls. tests/verify-ipad-pure.js holds the pairing. */
 #shell{display:flex;align-items:stretch;min-height:100vh;min-height:100dvh;
