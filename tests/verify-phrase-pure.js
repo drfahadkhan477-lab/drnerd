@@ -136,5 +136,54 @@ ok('the cut holds the pair index and the credit, and the weight is not zero',
    PHRASE_W > 0 && /bg\[ts\[i\]/.test(RANKER) && RANKER.includes('post,bgdf}') && /PHRASE_W/.test(RANKER.slice(RANKER.indexOf('function search('))),
    `PHRASE_W=${PHRASE_W}`);
 
+head('the stemmer keeps its answers and the tokenizer skips a trim it does not need, and neither changes a word');
+{
+  /* Building the index stems every token of every document, which on a library the size of the real one was a third of the
+     time the first search waited. Each word is stemmed once now, and the tokenizer trims a - + or / from the ends of a token
+     only when the token has one. Both are claims about speed that must not move a token, so the tokenizer is held to the one
+     it was, written out here from the page's own stemWord(), stopwords and short list: on invented text, and on every kind
+     of end a token can have. */
+  const k = { ALL_Q: [], REF: [], console };
+  vm.runInNewContext(RANKER + '\n;this.tok=tok;this.stem=stem;this.stemWord=stemWord;this.STOP=STOP;this.SHORTOK=SHORTOK;', k);
+  const slowTok = text => {
+    const out = [];
+    for (let t of String(text || '').toLowerCase().split(/[^a-z0-9₀-₉+/-]+/)) {
+      t = t.replace(/^[-+/]+|[-+/]+$/g, '');
+      if (!t || k.STOP.has(t) || /^\d+$/.test(t)) continue;
+      if (t.length < 3 && !k.SHORTOK.has(t)) continue;
+      out.push(t.length <= 4 && k.SHORTOK.has(t) ? t : k.stemWord(t));
+      if (t.includes('-')) for (const p of t.split('-')) if ((p.length >= 3 || k.SHORTOK.has(p)) && !k.STOP.has(p)) out.push(k.SHORTOK.has(p) ? p : k.stemWord(p));
+    }
+    return out;
+  };
+  let seed = 99;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const pick = a => a[(rnd() * a.length) | 0];
+  const ROOTS = ['amyloid', 'stenos', 'ischem', 'cardiomyopath', 'pericard', 'thromb', 'fibrill', 'ablat', 'sten', 'myocard', 'endocard', 'tampon', 'vasculit', 'hyperkal', 'warfar', 'qt', 'av', 'mi', 'pe', 'lv', 'cad', 'afib', 'ef', 'bp', 'aorta', 'valv'];
+  const ENDS = ['', 'osis', 'osed', 'otic', 'aemia', 'emia', 'aemic', 'emic', 'pathy', 'pathic', 'itis', 'itic', 'ically', 'ical', 'fication', 'fied', 'fying', 'tion', 'sion', 'ance', 'ence', 'ing', 'ed', 'ies', 'ches', 'shes', 'xes', 'ses', 'us', 'ss', 'is', 'as', 's', 'ic', 'al'];
+  const EDGES = ['', '', '', '-', '+', '/', '--', '-+/', '+-', '//'];
+  const SEP = [' ', '  ', ', ', '. ', '\n', ' (', ') ', ' - ', ' / '];
+  let texts = 0, tokens = 0, differing = null, stemsDiffer = null, stems = 0;
+  for (let round = 0; round < 4000 && !differing; round++) {
+    const text = Array.from({ length: 1 + ((rnd() * 14) | 0) }, () => {
+      let w = pick(ROOTS) + pick(ENDS);
+      if (rnd() < 0.15) w = w + '-' + pick(ROOTS) + pick(ENDS);                      // a hyphenated pair
+      if (rnd() < 0.1) w = pick(['The', 'AND', 'of', '12', '3.5', 'x2', '₂']) ;   // stopwords, numbers, subscripts
+      if (rnd() < 0.5) w = w.toUpperCase();
+      return pick(EDGES) + w + pick(EDGES);
+    }).map((w, i) => (i ? pick(SEP) : '') + w).join('');
+    texts++;
+    const want = slowTok(text), got = k.tok(text);
+    tokens += want.length;
+    if (JSON.stringify(want) !== JSON.stringify(got)) differing = { round, text: JSON.stringify(text).slice(0, 90), want: want.join(',').slice(0, 60), got: got.join(',').slice(0, 60) };
+    /* and the stemmer, in an order that visits words twice and out of turn */
+    for (const w of [pick(ROOTS) + pick(ENDS), pick(ROOTS) + pick(ENDS)]) { stems++; if (k.stem(w) !== k.stemWord(w) && !stemsDiffer) stemsDiffer = w; }
+  }
+  ok(`${texts} invented texts (suffixes, hyphens, stopwords, numbers, subscripts, a - + or / at either end) tokenize as they did`, !differing, differing ? JSON.stringify(differing) : `${texts} texts, ${tokens} tokens`);
+  ok('and more than a few thousand of the tokens are real ones, so the comparison is not empty lists', tokens > 10000, `${tokens} tokens`);
+  ok('a word stemmed again, and out of turn, is stemmed as it was', !stemsDiffer && stems > 0, stemsDiffer || `${stems} lookups`);
+  ok('a keep-list word, a short word and an empty word are returned as they were', ['stenosis', 'axis', 'bp', ''].every(w => k.stem(w) === k.stemWord(w)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

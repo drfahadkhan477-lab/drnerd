@@ -375,7 +375,7 @@ function harvest(notes, table) {
     if (best === undefined) best = bestRun(r.body);
     if (best && best.score >= 5) {
       const context = passageContext(r.body, best.run, r.title);
-      const fig = matchingFigure(r.body, best.run);
+      const fig = matchingFigure(r.body, best.run, context);
       out.push({ id: r.id, title: r.title || '', text: clean(best.run), score: best.score,
                  chapter: (r.title || '').split('—')[0].trim(), source: r.source || '',
                  concept: context.concept,
@@ -388,7 +388,25 @@ function harvest(notes, table) {
 /* Locate the exact passage in raw Markdown. A passage crossing stripped
    markup may have no contiguous span; in that case no figure is guessed. */
 function passageSpan(body, run) {
-  return new RegExp(run.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')).exec(String(body || ''));
+  /* The passage's words one after another with whitespace between them, as a pattern of them says it, found by looking
+     rather than by compiling a pattern for each note: the compile was most of what harvest() cost at every launch and
+     after every edit to the library. Words are what split() leaves between whitespace, so none holds any; whitespace at
+     either end of the run leaves an empty word there, which asks for whitespace at that end of the match, and is found
+     the same way. */
+  const words = run.split(/\s+/);
+  body = String(body || '');
+  const first = words[0];
+  for (let at = body.indexOf(first); at !== -1; at = at < body.length ? body.indexOf(first, at + 1) : -1) {
+    let end = at + first.length, i = 1;
+    for (; i < words.length; i++) {
+      let next = end;
+      while (next < body.length && /\s/.test(body[next])) next++;
+      if (next === end || !body.startsWith(words[i], next)) break;
+      end = next + words[i].length;
+    }
+    if (i === words.length) return { index: at };
+  }
+  return null;
 }
 function passageContext(body, run, title) {
   body = String(body || '');
@@ -403,9 +421,11 @@ function passageContext(body, run, title) {
     || (frame && frame[1]) || heading || String(title || '').split('—').pop().trim() || 'From your notes';
   return { concept, span, headings };
 }
-function matchingFigure(body, run) {
+function matchingFigure(body, run, context) {
   body = String(body || '');
-  const context = passageContext(body, run, '');
+  /* harvest() has the passage's context already, made for the same body and the same run: the title it was made with
+     changes the concept and nothing this reads. */
+  context = context || passageContext(body, run, '');
   if (!context.span) return null;
   const at = context.span.index;
   const preceding = context.headings.filter(h => h.index < at);
@@ -677,6 +697,6 @@ function steps(text) {
 function entryFits(body, e) { return fromTable(body, e) !== undefined; }
 
 root.Pearl = { harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
-               weakWords, aimWords, steps, lesson, matchingFigure, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
+               weakWords, aimWords, steps, lesson, matchingFigure, passageSpan, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);
