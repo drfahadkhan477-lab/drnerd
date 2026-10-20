@@ -546,6 +546,48 @@ const restore = `(text) => new Promise((resolve, reject) => {
     await context.close();
   }
 
+  head('the backup is named for the day on the user\'s calendar, not the day in Greenwich');
+  {
+    /* The name carries a date so that the newest of several backups can be told at a glance. It was cut from toISOString(), the UTC
+       date: east of Greenwich, between local midnight and the UTC midnight, a day behind (the owner's Karachi run, in the small
+       hours), and west of it in the evening a day ahead. The rest of the shell has counted the local day since that run (todayISO).
+       Two pages, one each side of UTC, each held at an hour where the two days differ, so that a name cut from the UTC date fails on
+       both and one shifted for a single side fails on the other. In UTC the two days are the same one and a page that lost its zone
+       would pass, so whether the zone took is a check of its own. The date is the page's, held for the length of the export and put
+       back. */
+    const HELD = [
+      { timezoneId: 'Pacific/Auckland', at: '2026-10-20T19:30:00Z', want: 'accsap12-annotations-2026-10-21.json',
+        says: 'half past eight on the morning of the 21st in Auckland, still the 20th in Greenwich, is named for the 21st' },
+      { timezoneId: 'America/Los_Angeles', at: '2026-10-21T03:30:00Z', want: 'accsap12-annotations-2026-10-20.json',
+        says: 'half past eight on the evening of the 20th in Los Angeles, already the 21st in Greenwich, is named for the 20th' },
+    ];
+    const got = [];
+    for (const h of HELD) {
+      const context = await browser.newContext({ timezoneId: h.timezoneId });
+      const p = watch(await context.newPage(), events, 'named-' + h.timezoneId);
+      const errs = [];
+      p.on('pageerror', e => errs.push(e.message));
+      await boot(p);
+      const r = await p.evaluate(async at => {
+        const Real = Date, now = Real.parse(at), held = new Real(now);
+        const create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click; let name = null, result;
+        URL.createObjectURL = () => 'blob:stub'; HTMLAnchorElement.prototype.click = function () { name = this.download; };
+        globalThis.Date = class extends Real { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } };
+        try { result = await exportMarkup(); }
+        finally { globalThis.Date = Real; URL.createObjectURL = create; HTMLAnchorElement.prototype.click = click; }
+        return { zone: Intl.DateTimeFormat().resolvedOptions().timeZone, apart: held.getDate() !== held.getUTCDate(), result, name };
+      }, h.at);
+      got.push({ ...h, ...r, errs });
+      await context.close();
+    }
+    ok('both pages are in the zones they were given, at an hour where the day there is not the day in Greenwich',
+       got.every(g => g.zone === g.timezoneId && g.apart), got.map(g => g.zone + (g.apart ? '' : ' (the same day)')).join(', '));
+    for (const g of got) {
+      ok(`the backup taken at ${g.says}`, g.result === true && g.name === g.want,
+         JSON.stringify(g.name) + (g.errs.length ? ' ' + g.errs.slice(0, 1).join('') : ''));
+    }
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed\n`);
   process.exit(failed ? 1 : 0);

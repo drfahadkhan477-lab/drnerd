@@ -993,7 +993,7 @@ async function exportMarkup(){
   try{ S.sinceBackup=0; S.lastBackup=Date.now(); save(); }catch(_){}
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='accsap12-annotations-'+new Date().toISOString().slice(0,10)+'.json';
+  a.download='accsap12-annotations-'+todayISO()+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
   return true;
