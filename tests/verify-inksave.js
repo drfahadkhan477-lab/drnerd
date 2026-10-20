@@ -16,7 +16,7 @@
  * database back, which is the thing that was slow and the thing that must not be lost:
  *   · a stroke lifted writes nothing yet, and is in the ink the screen reads; once the pen has been still it is written, once, and the
  *     database holds it; ten strokes a tenth of a second apart are one write, and the database holds all of them;
- *   · writing that never pauses for 900 ms still reaches the database, after about 10 s;
+ *   · writing that never pauses for 900 ms still reaches the database, after about 10 s, and what came after that is written when it stops;
  *   · hiding the page and closing it write at once, what was drawn last included;
  *   · three undos in a row are one write, and the database holds what is left;
  *   · an eraser swept over five strokes is one write, and the database holds what is left;
@@ -133,18 +133,22 @@ const STORED = `new Promise(resolve => {
   head('writing that never pauses');
   {
     /* A stroke added and the save asked for every 400 ms for 11.2 s: the pen is never still for 900 ms, so only the ceiling can write. */
-    const times = await page.evaluate(async () => {
+    const { base, times } = await page.evaluate(async () => {
       const key = currentQ().id + ':q', base = window.__puts.length, t0 = performance.now();
       for (let i = 0; i < 28; i++) {
         (INK[key] || (INK[key] = [])).push({ t: 'pen', c: '#EF4444', sz: 'M', p: [[0.1, 0.1, 0.5, 0], [0.2, 0.2, 0.5, 0]] });
         saveInkSoon();
         await new Promise(r => setTimeout(r, 400));
       }
-      return window.__puts.slice(base).map(t => Math.round(t - t0));
+      return { base, times: window.__puts.slice(base).map(t => Math.round(t - t0)) };
     });
     ok('the ceiling writes it, once, after about ten seconds and not before, though the pen was never still', times.length >= 1 && times.length <= 2 && times[0] >= 9000 && times[0] <= 11800, `writes at ${JSON.stringify(times)} ms`);
-    await putBy(2 + times.length + 1, 3000);
+    /* What was added after the ceiling is written when the writing stops. The wait is a precondition and its answer is read, and so is the database:
+       a trailing write that never came would otherwise be made by the undos below, and the suite would go on past it. */
+    const trailing = await putBy(base + times.length + 1, 3000);
     await page.waitForTimeout(300);
+    const all = await live(), held = await storedBy(all);
+    ok('and what was added after the ceiling is written when the writing stops, so the database holds every stroke', trailing && held === all, `${trailing ? 'the write came' : 'no write came'}; ${held} of ${all} strokes in the database`);
   }
 
   head('undoing');
