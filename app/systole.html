@@ -4630,17 +4630,17 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
    wrote last: an answer given in one was lost when the other, which had loaded before it, answered next, and a window left open for days wiped
    the days between at its first answer. The browser says when another window has written (a storage event), and a window that was suspended
    and missed that is caught up the next time it is seen. The record is then taken as this window's own, by the path a restore takes
-   (progressFromBackup), and nothing else is touched: not the question on screen, the answer chosen, the deck being worked, or the notes being
-   typed. Nothing here writes; a window that takes a record does not send it back.
+   (progressFromBackup, on the record as it was written: one a restore would refuse is not taken, not trimmed to what it would accept), and
+   nothing else is touched: not the question on screen, the answer chosen, the deck being worked, or the notes being typed. Nothing here
+   writes; a window that takes a record does not send it back.
    NOT COVERED: the ink, the sticky notes, the chats and the review log live in the database (src/core/store.js), which does not tell other
    windows, and are still decided by who wrote last. */
 SEEN[KEY]=SEEN[REF_KEY]=null;
 try{ SEEN[KEY]=localStorage.getItem(KEY); SEEN[REF_KEY]=localStorage.getItem(REF_KEY); }catch(_){}
-let progressShown=true;      // false: a record was taken while the window was hidden, and the screen has not been drawn from it
 function adoptProgress(text){
   let raw; try{ raw=JSON.parse(text); }catch(_){ return false; }
   if(!statRecord(raw)) return false;
-  let p; try{ p=progressFromBackup(usableStats(raw)); }catch(_){ return false; }   // what a restore would refuse is not taken
+  let p; try{ p=progressFromBackup(raw); }catch(_){ return false; }               // what a restore would refuse is not taken
   delete p.resumed;                                                               // whether this window has resumed a deck is its own
   const themeWas=S.theme;
   Object.assign(S,p);
@@ -4654,17 +4654,25 @@ function adoptRefs(text){
   REF=list; invalidateIndex();
   return true;
 }
-/* The screens that show the record are drawn again; the ones with a question or a note being worked are not, and show it the next time they are. */
-function showProgress(){
-  if(document.visibilityState==='hidden'){ progressShown=false; return; }
-  progressShown=true;
-  if(S.screen==='home'||S.screen==='stats'||S.screen==='study') render();
+/* What was taken is drawn where it shows: the progress record on the screens that show it, the notes on the library and on the home screen (its
+   pearl comes from them). A screen with a question on it, or a note being typed, is not drawn again, and shows what was taken the next time it is.
+   A window that is hidden draws when it is seen. */
+const sharedStale={progress:false,refs:false};
+function refDrafted(){ return ['refT','refG','refB'].some(id=>{ const el=document.getElementById(id); return !!el&&el.value.trim()!==''; }); }
+function drawShared(){
+  const s=S.screen, p=sharedStale.progress, r=sharedStale.refs;
+  sharedStale.progress=sharedStale.refs=false;
+  if((p&&(s==='home'||s==='stats'||s==='study'))||(r&&(s==='home'||(s==='refs'&&!refEditing&&!refDrafted())))) render();
+}
+function showShared(what){
+  sharedStale[what]=true;
+  if(document.visibilityState!=='hidden') drawShared();
 }
 function takeShared(k,text){
   if(typeof text!=='string'||text===SEEN[k]) return;
   SEEN[k]=text;
-  if(k===KEY){ if(adoptProgress(text)) showProgress(); }
-  else if(k===REF_KEY) adoptRefs(text);
+  if(k===KEY){ if(adoptProgress(text)) showShared('progress'); }
+  else if(k===REF_KEY){ if(adoptRefs(text)) showShared('refs'); }
 }
 function onProgressStorage(e){
   if(e.storageArea!==localStorage||(e.key!==KEY&&e.key!==REF_KEY)) return;
@@ -4678,7 +4686,7 @@ window.addEventListener('pageshow',catchUpShared);
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible') return;
   catchUpShared();
-  if(!progressShown) showProgress();
+  if(sharedStale.progress||sharedStale.refs) drawShared();
 });
 
 /* ── theme ──

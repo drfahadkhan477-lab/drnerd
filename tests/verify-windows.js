@@ -15,8 +15,9 @@
  *   · coming back from the page cache is caught up the same way;
  *   · the question being worked in the receiving window is left alone: the screen, the answer chosen, whether a deck was resumed, and no
  *     redraw of the quiz; and the screens that show the record are drawn again;
- *   · a record that is not one, or that a restore would refuse, is not taken, and nothing throws;
- *   · the reference notes are shared the same way, and a note being edited in one window when the other deletes it is kept, as a note of its own.
+ *   · a record that is not one, or that a restore would refuse (also when only one row of it is refused), is not taken, and nothing throws;
+ *   · the reference notes are shared the same way, drawn where they show (and not over a note being typed), and a note being edited in one
+ *     window when the other deletes it is kept, as a note of its own.
  *
  * What it does not hold, because it is not done: the ink, the sticky notes, the chats and the review log live in the database and are still
  * decided by who wrote last.
@@ -204,7 +205,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        window looked) and then holds it to what it had: the answers, the chapters, the missed list a set. A list and a string are JSON that parses
        and is not a record; a restore would take either as an empty one, and wipe what the window holds. */
     for (const [what, text] of [['text that is not JSON', '{not json'], ['JSON that is a list', '[]'], ['JSON that is a string', '"text"'],
-                                ['a record a restore would refuse (a missed list that is not a list)', '{"missed":"oops"}']]) {
+                                ['a record a restore would refuse (a missed list that is not a list)', '{"missed":"oops"}'],
+                                ['a record with one row a restore would refuse (more correct answers than answers), which is refused whole and not trimmed to the rest',
+                                 JSON.stringify({ sessionTotal: 99, practice: { zq: { n: 1, c: 2, t: 0 } } })]]) {
       const n = await B.evaluate(() => window.__taken);
       await A.evaluate(t => Storage.prototype.setItem.call(localStorage, 'accsap12.v2', t), text);
       const told = await until(B, n => window.__taken > n, n, 3000);
@@ -226,6 +229,43 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const list = await A.evaluate(() => JSON.parse(localStorage.getItem('accsap12.ref')).map(r => r.title).filter(t => /^Zq /.test(t)).sort());
     ok('a note added in one window is in the other, and the second window\'s is added to it, not written over it',
        gotFirst && gotBoth && list.join() === 'Zq first note,Zq second note', list.join(' | '));
+  }
+
+  head('the screens that show the notes are drawn from the notes taken');
+  {
+    /* The library with nothing typed in it, then with a draft in it, then in a window that is hidden. */
+    const titles = pg => pg.evaluate(() => [...document.querySelectorAll('.ref-title')].map(e => e.textContent));
+    await B.evaluate(() => { goRefs(); });
+    await until(B, () => S.screen === 'refs' && !!document.getElementById('refT'));
+    const idShown = await A.evaluate(() => refAdd('Zq drawn note', 'Body of a note added while the library is open in the other window.', 'zq', '').id);
+    const drawn = await until(B, () => [...document.querySelectorAll('.ref-title')].some(e => e.textContent === 'Zq drawn note'));
+    await A.evaluate(id => { refDelete(id); }, idShown);
+    const gone = await until(B, () => ![...document.querySelectorAll('.ref-title')].some(e => e.textContent === 'Zq drawn note'));
+    ok('a library on screen shows the note the other window added, and not the one it deleted', drawn && gone, `added: ${drawn}, deleted: ${gone}`);
+
+    await B.evaluate(() => { document.getElementById('refB').value = 'A note being typed here'; window.__renders = 0; });
+    await A.evaluate(() => { refAdd('Zq unseen note', 'Body of a note added while one is being typed in the other window.', 'zq', ''); });
+    const took = await until(B, () => REF.some(r => r.title === 'Zq unseen note'));
+    await pause(300);
+    const kept = await B.evaluate(() => ({ typed: document.getElementById('refB').value, renders: window.__renders }));
+    const listedWhileTyping = (await titles(B)).includes('Zq unseen note');
+    await B.evaluate(() => { document.getElementById('refB').value = ''; render(); });
+    const listedAfter = await until(B, () => [...document.querySelectorAll('.ref-title')].some(e => e.textContent === 'Zq unseen note'));
+    ok('but not over a note being typed: the draft stays, nothing is drawn, and the note is in the library the next time it is',
+       took && kept.typed === 'A note being typed here' && kept.renders === 0 && !listedWhileTyping && listedAfter,
+       `typed "${kept.typed.slice(0, 12)}", ${kept.renders} redraws, listed while typing: ${listedWhileTyping}, after: ${listedAfter}`);
+
+    await B.evaluate(() => { window.__renders = 0; Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); });
+    await A.evaluate(() => { refAdd('Zq later note', 'Body of a note added while the other window is hidden.', 'zq', ''); });
+    const tookHidden = await until(B, () => REF.some(r => r.title === 'Zq later note'));
+    await pause(200);
+    const whileHidden = await B.evaluate(() => window.__renders);
+    await B.evaluate(() => { delete document.visibilityState; document.dispatchEvent(new Event('visibilitychange')); });
+    const shown = await until(B, () => [...document.querySelectorAll('.ref-title')].some(e => e.textContent === 'Zq later note'));
+    ok('a window that is hidden takes the note and draws nothing, and shows it when it is seen', tookHidden && whileHidden === 0 && shown,
+       `${whileHidden} redraws while hidden, shown once seen: ${shown}`);
+    await B.evaluate(() => { goHome(); });
+    await until(B, () => S.screen === 'home' && !!document.querySelector('.hero-h1'));
   }
 
   head('a note being edited is not lost when the other window deletes it');
