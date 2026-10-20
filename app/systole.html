@@ -2296,8 +2296,12 @@ function setLab(k){
   render();
 }
 
+/* Every draw asks for this, not only a draw of the Lab: the monitor is a loop that asks for its own next frame, and one the
+   screen does not end goes on drawing into a canvas that is no longer in the page, at 60 frames a second, for the rest of the
+   session (7 ms of every second in Chromium and 10 in WebKit at iPad size, on every screen after the Lab). */
 function mountLab(){
   if(labMon){ labMon.destroy(); labMon=null; }
+  if(S.screen!=='lab') return;
   const cv=document.getElementById('labCanvas');
   if(cv){ labMon=new ECGMonitor(cv,{kind:labKind,speed:0.15,grid:true,amp:60,lineWidth:2.2}); labMon.start(); }
   if(typeof mountTwelve==='function') mountTwelve();
@@ -5773,7 +5777,7 @@ function renderNow(){
   if(typeof mountHero==='function') mountHero();
   if(typeof mountHeroHeart3d==='function') mountHeroHeart3d();
   if(typeof mountPhysio==='function') mountPhysio();
-  if(typeof mountLab==='function'&&S.screen==='lab') mountLab();
+  if(typeof mountLab==='function') mountLab();
   if(typeof mountInk==='function') mountInk();
   if(typeof mockMount==='function') mockMount();
   if(typeof mountHomeProgress==='function') mountHomeProgress();
