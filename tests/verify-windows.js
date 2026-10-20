@@ -26,6 +26,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { launch } = require('./_engine');
+const { booted } = require('./_render.js');
 const { onDeath, watch } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -53,8 +54,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   onDeath(() => ({ section, checks: passed + failed, errors, events: events.length ? events.join(', ') : 'none' }));
   const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
+  /* One page is booted before the next is opened: the later page is the one in front, and a page behind it is not given animation frames, which
+     the boot wait polls on. */
   const A = watch(await ctx.newPage(), events, 'A', errors);
+  await A.goto(base, { waitUntil: 'load', timeout: 200000 });
+  await booted(A, { timeout: 150000 });
   const B = watch(await ctx.newPage(), events, 'B', errors);
+  await B.goto(base, { waitUntil: 'load', timeout: 200000 });
+  await booted(B, { timeout: 150000 });
 
   /* A wait is a precondition, never the claim. polling is a number: the default polls on animation frames, which a window behind the front one
      is not given. */
@@ -69,11 +76,6 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const stored = pg => pg.evaluate(() => JSON.parse(localStorage.getItem('accsap12.v2')));
   const mine = pg => pg.evaluate(() => ({ total: S.sessionTotal, practice: Object.keys(S.practice).sort(), screen: S.screen, qIdx: S.qIdx, answered: S.answered,
                                            selected: S.selected, resumed: S.resumed, missedIsSet: S.missed instanceof Set, chapters: Object.keys(S.chStats).sort().join() }));
-
-  for (const pg of [A, B]) {
-    await pg.goto(base, { waitUntil: 'load', timeout: 200000 });
-    await until(pg, () => typeof S !== 'undefined' && !!document.querySelector('.hero-h1'), undefined, 150000);
-  }
 
   head('two windows, one origin');
   {
