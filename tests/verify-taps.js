@@ -16,12 +16,17 @@
  * And none of it may push a control off the phone it is on: at 375 and 320 px the chips and the two buttons lie inside the
  * screen and inside the card that holds them. A card clips what runs past it, so a row of chips made too wide is cut off and
  * the page does not scroll sideways; the chip is the witness, and the page's own width is read beside it.
+ *
+ * A tap also leaves something behind. On a touch screen the element that was tapped goes on matching :hover until something
+ * else is tapped, so a hover style that applies where nothing can hover is left on the screen: the Flag button, tapped on and
+ * then off, stayed amber with no flag set. The last section holds every :hover rule to the media query that asks for hover, as
+ * the stylesheets stand, and holds the Flag button to looking as it did.
  */
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, onScreen, quiet, resized, watchTransitions } = require('./_render.js');
+const { booted, settled, onScreen, quiet, resized, watchTransitions } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-taps.js <build.html>'); process.exit(1); }
@@ -136,6 +141,71 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     const miss = await fits('.miss-chip');
     ok(`at ${w} px the "How sure?" chips are inside the phone and the card that holds them`, cf.length >= 3 && !cf.some(c => c.out), cf.length < 3 ? `${cf.length} chips` : JSON.stringify(cf.filter(c => c.out)));
     ok(`and so are the "Why did you miss it?" chips after a wrong answer`, miss.length >= 3 && !miss.some(c => c.out), miss.length < 3 ? `${miss.length} chips` : JSON.stringify(miss.filter(c => c.out)));
+  }
+
+  head('no hover style applies where there is no hover');
+  {
+    /* A finger leaves :hover behind. On a touch screen the element that was tapped goes on matching :hover until something else
+       is tapped, so a hover style that is not asked for only where a pointer can hover stays on the screen after the tap: the
+       Flag button, tapped on and then off, stayed amber with no flag set. The stylesheets are walked as the browser holds them,
+       and a :hover rule counts as asked-for only if a media query on the way down says (hover: hover). */
+    const WALK = `(() => {
+      const guarded = [], bare = []; let sheets = 0, rules = 0;
+      const visit = (list, safe) => {
+        for (const r of list) {
+          rules++;
+          if (r.selectorText && /:hover/.test(r.selectorText)) (safe ? guarded : bare).push(r.selectorText);
+          if (r.cssRules && r.cssRules.length) visit(r.cssRules, safe || !!(r.media && /hover\\s*:\\s*hover/.test(r.media.mediaText)));
+        }
+      };
+      for (const s of document.styleSheets) { let list; try { list = s.cssRules; } catch (_) { continue; } sheets++; visit(list, false); }
+      return { sheets, rules, guarded, bare };
+    })()`;
+    /* The walk is tried on a sheet of its own first: one :hover rule that nothing guards and one that a media query does. A walk
+       that finds neither, or both on the same side, measures nothing. */
+    await page.evaluate(() => {
+      const s = document.createElement('style'); s.id = 'hoverProbe';
+      s.textContent = '.zz-bare:hover{color:red}@media (hover:hover){.zz-guarded:hover{color:red}}';
+      document.head.appendChild(s);
+    });
+    const probe = await page.evaluate(WALK);
+    await page.evaluate(() => document.getElementById('hoverProbe').remove());
+    ok('the walk tells a :hover rule nothing guards from one a media query does', probe.bare.includes('.zz-bare:hover') && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
+       `bare ${probe.bare.length}, guarded ${probe.guarded.length}`);
+    const walk = await page.evaluate(WALK);
+    ok('and it reads the app\'s own stylesheets, which hold :hover rules that are guarded', walk.sheets >= 1 && walk.guarded.length > 0, `${walk.sheets} sheets, ${walk.rules} rules, ${walk.guarded.length} guarded`);
+    ok('no :hover rule applies on a device that cannot hover', walk.bare.length === 0, `${walk.bare.length} bare: ${walk.bare.slice(0, 4).join(' | ')}`);
+
+    /* And the thing it is for, on a touch screen: the Flag button tapped on and off looks as it did before the first tap. */
+    const touch = await browser.newContext({ viewport: { width: 834, height: 1194 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+    const tp = watch(await touch.newPage(), events, 'touch');
+    tp.on('pageerror', e => errors.push(e.message));
+    await watchTransitions(tp);
+    await tp.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await booted(tp);
+    await tp.evaluate(() => { startAdhocQuiz(POOL.filter(q => q.o.length >= 4 && !q.imgopt).slice(0, 3), null); });
+    await onScreen(tp, 'quiz', { marker: '.btn-flag' });
+    await quiet(tp);
+    const still = () => settled(tp, () => { const b = document.querySelector('.btn-flag'); return !!b && b.getAnimations().length === 0; }, { label: 'the Flag button to have no transition running' });
+    const looks = () => tp.evaluate(() => { const b = document.querySelector('.btn-flag'), c = getComputedStyle(b); return { look: [c.color, c.borderTopColor, c.backgroundColor].join(' | '), on: b.classList.contains('on'), hover: b.matches(':hover') }; });
+    ok('the page is one that cannot hover, as a thumb on an iPad is', await tp.evaluate(() => !matchMedia('(hover: hover)').matches && matchMedia('(pointer: coarse)').matches));
+    /* The page drops a second tap that comes within 350 ms of the first on a control (its guard against a double-tap zoom, so
+       that a stray second tap does not misfire), and a tap dropped is a toggle that does not toggle. The window is waited out
+       before each tap: it is a precondition of tapping, not what is being measured. */
+    const tappable = () => settled(tp, () => Date.now() - lastTap > 400, { label: 'the page\'s double-tap guard (350 ms) to have run out' });
+    await still();
+    const rest = await looks();
+    await tappable();
+    await tp.tap('.btn-flag');
+    await settled(tp, () => document.querySelector('.btn-flag').classList.contains('on'), { label: 'the Flag button to be on' });
+    await tappable();
+    await tp.tap('.btn-flag');
+    await settled(tp, () => !document.querySelector('.btn-flag').classList.contains('on'), { label: 'the Flag button to be off again' });
+    await still();
+    const after = await looks();
+    ok('the Flag button was on, and is off again, and the finger that tapped it left it under :hover (so this measures what a tap leaves)', rest.on === false && after.on === false && after.hover === true, JSON.stringify({ rest: rest.on, after: after.on, hover: after.hover }));
+    ok('and it looks as it did before the first tap', after.look === rest.look, `${rest.look}  →  ${after.look}`);
+    await touch.close();
   }
 
   head('nothing throws');

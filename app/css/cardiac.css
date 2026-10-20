@@ -166,7 +166,7 @@
   margin:var(--s5,20px) 0 var(--s5,20px);
   transition:box-shadow .4s var(--glide),transform .4s var(--glide);
   animation:riseIn .7s var(--glide) .06s both}
-.pearl-card:hover{box-shadow:0 1px 2px rgba(10,22,40,.05),0 20px 44px -14px rgba(10,22,40,.20)}
+@media (hover:hover){.pearl-card:hover{box-shadow:0 1px 2px rgba(10,22,40,.05),0 20px 44px -14px rgba(10,22,40,.20)}}
 /* The trace runs along the foot of the PROSE, not of the whole card. It is
    positioned against .pearl-main, so on a wide screen it underlines the
    sentence rather than crossing under the figure beside it — and on a narrow
@@ -187,7 +187,7 @@
 .pearl-next{margin-left:auto;flex:0 0 auto;background:transparent;border:0;padding:4px;
   cursor:pointer;color:var(--muted);display:flex;border-radius:8px;
   transition:color .18s var(--ease),background .18s var(--ease),transform .3s var(--spring)}
-.pearl-next:hover{color:var(--teal);background:var(--card)}
+@media (hover:hover){.pearl-next:hover{color:var(--teal);background:var(--card)}}
 .pearl-next:active{transform:rotate(-90deg)}
 .pearl-body{margin:0;font-family:var(--font-display);font-size:23px;line-height:1.45;
   color:var(--text);text-wrap:pretty;letter-spacing:-.01em}
@@ -196,7 +196,7 @@
   display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;
   color:var(--teal);font-family:inherit}
 .pearl-open .icon{transition:transform .22s var(--spring)}
-.pearl-open:hover .icon{transform:translateX(3px)}
+@media (hover:hover){.pearl-open:hover .icon{transform:translateX(3px)}}
 /* Beside the sentence, not under it: a pearl and the diagram that explains it
    are one thought, and stacking them reads as two. */
 .pearl-fig{flex:0 0 38%;max-width:300px;margin:0;
@@ -204,7 +204,7 @@
   background:color-mix(in srgb, var(--white) 55%, transparent);
   cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:12px;transition:background .3s var(--glide)}
-.pearl-fig:hover{background:color-mix(in srgb, var(--white) 80%, transparent)}
+@media (hover:hover){.pearl-fig:hover{background:color-mix(in srgb, var(--white) 80%, transparent)}}
 .pearl-fig img{display:block;max-width:100%;max-height:230px;object-fit:contain;
   border-radius:8px}
 /* ── the background ──────────────────────────────────────────────────────
@@ -343,7 +343,7 @@
 .off-btn{flex:0 0 auto;padding:8px 14px;border-radius:11px;cursor:pointer;font-family:inherit;
   font-size:13px;font-weight:650;color:var(--white);background:var(--teal);border:0;
   transition:transform .26s var(--spring),opacity .2s}
-.off-btn:hover{transform:translateY(-1px)}
+@media (hover:hover){.off-btn:hover{transform:translateY(-1px)}}
 .off-btn:disabled{cursor:default;opacity:.55;transform:none;
   background:color-mix(in srgb, var(--teal) 30%, transparent);color:var(--muted)}
 /* Nothing left to fetch: the bar is the whole width and the prose stops
@@ -399,8 +399,8 @@
 .door:nth-child(1){animation-delay:.04s}.door:nth-child(2){animation-delay:.08s}
 .door:nth-child(3){animation-delay:.12s}.door:nth-child(4){animation-delay:.16s}
 .door:nth-child(5){animation-delay:.20s}.door:nth-child(6){animation-delay:.24s}
-.door:hover{transform:translateY(-3px);border-color:var(--teal);
-  box-shadow:0 14px 30px -14px rgba(10,22,40,.28)}
+@media (hover:hover){.door:hover{transform:translateY(-3px);border-color:var(--teal);
+  box-shadow:0 14px 30px -14px rgba(10,22,40,.28)}}
 .door:active{transform:translateY(-1px) scale(.985)}
 .door-wide{grid-column:1/-1;padding:18px 20px}
 .door-ic{display:flex;flex:0 0 auto;color:var(--teal)}
@@ -411,7 +411,7 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .door-go{margin-left:auto;color:var(--muted);display:flex;
   transition:transform .28s var(--spring),color .2s}
-.door:hover .door-go{color:var(--teal);transform:translateX(4px)}
+@media (hover:hover){.door:hover .door-go{color:var(--teal);transform:translateX(4px)}}
 /* The study page: a back door, the layout switch it inherited, and a title
    that says what the page is — it is entered deliberately now, so it may as
    well introduce itself. */
@@ -424,7 +424,7 @@
   font-size:13px;font-weight:600;cursor:pointer;
   animation:riseIn .5s var(--glide) both;
   transition:color .2s,border-color .2s,transform .26s var(--spring)}
-.study-back:hover{color:var(--teal);border-color:var(--teal);transform:translateX(-2px)}
+@media (hover:hover){.study-back:hover{color:var(--teal);border-color:var(--teal);transform:translateX(-2px)}}
 .study-title{margin-bottom:var(--s4,16px);animation:riseIn .6s var(--glide) .04s both}
 .study-title h2{margin:0;font-size:33px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
 .study-title p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--muted);max-width:52ch}
