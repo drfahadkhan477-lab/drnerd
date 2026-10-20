@@ -2129,13 +2129,33 @@ function setPhysioSlow(n){
   document.querySelectorAll('[data-physio-slow]').forEach(b=>
     b.classList.toggle('hot',+b.dataset.physioSlow===n));
 }
+/* Playing or paused. Unset until the screen first needs it, then decided by the device: with Reduce Motion on, the cycle starts paused, a still
+   diagram that can be dragged and played; without it, playing. After that the Play/Pause chip decides, for the visit. */
+let physioPlaying=null;
+function physioIsPlaying(){
+  if(physioPlaying===null){
+    let reduced=false;
+    try{ reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(_){}
+    physioPlaying=!reduced;
+  }
+  return physioPlaying;
+}
+function setPhysioPlaying(on){
+  physioPlaying=!!on;
+  if(physio) physioPlaying?physio.play():physio.pause();
+  document.querySelectorAll('[data-physio-play]').forEach(b=>{
+    b.textContent=physioPlaying?'Pause':'Play';
+    b.title=physioPlaying?'Pause the cycle':'Play the cycle';
+  });
+}
 
 function buildPhysio(){
   const v=PHYSIO_VIEWS.find(x=>x[0]===physioView)||PHYSIO_VIEWS[0];
   return `<div class="panel physio-panel">
     <div class="panel-h"><span>Cardiac cycle · ${e(v[1])}</span>
       <span class="physio-phase" id="physioPhase">&nbsp;</span></div>
-    <div class="physio-chips speed-chips"><span class="speed-lbl">speed</span>${
+    <div class="physio-chips speed-chips"><button class="chip mini" data-physio-play
+        title="${physioIsPlaying()?'Pause the cycle':'Play the cycle'}">${physioIsPlaying()?'Pause':'Play'}</button><span class="speed-lbl">speed</span>${
       PHYSIO_SPEEDS.map(([n,label])=>
         `<button class="chip mini${physioSlow===n?' hot':''}" data-physio-slow="${n}"
            title="${n===1?'Real time':'\u0024{label} of real time'}">${e(label)}</button>`).join('')}</div>
@@ -2198,7 +2218,7 @@ function mountPhysio(){
     || (!document.documentElement.hasAttribute('data-theme')
         && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   physio=Wiggers.mount(cv,{view:physioView,dark,hr:RHYTHMS[labKind].hr||68,
-    slow:physioSlow,
+    slow:physioSlow, playing:physioIsPlaying(),
     /* Its own clock. wiggers.js integrates one when no timeSource is given,
        and onFrame is how the caption below learns what time it is — sixty
        times a second, from the thing that owns the time. */
@@ -2208,6 +2228,8 @@ function mountPhysio(){
   physio.setIntervention(physioIv);
   document.querySelectorAll('[data-physio-slow]').forEach(b=>
     b.onclick=()=>setPhysioSlow(+b.dataset.physioSlow));
+  document.querySelectorAll('[data-physio-play]').forEach(b=>
+    b.onclick=()=>setPhysioPlaying(!physioIsPlaying()));
   document.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>{
     physioView=b.dataset.physioView;
     try{localStorage.setItem('accsap12.physioview',physioView);}catch(_){}
