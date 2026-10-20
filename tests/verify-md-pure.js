@@ -34,6 +34,10 @@
  * browser — the same division tests/verify-ipad-pure.js draws for the same
  * reason.
  *
+ * The last two sections hold what md() makes of the lists a model writes and
+ * of the blocks around them: the bullet Gemini, the default model here, writes
+ * is a list, and no block is ever drawn inside a paragraph.
+ *
  * THE FUNCTION IS LIFTED, NOT COPIED. A copy of md() pasted here would be
  * wrong the first time anybody changed the real one, and would keep passing.
  * So it is cut out of app/systole.html, the page that ships. (It used to be
@@ -199,6 +203,7 @@ head('what a model says cannot become what the page runs');
     ['markup inside a bold run', '**<img src=x onerror=alert(1)>**'],
     ['markup inside a table cell', '| a | b |\n|---|---|\n| <img src=x onerror=alert(1)> | y |'],
     ['markup inside a list item', '- <img src=x onerror=alert(1)>'],
+    ['markup inside a star bullet', '*   <img src=x onerror=alert(1)>'],
     ['markup inside a blockquote', '> <img src=x onerror=alert(1)>'],
     ['markup inside a heading', '## <img src=x onerror=alert(1)>'],
   ];
@@ -274,9 +279,112 @@ head('the ordinary job still gets done');
   ok('bold becomes strong', /<strong>dose<\/strong>/.test(md('**dose**')));
   ok('a heading becomes a heading', /<h3>Method<\/h3>/.test(md('## Method')));
   ok('a bullet becomes a list item', /<li>one<\/li>/.test(md('- one')));
+  ok('and so does a star bullet', /<li>one<\/li>/.test(md('* one')));
   ok('a fence becomes a code block', /<pre><code>/.test(md('```\nx\n```')));
   ok('a pipe table becomes a table', /<table>/.test(md('| a | b |\n|---|---|\n| 1 | 2 |')));
   ok('and prose becomes a paragraph', /<p>hello<\/p>/.test(md('hello')));
+}
+
+/* ── the nesting of what md() wrote ───────────────────────────────────────────
+   Read the way a browser's parser reads it, which is the way that matters: a block element opened inside an open <p> closes
+   the <p>, so the text after it is left outside any paragraph and the page has an empty <p> it did not write. A <li> belongs
+   to a list, and every tag that opens is closed in order. Returns '' for sound markup, and the first fault otherwise. */
+function nesting(html) {
+  const BLOCK = new Set(['ul', 'ol', 'h3', 'h4', 'pre', 'div', 'table', 'figure', 'blockquote', 'hr']);
+  const VOID = new Set(['hr', 'img', 'br']);
+  const stack = [];
+  for (const m of String(html).matchAll(/<(\/?)([a-z0-9]+)\b[^>]*>/g)) {
+    const close = m[1] === '/', name = m[2];
+    if (!close && BLOCK.has(name) && stack.includes('p')) return `<${name}> opened inside a <p>`;
+    if (VOID.has(name)) continue;
+    if (!close) {
+      if (name === 'li' && !/^(ul|ol)$/.test(stack[stack.length - 1] || '')) return '<li> outside a list';
+      stack.push(name);
+    } else if (stack.pop() !== name) return `</${name}> closes something other than what is open`;
+  }
+  return stack.length ? `<${stack[stack.length - 1]}> never closed` : '';
+}
+
+head('a model\'s lists');
+{
+  /* Guard on the guard: a checker that says '' of everything would pass every check below for the wrong reason. */
+  ok('the checker can tell a list inside a paragraph from a list beside one',
+     nesting('<p>Intro: <ul><li>one</li></ul>Outro.</p>') === '<ul> opened inside a <p>' && nesting('<p>Intro:</p><ul><li>one</li></ul><p>Outro.</p>') === '',
+     nesting('<p>Intro: <ul><li>one</li></ul>Outro.</p>'));
+  ok('and a loose <li>, a tag left open and a tag closed out of order',
+     nesting('<li>a</li>') === '<li> outside a list' && nesting('<p>a') === '<p> never closed' && nesting('<ul><li>a</ul></li>') !== '');
+
+  const UL = (...items) => '<ul>' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+  const OL = (...items) => '<ol>' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+  const gem = md('The key points:\n\n*   **Aortic stenosis:** fixed obstruction.\n*   **HOCM:** dynamic obstruction.\n\nIn summary, they differ.');
+  ok('the * bullets Gemini writes, with three spaces after the star, are a list between two paragraphs',
+     gem === '<p>The key points:</p>' + UL('<strong>Aortic stenosis:</strong> fixed obstruction.', '<strong>HOCM:</strong> dynamic obstruction.') + '<p>In summary, they differ.</p>', gem);
+  ok('and with one space', md('* one\n* two') === UL('one', 'two'), md('* one\n* two'));
+  ok('a bullet with an emphasis in it keeps its bullet, and the emphasis is on the right words',
+     md('* a *very* important point\n* second') === UL('a <em>very</em> important point', 'second'), md('* a *very* important point\n* second'));
+  ok('a star between spaces is a times sign and is left as it is',
+     md('It is 5 * 3 * 2 = 30 here.') === '<p>It is 5 * 3 * 2 = 30 here.</p>', md('It is 5 * 3 * 2 = 30 here.'));
+  ok('an emphasis is still one: at the start of a line, in brackets, and several in a line',
+     md('*important* and (*also*) so *this one*') === '<p><em>important</em> and (<em>also</em>) so <em>this one</em></p>', md('*important* and (*also*) so *this one*'));
+  ok('a star with a space after it does not open an emphasis, and one with a space before it does not close one',
+     md('x * y* z') === '<p>x * y* z</p>' && md('a *b and 5 * 3') === '<p>a *b and 5 * 3</p>', [md('x * y* z'), md('a *b and 5 * 3')].join('  |  '));
+
+  ok('a list after a paragraph is a block of its own, and what follows it is a paragraph',
+     md('Intro:\n\n- one\n- two\n\nOutro.') === '<p>Intro:</p>' + UL('one', 'two') + '<p>Outro.</p>', md('Intro:\n\n- one\n- two\n\nOutro.'));
+  ok('so is one written straight under its lead-in line',
+     md('Intro:\n- one\n- two\n\nOutro.') === '<p>Intro:</p>' + UL('one', 'two') + '<p>Outro.</p>', md('Intro:\n- one\n- two\n\nOutro.'));
+  ok('and a numbered one', md('Steps:\n\n1. first\n2. second\n\nDone.') === '<p>Steps:</p>' + OL('first', 'second') + '<p>Done.</p>', md('Steps:\n\n1. first\n2. second\n\nDone.'));
+  ok('a list with a blank line between its items is one list', md('- a\n\n- b\n\n- c') === UL('a', 'b', 'c'), md('- a\n\n- b\n\n- c'));
+  ok('a list that changes kind is two lists', md('1. one\n2. two\n- a\n- b') === OL('one', 'two') + UL('a', 'b'), md('1. one\n2. two\n- a\n- b'));
+  ok('a line of prose between two bullets is a paragraph between two lists',
+     md('- a\nmiddle\n- b') === UL('a') + '<p>middle</p>' + UL('b'), md('- a\nmiddle\n- b'));
+}
+
+head('and the blocks around them');
+{
+  /* Each block, written straight under a line of prose and with a line of prose straight under it. */
+  const around = [
+    ['a heading', 'Intro\n## Head\nBody', /^<p>Intro<\/p><h3>Head<\/h3><p>Body<\/p>$/],
+    ['a table', 'Compare:\n| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter.', /^<p>Compare:<\/p><div class="tw"><table>.*<\/table><\/div><p>After\.<\/p>$/],
+    ['a quotation', 'Said:\n> quoted\n\nAfter.', /^<p>Said:<\/p><blockquote><p>quoted<\/p><\/blockquote><p>After\.<\/p>$/],
+    ['a rule', 'above\n---\nbelow', /^<p>above<\/p><hr><p>below<\/p>$/],
+    ['a code fence', 'Run:\n```\nx = 1\n```\nAfter.', /^<p>Run:<\/p><pre><code>\nx = 1\n<\/code><\/pre><p>After\.<\/p>$/],
+    ['a figure', 'See:\n![a caption](refimg://k)\nAfter.', /^<p>See:<\/p><figure class="ref-fig"[^>]*><img [^>]*><figcaption>a caption<\/figcaption><\/figure><p>After\.<\/p>$/],
+  ];
+  for (const [what, input, shape] of around) {
+    const out = md(input);
+    ok(`${what} written under a line of prose is a block of its own, and the line after it is a paragraph`, shape.test(out) && nesting(out) === '', out.slice(0, 110));
+  }
+  ok('a paragraph after a table, a quotation or a list is a paragraph, not loose text',
+     md('| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter the table.').endsWith('</div><p>After the table.</p>')
+     && md('> quoted\n\nAfter the quote.').endsWith('</blockquote><p>After the quote.</p>')
+     && md('- a\n\nAfter the list.').endsWith('</ul><p>After the list.</p>'));
+  ok('a code fence with a blank line inside is as it was: cut at the blank line, not made worse',
+     md('Run:\n\n```\nline one\n\nline three\n```\n\nDone.') === '<p>Run:</p><pre><code>\nline one<p>line three </code></pre></p><p>Done.</p>',
+     md('Run:\n\n```\nline one\n\nline three\n```\n\nDone.'));
+  ok('and nothing written is still nothing: an empty answer is the empty paragraph it always was', md('') === '<p></p>', md(''));
+
+  /* The same property over documents: blocks and prose in every order, with one newline or several between them. A fixed
+     generator, so a failure names the same document on every run. */
+  let seed = 20260719;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const WORDS = ['aortic', 'valve', 'stenosis', '5 mg', 'HOCM', 'EF 55%', 'a < b', 'x & y', 'beta-blocker'];
+  const line = () => Array.from({ length: 1 + Math.floor(rnd() * 6) }, () => pick([w => w, w => w, w => `**${w}**`, w => `*${w}*`, w => '`' + w + '`'])(pick(WORDS))).join(' ');
+  const BLOCKS = [
+    () => line(), () => line() + '\n' + line(), () => '## ' + pick(WORDS), () => '> ' + line(), () => '---', () => '```\n' + pick(WORDS) + '\n```',
+    () => '| a | b |\n|---|---|\n| ' + pick(WORDS) + ' | y |', () => '![cap](refimg://k)',
+    () => '- ' + line() + '\n- ' + line(), () => '* ' + line() + '\n* ' + line(), () => '*   ' + line() + '\n*   ' + line(), () => '1. ' + line() + '\n2. ' + line(),
+    () => '- ' + line() + '\n\n- ' + line(), () => '1. ' + line() + '\n- ' + line(),
+  ];
+  let faults = 0, first = '', lists = 0;
+  for (let i = 0; i < 4000; i++) {
+    const doc = Array.from({ length: 1 + Math.floor(rnd() * 5) }, () => pick(BLOCKS)()).join(pick(['\n\n', '\n\n', '\n\n\n', '\n']));
+    const out = md(doc), why = nesting(out);
+    lists += (out.match(/<li>/g) || []).length;
+    if (why) { faults++; if (!first) first = `${why}: ${JSON.stringify(doc).slice(0, 90)}`; }
+  }
+  ok('4,000 documents of prose, lists and blocks in every order come out with no block inside a paragraph, and every tag closed', faults === 0 && lists > 8000, first || `${lists} list items`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

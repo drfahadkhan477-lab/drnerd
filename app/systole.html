@@ -4187,7 +4187,9 @@ function md(t){
   s=s.replace(/^###\s+(.+)$/gm,'<h3>$1</h3>');
   s=s.replace(/^##\s+(.+)$/gm,'<h3>$1</h3>');
   s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
-  s=s.replace(/(^|[\s(])\*([^*\n]+)\*/g,'$1<em>$2</em>');
+  /* A mark opens on a word and closes on one. A * with a space after it is a bullet or a times sign, which this used to take for
+     the start of an emphasis: "* a *very* point" lost its bullet and italicised the wrong words, and "5 * 3 * 2" was set in italics. */
+  s=s.replace(/(^|[\s(])\*(?=[^\s*])([^*\n]*[^\s*])\*/g,'$1<em>$2</em>');
   /* GFM pipe tables. Runs after the inline marks so cells keep their bold,
      and before the list rules so a |---|---| divider is never read as a
      bullet. The wrapper scrolls sideways: a drug-dose table is wider than a
@@ -4210,7 +4212,8 @@ function md(t){
      The rule still fired; the <hr> just ended up inside the paragraph it was
      supposed to separate. */
   s=s.replace(/^[ \t]*(?:---+|___+)[ \t]*$/gm,'<hr>');
-  s=s.replace(/^\s*[-•]\s+(.+)$/gm,'<li>$1</li>');
+  /* The * is the bullet Gemini, the default model here, writes. */
+  s=s.replace(/^\s*[-•*]\s+(.+)$/gm,'<li>$1</li>');
   s=s.replace(/^\s*\d+\.\s+(.+)$/gm,'<li data-o>$1</li>');
   /* THE ORDER IS THE CONTENT. Both kinds used to become a bare <li> and every
      run was wrapped in <ul>, so "1. 2. 3." came out as three bullets with the
@@ -4232,7 +4235,15 @@ function md(t){
      hard-wrapped at ~78 characters; turning each of those into a <br> gave
      paragraphs a ragged false margin that tracked the .md file rather than
      the column it was being read in. A blank line still starts a paragraph. */
-  s=s.split(/\n{2,}/).map(p=>/^<(ul|ol|h3|h4|pre|div|table|figure|blockquote|hr)/.test(p.trim())?p:`<p>${p.replace(/\n/g,' ')}</p>`).join('');
+  const para=p=>/^<(ul|ol|h3|h4|pre|div|table|figure|blockquote|hr)/.test(p.trim())?p:`<p>${p.replace(/\n/g,' ')}</p>`;
+  const BLOCK=/(<ul>[\s\S]*?<\/ul>|<ol>[\s\S]*?<\/ol>|<h[34]>[\s\S]*?<\/h[34]>|<pre>[\s\S]*?<\/pre>|<div class="tw">[\s\S]*?<\/div>|<figure[\s\S]*?<\/figure>|<blockquote>[\s\S]*?<\/blockquote>|<hr>)/;
+  /* A block is never inside a paragraph. One written straight under a line of prose, or with a line of prose straight under it,
+     is cut out of the paragraph it was in: a <ul> inside a <p> is not markup, and the browser closes the <p> in front of it and
+     leaves what followed with no paragraph at all. */
+  s=s.split(/\n{2,}/).map(p=>{
+    const parts=p.split(BLOCK);
+    return parts.length===1?para(p):parts.map((x,k)=>k%2?x:(x.trim()?para(x.trim()):'')).join('');
+  }).join('');
   return s;
 }
 function apexIsFull(){
