@@ -1636,6 +1636,17 @@ function refAbsorbImages(body, byPath, byName, report){
   });
 }
 
+/* A file the picker hands over, read. Blob.arrayBuffer() and Blob.text() came in Safari 14, and the floor is iPadOS 13.4, where calling them is a
+   TypeError and the import says "could not be read" for every file. FileReader is on every Safari. A Response has both methods from Safari 10, so
+   the scan of the floor (tests/verify-ipad-pure.js) cannot tell a Blob's apart from it by their spelling, and the picker's files go through these. */
+function blobBytes(f){
+  if(typeof f.arrayBuffer==='function') return f.arrayBuffer();
+  return new Promise((ok,no)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=()=>no(r.error||new Error('unreadable')); r.readAsArrayBuffer(f); });
+}
+function blobText(f){
+  if(typeof f.text==='function') return f.text();
+  return new Promise((ok,no)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=()=>no(r.error||new Error('unreadable')); r.readAsText(f); });
+}
 function refImportText(){
   const inp=document.createElement('input');
   inp.type='file'; inp.multiple=true;
@@ -1659,7 +1670,7 @@ function refImportText(){
     for(const f of picked){
       try{
         if(/\.zip$/i.test(f.name)){
-          const {files,skipped}=await ZipRead.read(await f.arrayBuffer());
+          const {files,skipped}=await ZipRead.read(await blobBytes(f));
           report.skipped+=skipped.length;
           for(const z of files){
             /* Zips from macOS carry a __MACOSX shadow of every file. */
@@ -1668,10 +1679,10 @@ function refImportText(){
             else offer(z.name, z.bytes);
           }
         } else if(/\.(md|txt|json)$/i.test(f.name)){
-          texts.push({name:f.name, raw:await f.text()});
+          texts.push({name:f.name, raw:await blobText(f)});
         } else {
           /* A file picker gives no directory, so its own name is its path. */
-          offer(f.webkitRelativePath||f.name, new Uint8Array(await f.arrayBuffer()));
+          offer(f.webkitRelativePath||f.name, new Uint8Array(await blobBytes(f)));
         }
       }catch(_){ failed++; }
     }
