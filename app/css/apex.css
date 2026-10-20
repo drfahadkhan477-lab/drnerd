@@ -232,7 +232,7 @@
 .fab-av{width:26px;height:26px;display:block;flex:none}
 .ai-fab:active{transform:scale(.96)}
 .ai-fab{transition:transform .12s var(--ease,ease),box-shadow .2s var(--ease,ease)}
-.ai-fab:hover{box-shadow:0 10px 30px rgba(30,58,138,.44)}
+@media (hover:hover){.ai-fab:hover{box-shadow:0 10px 30px rgba(30,58,138,.44)}}
 .ai-fab{position:fixed;right:max(14px,env(safe-area-inset-right));
   bottom:max(14px,env(safe-area-inset-bottom));z-index:70;
   height:50px;padding:0 18px;border-radius:25px;border:none;cursor:pointer;

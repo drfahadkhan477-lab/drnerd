@@ -135,11 +135,11 @@ html [data-home="focus"] .story-rail{display:none}
   border:1.5px solid var(--border2);box-shadow:var(--shadow-sm);
   transition:transform .18s var(--ease),box-shadow .18s var(--ease),border-color .18s;
   position:relative;overflow:hidden;user-select:none;-webkit-user-select:none}
-.ch-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+@media (hover:hover){.ch-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}}
 .ch-card:active{transform:translateY(0) scale(.98)}
 .ch-card.full{grid-column:1/-1;background:linear-gradient(135deg,var(--navy) 0%,var(--navy3) 100%);
   color:white;border-color:var(--navy2);padding:20px}
-.ch-card.full:hover{box-shadow:0 8px 32px rgba(15,30,61,.3)}
+@media (hover:hover){.ch-card.full:hover{box-shadow:0 8px 32px rgba(15,30,61,.3)}}
 .ch-card.missed-card{grid-column:1/-1;border-color:var(--red-b);background:var(--red-bg)}
 .ch-icon{font-size:23px;margin-bottom:10px;display:block}
 .ch-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;line-height:1.3;letter-spacing:-.01em}
@@ -166,7 +166,7 @@ html [data-home="focus"] .story-rail{display:none}
 .q-restart{font-size:var(--t-tiny);font-weight:600;color:var(--muted);background:none;
   border:1px solid var(--border);border-radius:999px;padding:3px 10px;cursor:pointer;
   margin-left:8px;line-height:1.4}
-.q-restart:hover{color:var(--fg);border-color:var(--fg)}
+@media (hover:hover){.q-restart:hover{color:var(--fg);border-color:var(--fg)}}
 .prog-track{height:4px;background:var(--border);border-radius:3px;overflow:hidden}
 .prog-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--teal),var(--teal2));
   transform-origin:left center;transition:transform .4s var(--ease)}
@@ -195,7 +195,7 @@ html [data-home="focus"] .story-rail{display:none}
   padding:13px 16px;cursor:pointer;display:flex;align-items:flex-start;gap:12px;
   text-align:left;width:100%;transition:all .15s var(--ease);
   line-height:1.55;font-size:13px;color:var(--text);font-family:var(--font-sans)}
-.opt:hover:not(:disabled){border-color:var(--teal);background:var(--teal4);box-shadow:var(--shadow-glow)}
+@media (hover:hover){.opt:hover:not(:disabled){border-color:var(--teal);background:var(--teal4);box-shadow:var(--shadow-glow)}}
 .opt:active:not(:disabled){transform:scale(.99)}
 .opt:disabled{cursor:default}
 .opt-letter{font-weight:700;font-size:11px;min-width:26px;height:26px;border-radius:8px;
@@ -244,23 +244,23 @@ html [data-home="focus"] .story-rail{display:none}
   cursor:pointer;transition:all .18s var(--ease);letter-spacing:-.01em;font-family:var(--font-sans);
   display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .btn-next{background:var(--navy);color:white}
-.btn-next:hover{background:var(--navy2);box-shadow:0 6px 20px rgba(15,30,61,.3)}
+@media (hover:hover){.btn-next:hover{background:var(--navy2);box-shadow:0 6px 20px rgba(15,30,61,.3)}}
 .btn-next:active{transform:scale(.98)}
 .btn-home{background:var(--card);border:1.5px solid var(--border);color:var(--muted);
   font-size:13px;flex:0;min-width:52px;padding:15px 14px}
 .btn-prev{background:var(--card);border:1.5px solid var(--border);color:var(--muted);
   font-size:13px;flex:0;min-width:52px;padding:15px 14px}
-.btn-prev:hover{border-color:var(--navy);color:var(--navy)}
+@media (hover:hover){.btn-prev:hover{border-color:var(--navy);color:var(--navy)}}
 .btn-prev:active{transform:scale(.94)}
-.btn-home:hover{border-color:var(--teal);color:var(--teal)}
+@media (hover:hover){.btn-home:hover{border-color:var(--teal);color:var(--teal)}}
 .btn-skip{background:transparent;border:1.5px solid var(--border);color:var(--muted);
   font-size:13px;flex:0;min-width:70px;padding:15px 10px}
-.btn-skip:hover{border-color:var(--amber);color:var(--amber)}
+@media (hover:hover){.btn-skip:hover{border-color:var(--amber);color:var(--amber)}}
 /* Flag: a toggle beside Previous. Amber and a filled pennant say it is on (not colour alone). On a phone the word goes
    (it stays for a screen reader): Home, Previous, Flag and Next are 333 px of a 336 px row, and a row that is
    still too narrow wraps Next onto a line of its own rather than running off the screen. */
 .btn-flag{background:var(--card);border:1.5px solid var(--border);color:var(--muted);font-size:13px;flex:0 0 auto;min-width:52px}
-.btn-flag:hover{border-color:var(--amber);color:var(--amber)}
+@media (hover:hover){.btn-flag:hover{border-color:var(--amber);color:var(--amber)}}
 .btn-flag.on{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
 .btn-flag.on .icon{fill:currentColor}
 @media(max-width:480px){
