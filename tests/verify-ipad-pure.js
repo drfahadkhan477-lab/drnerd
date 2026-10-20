@@ -298,8 +298,9 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      iPad 11" in portrait ended at 1553 px on a 1194 px screen, with no way to reach the rest. The way out is the one base.css already takes for
      the body: the same property in vh first, which the older Safari reads and the newer one overrides.
 
-     WHAT IS HELD IS THE ORDER, THE PROPERTY AND THE VALUE. An earlier declaration of the same property in the same block, whose value is the
-     dvh one in the older spelling (dvh, svh and lvh as vh; the same for w, min and max). After the dvh it would override it in a Safari that
+     WHAT IS HELD IS THE ORDER, THE PROPERTY AND THE VALUE. The last earlier declaration of the same property in the same block, whose value is the
+     dvh one in the older spelling (dvh, svh and lvh as vh; the same for w, min and max): it is the one an older Safari ends up with, so a vh that
+     a plain declaration of the property has overridden since is not the fallback. After the dvh it would override it in a Safari that
      knows it; on another property it is not a fallback; in another rule it is a cascade that the next edit to either rule can break; and a
      value that merely has no new unit in it is not one either (`height:not-a-value` is dropped by the same Safari, and takes the fallback with
      it). The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not a declaration that
@@ -321,15 +322,15 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
         if (c === '(') depth++; else if (c === ')') depth = Math.max(0, depth - 1);
         if ((c === ';' && depth === 0) || i === body.length) { decls.push({ text: body.slice(start, i), at: b.index + 1 + start }); start = i + 1; }
       }
-      const known = [];
+      const effective = new Map();     // property -> the value of its last declaration that an older Safari reads
       for (const d of decls) {
         const m = /^\s*([-\w]+)\s*:([\s\S]*)$/.exec(d.text);
         if (!m) continue;
         const prop = m[1].toLowerCase(), value = squash(m[2]);
-        if (!NEW_UNIT.test(value)) { known.push({ prop, value }); continue; }
+        if (!NEW_UNIT.test(value)) { effective.set(prop, value); continue; }
         used++;
         const want = older(value);
-        if (prop.startsWith('--') || !known.some(k => k.prop === prop && k.value === want))
+        if (prop.startsWith('--') || effective.get(prop) !== want)
           bad.push(`${prop}:${value.slice(0, 40)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
       }
     }
@@ -340,6 +341,8 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
   ok('and not one with the same property in vh before it, in a calc or not', bad('.a{height:100vh;height:100dvh}') === 0 && bad('.a{min-height:calc(100vh - 4px);min-height:calc(100dvh - 4px)}') === 0);
   ok('but a vh after it is no fallback: a browser that knows dvh then uses the vh', bad('.a{height:100dvh;height:100vh}') === 1);
   ok('nor is a vh on another property', bad('.a{min-height:100vh;height:100dvh}') === 1);
+  ok('nor is a vh that a declaration of the property in between has overridden, for the older Safari reads that one',
+     bad('.a{height:100vh;height:auto;height:100dvh}') === 1 && bad('.a{height:100vh;height:50dvh;height:100dvh}') === 1 && bad('.a{height:100vh;height:100dvh;height:100dvh}') === 0);
   ok('nor is a value that is merely not a new unit, or a vh that is not the same one',
      bad('.a{height:not-a-value;height:100dvh}') === 1 && bad('.a{height:auto;height:100dvh}') === 1 && bad('.a{height:90vh;height:100dvh}') === 1 &&
      bad('.a{height:calc(100vh - 4px);height:calc(100dvh - 8px)}') === 1);
