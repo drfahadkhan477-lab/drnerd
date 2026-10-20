@@ -446,7 +446,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     captured.length = 0;
     await page.evaluate(() => { fire('anything'); });
     await page.waitForTimeout(500);   // nothing observable marks a request that is never made; the positive control below shows the stub answers
-    ok('nothing is sent into the block, whoever asks', captured.length === 0, String(captured.length));
+    const asked0 = await page.evaluate(() => Object.keys(CHATS).some(k => (CHATS[k] || []).some(m => m.content === 'anything')));
+    ok('nothing is sent into the block, whoever asks, and nothing is asked: the prompt is in no thread', captured.length === 0 && !asked0, captured.length + ' ' + asked0);
     ok('and the helper that opens Apex for a chip or a button says no', await page.evaluate(() => askApex('hello') === false) && captured.length === 0);
     await page.evaluate(() => mockSubmit());
     await reached('mockreport');

@@ -4091,14 +4091,14 @@ async function streamReply(q,hist,extra){
   let guard=0, truncated=false;
   try{
     while(guard++ < 6){                       // bounded agent loop
-      if(apexAway()) break;                   // a mock block opened while this reply was on its way: no more requests
       apexSetState('thinking');
       const turn=await oneTurn(q,wire,extra);
       if(turn.text.trim()||turn.calls.length){
         if(turn.text.trim()) hist.push({role:'assistant',content:turn.text});
         saveJSON(AI_CHAT,CHATS);
       }
-      if(!turn.calls.length||apexAway()) break;   // ...and what it was at the model with can say its words but not act
+      /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
+      if(!turn.calls.length||apexAway()) break;
       if(guard>=6) truncated=true;          // calls still pending on the last allowed step
       const results=turn.calls.map(c=>{
         const out=runTool(c.name,c.input);
