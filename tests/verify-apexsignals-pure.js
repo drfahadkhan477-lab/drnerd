@@ -308,7 +308,7 @@ head('digest: recent misses, one per question');
     const x = G.digest({ log: [R({ q: 'Q1', ok: 0, pick: 1 })], byId: b, now: NOW, missed: null }); return row0(x).key === null && !has(x.text, 'the key is') && has(x.text, 'Chose B.'); })());
   ok('a confidence or a reason that is not one of the set is not printed, nor a time that cannot be true',
     (() => { const x = dig({ log: [R({ q: 'Q1', ok: 0, pick: 1, cf: 7, why: '<script>alert(1)</script>', ms: -4 })] });
-      return row0(x).cf === null && row0(x).why === null && row0(x).ms === null && !/Marked|Reason|<script>| s\.$/.test(x.text.split('\n')[3] || ''); })());
+      return row0(x).cf === null && row0(x).why === null && row0(x).ms === null && !/Marked|Reason|alert\(1\)| s\.$/.test(x.text.split('\n')[3] || ''); })());
   ok('a row with no date has no dash, and a block row with no date has only the kind',
     (() => { const x = dig({ log: [R({ q: 'Q1', ok: 0, pick: 1, t: undefined }), R({ q: 'Q4', ok: 0, pick: 1, t: undefined, m: 'exam' })] });
       return has(x.text, '[Q4] Pericardial Disease, item 2 — in a mock block\n') && has(x.text, '[Q1] Valvular Disease, item 7\n') && !has(x.text, '— ,') && !has(x.text, ' — \n'); })());
