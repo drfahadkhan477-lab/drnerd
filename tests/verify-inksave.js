@@ -10,18 +10,27 @@
  * clone; and a sweep of the eraser over ten strokes did it ten times. The strokes are in INK, which the screen reads, from the moment they
  * are drawn, so only the copy in the database needs to wait.
  *
- * It waits until the pen has been still for 900 ms, and never longer than 10 s after the first stroke not yet saved; hiding the page,
- * closing it and exporting save it at once; and before the store has hydrated, when a save is the one the store merges under what it then
- * reads (src/core/store.js), it is made at once as well. This holds each of those, counting the puts of the ink key and reading the
- * database back, which is the thing that was slow and the thing that must not be lost:
+ * It waits until the pen has been still for 900 ms, and never longer than 10 s after the first stroke not yet saved; hiding the page and
+ * exporting save it at once, and closing it asks for the same save at once; and before the store has hydrated, when a save is the one the
+ * store merges under what it then reads (src/core/store.js), it is made at once as well. This holds each of those, counting the puts of the
+ * ink key and reading the database back, which is the thing that was slow and the thing that must not be lost:
  *   · a stroke lifted writes nothing yet, and is in the ink the screen reads; once the pen has been still it is written, once, and the
  *     database holds it; ten strokes a tenth of a second apart are one write, and the database holds all of them;
  *   · writing that never pauses for 900 ms still reaches the database, after about 10 s, and what came after that is written when it stops;
- *   · hiding the page and closing it write at once, what was drawn last included;
+ *   · hiding the page writes at once, what was drawn last included, and closing it asks for the same write at once;
  *   · three undos in a row are one write, and the database holds what is left;
  *   · an eraser swept over five strokes is one write, and the database holds what is left;
  *   · an export holds a stroke not yet saved, and saves it;
  *   · before hydration a save is made at once.
+ *
+ * WHAT CLOSING IS HELD TO. The pagehide handler is run on a page that stays alive, and the write it asks for is counted at the IndexedDB layer
+ * and read back afterwards: that holds that the write is asked for, at once, and no more. Whether a browser lets a transaction opened by a
+ * page that is going away finish is the browser's, and measured it does not: with the pen lifted and page.close() called at once (pagehide
+ * runs), the stroke was in the database in 0 of 6 rounds on Chromium 153 and on WebKit 26.6, headless; with the page hidden first and closed
+ * 30 ms later it was in 6 of 6 on both, and with the page hidden and left open, 6 of 6. So what the saving relies on is hiding the page, which
+ * comes first when an iPad leaves the app and leaves the page alive to finish the write, and the ink drawn in the last 900 ms before a page is
+ * closed outright, with nothing hidden first, is what a close can lose. (Master's code, which wrote at every pen-up, lost it on Chromium too
+ * and not on WebKit: 0 of 6 and 6 of 6.)
  */
 'use strict';
 const path = require('path');
@@ -192,7 +201,7 @@ const STORED = `new Promise(resolve => {
     await page.evaluate(() => { window.__sentAt = performance.now(); window.dispatchEvent(new Event('pagehide')); });
     const w2 = await writeAfter(null, before2);
     const db2 = await storedBy(l2);
-    ok('and so does closing it', w2.came && w2.ms < LAG && db2 === l2, `the write came ${w2.ms} ms after the page was closed (within ${LAG}); ${db2} of ${l2} strokes in the database`);
+    ok('and closing it asks for the same write at once (the browser may still drop a transaction opened as a page goes away; hiding, which comes first, is what is relied on)', w2.came && w2.ms < LAG && db2 === l2, `the write was asked for ${w2.ms} ms after pagehide (within ${LAG}); ${db2} of ${l2} strokes in the database of the page that stayed alive`);
     await page.waitForTimeout(1000);
   }
 

@@ -152,7 +152,7 @@ const SUITES = [
   ['figzoom',      'a figure can be examined, and still has four ways out'],
   ['lazyink',      'a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host'],
   ['inkpaint',     'a move of the pen paints the segments it added and not every stroke on the canvas again, and the picture is the one a full repaint draws'],
-  ['inksave',      'the ink is written to the database when the pen has been still and not at every pen-up, at once when the page is hidden, closed or exported, and an eraser sweep or a run of undos is one write'],
+  ['inksave',      'the ink is written to the database when the pen has been still and not at every pen-up, at once when the page is hidden or exported and asked for at once when it is closed, and an eraser sweep or a run of undos is one write'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['taps',         'the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
