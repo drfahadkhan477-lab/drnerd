@@ -170,13 +170,14 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     await page.evaluate(() => {
       const s = document.createElement('style'); s.id = 'hoverProbe';
       s.textContent = '.zz-bare:hover{color:red}@media (hover:hover){.zz-guarded:hover{color:red}}' +
-                      '@media not (hover:hover){.zz-not:hover{color:red}}@media (hover:hover), (min-width:1px){.zz-list:hover{color:red}}';
+                      '@media not (hover:hover){.zz-not:hover{color:red}}@media (hover:hover), (min-width:1px){.zz-list:hover{color:red}}' +
+                      '@media (any-hover:hover){.zz-any:hover{color:red}}';
       document.head.appendChild(s);
     });
     const probe = await page.evaluate(WALK);
     await page.evaluate(() => document.getElementById('hoverProbe').remove());
-    ok('the walk tells a :hover rule nothing guards from one a media query does, and takes neither the negation of the query nor a list holding a query every device satisfies for a guard',
-       probe.bare.includes('.zz-bare:hover') && probe.bare.includes('.zz-not:hover') && probe.bare.includes('.zz-list:hover') && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
+    ok('the walk tells a :hover rule nothing guards from one a media query does, and takes none of the negation of the query, a list holding a query every device satisfies, or (any-hover: hover), which a mouse beside a touch screen satisfies, for a guard',
+       ['.zz-bare:hover', '.zz-not:hover', '.zz-list:hover', '.zz-any:hover'].every(s => probe.bare.includes(s)) && probe.guarded.includes('.zz-guarded:hover') && !probe.bare.includes('.zz-guarded:hover'),
        `bare ${probe.bare.length}, guarded ${probe.guarded.length}`);
     const walk = await page.evaluate(WALK);
     ok('and it reads the app\'s own stylesheets, which hold :hover rules that are guarded', walk.sheets >= 1 && walk.guarded.length > 0, `${walk.sheets} sheets, ${walk.rules} rules, ${walk.guarded.length} guarded`);

@@ -7,8 +7,8 @@
  * function with no closure so the second can send its source into a page.
  *
  * WHAT IT SAYS. A media query list applies where ANY of its queries does, so the list guards only if EVERY query in it does. A
- * query guards if it holds no "not" and no "or" and one of its "and" terms is exactly (hover: hover) or (any-hover: hover). Anything
- * else is refused, because it can apply where nothing hovers:
+ * query guards if it holds no "not" and no "or" and one of its "and" terms is exactly (hover: hover), which says the PRIMARY input can
+ * hover. Anything else is refused, because it can apply where a finger can still leave :hover behind:
  *
  *     not (hover: hover)                       the negation, which applies on exactly the devices that cannot
  *     not all and (hover: hover)               the same, with a media type: the term is there and the query is its opposite
@@ -17,6 +17,7 @@
  *     (hover: hover) or (min-width: 1px)       the same, written with "or"
  *     (a) or (b) and (hover: hover)            "and" and "or" mixed, which a browser reads as no query at all
  *     (hover: none)                            the wrong way round
+ *     (any-hover: hover)                       true on a touch screen with a mouse beside it, where the primary input is the finger
  *
  * It refuses a few forms that are in fact fine (a conjunction with a nested "or" in it, say): the cost of that is a failure that
  * asks for the simpler form, and the cost of the alternative is a guard with a hole in it. The substring test this replaced
@@ -35,7 +36,7 @@ function impliesHover(mediaText) {
   return queries.every(function (query) {
     var q = query.trim().toLowerCase();
     if (/\b(not|or)\b/.test(q)) return false;
-    return q.split(/\s+and\s+/).some(function (term) { return /^\(\s*(any-)?hover\s*:\s*hover\s*\)$/.test(term.trim()); });
+    return q.split(/\s+and\s+/).some(function (term) { return /^\(\s*hover\s*:\s*hover\s*\)$/.test(term.trim()); });
   });
 }
 
