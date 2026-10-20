@@ -261,23 +261,33 @@ head('and a file is read through the fallbacks, because the list cannot tell a B
      so the list above cannot name the spelling without flagging every fetch (memorizer/src/ocr.js says as much). The sites are counted
      instead: in the shell each is the line in blobBytes() or blobText() that uses the method only where it exists, and anywhere else it is a
      Response. A site that is neither fails here until somebody says which it is, which for a file the picker hands over means those two
-     helpers. The import that uses them is run on a page made to lack the methods in tests/verify-assets.js. */
+     helpers. The import that uses them is run on a page made to lack the methods in tests/verify-assets.js.
+
+     THE GENERATED LOADER IS BROWSER CODE TOO. scripts/build-pwa.js holds the page that opens a code-only deploy as a template literal, and its
+     import screen reads the package the user picks before the app can open at all; a Blob call there fails on the floor with the app still
+     closed. It is read here as it is, and its one Blob read is packageBytes(). (Its comments are text to the blanker, so they are written without
+     the call syntax.) The screen is run on a page made to lack the method in tests/verify-bankstore.js. */
   const SITE = /\.(?:arrayBuffer|text|stream)\s*\(\s*\)/;
-  const GUARDED = /typeof\s+f\.(arrayBuffer|text)\s*===\s*'function'\s*\)\s*return\s+f\.\1\(\)/;
-  const RESPONSE = /\(await fetchOk\([^)\n]*\)\)\.arrayBuffer\(\)/;
+  const GUARDED = /typeof\s+(\w+)\.(arrayBuffer|text)\s*===\s*'function'\s*\)\s*return\s+\1\.\2\(\)/;
+  const RESPONSES = [/\(await fetchOk\([^)\n]*\)\)\.arrayBuffer\(\)/,          // src/core/heart3d.js
+                     /\br\.ok\s*\?\s*r\.arrayBuffer\(\)/,                      // scripts/build-pwa.js, the heart mesh
+                     /\bcodeResponse\.text\(\)/];                               // scripts/build-pwa.js, the app's code
+  const response = l => RESPONSES.some(re => re.test(l));
   const at = f => blanked(f).split('\n').map((line, i) => ({ at: `${rel(f)}:${i + 1}`, line })).filter(s => SITE.test(s.line));
-  const shell = at(SHELL), elsewhere = SAFARI_FILES.flatMap(at);
+  const show = a => a.map(s => `${s.at}: ${s.line.trim().slice(0, 70)}`).join('; ');
+  const shell = at(SHELL), loader = at(path.join(ROOT, 'scripts', 'build-pwa.js')), elsewhere = SAFARI_FILES.flatMap(at);
   ok('the shell reads a Blob only in blobBytes() and blobText(), where the method is used only if it exists',
-     shell.length === 2 && shell.every(s => GUARDED.test(s.line)),
-     shell.map(s => `${s.at}: ${s.line.trim().slice(0, 70)}`).join('; ') || 'no site');
+     shell.length === 2 && shell.every(s => GUARDED.test(s.line)), show(shell) || 'no site');
+  ok('the generated loader reads the package only in packageBytes(), where the method is used only if it exists, and calls the others on a Response',
+     loader.filter(s => GUARDED.test(s.line)).length === 1 && loader.every(s => GUARDED.test(s.line) || response(s.line)), show(loader) || 'no site');
   ok('and nothing else Safari parses calls them on anything but a Response',
-     elsewhere.every(s => RESPONSE.test(s.line)),
-     elsewhere.filter(s => !RESPONSE.test(s.line)).map(s => `${s.at}: ${s.line.trim().slice(0, 70)}`).join('; ') || `${elsewhere.length} Response`);
-  const fixture = ['const t = await file.text();', 'new Uint8Array(await f.arrayBuffer())', 'const bin = await (await fetchOk(src.bin)).arrayBuffer();',
-                   "if(typeof f.text==='function') return f.text();"];
-  const verdict = fixture.map(l => SITE.test(l) && (GUARDED.test(l) || RESPONSE.test(l)));
-  ok('and the two patterns tell them apart: a Blob\'s call is refused, a Response\'s and the fallback\'s are not',
-     verdict.join() === 'false,false,true,true', verdict.join());
+     elsewhere.every(s => response(s.line)), show(elsewhere.filter(s => !response(s.line))) || `${elsewhere.length} Response`);
+  const fixture = ['const t = await file.text();', 'new Uint8Array(await f.arrayBuffer())', 'var zip = await ZipRead.read(await file.arrayBuffer());',
+                   'const bin = await (await fetchOk(src.bin)).arrayBuffer();', 'return r.ok ? r.arrayBuffer() : null;',
+                   "if(typeof file.arrayBuffer === 'function') return file.arrayBuffer();", "if(typeof f.text==='function') return f.text();"];
+  const verdict = fixture.map(l => SITE.test(l) && (GUARDED.test(l) || response(l)));
+  ok('and the patterns tell them apart: a Blob\'s call is refused, a Response\'s and the fallback\'s are not',
+     verdict.join() === 'false,false,false,true,true,true,true', verdict.join());
 }
 
 head('and the floor is written down where somebody will find it');

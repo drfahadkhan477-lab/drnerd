@@ -72,9 +72,10 @@ file the picker hands over is read through `FileReader` where `Blob.arrayBuffer(
 and `Blob.text()` (Safari 14) are missing. What holds this is narrower than the
 sentence: `tests/verify-ipad-pure.js` holds the script to a list of constructs
 that arrived later, and cannot see a method that is older on one object than on
-another, so it counts the places that read a file instead, and
-`tests/verify-assets.js` runs the import on a page made to lack those two
-methods; the stylesheets, and anything that is not on the list, are not
+another, so it counts the places that read a file instead (the shell, and the
+page that opens a code-only deploy), and `tests/verify-assets.js` and
+`tests/verify-bankstore.js` run the two imports on a page made to lack those
+two methods; the stylesheets, and anything that is not on the list, are not
 measured against the floor. Nothing has been run on a Safari as old as 13.4.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
