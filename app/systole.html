@@ -4592,6 +4592,7 @@ function save(){try{const text=JSON.stringify(Object.assign({},FOREIGN,{
      the one store whose loss you would most want to hear about was the only
      one that died without a word. */
   catch(_){ warnStorage(); }}
+const NEWER_DATA_NOTE='This copy of Systole is older than the data saved on this device. Nothing has been lost — update this copy to see everything.';
 function load(){try{
   const raw=JSON.parse(localStorage.getItem(KEY))||{};
   /* No schemaVersion means a store written before this step — every store in
@@ -4600,7 +4601,7 @@ function load(){try{
   FOREIGN={}; for(const k in raw) if(SCHEMA_KEYS.indexOf(k)===-1) FOREIGN[k]=raw[k];
   /* Deferred past the splash, which is still up at boot. */
   if(+raw.schemaVersion>DATA_SCHEMA_VERSION)
-    setTimeout(()=>toast('This copy of Systole is older than the data saved on this device. Nothing has been lost — update this copy to see everything.'),4200);
+    setTimeout(()=>toast(NEWER_DATA_NOTE),4200);
   return raw;
 }catch(_){return{};}}
 
@@ -4637,10 +4638,12 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
    windows, and are still decided by who wrote last. */
 SEEN[KEY]=SEEN[REF_KEY]=null;
 try{ SEEN[KEY]=localStorage.getItem(KEY); SEEN[REF_KEY]=localStorage.getItem(REF_KEY); }catch(_){}
+let newerNoted=false;        // a record from a newer copy was taken and the window has said so
 function adoptProgress(text){
   let raw; try{ raw=JSON.parse(text); }catch(_){ return false; }
   if(!statRecord(raw)) return false;
   let p; try{ p=progressFromBackup(raw); }catch(_){ return false; }               // what a restore would refuse is not taken
+  if(+raw.schemaVersion>DATA_SCHEMA_VERSION&&!newerNoted){ newerNoted=true; toast(NEWER_DATA_NOTE); }   // as load() says it of a record read at launch
   delete p.resumed;                                                               // whether this window has resumed a deck is its own
   const themeWas=S.theme;
   Object.assign(S,p);
@@ -4654,15 +4657,18 @@ function adoptRefs(text){
   REF=list; invalidateIndex();
   return true;
 }
-/* What was taken is drawn where it shows: the progress record on the screens that show it, the notes on the library and on the home screen (its
-   pearl comes from them). A screen with a question on it, or a note being typed, is not drawn again, and shows what was taken the next time it is.
-   A window that is hidden draws when it is seen. */
+/* What was taken is drawn where it shows: the progress record on the screens that show it (the lists of questions carry its missed and flagged
+   marks), the notes on the library and on the home screen (its pearl comes from them). A screen with a question on it is not drawn again, nor
+   one with a field being typed in or a note being written, and it shows what was taken the next time it is. A window that is hidden draws when
+   it is seen. */
 const sharedStale={progress:false,refs:false};
 function refDrafted(){ return ['refT','refG','refB'].some(id=>{ const el=document.getElementById(id); return !!el&&el.value.trim()!==''; }); }
+function fieldFocused(){ const a=document.activeElement, app=document.getElementById('app'); return !!a&&!!app&&app.contains(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }
 function drawShared(){
   const s=S.screen, p=sharedStale.progress, r=sharedStale.refs;
   sharedStale.progress=sharedStale.refs=false;
-  if((p&&(s==='home'||s==='stats'||s==='study'))||(r&&(s==='home'||(s==='refs'&&!refEditing&&!refDrafted())))) render();
+  if(fieldFocused()) return;
+  if((p&&(s==='home'||s==='stats'||s==='study'||s==='search'||s==='annotations'))||(r&&(s==='home'||(s==='refs'&&!refEditing&&!refDrafted())))) render();
 }
 function showShared(what){
   sharedStale[what]=true;

@@ -198,6 +198,68 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('a window that is hidden takes the record and draws nothing, and draws it when it is seen', hiddenDraws === 0 && seenDraws >= 1, `${hiddenDraws} redraws while hidden, ${seenDraws} once seen`);
   }
 
+  head('the lists of questions show the marks of the record taken');
+  {
+    /* A list of questions on screen carries the flagged and missed marks of the record: the annotated questions, and the results of a search. The
+       results are put on the screen as the search puts them (SQ.hits), as the index is not what is asked about. The question starts without either
+       mark in both windows, whatever was answered before: with a mark already there the list shows it whether or not it is drawn again, and a
+       check that cannot tell the two apart passes on a window that is never drawn. So each list is read before the other window writes, and has
+       to be without the mark then. */
+    const mark = (pg, sel) => pg.evaluate(sel => document.querySelectorAll(sel).length, sel);
+    // where the window is when it is asked, for a failure to say: a window the browser has hidden for a moment draws when it is seen, not before
+    const where = pg => pg.evaluate(() => `on ${S.screen}, ${document.visibilityState}`);
+    const qid = await B.evaluate(() => POOL.filter(q => q.o.length >= 4 && !q.imgopt)[0].id);
+    await A.evaluate(id => { S.flagged.delete(id); S.missed.delete(id); save(); }, qid);
+    await until(B, id => !S.flagged.has(id) && !S.missed.has(id), qid);
+    await B.evaluate(id => { NOTES = {}; NOTES[id] = [{ id: 'n1', x: .1, y: .1, text: 'A note on this question', color: '#F59E0B' }]; goAnnotations(); }, qid);
+    await until(B, () => S.screen === 'annotations' && document.querySelectorAll('#annoList .hit').length === 1);
+    const before = await mark(B, '#annoList .hit-flag.flagged');
+    await A.evaluate(id => { S.flagged.add(id); save(); }, qid);
+    const flagged = await until(B, () => document.querySelectorAll('#annoList .hit-flag.flagged').length === 1);
+    ok('the annotated questions on screen show a question the other window flagged', before === 0 && flagged, `${before} flagged marks before, ${await mark(B, '#annoList .hit-flag.flagged')} after, ${await where(B)}`);
+
+    await B.evaluate(() => { document.getElementById('annoQ').focus(); window.__renders = 0; });
+    await A.evaluate(id => { S.flagged.delete(id); save(); }, qid);
+    const unflagged = await until(B, id => !S.flagged.has(id), qid);
+    await pause(300);
+    const typing = await B.evaluate(() => ({ renders: window.__renders, focus: document.activeElement && document.activeElement.id, marks: document.querySelectorAll('#annoList .hit-flag.flagged').length }));
+    await B.evaluate(() => { document.activeElement.blur(); render(); });
+    const marksAfter = await until(B, () => document.querySelectorAll('#annoList .hit-flag.flagged').length === 0);
+    ok('but not under a field being typed in: nothing is drawn and the field keeps its focus, and the mark is gone the next time the list is',
+       unflagged && typing.renders === 0 && typing.focus === 'annoQ' && typing.marks === 1 && marksAfter,
+       `${typing.renders} redraws, focus in ${typing.focus}, ${typing.marks} mark while typing, gone after: ${marksAfter}`);
+
+    await B.evaluate(id => { SQ.q = 'zq'; SQ.ran = true; SQ.hits = [{ q: ALL_Q.find(q => q.id === id), score: 1 }]; S.screen = 'search'; render(); }, qid);
+    await until(B, () => S.screen === 'search' && document.querySelectorAll('.hits .hit').length === 1);
+    const unmarked = await mark(B, '.hits .hit-flag');
+    await A.evaluate(id => { S.missed.add(id); save(); }, qid);
+    const missed = await until(B, () => document.querySelectorAll('.hits .hit-flag').length === 1);
+    ok('the results of a search on screen show a question the other window missed', unmarked === 0 && missed, `${unmarked} marks before, ${await mark(B, '.hits .hit-flag')} after, ${await where(B)}`);
+    await B.evaluate(() => { SQ.hits = []; SQ.q = ''; goHome(); });
+    await until(B, () => S.screen === 'home' && !!document.querySelector('.hero-h1'));
+  }
+
+  head('a record from a newer copy of the app');
+  {
+    /* load() says, of a record a newer copy wrote, that this copy is older and that nothing is lost. A window that takes one from a newer copy says
+       so too, once; what the newer copy added is kept, as a save of this window would write it back. */
+    await B.evaluate(() => { window.__toasts = 0; const real = toast; toast = function (m) { if (/older than the data/.test(m)) window.__toasts++; return real.apply(this, arguments); }; });
+    const n = await B.evaluate(() => window.__taken);
+    await A.evaluate(v => {
+      const rec = JSON.parse(localStorage.getItem('accsap12.v2'));
+      Storage.prototype.setItem.call(localStorage, 'accsap12.v2', JSON.stringify(Object.assign(rec, { schemaVersion: v + 1, zqFuture: { kept: true } })));
+    }, await A.evaluate(() => DATA_SCHEMA_VERSION));
+    const told = await until(B, n => window.__taken > n, n, 3000);
+    await A.evaluate(() => {
+      const rec = JSON.parse(localStorage.getItem('accsap12.v2'));
+      Storage.prototype.setItem.call(localStorage, 'accsap12.v2', JSON.stringify(Object.assign(rec, { zqFuture: { kept: true, again: true } })));
+    });
+    const toldAgain = await until(B, n => window.__taken > n + 1, n, 3000);
+    const seen = await B.evaluate(() => ({ toasts: window.__toasts, foreign: typeof FOREIGN === 'object' && !!FOREIGN.zqFuture && FOREIGN.zqFuture.again === true }));
+    ok('a record a newer copy wrote is taken with the warning load() gives, once, and what the newer copy added is kept', told && toldAgain && seen.toasts === 1 && seen.foreign,
+       `${seen.toasts} warnings in two records, the newer copy's field ${seen.foreign ? 'kept' : 'not kept'}`);
+  }
+
   head('a record that is not one is not taken');
   {
     const before = await mine(B);
