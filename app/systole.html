@@ -531,7 +531,8 @@ function missRowHtml(wasCorrect){
       + e(r.label) + '</button>';
   }).join("");
   return '<div class="miss-row" role="group" aria-label="Why did you miss it?">'
-    + '<span class="miss-lab">Why did you miss it?</span>' + chips + '</div>';
+    + '<span class="miss-lab">Why did you miss it?</span>' + chips
+    + '<button class="miss-ask" type="button" onclick="askApexWhy()">' + icon('zap','icon-sm') + ' Ask Apex why</button></div>';
 }
 function setConfidence(n){
   if(S.answered) return;
@@ -565,6 +566,9 @@ function logReview(q,grade,ok,mode,extra){
          below settled on, rather than backfilling history nobody recorded. */
       ms:(extra&&'ms' in extra)?extra.ms:answerMs(),
       cf:(extra&&'cf' in extra)?extra.cf:((S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null), why:null,
+      /* pick is the option chosen, an index into the question's options, so that Apex can say why that one tempted (src/core/apexsignals.js).
+         A row written before it existed, and a self-rating, have none: null, which is not option A. */
+      pick:(extra&&Number.isInteger(extra.pick)&&extra.pick>=0)?extra.pick:null,
       /* ef was SM-2's ease factor and an FSRS card has never had one, so this
          wrote an empty field on every review since the scheduler changed —
          in the log that exists precisely to fit parameters to real history.
@@ -2372,14 +2376,15 @@ const TOOLS=[
     query:{type:'string',description:'Clinical concept to search for, e.g. "cardiac amyloidosis apical sparing"'},
     limit:{type:'integer',description:'How many items to return (1-6, default 4)'}},required:['query']}},
  {name:'get_performance',
-  description:"Retrieve the fellow's answer history: per-chapter accuracy, total answered, and the list of questions they have missed. Use before recommending what to study, or when asked about weak areas.",
+  description:"Retrieve the fellow's answer history: per-chapter accuracy, total answered, the list of questions they have missed, how they answer (how often certain and wrong, why they say they miss, how long right and wrong answers take), their last mock block, and whether they are on track for the exam. Use before recommending what to study, or when asked about weak areas.",
   input_schema:{type:'object',properties:{},required:[]}},
  {name:'start_quiz',
   description:'Build and launch a custom quiz for the fellow from specific question IDs, or from a chapter. Use when they ask to be drilled on something. The quiz opens immediately after your reply.',
   input_schema:{type:'object',properties:{
     question_ids:{type:'array',items:{type:'string'},description:'Specific IDs, e.g. ["HEA_14","VAL_12"]'},
     chapter:{type:'string',description:'Whole chapter name, used only if question_ids is omitted'},
-    missed_only:{type:'boolean',description:'Restrict to questions they previously got wrong'}},required:[]}},
+    missed_only:{type:'boolean',description:'Restrict to questions they previously got wrong'},
+    flagged_only:{type:'boolean',description:'Restrict to the questions they flagged to come back to'}},required:[]}},
  {name:'open_question',
   description:'Open one specific question in the main pane so the fellow can read it alongside your explanation. Opens after your reply.',
   input_schema:{type:'object',properties:{
@@ -2400,6 +2405,16 @@ const TOOLS=[
   description:'Delete one memory that has stopped being true. Use the id printed in square brackets beside it in what you know about this fellow.',
   input_schema:{type:'object',properties:{
     id:{type:'string',description:'The bracketed id, e.g. m1a2b3c'}},required:['id']}},
+ {name:'get_misses',
+  get description(){ return "Retrieve the fellow's recent misses, newest first, one per question: "
+    +(AI_GROUNDED?"how sure they said they were, why they say they missed it and how long they took. Grounded mode withholds the keyed option, the stems, the options' wording and the option they chose, so this gives only which items, and how they went wrong in the fellow's own terms."
+                 :"what they chose, how sure they said they were, why they say they missed it and how long they took, with the keyed option, the stem and the wording of the two options. Use it to explain a miss, to find what connects several, or before you drill them.");},
+  input_schema:{type:'object',properties:{
+    limit:{type:'integer',description:'How many misses (1-15, default 8)'}},required:[]}},
+ {name:'plan_session',
+  description:"Build the fellow's study session for the time they have: what is due first (the most forgotten), then their weaker chapters, then new questions, and say what it holds and why. The session opens after your reply as a review session, whose ratings move the schedule as usual. Use it when they ask what to do today, or once you have talked through where they are weak. Pass minutes (5-120, default 20).",
+  input_schema:{type:'object',properties:{
+    minutes:{type:'integer',description:'How long they have, in minutes (5-120, default 20)'}},required:[]}},
  {name:'start_review_session',
   description:"Launch the spaced-repetition review queue: questions due today by FSRS-5 scheduling, topped up with never-seen questions (sampled across chapters) if the queue is thin. Each item is followed by a genuine self-rating step (Again/Hard/Good/Easy) that drives the next interval — this is real active recall, not just another quiz. Use when the fellow asks to review, asks what is due, or asks to keep their streak going. Opens after your reply.",
   input_schema:{type:'object',properties:{},required:[]}}
@@ -2418,8 +2433,14 @@ function toggleGrounded(){
                    :'Open mode: Apex will use its own knowledge again.');
 }
 
+/* A mock block is open: the tutor is put away until it is handed in (mockMount). A reply already on its way when the block was opened
+   must not carry on into it, so every tool refuses, and so does fire() and flushNav(). The screen is asked as well as the attribute:
+   the attribute is drawn by the render, which a view transition runs a frame or more after the screen is set. */
+function apexAway(){ return document.documentElement.hasAttribute('data-mock')||(S.screen==='mock'&&!!S.mock); }
 function runTool(name,input){
   try{
+    if(apexAway()) return {result:'A mock exam block is open, so the tutor stays out of it until it is handed in. Say nothing about the questions in it.'};
+    input=input||{};
     if(name==='search_question_bank'){
       const n=Math.min(Math.max(input.limit||4,1),6);
       /* Grounded mode leaves the bank out of this door as groundedContext()
@@ -2457,12 +2478,27 @@ function runTool(name,input){
       const byId=Object.fromEntries(ALL_Q.map(x=>[x.id,x]));
       const mlist=missed.map(id=>byId[id]?`${id} — ${byId[id].ch} item ${byId[id].n}`:'').filter(Boolean);
       const dueN=dueQuestions().length;
+      const how=apexStandingLines();
+      let ready=''; try{ ready=StudyPlan.readiness({pool:POOL,srs:S.srs,chStats:S.chStats,recentPerDay:recentPerDay(),examDate:S.examDate}).text; }catch(_){}
       return {result:
         `Answered overall: ${S.sessionCorrect}/${S.sessionTotal}\n`+
         `Spaced-repetition: ${dueN} due right now, ${Object.keys(S.srs).length}/${TOTAL_Q} cards ever reviewed, review streak ${S.reviewStreak||0} day(s).\n`+
         (rows.length?`Per chapter:\n${rows.join('\n')}`:'No chapter attempts recorded yet.')+
         (mlist.length?`\n\nMissed questions (${S.missed.size} total, first ${mlist.length}):\n${mlist.join('\n')}`
-                     :'\n\nNo missed questions recorded.')};
+                     :'\n\nNo missed questions recorded.')+
+        (how.length?`\n\nHow they answer:\n${how.join('\n')}`:'')+
+        (ready?`\n\nOn track for the exam? ${ready}`:'')};
+    }
+    if(name==='get_misses'){
+      const d=ApexSignals.digest({log:LOG,missed:S.missed,byId:QBYID,limit:input.limit,now:Date.now(),grounded:AI_GROUNDED});
+      return {result:d.text||'No recent misses are recorded: either nothing is missed, or what is missed was answered before the review log kept it.'};
+    }
+    if(name==='plan_session'){
+      const minutes=Math.max(5,Math.min(120,Number.isInteger(input.minutes)?input.minutes:20));
+      const p=planNow(minutes);
+      if(!p.items.length) return {result:p.text};
+      pendingNav={kind:'plan',minutes};
+      return {result:p.text+' It will open as a review session as soon as this reply finishes; ratings there move the schedule as usual.'};
     }
     if(name==='start_review_session'){
       const due=dueQuestions();
@@ -2474,10 +2510,13 @@ function runTool(name,input){
     if(name==='start_quiz'){
       let ids=Array.isArray(input.question_ids)?input.question_ids.filter(id=>ALL_Q.some(q=>q.id===id&&!q.bad)):[];
       if(input.missed_only) ids=[...S.missed].filter(id=>ALL_Q.some(q=>q.id===id&&!q.bad));
+      const narrowed=ids.length>0||!!input.missed_only||!!input.chapter||(Array.isArray(input.question_ids)&&input.question_ids.length>0);
       if(!ids.length&&input.chapter){
         const ch=CHAPTERS.find(c=>c.toLowerCase().includes(String(input.chapter).toLowerCase().split(' ')[0]));
         if(ch) ids=POOL.filter(q=>q.ch===ch).map(q=>q.id);
       }
+      /* Restricts whatever else was asked for (ids, missed, a chapter) to the flagged; asked alone, it is every flagged question. */
+      if(input.flagged_only){ const f=flaggedQs().map(q=>q.id); ids=narrowed?ids.filter(id=>f.includes(id)):f; }
       if(!ids.length) return {result:'No questions matched — nothing was launched.'};
       pendingNav={kind:'quiz',ids};
       return {result:`Ready: a ${ids.length}-question quiz will open as soon as this reply finishes.`};
@@ -2514,8 +2553,10 @@ function runTool(name,input){
 function flushNav(){
   if(!pendingNav) return;
   const nav=pendingNav; pendingNav=null;
+  if(apexAway()) return;
   if(nav.kind==='open'){ jumpTo(nav.id); }
   else if(nav.kind==='due'){ startQuiz(null,'due'); }
+  else if(nav.kind==='plan'){ startPlan(nav.minutes); }
   else if(nav.kind==='quiz'){
     const qs=nav.ids.map(id=>ALL_Q.find(q=>q.id===id)).filter(Boolean);
     if(!qs.length)return;
@@ -3023,9 +3064,10 @@ function quizFromSearch(){
   toast(`Quiz built from “${SQ.q}” — ${qs.length} questions.`);
 }
 
-/* ═══════════ Vision + learning profile — see src/core/{vision,profile}.js ═══════════ */
+/* ═══════════ Vision + learning profile — see src/core/{vision,profile,apexsignals}.js ═══════════ */
 @@SLOT[src:src/core/vision.js]@@
 @@SLOT[src:src/core/profile.js]@@
+@@SLOT[src:src/core/apexsignals.js]@@
 
 /* ══════════════ The daily pearl — see src/core/pearl.js ══════════════ */
 @@SLOT[src:src/core/pearl.js]@@
@@ -3505,9 +3547,44 @@ Plain prose with short paragraphs. Use **bold** for the key term being taught, a
 IMPORTANT
 You are reasoning from your own medical training, not quoting any textbook. Never reproduce passages from Braunwald's Heart Disease or any other copyrighted source — explain every concept in your own words. You are a study aid, not a clinical decision-making tool for real patients.`;
 
+/* How the fellow answers, beyond right and wrong: certain and wrong, why they miss, pace, the last mock block, the exam (examDaysLeft, the
+   countdown the Study screen uses), what they flagged (src/core/apexsignals.js). Their record, not the bank, so grounded mode has it too.
+   A torn log, or a date that cannot be counted to, costs this block, not the turn. */
+function apexStandingLines(){
+  try{
+    if(typeof ApexSignals==='undefined') return [];
+    return ApexSignals.standing({log:LOG,mocks:S.mocks,flagged:flaggedQs().length,daysLeft:examDaysLeft(),now:Date.now()});
+  }catch(_){ return []; }
+}
+function apexStanding(){
+  try{
+    const lines=apexStandingLines();
+    return lines.length?`\n\nHOW THE FELLOW ANSWERS (from their own review log: signals, not scores. Use them to choose what to press on; do not read them back as a report):\n${lines.join('\n')}`:'';
+  }catch(_){ return ''; }
+}
+/* The latest answer logged for a question: a self-rating is not an answer. */
+function lastAnswerRow(id){
+  for(let i=LOG.length-1;i>=0;i--){
+    const r=LOG[i];
+    if(r&&r.q===id&&ApexSignals.ANSWER_MODES.indexOf(r.m)>=0) return r;
+  }
+  return null;
+}
+/* What the fellow did on the question open now, once it is answered. Grounded mode is told the choice, the confidence and the time
+   and never whether it was right (src/core/apexsignals.js, rule 2). */
+function apexDid(q){
+  try{
+    if(typeof ApexSignals==='undefined'||!q||S.screen!=='quiz'||!S.answered||S.questions[S.qIdx]!==q) return '';
+    const a=S.answers[S.qIdx]||{}, row=lastAnswerRow(q.id);
+    const line=ApexSignals.answerLine({pick:S.selected,ok:S.selected===q.ci,cf:a.cf,why:row&&row.why,ms:row&&row.ms,
+      flagged:S.flagged.has(q.id),grounded:AI_GROUNDED,letters:q.o.map(o=>o.l)});
+    return line?`\n\nWHAT THE FELLOW DID ON THIS ITEM (their own answer; engage with it${AI_GROUNDED?'':'. A wrong answer given with high confidence is the most valuable thing to correct'}):\n${line}`:'';
+  }catch(_){ return ''; }
+}
 function aiCtx(q){
   if(!q) return 'The fellow is browsing the question index; no question is open.'
     + ((typeof Profile!=='undefined') ? Profile.build() : '')
+    + apexStanding()
     + ((typeof Memory!=='undefined') ? Memory.build() : '');
   /* The mark on the keyed option IS the answer key, and how many candidates
      chose each option hints at it, so grounded mode, which tells the model the
@@ -3523,20 +3600,30 @@ function aiCtx(q){
      it decided to remember something. Same rule, same fence. */
   if(memoryBlock) memoryBlock=refBlock('MEMORY','what you have learned about this fellow:',memoryBlock);
   if(AI_GROUNDED){
-    return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\n(The official ${BANK_BY}commentary for this item is withheld in grounded mode. You can see what is being asked; you may not read the answer key. Teach from the fellow's reference notes below, and if they do not cover it, say so.)\n\n${Vision.figureContextLine(q, AI.provider)}${ownBlock}${profileBlock}${memoryBlock}`;
+    return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\n(The official ${BANK_BY}commentary for this item is withheld in grounded mode. You can see what is being asked; you may not read the answer key. Teach from the fellow's reference notes below, and if they do not cover it, say so.)\n\n${Vision.figureContextLine(q, AI.provider)}${ownBlock}${apexDid(q)}${profileBlock}${apexStanding()}${memoryBlock}`;
   }
-  return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\nOFFICIAL ${BANK_BY.toUpperCase()}COMMENTARY\n${q.ex}\n\n${Vision.figureContextLine(q, AI.provider)}Use this as the ground truth for the item. You may go well beyond it.${ownBlock}${profileBlock}${memoryBlock}`;
+  return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\nOFFICIAL ${BANK_BY.toUpperCase()}COMMENTARY\n${q.ex}\n\n${Vision.figureContextLine(q, AI.provider)}Use this as the ground truth for the item. You may go well beyond it.${ownBlock}${apexDid(q)}${profileBlock}${apexStanding()}${memoryBlock}`;
 }
 
+/* What the fellow can ask of Apex about how they answer: a chip in the panel, and a button where it is needed. */
+const APEX_ASK={
+  why:'Look at how I answered this one: the option I chose (if you can see it), how sure I said I was and how long I took. Why might I have chosen that, what in the stem supports it or rules it out, and what should I check before choosing like that again? Keep it short.',
+  misses:'Use get_misses to look at my recent misses, then tell me what connects them: the concept, the kind of mistake, or the way I read the stem. Be specific and blunt, then offer a short drill.',
+  plan:'Using get_performance and what you know about me, plan my next seven days of study in a few lines and say what to do today. Offer to start today\'s session with plan_session, but do not start it until I say yes.',
+};
+/* A chip with a third element shows only when that returns true for the question open. */
 const CHIPS=[
   ['Why is this the answer?','Walk me through the reasoning for the correct answer — mechanism first.'],
   ['Kill the distractors','Take each wrong option in turn and tell me precisely why it fails here.'],
+  ['Why did I pick that?',APEX_ASK.why,q=>!!q&&S.answered],
   ['Go deeper on mechanism','Take the underlying pathophysiology down to the cellular / receptor level.'],
   ['Trials & guidelines','Which landmark trials and guideline recommendations govern this decision?'],
   ['Quiz me back','Ask me a harder follow-up question on this concept, then critique my answer.'],
   ['Memory hook','Give me a durable way to remember this for the boards.'],
   ['Where am I weak?','Look at my performance across chapters and tell me where I should focus. Be specific and blunt.'],
   ['Drill my misses','Build me a quiz from the questions I keep getting wrong, then tell me the theme connecting them.'],
+  ['Explain my misses',APEX_ASK.misses],
+  ['Plan my week',APEX_ASK.plan],
   ['Save this as a note','Write what you just taught me into my reference library as a tight, board-focused note.'],
 ];
 
@@ -3614,7 +3701,7 @@ function buildAI(){
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
         : `<div class="msg bot">${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
-    : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"drill me on what I keep missing"</i>.</p></div>`;
+    : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
   /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
   const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
   const srcStrip=hits.length?`<div class="src-strip"><span class="src-lbl">drawing on</span>${
@@ -3648,7 +3735,7 @@ function buildAI(){
     `<div class="ai-body" id="aiBody">${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
      ${srcStrip}
      ${figStrip}
-     <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`).join('')}
+     <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>(!c[2]||c[2](q))?`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`:'').join('')}
        ${hist.length?'<button class="chip" data-chip="clear">Clear thread</button>':''}</div>
      <div class="ai-foot"><div class="ai-input">
        <button class="ai-more${apexChipsOpen?' on':''}" id="aiMore" type="button"
@@ -3937,7 +4024,7 @@ function bindChat(q){
 }
 let lastHits=[], lastHitsKey=null;
 function fire(text){
-  text=(text||'').trim(); if(!text||aiBusy)return;
+  text=(text||'').trim(); if(!text||aiBusy||apexAway())return;
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=apexTrim(chatFor(q));
   hist.push({role:'user',content:text});
@@ -3949,6 +4036,19 @@ function fire(text){
   aiBusy=true; buildAI();
   streamReply(q,hist,extra.text);
 }
+/* Open the panel if it is shut and ask it something. With no key the panel shows its setup screen, which is the answer; nothing is sent.
+   Not into a mock block: the panel is put away there. */
+const apexReady=()=>!!(cur().key||(AI.provider==='gemini'&&apexHosted()));
+function askApex(prompt){
+  if(apexAway()) return false;
+  const sh=document.getElementById('shell'); if(!sh) return false;
+  if(!sh.classList.contains('ai-open')) toggleAI();
+  if(!apexReady()||aiBusy) return false;      // a reply still on its way: the panel is open, and the prompt is not sent over it
+  fire(prompt);
+  return true;
+}
+function askApexWhy(){ return askApex(APEX_ASK.why); }
+function askApexMisses(){ return askApex(APEX_ASK.misses); }
 /* ═══════════ how much of a thread rides on a request ═══════════
    Every turn used to carry every message ever sent about this question, so a
    long conversation grew slower and more expensive with each exchange and had
@@ -4006,7 +4106,8 @@ async function streamReply(q,hist,extra){
         if(turn.text.trim()) hist.push({role:'assistant',content:turn.text});
         saveJSON(AI_CHAT,CHATS);
       }
-      if(!turn.calls.length) break;
+      /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
+      if(!turn.calls.length||apexAway()) break;
       if(guard>=6) truncated=true;          // calls still pending on the last allowed step
       const results=turn.calls.map(c=>{
         const out=runTool(c.name,c.input);
@@ -4337,7 +4438,7 @@ async function apiError(r,provider){
 }
 const TOOL_LABEL={search_question_bank:'searching your bank',get_performance:'reading your scores',
   start_quiz:'building a quiz',open_question:'opening a question',save_reference_note:'saving a note',
-  start_review_session:'opening your review queue',
+  start_review_session:'opening your review queue',get_misses:'looking at your misses',plan_session:'planning your session',
   remember:'remembering that',forget:'forgetting that'};
 function toolStrip(){
   const calls=toolTrace.filter(t=>t.kind==='call');
@@ -5115,7 +5216,7 @@ function selectOpt(idx){
   if(!(idx>=0&&idx<q.o.length))return;                 // guard: key beyond option count
   const ok=idx===q.ci;
   S.quizTotal++; if(ok)S.quizCorrect++;
-  recordAnswer(q,ok,S.mode);
+  recordAnswer(q,ok,S.mode,{pick:idx});
   S.selected=idx;S.answered=true;
   S.answers[S.qIdx]={selected:idx,rated:false,
     cf:(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null};
@@ -5553,7 +5654,7 @@ function mockSubmit(ranOut){
   mockWrite(MOCK_LAST_KEY,MockExam.serialize(r));
   for(const it of res.items){
     if(it.state==='skipped') continue;
-    recordAnswer(QBYID[it.id],it.state==='correct','exam',{ms:it.ms>0?it.ms:null,cf:null});
+    recordAnswer(QBYID[it.id],it.state==='correct','exam',{ms:it.ms>0?it.ms:null,cf:null,pick:it.sel});
   }
   /* A flag set in a block is a flag from here on: added to the Flagged list, never taken off it. */
   FlagSet.addAll(S.flagged,res.items.filter(it=>it.flagged).map(it=>it.id));
@@ -7011,6 +7112,7 @@ function buildResults(){
     <div class="results-btns">
       <button class="btn btn-next" onclick="goHome()" type="button">${icon('arrow-left','icon-sm')} Back to Chapters</button>
       ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red);border:1.5px solid var(--red-b)" onclick="startQuiz(null,'missed')">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
+      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--accent)" onclick="askApexMisses()">${icon('zap','icon-sm')} Explain my misses</button>`:''}
       <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
         onclick="startQuiz(${S.mode==='due'?'null':'S.chapter'},'${restartMode}')">${restartLabel}</button>
     </div>

@@ -482,3 +482,73 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   failed it. → Rule: grep for the function (`importMarkup`,
   `validateAnnotationBackup`, `progressFromBackup`: verify-backup, verify-flags,
   verify-fsrs, verify-mockscreen) and run those suites before the push.
+
+## Smarter Apex (the third upgrade)
+
+- **A suite that cuts functions out of the shell breaks when a cut function
+  gains a dependency.** `aiCtx` now calls `apexDid` and `apexStanding`;
+  verify-memory-pure cuts `aiCtx` into a vm and failed with `apexDid is not
+  defined`, a ReferenceError and not a FAIL line. → Rule: when a function that
+  some suite cuts out starts to call another, extend that suite's cut in the
+  same change (the harness, not the checks), and run every suite that cuts
+  from the shell (`grep -l _appcut tests/*.js`).
+- **A new check in a record-bound suite moves the label the record compares.**
+  verify-memory-pure's 28 is written to `tests/test-stats.json` and quoted in
+  the workflow; adding checks to it would make a label that disagrees with the
+  record until the next full run. → Rule: new checks about new behaviour go in
+  a new suite (listed in `PENDING_RECORD` until a full green run writes it),
+  not into an old one whose number is pinned.
+- **Anchor uniqueness finds a second definition before the browser does.** The
+  first draft defined `examDaysLeft` again; the cut helper stopped with "anchor
+  occurs twice", which was the only warning, since the later definition would
+  have silently won in the page. → Rule: grep for a helper's name before
+  writing it; the app has more than it shows.
+- **A page function cannot see a Node variable.** `page.waitForFunction(n =>
+  captured.length >= n, …)` read `captured`, which lives in the suite, and
+  timed out for the wrong reason. → Rule: wait on page state in the page and on
+  suite state in the suite (poll the Node-side array with a plain loop).
+- **A probe must survive the defect it hunts.** Injected defects made the unit
+  return nothing, so a check that read `.indexOf` on it threw and ended the
+  suite with a stack instead of a named FAIL. → Rule: read the result through a
+  guard that falls back to a value that fails the comparison (`['THREW']`, `''`),
+  and compare against the exact expected string, never `!== undefined`.
+- **A reading of the page that a render may still be replacing is a race.** The
+  mock block's report and sub-line are written inside the view transition's
+  update callback; a read right after the click saw the previous screen.
+  → Rule: wait for the element the new screen owns (`#mockSub`, `.mock-report`)
+  before reading anything on it, and make the wait a precondition, not the
+  proposition.
+- **Read which check names the defect, not only that one did.** With the key
+  guard on "ask Apex" removed, the only FAIL was "the page threw nothing": the
+  send went to a hosted route that a `file:` page cannot reach, so the console
+  logged an error, and the check written for it ("nothing is sent") stayed
+  green because the request never reached the stub. → Rule: after an injection
+  round, list each defect with the check that failed; where it is a hygiene
+  check, the designed check is blind. Here it now reads what a send leaves
+  behind that a stub does not need to see, the prompt in the thread.
+- **A click that waits for the element makes a missing element a crash.**
+  `display:none` on the new button left Playwright waiting 30 s to click it and
+  the suite ended in a TimeoutError with no FAIL line. → Rule: put "it is on the
+  screen" (`offsetWidth`) in a check of its own, and click with a short timeout
+  whose failure is swallowed, so the checks that follow name the consequence.
+- **A guard the page can never reach is an equivalent defect: say so.** The
+  `!S.answered` test in `apexDid` cannot be told from its absence, because
+  `restoreQuizState` sets `S.selected` to null whenever `S.answered` is false.
+  Chasing it would have meant a check on a state the page cannot be in. → Rule:
+  hold it where the state can be made (the page-code suite builds it), and write
+  the survivor into the PR rather than into a test that cannot fail.
+- **Another row of the log can answer for the question.** A card rated in a
+  review has two rows, the answer and the rating, and the rating is the later
+  one; reading "the last row for this question" would give Apex the rating's
+  time and none of the reason. The code looks the row up through `ANSWER_MODES`,
+  but the browser suite never looked at a card again after rating it, so the
+  injected defect survived. → Rule: name what counts as an answer, look the row
+  up through it, and exercise the case where the wrong row is the later one.
+- **A fact that is safe alone can give the key beside one the model already
+  has.** Grounded mode was told which option the fellow chose and never whether
+  it was right, and that sentence was checked to read the same either way. But
+  the model already gets the ids of recent misses: "chose D", and the question
+  not among the misses, is "D is the key". The independent read found it; my
+  checks read the new line alone. → Rule: for anything grounded mode is told,
+  ask what it adds to what the model already holds (Profile, the tools), not
+  only what it says by itself.

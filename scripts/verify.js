@@ -92,6 +92,7 @@ const SUITES = [
   ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
   ['flags',        'a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block\'s flags join the list when it is handed in'],
   ['reflist',      'the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages'],
+  ['apexask',      'every answer keeps the option chosen; Apex is told what the fellow chose and how they miss, through the real panel; the miss row, chips and results button ask it; its tools answer from the page; a mock block puts it away'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
@@ -248,6 +249,9 @@ const SUITES = [
      carrying a real failure: a torn store took the whole Apex turn down, and
      an empty note list reclaimed every imported figure. */
   ['profile-pure', 'a torn store costs the profile line, never the turn'],
+  /* What Apex is told about how the fellow answers, beyond right and wrong: the rules (no DOM), and the page's own code cut from the shell. */
+  ['apexsignals-pure', 'Apex is told how the fellow answers only with the samples to say, what they chose on the question open, and their recent misses; in grounded mode never which option was chosen or whether it was right'],
+  ['apexctx-pure', 'the page tells Apex what the fellow did and how they miss, never the key in grounded mode, and every tool refuses while a mock block is open'],
   ['refassets-pure', 'imported figures are reclaimed only against notes that actually loaded'],
   /* rhythms-extra's header has invited a unit test since it was written — it
      duplicates the beat model rather than importing it for exactly that. The
@@ -499,7 +503,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows'];
+const PENDING_RECORD = ['apexask', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
