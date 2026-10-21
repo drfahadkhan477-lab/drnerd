@@ -93,6 +93,7 @@ function companionProblems(file, uses, row, usedNarrower) {
 function beforeProblems(file, uses, watch) {
   const out = [];
   for (const u of uses) {
+    if (u.via) { out.push(`${where(file, u)} ${u.key}: reached through var(${u.via}), which is judged when the page is drawn, so no older value written before it is a fallback`); continue; }
     const rule = u.node, at = rule.decls.indexOf(u.decl);
     const prior = rule.decls.slice(0, at);
     let found = false;
@@ -134,12 +135,16 @@ const guardProblems = (roots, row, uses) => {
   return out;
 };
 
-/* every plain use of a feature that is read at the floor only behind -webkit- has the prefixed one in its rule */
+/* every plain use of a feature that is read at the floor only behind -webkit- has the prefixed one in its rule, with the same value: the Safari of the floor reads only that
+   one, so a prefixed `none` beside a plain blur() is the effect gone there */
 function prefixProblems(file, uses, table) {
   const out = [];
+  const same = (a, b) => a.value.replace(/\s+/g, ' ').trim().toLowerCase() === b.value.replace(/\s+/g, ' ').trim().toLowerCase() && !!a.important === !!b.important;
   for (const u of uses) {
     if (u.kind !== 'property' || !table.prefixed[u.key] || u.name.startsWith('-webkit-')) continue;
-    if (!u.node.decls.some(d => d.prop === '-webkit-' + u.name)) out.push(`${where(file, u)} ${u.name}: no -webkit-${u.name} in its rule`);
+    const twins = u.node.decls.filter(d => d.prop === '-webkit-' + u.name);
+    if (!twins.length) out.push(`${where(file, u)} ${u.name}: no -webkit-${u.name} in its rule`);
+    else if (!twins.some(d => same(d, u.decl))) out.push(`${where(file, u)} ${u.name}: its -webkit-${u.name} has another value (${twins[twins.length - 1].value.slice(0, 30)}), and that is the one the floor reads`);
   }
   return out;
 }
@@ -147,7 +152,7 @@ function prefixProblems(file, uses, table) {
 /* one pass over parsed files: what is not in the table, what is in it wrongly, and what each class says that is not so */
 function analyse(files, table, opts) {
   const res = { unlisted: new Map(), todo: [], malformed: [], rows: {}, stray: [], newerInside: [], unusedRows: [], prefix: [] };
-  const all = files.flatMap(f => f.uses.map(u => Object.assign({ file: f.file }, u)));
+  const all = files.flatMap(f => f.uses.map(u => Object.assign({ file: f.file }, u))).concat(C.customValueUses(files, table.watch));
   for (const u of all) {
     const c = C.classify(table, u);
     if (c.how === 'unlisted' && !res.unlisted.has(u.key)) res.unlisted.set(u.key, where(u.file, u));
@@ -224,6 +229,11 @@ head('the reader, on small stylesheets');
   ok('a unit is not found in a colour, a hex alpha and a space-separated rgb are, and selector() in an @supports is', !keysOf('.a{color:#5EEAD4}').some(k => k.startsWith('unit')) && keysOf('.a{color:#5EEAD4AA}').includes('color hex-alpha') && keysOf('.a{color:rgb(0 0 0 / .5)}').includes('color space-separated') && !keysOf('.a{color:rgba(0,0,0,.5)}').includes('color space-separated') && keysOf('@supports selector(:has(a)){.a{color:red}}').includes('supports selector()'));
   ok('range syntax and not/or in a media query are found, and min- and max- are one feature', keysOf('@media (width >= 600px){.a{color:red}}').includes('media range-syntax') && keysOf('@media not all and (hover:hover){.a{color:red}}').includes('media not-or') && keysOf('@media (min-width:1px) and (max-width:9px){.a{color:red}}').filter(k => k === 'media width').length === 2 && !keysOf('@media (min-width:1px){.a{color:red}}').includes('media range-syntax'));
   ok('a keyword the watch list names is a use of the property it is the value of, and only of that one', keysOf('.a{overflow-wrap:anywhere}.b{display:anywhere}', T.watch).filter(k => k.startsWith('value')).join() === 'value overflow-wrap: anywhere' && !keysOf('.a{overflow-wrap:break-word}', T.watch).some(k => k.startsWith('value')));
+  const CV = (css, more) => C.customValueUses([{ file: 't.css', root: C.parseCss(css).root }].concat(more ? [{ file: 'u.css', root: C.parseCss(more).root }] : []), T.watch).map(u => u.key + ' <- ' + u.via + ' @' + u.file);
+  ok('a newer keyword stored in a custom property is a use of the property that reads it with var(), in the same stylesheet or in another', CV(':root{--wrap:anywhere}.x{overflow-wrap:break-word;overflow-wrap:var(--wrap)}').join() === 'value overflow-wrap: anywhere <- --wrap @t.css' &&
+     CV(':root{--wrap:anywhere}', '.x{overflow-wrap:var(--wrap)}').join() === 'value overflow-wrap: anywhere <- --wrap @t.css' && CV(':root{--wrap:Anywhere}.x{overflow-wrap:var(--wrap, normal)}').length === 1);
+  ok('and only of that property, and only a keyword that is newer: a custom property read by another property, a custom property nobody reads, a keyword the floor reads', CV(':root{--a:anywhere}.x{color:var(--a)}').length === 0 && CV(':root{--a:anywhere}.x{color:red}').length === 0 &&
+     CV(':root{--w:normal}.x{overflow-wrap:var(--w)}').length === 0);
   ok('a gap is taken for a flex box\'s, which the text cannot tell', keysOf('.a{gap:4px}.b{row-gap:1px}.c{column-gap:2px}.d{grid-gap:3px}').filter(k => k === 'layout flex-gap').length === 3);
   ok('the descriptors of an @font-face, @page, @property and @counter-style are descriptors of their at-rule and not properties, and the functions and units in their values are read', (() => {
     const k = keysOf('@font-face{font-family:x;src:url(x.woff2) format("woff2");font-display:swap;size-adjust:100%}@property --x{syntax:"<length>";inherits:false}@counter-style c{system:cyclic;symbols:"a"}@page{size:A4;margin:1cm}');
@@ -288,11 +298,18 @@ head('the reader, on small stylesheets');
      ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 0 &&
      ar('@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 1);
   ok('the older spelling uses nothing newer than the floor', A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:color-mix(in srgb,var(--y) 10%,transparent)}}', CM).newerInside.length === 1 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:var(--y)}}', CM).newerInside.length === 0);
+  const PRE = { prefixed: { 'property backdrop-filter': { since: '18', prefixedSince: '9' } } };
+  const pre = css => A(css, {}, PRE).prefix;
+  ok('what the floor reads only behind -webkit- has the prefixed twin, with the same value: no twin, and a twin with another value (the one the floor reads), are found', pre('.a{backdrop-filter:blur(12px)}').length === 1 &&
+     pre('.a{backdrop-filter:blur(12px);-webkit-backdrop-filter:none}').length === 1 && pre('.a{-webkit-backdrop-filter:none;backdrop-filter:blur(12px)}').length === 1 &&
+     pre('.a{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}').length === 0 && pre('.a{-webkit-backdrop-filter: BLUR(12px)  ;backdrop-filter:blur(12px)}').length === 0 && pre('.a{-webkit-backdrop-filter:blur(12px) !important;backdrop-filter:blur(12px)}').length === 1);
   ok('an @supports not that tests a feature the table lists as newer and is no row\'s probe is found, a row\'s is not, and one that tests something else is not either', A('@supports not (color:color-mix(in srgb,red,blue) or x:y){.a{color:red}}', CM).stray.length === 1 && A('@supports not (display:grid){.a{color:red}}', CM).stray.length === 0 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}', CM).stray.length === 0);
 
   /* before */
   const OW = { 'value overflow-wrap: anywhere': row({ since: '15.4', how: 'before' }) };
   const ow = css => A(css, OW).rows['value overflow-wrap: anywhere'];
+  ok('a newer keyword that reaches a property through var() is found whatever is written before the var(), because it is judged when the page is drawn', ow(':root{--wrap:anywhere}.x{overflow-wrap:break-word;overflow-wrap:var(--wrap)}').length === 1 && /var\(--wrap\)/.test(ow(':root{--wrap:anywhere}.x{overflow-wrap:break-word;overflow-wrap:var(--wrap)}')[0] || '') &&
+     ow(':root{--wrap:normal}.x{overflow-wrap:break-word;overflow-wrap:var(--wrap)}').length === 0);
   ok('a keyword the floor does not read has the property before it, in its rule: nothing is found', ow('.a{overflow-wrap:break-word;overflow-wrap:anywhere}').length === 0 && ow('.a{overflow-wrap:break-word;color:red;overflow-wrap:anywhere}').length === 0);
   ok('and one with nothing before it is found, and so is one with the fallback after it, in another rule, or that is itself newer', ow('.a{overflow-wrap:anywhere}').length === 1 && ow('.a{overflow-wrap:anywhere;overflow-wrap:break-word}').length === 1 &&
      ow('.a{overflow-wrap:break-word}.a{overflow-wrap:anywhere}').length === 1 && ow('.a{overflow-wrap:anywhere;overflow-wrap:anywhere}').length === 2 && ow('.a{color:red;overflow-wrap:anywhere}').length === 1);

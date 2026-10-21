@@ -222,6 +222,27 @@ function classify(table, use) {
   return { how: 'unlisted' };
 }
 
+/* A newer keyword stored in a custom property is a use of it for the property that reads the custom property: `:root{--wrap:anywhere}` and
+   `overflow-wrap:var(--wrap)`. The text of the declaration that holds it names the custom property, not the property, so usesOf cannot see it; and it is judged when the
+   page is drawn, so a plain value written before the var() is no fallback. Across all the stylesheets given: [{ file, root }] -> uses of kind `value`, with `via` the custom property. */
+function customValueUses(files, watch) {
+  const consumers = new Map();                                   // custom property -> the properties that read it with var()
+  for (const { root } of files) for (const node of blocks(root)) for (const d of node.decls) {
+    if (d.prop.startsWith('--')) continue;
+    for (const m of d.value.matchAll(/var\(\s*(--[\w-]+)/g)) { if (!consumers.has(m[1])) consumers.set(m[1], new Set()); consumers.get(m[1]).add(d.prop); }
+  }
+  const out = [];
+  for (const { file, root } of files) for (const node of blocks(root)) for (const d of node.decls) {
+    if (!d.prop.startsWith('--')) continue;
+    for (const prop of consumers.get(d.prop) || []) {
+      const w = watch && watch[prop];
+      if (!w) continue;
+      for (const m of d.value.toLowerCase().matchAll(/(?<![\w-])([a-z][a-z-]*)(?![\w(-])/g)) if (w[m[1]] !== undefined) out.push({ file, key: 'value ' + prop + ': ' + m[1], kind: 'value', name: prop + ': ' + m[1], node, decl: d, line: d.line, via: d.prop });
+    }
+  }
+  return out;
+}
+
 /* ── what an older Safari makes of a stylesheet, as a text rewrite ──────────────────────────────────────────────────────────────
    The NAME of a feature is changed to one nothing knows, in the style text of a page, so that the engine in front of it does what the older one does
    (see the top of this file): the declaration is dropped, the rule with the pseudo-class is dropped whole, the var() with the unknown function comes
@@ -417,4 +438,4 @@ function inlineUses(text, watch) {
   return out;
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets };
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets, customValueUses };

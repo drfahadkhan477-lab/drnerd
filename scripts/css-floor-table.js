@@ -118,6 +118,7 @@ for (const p of props) {
 const uses = [];
 for (const fam of C.families()) for (const f of fam.files) uses.push(...C.usesOf(C.parseCss(C.readFile(f)).root, watch));
 uses.push(...inlineOf(watch));
+uses.push(...C.customValueUses([...C.families().flatMap(fam => fam.files.map(f => ({ file: f, root: C.parseCss(C.readFile(f)).root }))), ...C.generatedSheets().map(g => ({ file: g.file, root: C.parseCss(g.css).root }))], watch).map(u => Object.assign(u, { node: { line: u.file + ':' + u.line } })));
 const keys = new Map();
 for (const u of uses) if (!keys.has(u.key)) keys.set(u.key, u);
 
