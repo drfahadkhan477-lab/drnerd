@@ -2,7 +2,7 @@
 
 /* question card: subtle depth + chapter-tinted wash, refined tag */
 .q-card{position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(15,30,61,.04),0 8px 22px rgba(15,30,61,.06)}
-.q-card::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;
+.q-card::before{content:'';position:absolute;top:0;right:0;bottom:0;left:0;z-index:0;pointer-events:none;opacity:.5;
   background:radial-gradient(120% 90% at 0% 0%,var(--teal4),transparent 60%)}
 html[data-theme="dark"] .q-card::before{opacity:.22}
 .q-card>*{position:relative;z-index:1}
@@ -16,6 +16,8 @@ html[data-theme="dark"] .q-card::before{opacity:.22}
   color:var(--acc); border:1.5px solid color-mix(in srgb, var(--acc) 38%, var(--border));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
   font-weight:800; font-size:13px}
+/* The older spelling of the color-mix() above: see the note in app/css/cardiac.css. */
+@supports not (color:color-mix(in srgb,red,blue)){.opt-letter{background:var(--card);border:1.5px solid var(--border)}}
 html[data-theme="dark"] .opt-letter{box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
 
 /* option cards: layered depth, accent bar on hover/focus, smoother press */
@@ -98,8 +100,10 @@ html[data-theme="dark"]{
   background:color-mix(in srgb, var(--accent,var(--teal)) 14%, transparent);
   width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;
   color:var(--accent,var(--teal))}
+@supports not (color:color-mix(in srgb,red,blue)){.ct-ico{background:var(--card)}}
 .story-ring circle:last-child{filter:none;
   filter:drop-shadow(0 0 4px color-mix(in srgb, var(--accent,var(--teal)) 45%, transparent))}
+@supports not (color:color-mix(in srgb,red,blue)){.story-ring circle:last-child{filter:none}}
 
 /* card surfaces pick up the new elevation scale */
 .feed-card{box-shadow:var(--e1)}
@@ -132,6 +136,7 @@ html[data-theme="dark"]{
 }
 .opt-letter{min-width:28px;height:28px;border-radius:9px;font-size:11px;
   border-color:color-mix(in srgb, var(--acc,var(--border)) 35%, var(--border))}
+@supports not (color:color-mix(in srgb,red,blue)){.opt-letter{border-color:var(--border)}}
 @media (hover:hover){.opt:not(:disabled):hover .opt-letter{border-color:var(--acc,var(--teal));color:var(--acc,var(--teal))}}
 
 /* progress bar: gradient fill instead of a flat tint */
@@ -143,8 +148,11 @@ html[data-theme="dark"]{
 
 /* dist bars in the reveal card: smoother, slightly glossy */
 .dist-bar{background:linear-gradient(90deg,var(--teal),color-mix(in srgb, var(--teal) 70%, #38BDF8))}
+@supports not (color:color-mix(in srgb,red,blue)){.dist-bar{background:var(--teal)}}
 .correct-row .dist-bar{background:linear-gradient(90deg,var(--green),color-mix(in srgb, var(--green) 70%, #6EE7B7))}
+@supports not (color:color-mix(in srgb,red,blue)){.correct-row .dist-bar{background:var(--green)}}
 .wrong-row .dist-bar{background:linear-gradient(90deg,var(--red),color-mix(in srgb, var(--red) 70%, #FCA5A5))}
+@supports not (color:color-mix(in srgb,red,blue)){.wrong-row .dist-bar{background:var(--red)}}
 
 /* ═══════ v12 — screen transitions (View Transitions API, Safari 18+) ═══════
    Feature-detected and reduced-motion-gated in JS (render() in app.js);
@@ -166,5 +174,5 @@ html[data-theme="dark"]{
    are 8 px apart, so the two slops meet and do not cross) and a bar is where a wider button would crowd the title. */
 .cf-chip,.miss-chip,.study-back,.hello-x{min-height:44px}
 .icon-btn,.nav-brand{position:relative}
-.icon-btn::before{content:'';position:absolute;inset:-5px}   /* from the padding box: 1 px of border is inside the 4 px the press may stray */
-.nav-brand::before{content:'';position:absolute;inset:-1px 0}
+.icon-btn::before{content:'';position:absolute;top:-5px;right:-5px;bottom:-5px;left:-5px}   /* from the padding box: 1 px of border is inside the 4 px the press may stray */
+.nav-brand::before{content:'';position:absolute;top:-1px;right:0;bottom:-1px;left:0}

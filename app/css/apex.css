@@ -1,7 +1,7 @@
 /* ═══════════ ANNOTATION · STICKY NOTES · AI PANEL ═══════════ */
 :root{--ink-bar:#111E35}
 .ink-host{position:relative}
-.ink-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:6;
+.ink-canvas{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;z-index:6;
   touch-action:pan-y;pointer-events:none}
 .ink-host.ink-on .ink-canvas{pointer-events:auto;cursor:crosshair}
 .ink-host.ink-on .fig-img{cursor:default}
@@ -36,7 +36,7 @@
 .tool-auto{font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
 
 /* sticky notes */
-.note-layer{position:absolute;inset:0;z-index:7;pointer-events:none}
+.note-layer{position:absolute;top:0;right:0;bottom:0;left:0;z-index:7;pointer-events:none}
 .sticky{position:absolute;min-width:120px;max-width:260px;pointer-events:auto;
   background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:8px 10px 10px;
   box-shadow:0 4px 14px rgba(15,30,61,.14);font-size:13px;line-height:1.45;color:#3F2D06;
@@ -263,7 +263,7 @@
 .setup .note{font-size:11px;color:var(--muted);margin-top:10px}
 @media (max-width:1023px){
   #shell{display:block}
-  #ai{position:fixed;inset:auto 0 0 0;width:100%;height:0;border-left:none;
+  #ai{position:fixed;top:auto;right:0;bottom:0;left:0;width:100%;height:0;border-left:none;
     border-top:1px solid var(--border);z-index:80;
     border-radius:18px 18px 0 0;box-shadow:0 -10px 40px rgba(15,30,61,.2)}
   #shell.ai-open #ai{height:74vh;height:74dvh;flex-basis:auto}
@@ -287,7 +287,7 @@
    sheet used to take, where there is width for two columns. */
 @media (min-width:768px) and (orientation:landscape){
   #shell{display:flex;align-items:stretch}
-  #ai{position:sticky;inset:auto;top:calc(var(--navh) + var(--sat));
+  #ai{position:sticky;top:auto;right:auto;bottom:auto;left:auto;top:calc(var(--navh) + var(--sat));
     height:calc(100vh - var(--navh) - var(--sat));height:calc(100dvh - var(--navh) - var(--sat));
     width:0;flex:0 0 0;max-width:none;
     border-left:1px solid var(--border);border-top:none;
@@ -309,7 +309,7 @@
      set by the length of whichever pearl had been chosen. It is a reading
      column; it is not allowed to have an opinion about the prose inside it. */
   #app{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;width:100%}
-  #ai{position:static;inset:auto;width:100%;max-width:none;
+  #ai{position:static;top:auto;right:auto;bottom:auto;left:auto;width:100%;max-width:none;
     height:0;flex:0 0 0;min-height:0;overflow:hidden;
     border-left:none;border-top:1.5px solid var(--border);
     border-radius:18px 18px 0 0;
@@ -383,7 +383,7 @@
   font-family:var(--font-mono)}
 .src-pill.ref{border-color:var(--teal);color:var(--teal);cursor:default;font-family:var(--font-sans)}
 #peek{display:none}
-#peek.peek-open{display:flex;position:fixed;inset:0;z-index:120;background:rgba(10,22,40,.55);
+#peek.peek-open{display:flex;position:fixed;top:0;right:0;bottom:0;left:0;z-index:120;background:rgba(10,22,40,.55);
   align-items:center;justify-content:center;padding:18px;
   backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .peek-card{background:var(--white);border-radius:18px;max-width:660px;width:100%;
@@ -411,7 +411,7 @@
 .ref-card{background:var(--white);border:1.5px solid var(--border2);border-radius:14px;
   padding:12px 14px;margin-bottom:9px}
 .ref-top{display:flex;align-items:flex-start;gap:10px}
-.ref-title{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700;font-size:16px;letter-spacing:-.01em;line-height:1.35}
+.ref-title{flex:1;min-width:0;overflow-wrap:break-word;overflow-wrap:anywhere;font-weight:700;font-size:16px;letter-spacing:-.01em;line-height:1.35}
 .ref-acts{display:flex;gap:5px}
 .ref-tags{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
 .ref-tags .ref-more{color:var(--muted);background:transparent;border-style:dashed;cursor:default}

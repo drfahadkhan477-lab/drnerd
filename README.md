@@ -49,7 +49,7 @@ record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 98 suites that need neither a browser nor a build all stay green. See
+the 99 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 226 checks can't run here.
 
@@ -77,12 +77,41 @@ that arrived later, and cannot see a method that is older on one object than on
 another, so it counts the places that read a file instead (the shell, and the
 page that opens a code-only deploy), and `tests/verify-assets.js` and
 `tests/verify-bankstore.js` run the two imports on a page made to lack those
-two methods. The stylesheets are held to the prefix and that `vh`, and to nothing
-else: they also use `color-mix()`, `aspect-ratio`, `:has()` and a `gap` on flex
-boxes, which are newer than the floor, and below the Safari that introduced each
-the declaration or the rule is skipped, and what that leaves on screen has not
-been measured. Anything else that is not on the list is not measured against the
-floor either. Nothing has been run on a Safari as old as 13.4.
+two methods.
+
+The stylesheets are held to a table. `tests/css-floor-table.json` lists every
+property, function, unit, pseudo-class, at-rule and media feature they use with
+the first iOS Safari that reads it (MDN's data: `scripts/css-floor-table.js`
+writes the table from it), and `tests/verify-floor-css-pure.js` fails on a use that is not
+in it, so a newer feature cannot arrive unclassified. An older Safari does not
+stop at what it does not know: it skips the declaration, or the whole rule that
+holds an unknown pseudo-class, or the whole `@media`, and says nothing. A
+feature newer than the floor has a row that says what the stylesheets do about
+it, and the guard reads that claim where the text can show it. A rule that
+uses `color-mix()` or `aspect-ratio` is followed by an `@supports not` rule
+that spells it the older way (a plain value written before it would not help:
+a declaration with a `var()` in it is taken at face value and comes to nothing
+when the page is drawn), a keyword that is newer has the older one before it, no
+selector list holds a pseudo-class the floor does not read with one it does,
+and `inset` and `padding-block` are not used. The rest is named as progressive
+(smooth scrolling, `text-wrap: pretty`: not having it is the older default),
+accepted, or inert. `tests/verify-floor.js` is the browser half. It makes the
+features that have a fallback unknown to the engine, the way an older Safari
+does not know them, and checks that nothing in the app moves, resizes or loses a
+ground, a border or a text colour, and that each fallback draws what the rule
+it stands in for would have. The first version of the fallback for the diagram
+stages had their height and not their width, and that suite is what found it.
+
+What is left is the gap on a flex box, which Safari reads from 14.5 (on a grid
+it already does): before it the items of a row close up, a chip against its icon,
+an option's letter against its text. Put on every flex box in this machine's
+engine, a gap of 0 leaves the screens that were looked at (the home screen, the
+study screen, a question answered) complete and legible with their rows touching.
+It is accepted, not fixed, and it cannot be made unknown the way the rest can,
+so it is the one thing that suite does not hold. Where `color-mix()` is not read
+a theme colour stands in for each tint and glow. Nothing has been run on a Safari
+as old as 13.4: what is measured is an engine that knows more, with the names of
+the features changed.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why

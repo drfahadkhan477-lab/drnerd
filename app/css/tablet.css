@@ -54,7 +54,7 @@
     grid-template-areas:"hero pearl" "prog pearl" "gap pearl" "doors doors";
     column-gap:clamp(18px,2.4vw,34px);
     row-gap:0;
-    align-content:start;
+    align-content:flex-start;align-content:start;
     /* One screen: the viewport, less the fixed nav, the status-bar strip and
        the wrap's own padding. min-height rather than height so a left column
        taller than a short screen can still push past it and scroll rather

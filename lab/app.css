@@ -66,6 +66,8 @@ canvas.view { width: 100%; display: block; border: 1px solid var(--line); border
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 0.85rem; background: var(--bg); }
 
 .banner { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--card)); border-radius: 10px; padding: 10px 12px; margin-bottom: var(--gap); font-size: 0.92rem; }
+/* The older spelling of the color-mix() above: see the note in app/css/cardiac.css. */
+@supports not (color:color-mix(in srgb,red,blue)){.banner { background: var(--card); }}
 
 .explore { display: grid; grid-template-columns: 1fr; gap: var(--gap); }
 @media (min-width: 760px) { .explore { grid-template-columns: 1.15fr 0.85fr; } }
