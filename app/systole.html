@@ -502,9 +502,33 @@ function flushLog(){
   if(logTimer){ clearTimeout(logTimer); logTimer=null; }
   if(logDirty){ logDirty=false; saveJSON(LOG_KEY,LOG); }
 }
+/* THE INK IS SAVED WHEN THE PEN HAS BEEN STILL, and not at every pen-up. Saving it hands IndexedDB the whole store, which clones everything ever
+   written, on the main thread, inside the put: with nothing else running, 24 ms on Chromium and 84 on WebKit at three thousand strokes, 88 and
+   316 at twelve thousand, every time the pen is lifted, which is when the next stroke begins and the first of its points wait behind the clone.
+   Erasing a sweep of strokes did it once for each. The strokes are in INK, which the screen reads, from the moment they are drawn; only the copy
+   in the database waits. It waits until the pen has been still for INK_IDLE_MS, and never more than INK_MAX_MS after the first stroke not yet saved,
+   so that writing without a pause still reaches the database. Hiding the page and exporting save it at once, and closing it asks for the same save (a
+   transaction opened by a page that is going away is the browser's to finish or drop; hiding, which comes first, is what is relied on). Before the store has
+   hydrated a save is made at once as well: a write that comes in that window is the one the store merges under what it then reads, and that
+   depends on its having been made (src/core/store.js). What is lost if the page is killed with no warning is what was drawn since the last save,
+   at most INK_IDLE_MS of writing and at the outside INK_MAX_MS; hiding the page, which comes first on an iPad, saves it. */
+const INK_IDLE_MS=900, INK_MAX_MS=10000;
+let inkDirtyAt=0, inkTimer=null;
+function saveInkNow(){
+  if(inkTimer){ clearTimeout(inkTimer); inkTimer=null; }
+  inkDirtyAt=0; saveJSON(INK_KEY,INK);
+}
+function saveInkSoon(){
+  if(!Store.isHydrated()){ saveInkNow(); return; }
+  const now=Date.now();
+  if(!inkDirtyAt) inkDirtyAt=now;
+  if(inkTimer) clearTimeout(inkTimer);
+  inkTimer=setTimeout(flushInk,Math.max(0,Math.min(INK_IDLE_MS,inkDirtyAt+INK_MAX_MS-now)));
+}
+function flushInk(){ if(inkDirtyAt) saveInkNow(); }
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){
-    flushLog();
+    flushLog(); flushInk();
     /* rAF-driven canvases need nothing — the browser suspends them. This
        interval does not suspend, so it is the only thing worth stopping. */
     if(heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
@@ -512,7 +536,7 @@ document.addEventListener('visibilitychange',()=>{
     heroRotateTimer=startHeroRotation();
   }
 });
-window.addEventListener('pagehide',flushLog);
+window.addEventListener('pagehide',()=>{ flushLog(); flushInk(); });
 /* grade is null for an ordinary practice answer, 0-5 for a real self-rating. */
 @@SLOT[src:src/core/calib.js]@@
 function cfRowHtml(){
@@ -789,7 +813,7 @@ function attachInk(host,key){
     if(had<2) redraw(); else paint(cur,box(),had);
   }
   function end(){
-    if(cur&&cur.p.length){ strokes().push(simplifyStroke(cur)); saveJSON(INK_KEY,INK); }
+    if(cur&&cur.p.length){ strokes().push(simplifyStroke(cur)); saveInkSoon(); }
     cur=null; redraw(); refreshRail(); armAutoMinimize();
   }
 
@@ -797,7 +821,7 @@ function attachInk(host,key){
     const arr=strokes();
     for(let i=arr.length-1;i>=0;i--){
       if(arr[i].p.some(q=>Math.hypot(q[0]-pt[0],(q[1]-pt[1])*0.6)<0.022)){
-        arr.splice(i,1); saveJSON(INK_KEY,INK); redraw(); refreshRail(); return;
+        arr.splice(i,1); saveInkSoon(); redraw(); refreshRail(); return;
       }
     }
   }
@@ -951,14 +975,14 @@ function railAction(a){
     const keys=Object.keys(INK).filter(k=>k.startsWith(q.id+':'));
     let best=null,bt=-1;
     keys.forEach(k=>{ const s=INK[k]; if(s.length&&s.length>bt){bt=s.length;best=k;} });
-    if(best){ INK[best].pop(); if(!INK[best].length)delete INK[best]; saveJSON(INK_KEY,INK); repaintAll(); }
+    if(best){ INK[best].pop(); if(!INK[best].length)delete INK[best]; saveInkSoon(); repaintAll(); }
   }
   else if(a==='clear'){
     const q=currentQ(); if(!q)return;
     if(!confirm('Clear all ink and notes on this question?'))return;
     Object.keys(INK).filter(k=>k.startsWith(q.id+':')).forEach(k=>delete INK[k]);
     delete NOTES[q.id];
-    saveJSON(INK_KEY,INK); saveJSON(NOTE_KEY,NOTES); repaintAll();
+    saveInkNow(); saveJSON(NOTE_KEY,NOTES); repaintAll();
   }
   buildRail(); syncInkMode(); armAutoMinimize();
 }
@@ -1008,6 +1032,7 @@ async function exportMarkup(){
   try{
   if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
   if(typeof flushLog==='function') flushLog();
+  if(typeof flushInk==='function') flushInk();
   const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
   const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
     refs:(typeof REF!=='undefined'?REF:[]),
@@ -1050,7 +1075,7 @@ function importMarkup(){
         const progress=validateAnnotationBackup(d);
         if(!(await storeReadyOrNull())){ toast('Storage is not responding, so nothing was restored. Reload and try again.'); return; }
         const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
-        if(d.ink)  { INK=d.ink;   saveJSON(INK_KEY,INK); }
+        if(d.ink)  { INK=d.ink;   saveInkNow(); }
         if(d.notes){ NOTES=d.notes; saveJSON(NOTE_KEY,NOTES); }
         if(d.refs&&typeof REF!=='undefined'){ REF=d.refs; saveJSON('accsap12.ref',REF);
           if(typeof invalidateIndex==='function')invalidateIndex(); }
