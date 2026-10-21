@@ -328,9 +328,9 @@ function declsToCss(list) {
   return out.length ? 'x{' + out.join(';') + '}' : '';
 }
 
-/* The text of an expression of string literals, from `at`: what a script assigns to a style or sets as a value. Literals joined with + are one text ('rgba(' + r + ',' +
-   g + ')' is rgba(0,0)), anything that is not a literal is a 0, and any other operator ( ? : , || ) separates, so that cond ? 'none' : 'block' is not one word. It ends at the ;
-   or the bracket that ends the statement, or at a line end that the expression does not go on past (an operator ends the line or starts the next). */
+/* The text of an expression of string literals, from `at`: what a script assigns to a style or sets as a value, and where it ends. Literals joined with + are one text
+   ('rgba(' + r + ',' + g + ')' is rgba(0,0)), anything that is not a literal is a 0, and any other operator ( ? : || ) separates, so that cond ? 'none' : 'block' is not one
+   word. It ends at the , or the ; or the bracket that ends the expression, or at a line end that it does not go on past (an operator ends the line or starts the next). */
 function literalsFrom(t, at) {
   let out = '', k = at, depth = 0;
   const prev = idx => { while (idx >= at && /\s/.test(t[idx])) idx--; return t[idx] || ''; };
@@ -344,8 +344,8 @@ function literalsFrom(t, at) {
     }
     if (c === '(' || c === '[' || c === '{') depth++;
     else if (c === ')' || c === ']' || c === '}') { if (depth === 0) break; depth--; }
-    else if (c === ';' && depth === 0) break;
-    else if (c === '\n') { if (depth === 0 && !/[+?:,|&=(]/.test(prev(k - 1)) && !/[+?:|&.,)]/.test(next(k + 1))) break; }
+    else if ((c === ';' || c === ',') && depth === 0) break;
+    else if (c === '\n') { if (depth === 0 && !/[+?:|&=(]/.test(prev(k - 1)) && !/[+?:|&.)]/.test(next(k + 1))) break; }
     else if (/[\w$]/.test(c)) {
       let e = k; while (e < t.length && /[\w$.]/.test(t[e])) e++;
       if (t[e] === '(') { let d = 0; for (; e < t.length; e++) { if (t[e] === '(') d++; else if (t[e] === ')' && --d === 0) break; } k = e; }   // a call: to its ), which the loop steps past
@@ -354,8 +354,9 @@ function literalsFrom(t, at) {
     }
     else if (c !== '+' && !/\s/.test(c)) out += ' ';
   }
-  return out;
+  return { text: out, end: k };
 }
+const literals = (t, at) => literalsFrom(t, at).text;
 
 /* The stylesheet text of everything inline in a script or page: [{ css, line }]. */
 function inlineSegments(text) {
@@ -367,14 +368,28 @@ function inlineSegments(text) {
   const push = (css, idx) => { if (css) { const line = lineAt(idx); out.push({ css: '\n'.repeat(line - 1) + css, line }); } };
   const lists = (re, kept) => { for (const m of t.matchAll(re)) { const v = m[kept] ?? m[kept + 1] ?? m[kept + 2]; if (v != null) push(declsToCss(v), m.index); } };
   lists(/\bstyle\s*=\s*\\?"([^"\\]*)\\?"()()|\bstyle\s*=\s*\\?'([^'\\]*)\\?'()()/g, 1);
-  lists(new RegExp('\\bcssText\\s*\\+?=\\s*(?:' + STR + ')', 'g'), 1);
-  lists(new RegExp('(?<![\\w$.])style\\s*:\\s*(?:' + STR + ')', 'g'), 1);
-  lists(new RegExp('setAttribute\\(\\s*[\'"]style[\'"]\\s*,\\s*(?:' + STR + ')', 'g'), 1);
+  // a list of declarations as an expression of literals: el.style.cssText = 'a:b;' + 'c:d', { style: 'a:b' }, setAttribute('style', 'a:b' + x)
+  for (const re of [/\bcssText\s*\+?=\s*/g, /(?<![\w$.])style\s*:\s*/g, /setAttribute\(\s*['"]style['"]\s*,\s*/g]) for (const m of t.matchAll(re)) push(declsToCss(literals(t, m.index + m[0].length)), m.index);
+  const kebab = n => n === 'cssFloat' ? 'float' : n.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
+  const decl = (name, at, idx) => push('x{' + kebab(name) + ':' + (maskTemplate(literals(t, at)) || '0') + '}', idx);
   for (const m of t.matchAll(/\.style\.([a-zA-Z]+)\s*(?:=(?!=)|\+=)/g)) {
     if (/^(cssText|setProperty|removeProperty|getPropertyValue|length)$/.test(m[1])) continue;
-    push('x{' + (m[1] === 'cssFloat' ? 'float' : m[1].replace(/[A-Z]/g, c => '-' + c.toLowerCase())) + ':' + (maskTemplate(literalsFrom(t, m.index + m[0].length)) || '0') + '}', m.index);
+    decl(m[1], m.index + m[0].length, m.index);
   }
-  for (const m of t.matchAll(/\.style\.setProperty\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1\s*,?/g)) push('x{' + m[2] + ':' + (maskTemplate(literalsFrom(t, m.index + m[0].length)) || '0') + '}', m.index);
+  for (const m of t.matchAll(/\.style\[\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1\s*\]\s*(?:=(?!=)|\+=)/g)) decl(m[2], m.index + m[0].length, m.index);
+  for (const m of t.matchAll(/\.style\.setProperty\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1\s*,?/g)) decl(m[2], m.index + m[0].length, m.index);
+  // Object.assign(el.style, { background: '...', borderRadius: x + 'px' })
+  for (const m of t.matchAll(/Object\.assign\(\s*[\w$.]+\.style\s*,\s*\{/g)) {
+    for (let k = m.index + m[0].length; k < t.length;) {
+      const e = /^[\s,]*(['"]?)(-{0,2}[a-zA-Z][\w-]*)\1\s*:/.exec(t.slice(k, k + 200));
+      if (!e) break;
+      const v = literalsFrom(t, k + e[0].length);
+      push('x{' + kebab(e[2]) + ':' + (maskTemplate(v.text) || '0') + '}', k);
+      k = v.end + 1;
+    }
+  }
+  // sheet.insertRule('.a{...}', 0)
+  for (const m of t.matchAll(/\.insertRule\(\s*/g)) push(maskTemplate(literals(t, m.index + m[0].length)), m.index);
   for (const m of t.matchAll(/\.style\.(?:removeProperty|getPropertyValue)\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1/g)) push('x{' + m[2] + ':0}', m.index);
   // a <style> block of a page, with the assembler's slots (where the stylesheets go) taken out
   for (const m of t.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)) push(m[1].replace(/@@SLOT\[[^\]]*\]@@/g, ' '), m.index + m[0].indexOf('>') + 1);
@@ -382,7 +397,7 @@ function inlineSegments(text) {
   for (const mk of t.matchAll(/(\w+)\s*=\s*[\w.]*createElement\(\s*['"]style['"]\s*\)/g)) {
     const re = new RegExp('(?<![\\w$.])' + mk[1] + '\\.(?:textContent|innerHTML)\\s*\\+?=\\s*', 'g');
     re.lastIndex = mk.index;
-    for (let m; (m = re.exec(t)) && m.index - mk.index < 4000;) push(maskTemplate(literalsFrom(t, m.index + m[0].length)), m.index);
+    for (let m; (m = re.exec(t)) && m.index - mk.index < 4000;) push(maskTemplate(literals(t, m.index + m[0].length)), m.index);
   }
   return out;
 }

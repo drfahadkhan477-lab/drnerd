@@ -391,7 +391,8 @@ head('and a style written in script is held to the rows the table has');
      table, so that a feature that is only ever written there cannot arrive unclassified. And a property or a function that a row says is newer than the floor, in a
      string that looks like a style or in an assignment to element.style, is found, unless the row says it is read as an older spelling there (the image figure's
      ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). What is not read: CSS that a function builds from data
-     (the Memorizer's look sheet, memorizer/src/appearance.js css()), and a style assembled from variables entirely. */
+     (the Memorizer's look sheet, memorizer/src/appearance.js css()), a style assembled from variables entirely, and the standalone demo pages (demo/), which are opened
+     in Safari on their own and are not the app (they write inset, aspect-ratio and :focus-visible with no fallback). */
   const T = C.loadTable();
   const above = Object.entries(T.above).filter(([k, r]) => (k.startsWith('property ') || k.startsWith('function ')) && r.class !== 'inert');
   const names = above.map(([k]) => k.split(' ')[1]);
@@ -484,6 +485,10 @@ head('and a style written in script is held to the rows the table has');
      IN("el.style.transform = 'translate(' + x + 'px,' + y + 'px)'").join() === 'property transform,function translate,unit px,unit px' && IN("el.style.display = on ? 'none' : 'block'").join() === 'property display');
   ok('and a statement ends where it ends: at its ;, at a line end the expression does not go on past, and a name is not run into what follows it', IN("a.style.display=open?'none':'flex'; b.style.width='5px'").join() === 'property display,property width,unit px' &&
      IN("a.style.width = '10px'\nb.style.height = '5em'\n").join() === 'property width,unit px,property height,unit em' && IN("a.style.background =\n  'rgba(' + r + ',' + g + ')' +\n  'x';").join() === 'property background,function rgba');
+  ok('and an expression of several literals is read whole: a cssText joined over lines, a style: with more after it that is not its own, a setAttribute that script finishes', IN("t.style.cssText='position:fixed;left:50%;'+\n 'background:#111;border-radius:11px;'+\n 'inset:0';").join() === 'property position,property left,unit %,property background,property border-radius,unit px,property inset' &&
+     IN("h('div', { style: 'width:1px', title: '5em' })").join() === 'property width,unit px' && IN("h('div', { style: 'width:' + w + 'px;inset:0', class: 'x' })").join() === 'property width,unit px,property inset' && IN("el.setAttribute('style', 'height:100dvh;' + extra)").join() === 'property height,unit dvh');
+  ok('and Object.assign(el.style, {...}), a bracket assignment and insertRule are read', IN("Object.assign(el.style, { background: 'color-mix(in srgb, red, blue)', borderRadius: r + 'px', 'z-index': 3 })").join() === 'property background,function color-mix,property border-radius,unit px,property z-index' &&
+     IN("el.style['container-type'] = 'inline-size'").join() === 'property container-type' && IN("sheet.insertRule('.a{container-type:inline-size}', 0)").join() === 'property container-type');
   ok('and nothing in a class name, a comment, a comparison, a read, a style: that is not a declaration, a text that is not a style element\'s, or script putting a value together', !IN('<i class="inset aspect-ratio">').length && !IN('// style="inset:0"').length && !IN('if (el.style.display === "none") {}').length &&
      !IN('var w = el.style.width;').length && !IN("var o = { style: 'solid' };").length && !IN("var el = document.createElement('div'); el.textContent = '.a{inset:0}';").length &&
      IN("'<i style=\"width:' + Math.round(w) + 'px\">'").join() === 'property width' && IN('<i style="clip-path:inset(0 ${(100 - x).toFixed(2)}% 0 0 round 5px)">').join() === 'property clip-path,function inset,unit %,unit px' &&
