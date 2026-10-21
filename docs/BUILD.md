@@ -563,6 +563,50 @@ It extracts both functions out of the suites rather than keeping copies,
 and drives them over pages built to give each answer that matters,
 including the ones each first draft got wrong.
 
+### When a stylesheet uses CSS that the floor does not read
+
+`verify-floor-css-pure` reads every stylesheet the pages ship against
+`tests/css-floor-table.json`, which says, for each property, function, unit,
+pseudo-class, at-rule and media feature, the first iOS Safari that reads it.
+It fails in three ways, and each has one way out:
+
+- `… is not in the table`: a feature nobody has classified. The versions are
+  MDN's, which this repository does not depend on, so get a copy of the package
+  and let the script write the row:
+
+  ```bash
+  npm install --prefix /tmp/bcd @mdn/browser-compat-data
+  node scripts/css-floor-table.js --bcd /tmp/bcd/node_modules/@mdn/browser-compat-data --write
+  ```
+
+  A feature the floor reads is listed and that is all. One it does not read gets
+  a row with `"class": "TODO"`, and the guard refuses that until someone has
+  said what the stylesheets do about it.
+- `… is TODO`, or a row with no note: write the class and the note in the table.
+  `fallback` says how it is held (`how`: a `companion` `@supports not` rule after
+  each rule that uses it, a `guard`, an older value `before` it in the rule, a
+  `split` selector list, or `elsewhere`), `progressive` says what not having it
+  looks like, `accepted` says what it costs, `inert` that an iPad does nothing
+  with it, `banned` that it is not to be used and what to write instead.
+- a class that the stylesheets do not live up to: the message names the rule.
+
+A declaration that holds a `var()` is taken at face value by a Safari that does
+not know its function and comes to nothing when the page is drawn, so a plain
+value written before it is no fallback. The fallback is an `@supports not (…)`
+rule after it, for the same selector, that sets the same properties.
+
+`verify-floor` is the browser half and needs a build. It makes the features that
+have a fallback unknown to the engine (`tests/_cssfloor.js` renames them in the
+page's style text) and compares three pages: as it ships, with the features
+unknown, and with every `@supports not` block applied. To look at what an older
+Safari would draw, without a suite:
+
+```js
+const C = require('./tests/_cssfloor.js'), fs = require('fs');
+const t = C.loadTable(), sims = [...new Set(Object.values(t.above).filter(r => r.sim).map(r => r.sim))];
+fs.writeFileSync('/tmp/older.html', C.unknownFeatures(fs.readFileSync('build/systole.html', 'utf8'), sims).html);
+```
+
 ### The one suite that checks us against somebody else
 
 `verify-oracle` is different in kind from the rest. Every other suite was
@@ -826,7 +870,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        162 suites · 98 need no browser · + pwa
+tests/        162 suites · 99 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

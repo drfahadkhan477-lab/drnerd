@@ -306,6 +306,11 @@ const SUITES = [
   ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
   ['swlifetime-pure', 'the service worker keeps the event alive for each cache write it makes, including the refresh behind a cache hit that the network answers late'],
   ['hover-pure', 'no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind'],
+  /* The stylesheets use CSS that iPadOS 13.4, the floor, does not read, and an older Safari does not stop at it: it skips the declaration, the whole rule or
+     the whole @media, and says nothing. ipad-pure holds the script to a list; this holds every property, function, unit, pseudo-class, at-rule and
+     media feature the stylesheets use to a table of the first Safari that reads it (tests/css-floor-table.json), and what the table says is done about
+     one that is newer, where it can be read from the text. */
+  ['floor-css-pure', 'every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says: a companion @supports not rule, an older value before it, a list that is split, or no use at all'],
   /* Two facts that were true when an audit looked and had nothing holding
      them that way: four native dialogs, all deliberate, and no icon-only
      button without an accessible name. Written down where they fail. */
@@ -352,6 +357,9 @@ const SUITES = [
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
   ['record-pure',    'the counts record in two halves: each written only from a run where every one of its suites ran and passed, the other half kept'],
   ['suitetime-pure', 'a suite that runs far past its recorded time is stopped and named with the section it was in, and every section is timed'],
+  /* The browser half of floor-css-pure. It makes the features that have a fallback unknown to the engine, the way an older Safari does not know
+     them, and compares what the app draws with what it draws as it ships, and with the fallbacks laid over the features. Needs the built page. */
+  ['floor', 'with the features that have a fallback made unknown, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have'],
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
@@ -506,7 +514,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
+const PENDING_RECORD = ['floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

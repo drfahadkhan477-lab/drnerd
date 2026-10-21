@@ -406,7 +406,7 @@ const LOADER = `<script>
     var box = document.createElement('div');
     box.id = 'bankImport';
     box.setAttribute('role', 'dialog');
-    box.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:#0b1512;color:#e8f2ee;font:16px/1.45 system-ui,-apple-system,sans-serif;text-align:center';
+    box.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;background:#0b1512;color:#e8f2ee;font:16px/1.45 system-ui,-apple-system,sans-serif;text-align:center';
     box.innerHTML = '<div style="font-size:24px;font-weight:600">Import your study content</div>' +
       '<div style="max-width:30em;opacity:.8">This copy of Systole carries no question bank. Pick the package you made with tools/pack-content.js (systole-content-v1.zip). It stays on this device.</div>' +
       '<label style="padding:12px 20px;border-radius:12px;background:#1f8a6a;color:#fff;cursor:pointer">Choose file<input id="bankFile" type="file" accept=".zip,application/zip" style="display:none"></label>' +

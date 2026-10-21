@@ -1,0 +1,748 @@
+{
+  "floor": "13.4",
+  "source": "@mdn/browser-compat-data 8.1.6, support.safari_ios",
+  "ok": {
+    "atrule": [
+      "@font-face",
+      "@keyframes",
+      "@media",
+      "@supports"
+    ],
+    "descriptor": [
+      "@font-face font-display",
+      "@font-face font-family",
+      "@font-face font-style",
+      "@font-face font-weight",
+      "@font-face src"
+    ],
+    "function": [
+      "blur",
+      "brightness",
+      "calc",
+      "clamp",
+      "counter",
+      "cubic-bezier",
+      "drop-shadow",
+      "env",
+      "format",
+      "hsl",
+      "hsla",
+      "inset",
+      "linear-gradient",
+      "max",
+      "min",
+      "minmax",
+      "radial-gradient",
+      "rect",
+      "repeat",
+      "repeating-linear-gradient",
+      "rgba",
+      "rotate",
+      "rotatey",
+      "saturate",
+      "scale",
+      "scalex",
+      "scaley",
+      "skewx",
+      "translate",
+      "translate3d",
+      "translatex",
+      "translatey",
+      "url",
+      "var"
+    ],
+    "media": [
+      "height",
+      "hover",
+      "orientation",
+      "prefers-color-scheme",
+      "prefers-reduced-motion",
+      "width"
+    ],
+    "property": [
+      "--*",
+      "-webkit-background-clip",
+      "-webkit-font-smoothing",
+      "-webkit-overflow-scrolling",
+      "-webkit-tap-highlight-color",
+      "-webkit-text-fill-color",
+      "align-content",
+      "align-items",
+      "align-self",
+      "animation",
+      "animation-delay",
+      "animation-duration",
+      "animation-iteration-count",
+      "background",
+      "background-attachment",
+      "background-clip",
+      "background-color",
+      "background-image",
+      "background-position",
+      "background-repeat",
+      "background-size",
+      "border",
+      "border-bottom",
+      "border-collapse",
+      "border-color",
+      "border-left",
+      "border-left-color",
+      "border-radius",
+      "border-right",
+      "border-style",
+      "border-top",
+      "border-top-color",
+      "border-width",
+      "bottom",
+      "box-shadow",
+      "box-sizing",
+      "clip",
+      "clip-path",
+      "color",
+      "color-scheme",
+      "column-gap",
+      "content",
+      "counter-increment",
+      "counter-reset",
+      "cursor",
+      "display",
+      "dominant-baseline",
+      "fill",
+      "filter",
+      "flex",
+      "flex-basis",
+      "flex-direction",
+      "flex-shrink",
+      "flex-wrap",
+      "font",
+      "font-family",
+      "font-size",
+      "font-style",
+      "font-variant-numeric",
+      "font-weight",
+      "gap",
+      "grid-area",
+      "grid-column",
+      "grid-row",
+      "grid-template-areas",
+      "grid-template-columns",
+      "grid-template-rows",
+      "height",
+      "isolation",
+      "justify-content",
+      "left",
+      "letter-spacing",
+      "line-height",
+      "list-style",
+      "margin",
+      "margin-bottom",
+      "margin-left",
+      "margin-right",
+      "margin-top",
+      "marker-end",
+      "max-height",
+      "max-width",
+      "min-height",
+      "min-width",
+      "object-fit",
+      "opacity",
+      "outline",
+      "outline-offset",
+      "overflow",
+      "overflow-wrap",
+      "overflow-x",
+      "overflow-y",
+      "padding",
+      "padding-bottom",
+      "padding-left",
+      "padding-right",
+      "padding-top",
+      "paint-order",
+      "perspective",
+      "place-items",
+      "pointer-events",
+      "position",
+      "right",
+      "row-gap",
+      "scroll-snap-align",
+      "scroll-snap-type",
+      "shape-rendering",
+      "stop-color",
+      "stop-opacity",
+      "stroke",
+      "stroke-dasharray",
+      "stroke-dashoffset",
+      "stroke-linecap",
+      "stroke-linejoin",
+      "stroke-opacity",
+      "stroke-width",
+      "text-align",
+      "text-anchor",
+      "text-decoration",
+      "text-decoration-color",
+      "text-overflow",
+      "text-rendering",
+      "text-transform",
+      "top",
+      "touch-action",
+      "transform",
+      "transform-box",
+      "transform-origin",
+      "transform-style",
+      "transition",
+      "transition-duration",
+      "vertical-align",
+      "visibility",
+      "white-space",
+      "width",
+      "will-change",
+      "word-break",
+      "word-wrap",
+      "z-index"
+    ],
+    "selector": [
+      "::-webkit-details-marker",
+      "::-webkit-scrollbar",
+      "::after",
+      "::before",
+      "::marker",
+      "::placeholder",
+      ":active",
+      ":after",
+      ":before",
+      ":disabled",
+      ":empty",
+      ":first-child",
+      ":first-of-type",
+      ":focus",
+      ":focus-within",
+      ":hover",
+      ":last-child",
+      ":not",
+      ":nth-child",
+      ":root"
+    ],
+    "unit": [
+      "%",
+      "ch",
+      "deg",
+      "em",
+      "fr",
+      "ms",
+      "px",
+      "rem",
+      "s",
+      "vh",
+      "vmax",
+      "vw"
+    ]
+  },
+  "prefixed": {
+    "property -webkit-backdrop-filter": {
+      "since": "18",
+      "prefixedSince": "9"
+    },
+    "property -webkit-backface-visibility": {
+      "since": "15.4",
+      "prefixedSince": "5"
+    },
+    "property -webkit-box-decoration-break": {
+      "since": null,
+      "prefixedSince": "7"
+    },
+    "property -webkit-box-orient": {
+      "since": null,
+      "prefixedSince": "1"
+    },
+    "property -webkit-line-clamp": {
+      "since": "18.2",
+      "prefixedSince": "4.2"
+    },
+    "property -webkit-mask-image": {
+      "since": "15.4",
+      "prefixedSince": "3.2"
+    },
+    "property -webkit-text-size-adjust": {
+      "since": null,
+      "prefixedSince": "1"
+    },
+    "property -webkit-user-select": {
+      "since": null,
+      "prefixedSince": "3"
+    },
+    "property backdrop-filter": {
+      "since": "18",
+      "prefixedSince": "9"
+    },
+    "property backface-visibility": {
+      "since": "15.4",
+      "prefixedSince": "5"
+    },
+    "property box-decoration-break": {
+      "since": null,
+      "prefixedSince": "7"
+    },
+    "property mask-image": {
+      "since": "15.4",
+      "prefixedSince": "3.2"
+    },
+    "property user-select": {
+      "since": null,
+      "prefixedSince": "3"
+    }
+  },
+  "above": {
+    "function color-mix": {
+      "since": "16.2",
+      "class": "fallback",
+      "how": "companion",
+      "probe": "color:color-mix(in srgb,red,blue)",
+      "sim": "color-mix",
+      "note": "Each rule that uses it is followed by an @supports not rule that spells it with a theme token (the same ground in the same theme, without the tint or the glow). A plain value written before it would not do: a declaration with a var() in it is judged when the page is drawn, and comes to nothing there."
+    },
+    "function sin": {
+      "since": "15.4",
+      "class": "progressive",
+      "note": "The resting pose of the voice-wave bars, which shows only while their animation is off (Reduce Motion): without it the bars stand at full height."
+    },
+    "layout flex-gap": {
+      "since": "14.5",
+      "class": "accepted",
+      "note": "gap on a flex box is not read before the version in this row (on a grid it already is). The items of a row close up: a chip against its icon, a button against the next. Measured on Chromium with gap: 0 put on every flex box: every screen changes, and the three looked at (home, study, a question answered) lose nothing. Not fixed: it would need a runtime shim for every gap in the stylesheets, since whether a rule's box is a flex box is the cascade's to say and not the text's."
+    },
+    "media prefers-reduced-transparency": {
+      "since": null,
+      "class": "progressive",
+      "note": "No Safari reads it. The block that asks for opaque panes is skipped, and the panes keep their glass."
+    },
+    "property aspect-ratio": {
+      "since": "15",
+      "class": "fallback",
+      "how": "companion",
+      "probe": "aspect-ratio:1",
+      "sets": [
+        "height",
+        "padding-bottom"
+      ],
+      "sim": "aspect-ratio",
+      "exempt": {
+        ".echo-teaching-image": "An img: where aspect-ratio is not read it is shown at its own proportions, without the black bars of its box.",
+        ".pages .fig img": "An img in the Memorizer, whose script holds the figure's space itself (memorizer/src/ui.js lazyImage): where it is not read the page grows as the figure is drawn.",
+        "memorizer/src/ui.js#lazyImage": "The figure's box is held by script until the image is drawn, and the function says it holds nothing where aspect-ratio is not read. Exempt in this function only: another use in that file is found."
+      },
+      "narrower": {
+        ".heat-cell": {
+          "by": ".heat .heat-cell",
+          "why": "The legend's swatches are .heat-cell too, inside .heat-key, and are sized by their width and height (.heat-key i); only the cells of the grid (.heat) are sized by the ratio, so only they are given a box made the old way."
+        }
+      },
+      "note": "A box that has only a ratio is 0 px tall where it is not read: the heat map and the two diagram stages. Each is followed by an @supports not rule that makes the same box with a height of 0 and a padding-bottom that is a share of the width (under min() with the max-height, which clamps the height), the max-width that a max-height gives a ratio box, and the canvas laid over it."
+    },
+    "property contain": {
+      "since": "15.4",
+      "class": "accepted",
+      "note": "The pearl card on the tablet home grid (app/css/tablet.css, which says so): where contain: size is not read the card sizes its row from its text, and a long pearl scrolls the page and not the card."
+    },
+    "property inset": {
+      "since": "14.5",
+      "class": "banned",
+      "note": "Written as top, right, bottom and left: a box that is positioned by inset alone is not positioned at all where it is not read."
+    },
+    "property overscroll-behavior": {
+      "since": "16",
+      "class": "progressive",
+      "note": "A panel's scroll goes on to the page behind it when it reaches its end."
+    },
+    "property padding-block": {
+      "since": "14.5",
+      "class": "banned",
+      "note": "Written as padding-top and padding-bottom."
+    },
+    "property resize": {
+      "since": null,
+      "class": "inert",
+      "note": "iPadOS shows no resize handle, so the property has nothing to do there."
+    },
+    "property scroll-behavior": {
+      "since": "15.4",
+      "class": "progressive",
+      "note": "The page jumps to an anchor or a scrollTo where it would glide."
+    },
+    "property scrollbar-width": {
+      "since": "18.2",
+      "class": "progressive",
+      "note": "iPadOS draws scroll indicators over the content, and only while it scrolls: a strip that scrolls sideways shows its indicator for that moment."
+    },
+    "property text-wrap": {
+      "since": "17.4",
+      "class": "progressive",
+      "note": "Lines break by the ordinary rule."
+    },
+    "property translate": {
+      "since": "14.5",
+      "class": "fallback",
+      "how": "guard",
+      "probe": "translate:0 1px",
+      "sim": "translate",
+      "guard": ".scroll-reveal",
+      "note": "The scroll-reveal offset: an @supports not rule shows the item at once where translate is not read, and not at opacity 0 waiting for a slide it cannot make."
+    },
+    "selector ::view-transition-new": {
+      "since": "18",
+      "class": "progressive",
+      "note": "Screens change without the cross-fade."
+    },
+    "selector ::view-transition-old": {
+      "since": "18",
+      "class": "progressive",
+      "note": "As ::view-transition-new."
+    },
+    "selector :focus-visible": {
+      "since": "15.4",
+      "class": "fallback",
+      "how": "split",
+      "note": "A rule with an unknown pseudo-class in its list is dropped whole, the selectors that were known with it, so no list holds it with one that does not need it. Where every selector of a list needs it, what is lost is the keyboard focus ring, and the engine's own is drawn."
+    },
+    "selector :has": {
+      "since": "15.4",
+      "class": "fallback",
+      "how": "split",
+      "note": "As :focus-visible. The one rule that holds it alone is a refinement, and the pair that keeps a unit's menu above the cards below it is two rules."
+    },
+    "selector :where": {
+      "since": "14",
+      "class": "accepted",
+      "note": "The Memorizer's glass sheen (memorizer/app.css) is one rule that holds it: where :where() is not read the rule is dropped and the panes are flat."
+    },
+    "unit dvh": {
+      "since": "15.4",
+      "class": "fallback",
+      "how": "elsewhere",
+      "where": "tests/verify-ipad-pure.js",
+      "note": "Every declaration that uses it has the same value in vh before it, which that suite holds."
+    },
+    "value align-content: start": {
+      "since": "15.6",
+      "class": "fallback",
+      "how": "before",
+      "sim": "align-content-start",
+      "note": "flex-start is written before it, which a grid reads as start."
+    },
+    "value contain: size": {
+      "since": "15.4",
+      "class": "accepted",
+      "note": "As property contain."
+    },
+    "value overflow-wrap: anywhere": {
+      "since": "15.4",
+      "class": "fallback",
+      "how": "before",
+      "sim": "overflow-wrap-anywhere",
+      "note": "break-word is written before it."
+    },
+    "value overscroll-behavior: contain": {
+      "since": "16",
+      "class": "progressive",
+      "note": "As property overscroll-behavior."
+    },
+    "value scroll-behavior: auto": {
+      "since": "15.4",
+      "class": "progressive",
+      "note": "As property scroll-behavior."
+    },
+    "value scroll-behavior: smooth": {
+      "since": "15.4",
+      "class": "progressive",
+      "note": "As property scroll-behavior."
+    },
+    "value scrollbar-width: none": {
+      "since": "18.2",
+      "class": "progressive",
+      "note": "As property scrollbar-width."
+    },
+    "value text-wrap: pretty": {
+      "since": "26",
+      "class": "progressive",
+      "note": "As property text-wrap."
+    },
+    "value translate: none": {
+      "since": "14.5",
+      "class": "fallback",
+      "how": "guard",
+      "probe": "translate:0 1px",
+      "sim": "translate",
+      "guard": ".scroll-reveal",
+      "note": "As property translate."
+    }
+  },
+  "watch": {
+    "align-content": {
+      "end": "15.6",
+      "safe": "17.6",
+      "start": "15.6",
+      "unsafe": "17.6"
+    },
+    "align-items": {
+      "anchor-center": "26",
+      "safe": "17.6",
+      "self-end": "15.6",
+      "self-start": "15.6",
+      "unsafe": "17.6"
+    },
+    "align-self": {
+      "anchor-center": "26",
+      "end": "15.4",
+      "safe": "17.6",
+      "self-end": "15.6",
+      "self-start": "15.6",
+      "start": "15.4",
+      "unsafe": "17.6"
+    },
+    "animation-duration": {
+      "auto": "18.4"
+    },
+    "aspect-ratio": {
+      "auto": "15"
+    },
+    "background": {
+      "border-area": "18.2",
+      "text": "14",
+      "x-end": "26",
+      "x-start": "26",
+      "y-end": "26",
+      "y-start": "26"
+    },
+    "background-clip": {
+      "border-area": "18.2"
+    },
+    "background-image": {
+      "element": null
+    },
+    "background-position": {
+      "x-end": "26",
+      "x-start": "26",
+      "y-end": "26",
+      "y-start": "26"
+    },
+    "bottom": {
+      "anchor": "26",
+      "anchor-size": "26"
+    },
+    "contain": {
+      "content": "15.4",
+      "inline-size": "16",
+      "layout": "15.4",
+      "none": "15.4",
+      "paint": "15.4",
+      "size": "15.4",
+      "strict": "15.4",
+      "style": "15.4"
+    },
+    "counter-reset": {
+      "reversed": null
+    },
+    "display": {
+      "grid-lanes": "26.4",
+      "inline-grid-lanes": "26.4",
+      "math": null,
+      "ruby": null,
+      "ruby-base": null,
+      "ruby-base-container": null,
+      "ruby-text": null,
+      "ruby-text-container": null
+    },
+    "dominant-baseline": {
+      "text-bottom": null,
+      "text-top": null
+    },
+    "flex": {
+      "content": "15",
+      "fit-content": "16",
+      "max-content": "16",
+      "min-content": "16",
+      "stretch": "27"
+    },
+    "flex-basis": {
+      "content": "15.4",
+      "fit-content": "16",
+      "max-content": "16",
+      "min-content": "16",
+      "stretch": "27"
+    },
+    "flex-wrap": {
+      "balance": null
+    },
+    "font-family": {
+      "math": "26.2"
+    },
+    "font-size": {
+      "math": "26.4",
+      "xxx-large": "16.4"
+    },
+    "grid-template-columns": {
+      "animation": "16",
+      "subgrid": "16"
+    },
+    "grid-template-rows": {
+      "animation": "16",
+      "subgrid": "16"
+    },
+    "height": {
+      "anchor-size": "26",
+      "stretch": "27"
+    },
+    "left": {
+      "anchor": "26",
+      "anchor-size": "26"
+    },
+    "list-style": {
+      "symbols": null
+    },
+    "margin": {
+      "anchor-size": "26"
+    },
+    "margin-bottom": {
+      "anchor-size": "26"
+    },
+    "margin-left": {
+      "anchor-size": "26"
+    },
+    "margin-right": {
+      "anchor-size": "26"
+    },
+    "margin-top": {
+      "anchor-size": "26"
+    },
+    "max-height": {
+      "anchor-size": "26",
+      "stretch": "27"
+    },
+    "max-width": {
+      "anchor-size": "26",
+      "stretch": "27"
+    },
+    "min-height": {
+      "anchor-size": "26",
+      "stretch": "27"
+    },
+    "min-width": {
+      "anchor-size": "26",
+      "stretch": "27"
+    },
+    "overflow": {
+      "clip": "16"
+    },
+    "overflow-wrap": {
+      "anywhere": "15.4"
+    },
+    "overflow-x": {
+      "clip": "16"
+    },
+    "overflow-y": {
+      "clip": "16"
+    },
+    "overscroll-behavior": {
+      "auto": "16",
+      "chain": null,
+      "contain": "16",
+      "none": "16"
+    },
+    "place-items": {
+      "anchor-center": "26"
+    },
+    "right": {
+      "anchor": "26",
+      "anchor-size": "26"
+    },
+    "scroll-behavior": {
+      "auto": "15.4",
+      "smooth": "15.4"
+    },
+    "scroll-snap-type": {
+      "pair": null
+    },
+    "scrollbar-width": {
+      "auto": "18.2",
+      "none": "18.2",
+      "thin": "18.2"
+    },
+    "text-align": {
+      "match-parent": "15.4"
+    },
+    "text-decoration": {
+      "auto": "26.2",
+      "dashed": "26.2",
+      "dotted": "26.2",
+      "double": "26.2",
+      "from-font": "26.2",
+      "grammar-error": "26.2",
+      "solid": "26.2",
+      "spelling-error": "26.2",
+      "transparent": "26.2",
+      "wavy": "26.2"
+    },
+    "text-overflow": {
+      "string": null
+    },
+    "text-transform": {
+      "full-size-kana": "17",
+      "full-width": "17",
+      "math-auto": null
+    },
+    "text-wrap": {
+      "auto": "17.4",
+      "balance": "17.5",
+      "nowrap": "17.4",
+      "pretty": "26",
+      "stable": "17.5",
+      "wrap": "17.4"
+    },
+    "top": {
+      "anchor": "26",
+      "anchor-size": "26"
+    },
+    "touch-action": {
+      "pan-down": null,
+      "pan-left": null,
+      "pan-right": null,
+      "pan-up": null
+    },
+    "transition": {
+      "transition-behavior": "17.4"
+    },
+    "translate": {
+      "none": "14.5"
+    },
+    "user-select": {
+      "all": "16"
+    },
+    "vertical-align": {
+      "alphabetic": null,
+      "center": null,
+      "central": null,
+      "first": null,
+      "hanging": null,
+      "ideographic": null,
+      "last": null,
+      "mathematical": null
+    },
+    "white-space": {
+      "collapse": "18",
+      "discard-after": null,
+      "discard-before": null,
+      "discard-inner": null,
+      "none": null,
+      "preserve": "18",
+      "preserve-breaks": "18",
+      "preserve-spaces": null,
+      "wrap": "18"
+    },
+    "width": {
+      "anchor-size": "26",
+      "stretch": "27"
+    },
+    "word-break": {
+      "auto-phrase": null
+    }
+  }
+}

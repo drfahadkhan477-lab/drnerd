@@ -16,6 +16,8 @@
   backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
   border:1.5px solid var(--border2);
   animation:riseIn .6s var(--glide) .18s both}
+/* The older spelling of the color-mix() above: see the note in app/css/cardiac.css. */
+@supports not (color:color-mix(in srgb,red,blue)){.home-progress{background:var(--white)}}
 .hp-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px}
 .hp-cap{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
   letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
@@ -26,7 +28,8 @@
   background:color-mix(in srgb, var(--amber) 15%, transparent);
   color:var(--amber-ink);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;
   transition:transform .22s var(--spring),background .18s}
-@media(hover:hover){.hp-due:hover{background:color-mix(in srgb, var(--amber) 22%, transparent)}}
+@supports not (color:color-mix(in srgb,red,blue)){.hp-due{border:1.5px solid var(--amber-b);background:var(--amber-bg)}}
+@media(hover:hover){.hp-due:hover{background:color-mix(in srgb, var(--amber) 22%, transparent)}@supports not (color:color-mix(in srgb,red,blue)){.hp-due:hover{background:var(--amber-bg)}}}
 .hp-due:active{transform:scale(.94)}
 /* The ticks are --border3 on --border2: the strongest border weight on the
    track's own fill, so they follow every palette without knowing which is on.
@@ -43,9 +46,11 @@
 .hp-seen,.hp-mast{position:absolute;top:0;bottom:0;left:0;border-radius:12px}
 .hp-seen{background:color-mix(in srgb,var(--teal) 30%,transparent);
   animation:hpGrow 1.15s var(--glide) both}
+@supports not (color:color-mix(in srgb,red,blue)){.hp-seen{background:var(--teal3)}}
 .hp-mast{background:linear-gradient(90deg,var(--teal2),var(--teal));
   box-shadow:0 0 10px color-mix(in srgb,var(--teal) 55%,transparent);
   animation:hpGrow 1.15s var(--glide) .1s both}
+@supports not (color:color-mix(in srgb,red,blue)){.hp-mast{box-shadow:none}}
 .hp-shine{position:absolute;top:0;bottom:0;width:32%;pointer-events:none;border-radius:12px;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.48),transparent);
   animation:hpShine 2.8s var(--glide) 1.15s infinite}
@@ -59,6 +64,7 @@
 .hp-dot{width:8px;height:8px;border-radius:50%;flex:none;align-self:center}
 .hp-dot-mast{background:linear-gradient(135deg,var(--teal2),var(--teal))}
 .hp-dot-seen{background:color-mix(in srgb,var(--teal) 42%,transparent)}
+@supports not (color:color-mix(in srgb,red,blue)){.hp-dot-seen{background:var(--teal3)}}
 .hp-num{font-family:var(--font-mono);font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
 /* THE TWO NUMBERS MUST RANK EACH OTHER THE WAY THEIR BARS ALREADY DO. The
    mastered bar is a glowing teal gradient and the seen bar is a flat 30%
@@ -277,7 +283,7 @@ html [data-home="focus"] .story-rail{display:none}
   margin-bottom:20px;box-shadow:var(--shadow);border:1px solid var(--border2)}
 .score-circle{width:128px;height:128px;margin:0 auto 20px;position:relative}
 .score-circle svg{transform:rotate(-90deg)}
-.score-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.score-num{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .score-pct{font-size:28px;font-weight:800;letter-spacing:-.03em;font-family:var(--font-display)}
 .score-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
 .score-msg{font-size:16px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}

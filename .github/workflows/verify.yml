@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 98 suites that are pure Node with no Playwright and no
+#   logic        the 99 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -334,6 +334,8 @@ jobs:
         run: node tests/verify-swlifetime-pure.js
       - name: no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind (25 checks)
         run: node tests/verify-hover-pure.js
+      - name: every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says (144 checks)
+        run: node tests/verify-floor-css-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)
         run: node tests/verify-ui-pure.js
       - name: the corpus checker holds every floor it claims (17 checks)
@@ -711,6 +713,9 @@ jobs:
         name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (24 checks)
         run: node tests/verify-taps.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: with the features that have a fallback made unknown to the engine, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have (15 checks)
+        run: node tests/verify-floor.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -1008,6 +1013,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (24 checks)
         run: node tests/verify-taps.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: with the features that have a fallback made unknown to the engine, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have (15 checks)
+        run: node tests/verify-floor.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html

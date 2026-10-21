@@ -149,6 +149,8 @@ html[data-theme="dark"][data-palette="contrast"]{
   font-family:inherit;font-size:13px;font-weight:600;transition:background .13s var(--ease)}
 @media(hover:hover){.theme-opt:hover{background:var(--border2)}}
 .theme-opt.on{background:color-mix(in srgb,var(--teal) 12%,transparent)}
+/* The older spelling of the color-mix() above: see the note in app/css/cardiac.css. */
+@supports not (color:color-mix(in srgb,red,blue)){.theme-opt.on{background:var(--teal4)}}
 .theme-sw{width:22px;height:22px;border-radius:7px;flex:none;border:1px solid rgba(255,255,255,.14);
   box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
 .theme-opt .tk{flex:1 1 auto}
