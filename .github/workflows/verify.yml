@@ -506,9 +506,6 @@ jobs:
         name: the code-only deploy in a real browser — the loader shows the import screen and never asks the host for content, a refused package changes nothing, a good one launches the app on blob figures, the notes are served from the package, a replacement is whole or not at all, and a normal build is untouched (33 checks)
         run: node tests/verify-bankstore.js
       - if: ${{ !cancelled() }}
-        name: the Lab, built and driven — the audio played is the heart sound asked, nothing names an answer early, progress is stored and survives a reload, and the heart map is drawn from the map (67 checks)
-        run: node tests/verify-lab.js
-      - if: ${{ !cancelled() }}
         name: the result cache's view of the browser — every file a page loads from disk is reported in the engines the cache traces, and the cache stays off for an engine that reports none (20 checks)
         run: node tests/verify-suitecache.js
 
@@ -593,6 +590,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: green, red and amber text a reader can read in every theme, the colours that fill left as they are (52 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (67 checks)
+        run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the welcome bar, the progress bar, three layouts (66 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
@@ -891,6 +891,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: green, red and amber text a reader can read in every theme, the colours that fill left as they are (52 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (67 checks)
+        run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the welcome bar, the progress bar, three layouts (66 checks)
         run: node tests/verify-home.js build/synthetic/systole.html

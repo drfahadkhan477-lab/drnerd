@@ -441,8 +441,7 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      braces('.a{color:red}.b{content:"}"}').balanced && braces('@media (x){.a{color:red}}').balanced);
 
   const FAMILIES = [['the Systole app', CSS_FILES],
-                    ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]],
-                    ['the Lab page', [path.join(ROOT, 'lab', 'app.css')]]];
+                    ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]]];
   let used = 0;
   for (const [name, files] of FAMILIES) {
     const read = files.map(f => ({ f, ...newUnitsWithoutFallback(fs.readFileSync(f, 'utf8')) }));

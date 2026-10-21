@@ -6,8 +6,7 @@
  *   node scripts/ci-changes.js        (in the workflow's `changes` job)
  *
  * The synthetic-browser job takes about twelve minutes and never reads
- * memorizer/ or lab/ (the Lab's browser suite runs in memorizer-browser);
- * the memorizer-browser job never reads the Systole shell in app/
+ * memorizer/; the memorizer-browser job never reads the Systole shell in app/
  * or assets/. A pull request that touches only one side was paying for both.
  *
  * THE DIRECTION OF EVERY DOUBT IS "RUN IT". A job is skipped only when every
@@ -34,10 +33,9 @@ const fs = require('fs');
 
 /* Reaches neither browser job. */
 const DOCS = [/^docs\//, /^tasks\//, /^\.claude\//, /^[^/]+\.md$/];
-/* Reaches memorizer-browser only: the Memorizer, and the Lab, whose browser suite
-   runs in that job. src/lab/ is not here: verify-csp, in synthetic-browser,
-   walks all of src/. scripts/build-lab.js is not here either: it walks scripts/. */
-const MEMORIZER_ONLY = [/^memorizer\//, /^tests\/verify-memorizer[a-z0-9-]*\.js$/, /^lab\//, /^tests\/verify-lab\.js$/];
+/* Reaches memorizer-browser only: the Memorizer. The Practice Lab is a Systole screen
+   (src/lab/), and its browser suite, tests/verify-lab.js, runs in the synthetic jobs. */
+const MEMORIZER_ONLY = [/^memorizer\//, /^tests\/verify-memorizer[a-z0-9-]*\.js$/];
 /* Reaches synthetic-browser only. */
 const SYSTOLE_ONLY = [/^app\//, /^assets\//];
 
