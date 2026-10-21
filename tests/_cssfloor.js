@@ -473,10 +473,10 @@ function inlineSegments(text) {
   const lineAt = idx => { let lo = 0, hi = nl.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (nl[mid] <= idx) lo = mid; else hi = mid - 1; } return lo + 1; };
   const out = [];
   const push = (css, idx) => { if (css) { const line = lineAt(idx); out.push({ css: '\n'.repeat(line - 1) + css, line }); } };
-  const lists = (re, kept) => { for (const m of t.matchAll(re)) { const v = m[kept] ?? m[kept + 1] ?? m[kept + 2]; if (v != null) push(declsToCss(v), m.index); } };
-  lists(/\bstyle\s*=\s*\\?"([^"\\]*)\\?"()()|\bstyle\s*=\s*\\?'([^'\\]*)\\?'()()/g, 1);
-  // a list of declarations as an expression of literals: el.style.cssText = 'a:b;' + 'c:d', { style: 'a:b' }, setAttribute('style', 'a:b' + x)
-  for (const re of [/\bcssText\s*\+?=\s*/g, /(?<![\w$.])style\s*:\s*/g, /setAttribute\(\s*['"]style['"]\s*,\s*/g]) for (const m of t.matchAll(re)) push(declsToCss(literals(t, m.index + m[0].length)), m.index);
+  // a style attribute, in double or single quotes (and in a string whose own quotes are escaped)
+  for (const m of t.matchAll(/\bstyle\s*=\s*\\?(?:"([^"\\]*)\\?"|'([^'\\]*)\\?')/g)) { const v = m[1] ?? m[2]; if (v != null) push(declsToCss(v), m.index); }
+  // a list of declarations as an expression of literals: el.style.cssText = 'a:b;' + 'c:d', el.style = 'a:b' (the same thing), { style: 'a:b' }, setAttribute('style', 'a:b' + x)
+  for (const re of [/\bcssText\s*\+?=\s*/g, /\.style\s*\+?=(?!=)\s*/g, /(?<![\w$.])style\s*:\s*/g, /setAttribute\(\s*['"]style['"]\s*,\s*/g]) for (const m of t.matchAll(re)) push(declsToCss(literals(t, m.index + m[0].length)), m.index);
   const kebab = n => n === 'cssFloat' ? 'float' : n.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
   const decl = (name, at, idx) => push('x{' + kebab(name) + ':' + (maskTemplate(literals(t, at)) || '0') + '}', idx);
   for (const m of t.matchAll(/\.style\.([a-zA-Z]+)\s*(?:=(?!=)|\+=)/g)) {

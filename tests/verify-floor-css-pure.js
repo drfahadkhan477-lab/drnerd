@@ -669,6 +669,10 @@ head('and a style written in script is held to the rows the table has');
      !IN('var w = el.style.width;').length && !IN("var o = { style: 'solid' };").length && !IN("var el = document.createElement('div'); el.textContent = '.a{inset:0}';").length &&
      IN("'<i style=\"width:' + Math.round(w) + 'px\">'").join() === 'property width' && IN('<i style="clip-path:inset(0 ${(100 - x).toFixed(2)}% 0 0 round 5px)">').join() === 'property clip-path,function inset,unit %,unit px' &&
      IN('<i style="background:${col}1F;color:${col}">').join() === 'property background,property color');
+  const INU = text => [...new Set(IN(text))].join();
+  ok('the inline reader finds a list of declarations assigned to the style object itself, el.style = and +=, of literals joined with +, and a style attribute in single quotes, in a string of either quote', INU("el.style = 'height:100dvh'") === 'property height,unit dvh' && INU("el.style += 'width:10cqw'") === 'property width,unit cqw' &&
+     INU("el.style = 'color:red;' + 'width:1px'") === 'property color,property width,unit px' && INU('x.innerHTML = "<i style=\'height:100dvh\'>"') === 'property height,unit dvh' && INU("x = '<i style=\\'height:100dvh\\'>'") === 'property height,unit dvh' && INU('x = \'<i style="height:100dvh">\'') === 'property height,unit dvh');
+  ok('and what is not one is not: a comparison, a copy, a style sheet, a style that is not a literal, an object key or a variable of that name', !INU('if (el.style === x) {}') && !INU("if (a.style == 'x:1px') {}") && !INU('var s = el.style;') && !INU("el.styleSheet = 'x:y'") && !INU('el.style = someVar') && !INU("var o = { style: 'solid' };") && !INU("var style = 'solid';") && INU("el.style.width = '1px'") === 'property width,unit px');
   ok('and a line is the line it is on', C.inlineUses('a\nb\n<i style="color:red">', null).map(u => u.line).join() === '3' && C.inlineUses('a\n<style>\n.x{color:red}\n</style>', null).map(u => u.line).join() === '3');
 
   /* inline CSS goes through the same classification as a stylesheet: each piece is a pseudo-file, and analyse() sorts what is in it */
