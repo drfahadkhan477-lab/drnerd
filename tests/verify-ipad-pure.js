@@ -307,15 +307,29 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      break; and a value that merely has no new unit in it is not a fallback either (`height:not-a-value` is dropped by the same Safari, and takes
      the fallback with it). The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not
      a declaration that can fall back at all: it parses, and the declaration that uses it fails later, past every earlier one. None is in use;
-     the reader finds one if it is added. A declaration marked !important is compared with its mark, and a rule nested in another is not read:
-     neither is in use. */
+     the reader finds one if it is added. A declaration marked !important is compared with its mark. A style rule nested in another (CSS nesting,
+     Safari 16.5) is refused, not read: the reader takes the innermost braces, so the declarations of the outer rule would go unread, and a new
+     unit in one of them would pass. Rules inside an at-rule (@media, @supports, @layer, @keyframes) are not nested in this sense. */
   const NEW_UNIT = /(?:\d|\.)[dsl]v(?:h|w|i|b|min|max)\b/i;
   const OLDER = { dvh: 'vh', svh: 'vh', lvh: 'vh', dvw: 'vw', svw: 'vw', lvw: 'vw', dvmin: 'vmin', svmin: 'vmin', lvmin: 'vmin', dvmax: 'vmax', svmax: 'vmax', lvmax: 'vmax' };
   const older = v => v.replace(new RegExp('(\\d|\\.)(' + Object.keys(OLDER).join('|') + ')\\b', 'gi'), (m, d, u) => d + OLDER[u.toLowerCase()]);
   const squash = v => v.trim().replace(/\s+/g, ' ').toLowerCase();
   const lineOf = (text, i) => text.slice(0, i).split('\n').length;
+  const blankCss = css => blankComments(css).replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
+  function nestedStyleRules(css) {     // the lines where a style rule is opened inside a style rule
+    const blank = blankCss(css), inAtRule = [], lines = []; let start = 0;
+    for (let i = 0; i < blank.length; i++) {
+      const c = blank[i];
+      if (c === '{') {
+        if (inAtRule.length && !inAtRule[inAtRule.length - 1]) lines.push(lineOf(blank, i));
+        inAtRule.push(blank.slice(start, i).trim().startsWith('@')); start = i + 1;
+      } else if (c === '}') { inAtRule.pop(); start = i + 1; }
+      else if (c === ';') start = i + 1;
+    }
+    return lines;
+  }
   function newUnitsWithoutFallback(css) {
-    const blank = blankComments(css).replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
+    const blank = blankCss(css);
     const bad = []; let used = 0, b;
     const block = /\{([^{}]*)\}/g;
     while ((b = block.exec(blank))) {
@@ -362,6 +376,13 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      bad('/* height:100dvh */ .a{content:"height:100dvh"}') === 0 && bad('.a{height:100vh;width:50%;top:4px}') === 0);
   ok('and a semicolon inside parentheses does not end a declaration, so a fallback written inside a url() is none',
      bad('.a{background:url(data:image/png;height:100vh;);height:100dvh}') === 1 && bad('.a{background:url(data:image/png;base64,AAAA);height:100vh;height:100dvh}') === 0);
+  const nested = css => nestedStyleRules(css).length;
+  ok('a style rule nested in another is found, whether it follows a declaration or not, whether it is a rule or a conditional, and after a statement at the top',
+     nested('.a{height:100dvh;.child{color:red}}') === 1 && nested('.a{.child{color:red}}') === 1 && nested('.a{&:hover{color:red}}') === 1 &&
+     nested('.a{@media (min-width:1px){color:red}}') === 1 && nested('@import "x.css";.a{.b{color:red}}') === 1);
+  ok('but the rules inside an at-rule are not nested ones, at any depth, and neither are rules side by side',
+     nested('@media (min-width:1px){.a{color:red}}') === 0 && nested('@supports (display:grid){@media (min-width:1px){.a{color:red}.b{color:blue}}}') === 0 &&
+     nested('@keyframes k{from{opacity:0}to{opacity:1}}.c{color:red}') === 0 && nested('.a{color:red}.b{color:blue}') === 0 && nested('@font-face{font-family:x;src:url(x.woff2)}') === 0);
 
   const FAMILIES = [['the Systole app', CSS_FILES],
                     ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]],
@@ -375,6 +396,8 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
        lost.slice(0, 3).join(' | ') || `${read.reduce((n, r) => n + r.used, 0)} declarations in ${files.length} file(s)`);
   }
   ok('and there are such declarations to check, so the scan is not reading nothing', used > 0, `${used} declarations`);
+  const nestedIn = FAMILIES.flatMap(([, files]) => files.flatMap(f => nestedStyleRules(fs.readFileSync(f, 'utf8')).map(n => `${rel(f)} line ${n}`)));
+  ok('no style rule in them is nested in another, which the reader would not read the outer declarations of', nestedIn.length === 0, nestedIn.slice(0, 3).join(' | ') || 'none');
   const inline = [...SAFARI_FILES, SHELL].filter(f => NEW_UNIT.test(blanked(f))).map(rel);
   ok('none is written in the shell\'s markup or script or in a src/ module, where a style attribute cannot carry a fallback', inline.length === 0, inline.join(', ') || 'none');
 }
