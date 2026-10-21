@@ -297,7 +297,7 @@
     "layout flex-gap": {
       "since": "14.5",
       "class": "accepted",
-      "note": "gap on a flex box is not read before 14.5 (on a grid it is, from 12). The items of a row close up: a chip against its icon, a button against the next. Measured on Chromium with gap: 0 put on every flex box: every screen changes and none loses anything. Not fixed: a runtime shim for a rule that is written 177 times, and a Safari that an iPad able to run iPadOS 13 can leave in a few taps."
+      "note": "gap on a flex box is not read before the version in this row (on a grid it already is). The items of a row close up: a chip against its icon, a button against the next. Measured on Chromium with gap: 0 put on every flex box: every screen changes, and the three looked at (home, study, a question answered) lose nothing. Not fixed: it would need a runtime shim for every gap in the stylesheets, since whether a rule's box is a flex box is the cascade's to say and not the text's."
     },
     "media prefers-reduced-transparency": {
       "since": null,
@@ -315,11 +315,11 @@
       ],
       "sim": "aspect-ratio",
       "exempt": {
-        ".echo-teaching-image": "An img: before 15 it is shown at its own proportions, without the black bars of the 3:2 box.",
-        ".pages .fig img": "An img in the Memorizer, whose script holds the figure's space itself (memorizer/src/ui.js lazyImage): before 15 the page grows as the figure is drawn.",
-        "memorizer/src/ui.js": "The figure's box is held by script until the image is drawn (lazyImage), and said to hold nothing before 15 there."
+        ".echo-teaching-image": "An img: where aspect-ratio is not read it is shown at its own proportions, without the black bars of its box.",
+        ".pages .fig img": "An img in the Memorizer, whose script holds the figure's space itself (memorizer/src/ui.js lazyImage): where it is not read the page grows as the figure is drawn.",
+        "memorizer/src/ui.js": "The figure's box is held by script until the image is drawn (lazyImage), and says it holds nothing where aspect-ratio is not read."
       },
-      "note": "A box that has only a ratio is 0 px tall before 15: the heat map and the two diagram stages. Each is followed by an @supports not rule that makes the same box with a height of 0 and a padding-bottom that is a share of the width (under min() with the max-height, as a max-height clamps a ratio), the canvas laid over it."
+      "note": "A box that has only a ratio is 0 px tall where it is not read: the heat map and the two diagram stages. Each is followed by an @supports not rule that makes the same box with a height of 0 and a padding-bottom that is a share of the width (under min() with the max-height, which clamps the height), the max-width that a max-height gives a ratio box, and the canvas laid over it."
     },
     "property contain": {
       "since": "15.4",
@@ -329,7 +329,7 @@
     "property inset": {
       "since": "14.5",
       "class": "banned",
-      "note": "Written as top, right, bottom and left: a box that is positioned by inset alone is not positioned at all before 14.5."
+      "note": "Written as top, right, bottom and left: a box that is positioned by inset alone is not positioned at all where it is not read."
     },
     "property overscroll-behavior": {
       "since": "16",
@@ -395,7 +395,7 @@
     "selector :where": {
       "since": "14",
       "class": "accepted",
-      "note": "The Memorizer's glass sheen (memorizer/app.css) is one rule that holds it: before 14 the rule is dropped and the panes are flat."
+      "note": "The Memorizer's glass sheen (memorizer/app.css) is one rule that holds it: where :where() is not read the rule is dropped and the panes are flat."
     },
     "unit dvh": {
       "since": "15.4",
