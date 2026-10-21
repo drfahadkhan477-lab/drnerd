@@ -19,7 +19,7 @@
  *   · the pencil's rail, folded and open, keeps off Apex and its Send button in each of the ways Apex opens (a sheet, a
  *     split in portrait, a column in landscape), standing just above a sheet or a split and never under the top bar; on
  *     a phone on its side it waits under the sheet as it did; with Apex full screen it is put away; and open, with Apex
- *     shut, it fits the screen on a phone and on an iPad on its side, every tool reachable;
+ *     shut, it fits the screen on a phone, on an iPad on its side and in a short window, every tool reachable;
  *   · at Largest a word longer than its line breaks inside the stem, an option and the explanation;
  *   · nothing throws.
  */
@@ -263,6 +263,9 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
       /* Precondition: the panel has finished opening, its height and the rail's box the same over half a second. */
       const settledAi = await page.waitForFunction(() => { const a = document.getElementById('ai'), s = document.getElementById('aiSend'), r = document.getElementById('rail'); if (!a || !s || !r) return false;
         const key = [a.getBoundingClientRect().height, r.getBoundingClientRect().width, r.getBoundingClientRect().top].map(Math.round).join(); const was = window.__aiKey; window.__aiKey = key; return a.getBoundingClientRect().height > 150 && was === key; }, null, { timeout: 8000, polling: 500 }).then(() => true, () => false);
+      /* Apex's column is sticky beside the question: where it ends depends on how far the page is scrolled, so the rail is
+         measured with the page at its end, where the column reaches lowest. */
+      if (where === 'beside') { await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await quiet(page); }
       const m = await page.evaluate(() => {
         const r = document.getElementById('rail'), a = document.getElementById('ai'), s = document.getElementById('aiSend'), n = document.getElementById('navbar');
         const rr = r.getBoundingClientRect(), ar = a.getBoundingClientRect(), sr = s.getBoundingClientRect(), nr = n.getBoundingClientRect();
@@ -284,7 +287,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
   }
 
   head('the open rail fits the screen with Apex shut');
-  for (const [w, h] of [[390, 844], [1024, 768], [1180, 820]]) {
+  for (const [w, h] of [[390, 844], [1024, 768], [1180, 820], [1024, 600]]) {
     const page = await open({ width: w, height: h }, { hasTouch: true, isMobile: true });
     await page.evaluate(() => startAdhocQuiz([POOL.find(q => !q.bad)], null));
     await page.waitForFunction(() => S.screen === 'quiz' && !!document.getElementById('rail') && document.getElementById('rail').offsetWidth > 0, null, { timeout: 8000 }).catch(() => {});
@@ -293,6 +296,10 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     await quiet(page);
     /* Precondition: the rail's entrance has finished, so what is measured is where it rests. */
     await page.evaluate(() => Promise.all(document.getElementById('rail').getAnimations({ subtree: true }).map(a => a.finished.catch(() => {}))));
+    /* And the screen change before it has let go of the pointer: while a view transition runs, Chromium hit-tests <html>
+       (tests/_render.js). The rail's own button is what a tap at its centre must reach before anything is counted. */
+    await page.waitForFunction(() => { const b = document.querySelector('#rail button'); if (!b) return false; const q = b.getBoundingClientRect();
+      const el = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !!el && el !== document.documentElement; }, null, { timeout: 6000 }).catch(() => {});
     const m = await page.evaluate(() => { const r = document.getElementById('rail'); const rr = r.getBoundingClientRect();
       const tools = [...r.querySelectorAll('button')].filter(b => b.offsetWidth);
       const reach = tools.map(b => { b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const q = b.getBoundingClientRect(); const el = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !!el && b.contains(el); });

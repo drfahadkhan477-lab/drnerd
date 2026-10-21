@@ -71,7 +71,6 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
   #shell.ai-open ~ .tool-rail .swatches{flex-direction:row}
 }
 @media (min-width:768px) and (max-width:1023px) and (orientation:landscape){
-  #shell.ai-open ~ .tool-rail{bottom:max(14px,env(safe-area-inset-bottom));right:auto;left:max(10px,env(safe-area-inset-left));
-    justify-content:flex-start;max-width:calc(100vw - min(46vw,560px) - 20px)}
+  #shell.ai-open ~ .tool-rail{bottom:max(14px,env(safe-area-inset-bottom));right:auto;left:max(10px,env(safe-area-inset-left))}
 }
 #shell.ai-full ~ .tool-rail{display:none}
