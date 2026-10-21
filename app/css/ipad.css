@@ -1,0 +1,76 @@
+/* ═══════════ the iPad pass: reading size, touch targets, the pencil's rail ═══════════
+   Last in the shell's list, so these win over the rules they scale. */
+
+/* Reading size (Text size, in the theme menu; readSize() in the shell). Only the reading: the stem, the options, the
+   explanation and Apex's thread with its headings, tables and code. The chrome, the labels and the chips keep their
+   size, so a larger question does not push the controls off the screen. Standard sets no attribute and nothing here
+   applies. Each rule scales the size the page had at that width: an option is 13 px below 768 px (home-quiz.css) and
+   16 px from there (tablet.css). A word too long for its line at the larger sizes breaks rather than being cut off by
+   the card's overflow:hidden. */
+html[data-read="1"]{--read:1.125}
+html[data-read="2"]{--read:1.25}
+html[data-read="3"]{--read:1.4}
+html[data-read] .q-card,
+html[data-read] .exp-text{font-size:calc(var(--t-body) * var(--read))}
+html[data-read] .opt{font-size:calc(16px * var(--read))}
+@media(max-width:767px){html[data-read] .opt{font-size:calc(13px * var(--read))}}
+html[data-read] .msg{font-size:calc(16px * var(--read))}
+html[data-read] .msg.bot h3{font-size:calc(var(--t-lead) * var(--read))}
+html[data-read] .msg.bot h4{font-size:calc(var(--t-body) * var(--read))}
+html[data-read] .msg table,
+html[data-read] .msg.bot code{font-size:calc(13px * var(--read))}
+html[data-read] .q-card,html[data-read] .opt,html[data-read] .exp-text,html[data-read] .msg{word-wrap:break-word;overflow-wrap:break-word}
+html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink below its longest word without it */
+
+/* The control: four letters A, each larger than the one before, on the type scale. The menu it sits in scrolls when a
+   short screen cannot hold it, which a phone on its side cannot. */
+.read-row{display:flex;gap:6px;padding:2px 7px 6px}
+.read-opt{flex:1 1 0;display:flex;align-items:center;justify-content:center;border-radius:9px;cursor:pointer;
+  border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-weight:700;line-height:1}
+.read-opt.on{border-color:var(--teal);color:var(--teal);background:var(--teal4)}
+.theme-menu{max-height:calc(100vh - 80px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* Touch targets. The chips beside these are already 44 px tall (refinements.css: about the least a finger on an iPad can
+   hit), and these were not: Ask Apex why (32), the theme options (37), and the composer's More and Send (40). The
+   composer's two keep their drawn size, and their hit area is grown to 44 by a box that is not drawn, as .icon-btn's is;
+   a box is placed from the padding edge, so More, which has a 1.5 px border, needs 3.5 px and Send, which has none, 2. */
+.miss-ask,.theme-opt,.read-opt{min-height:44px}
+.ai-more,.ai-send{position:relative}
+.ai-more::after,.ai-send::after{content:'';position:absolute}
+.ai-more::after{top:-3.5px;right:-3.5px;bottom:-3.5px;left:-3.5px}
+.ai-send::after{top:-2px;right:-2px;bottom:-2px;left:-2px}
+
+/* The pencil's rail. Open, it is a row of about 650 px below 1024 px and a column of about 680 px above: on a phone the
+   row ran off the left of the screen, and on an iPad on its side (768 or 820 high) the column ran off the bottom. The row
+   now wraps inside the screen; the column, which its entrance animation leaves at top:50% without the centring
+   transform, starts under the top bar and scrolls inside the screen. */
+@media (max-width:1023px){
+  .tool-rail{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 20px)}
+}
+@media (min-width:1024px){
+  .tool-rail{max-height:calc(100vh - var(--navh) - 24px);overflow-y:auto}
+  .tool-rail:not(.mini){top:calc(var(--navh) + 12px);transform:none}
+}
+
+/* The rail and Apex. Below 1024 px the rail is fixed at the bottom right, 62 px up, and Apex opens over the same corner:
+   as a sheet over the lower three quarters below 700 px, as the lower 48% of a split in portrait, and as the right-hand
+   column in landscape. On an iPad in portrait the rail lay over the top half of Send, so a tap there opened the pen
+   tools. With Apex open the rail now stands over the question: just above the sheet or the split, or on the left in
+   landscape. A screen too short to show the question above the sheet (under 520 px, a phone on its side) keeps the rail
+   where it was, under the sheet, rather than under the top bar. An iPad Pro in portrait has the split too, with the rail
+   as a column on the left over Apex's corner, so it takes the row above the split as the smaller iPads do. With Apex full
+   screen there is no question to mark, and the rail is put away. */
+@media (max-width:1023px) and (min-height:520px){
+  #shell.ai-open ~ .tool-rail{bottom:calc(74vh + 10px);bottom:calc(74dvh + 10px)}
+}
+@media (min-width:700px) and (orientation:portrait){
+  #shell.ai-open ~ .tool-rail{left:auto;right:max(10px,env(safe-area-inset-right));top:auto;transform:none;
+    flex-direction:row;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 20px);max-height:none;padding:6px 8px;
+    bottom:calc(48vh + 10px);bottom:calc(48dvh + 10px)}
+  #shell.ai-open ~ .tool-rail .tool-sep{width:1px;height:auto;margin:4px 3px}
+  #shell.ai-open ~ .tool-rail .swatches{flex-direction:row}
+}
+@media (min-width:768px) and (max-width:1023px) and (orientation:landscape){
+  #shell.ai-open ~ .tool-rail{bottom:max(14px,env(safe-area-inset-bottom));right:auto;left:max(10px,env(safe-area-inset-left))}
+}
+#shell.ai-full ~ .tool-rail{display:none}

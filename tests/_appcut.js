@@ -39,7 +39,7 @@ function cut(file, from, to, opts = {}) {
 }
 
 /* THE STYLESHEET, AS THE APP GETS IT. It used to be one file,
-   app/css/systole.css; it is now ten pieces under app/css/, each a slot in
+   app/css/systole.css; it is now eleven pieces under app/css/, each a slot in
    app/systole.html's <style>. This joins the pieces in the order the shell
    names them, which is the order the cascade sees, so a suite reading a rule
    or cutting between two anchors reads exactly what ships, wherever the piece
