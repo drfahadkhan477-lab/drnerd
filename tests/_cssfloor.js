@@ -28,14 +28,13 @@ const { blankComments } = require('./_source.js');
 
 const ROOT = path.join(__dirname, '..');
 
-/* The three stylesheet families the pages ship: the app (every file in app/css, in the order they are listed here, which is only the
-   order of a directory listing: the cascade between files is the assembler's), the Memorizer's and the Lab page's. */
+/* The two stylesheet families the pages ship: the app (every file in app/css, in the order they are listed here, which is only the
+   order of a directory listing: the cascade between files is the assembler's), and the Memorizer's. */
 function families() {
   const dir = path.join(ROOT, 'app', 'css');
   return [
     { name: 'the Systole app', files: fs.readdirSync(dir).filter(f => f.endsWith('.css')).sort().map(f => 'app/css/' + f) },
     { name: 'the Memorizer', files: ['memorizer/app.css'] },
-    { name: 'the Lab page', files: ['lab/app.css'] },
   ];
 }
 const readFile = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -345,8 +344,8 @@ function scriptFiles() {
       else if (/\.js$/.test(e.name)) out.push(rel + '/' + e.name);
     }
   };
-  walk('src'); walk('memorizer/src'); walk('lab/src');
-  for (const f of ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html', 'lab/index.html']) if (fs.existsSync(path.join(ROOT, f))) out.push(f);
+  walk('src'); walk('memorizer/src');
+  for (const f of ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html']) if (fs.existsSync(path.join(ROOT, f))) out.push(f);
   return out;
 }
 

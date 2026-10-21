@@ -568,8 +568,8 @@ head('and a style written in script is held to the rows the table has');
      reads('app/systole.html').has('function min') && reads('app/systole.html').has('descriptor @font-face font-display') && reads('scripts/build-pwa.js').has('property z-index') && reads('memorizer/src/ui.js').has('property width'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);
   ok('and the stylesheets that scripts build from data are read as built: the Memorizer\'s look sheet has its themes (:root blocks), its dark scheme (@media) and its custom properties', generated.length > 0 && generated.every(g => g.css.length > 500) && reads('memorizer/src/appearance.js').has('atrule @media') &&
      reads('memorizer/src/appearance.js').has('property --*') && generated.some(g => /:root\[data-look="auto"\]/.test(g.css)), generated.map(g => `${g.file} ${g.css.length} chars`).join(', '));
-  ok('and the scripts and pages read are the ones the app ships: the shell, the builder, both other pages and the sources of all three', ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html', 'lab/index.html'].every(f => SRC.includes(f)) &&
-     ['src/', 'memorizer/src/', 'lab/src/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
+  ok('and the scripts and pages read are the ones the app ships: the shell, the builder, the Memorizer\'s page and the sources of both', ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html'].every(f => SRC.includes(f)) &&
+     ['src/', 'src/lab/', 'memorizer/src/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
   function list0(a) { return a.slice(0, 4).join(' | '); }
 }
 

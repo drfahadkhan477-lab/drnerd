@@ -417,7 +417,7 @@ const SUITES = [
   /* What the result cache learns of a page a browser loads from the repository,
      held in the engine that runs it. CI runs it in all three. */
   ['suitecache',             'the browser reports every file a page loads from disk, in the engines the result cache traces, and the cache stays off for an engine that reports none'],
-  ['lab',                    'the Lab, built and driven: the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map'],
+  ['lab',                    'the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map'],
 ];
 
 /* ── suites registered since the last full green run ──────────────────────────

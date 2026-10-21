@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/ipad.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -1759,6 +1759,17 @@ function refImportText(){
 
 /* ═══════════ FSRS-5 — see src/core/fsrs.js ═══════════ */
 @@SLOT[src:src/core/fsrs.js]@@
+
+/* ═══════════ The Practice Lab — see src/lab/*.js. After Physio, RhythmsExtra and FSRS, which they read as they load;
+   ui.js last, as it reads every one before it. ═══════════ */
+@@SLOT[src:src/lab/heartsounds.js]@@
+@@SLOT[src:src/lab/tracings.js]@@
+@@SLOT[src:src/lab/strips.js]@@
+@@SLOT[src:src/lab/heartmap.js]@@
+@@SLOT[src:src/lab/drill.js]@@
+@@SLOT[src:src/lab/progress.js]@@
+@@SLOT[src:src/lab/items.js]@@
+@@SLOT[src:src/lab/ui.js]@@
 @@SLOT[src:src/core/studyplan.js]@@
 @@SLOT[src:src/core/topicrun.js]@@
 @@SLOT[src:src/core/voicemode.js]@@
@@ -2397,6 +2408,18 @@ function mountLab(){
 }
 let __lastReadoutPaint=0;
 function goLab(){ S.screen='lab'; render(); toTop(); }
+
+/* ═══════════ The Practice Lab: heart sounds, pressure tracings, ECG strips and the heart map, drilled ═══════════
+   The screen is an empty element; src/lab/ui.js draws inside it and keeps its own place, its own progress and its own
+   keys. Every draw of this screen hands it the element again, and every draw of another lets it go, which stops a heart
+   sound that is playing. */
+function buildPractice(){ return `<div class="home-wrap anim-fade"><div class="plab" id="plabRoot"></div></div>`; }
+function mountPractice(){
+  if(typeof LabUI==='undefined') return;
+  if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'));
+  else LabUI.unmount();
+}
+function goPractice(){ S.screen='practice'; render(); toTop(); }
 
 /* ═══════════ Apex agent — client-side tool loop ═══════════ */
 'use strict';
@@ -6075,6 +6098,7 @@ function renderNow(){
   if(typeof mountHeroHeart3d==='function') mountHeroHeart3d();
   if(typeof mountPhysio==='function') mountPhysio();
   if(typeof mountLab==='function') mountLab();
+  if(typeof mountPractice==='function') mountPractice();
   if(typeof mountInk==='function') mountInk();
   if(typeof mockMount==='function') mockMount();
   if(typeof mountHomeProgress==='function') mountHomeProgress();
@@ -6123,7 +6147,8 @@ function buildScreen(){
     :S.screen==='search'?buildSearch()
     :S.screen==='annotations'?buildAnnotations()
     :S.screen==='mock'?buildMock():S.screen==='mockreport'?buildMockReport()
-    :S.screen==='stats'?buildStats():S.screen==='lab'?buildLab():'';
+    :S.screen==='stats'?buildStats():S.screen==='lab'?buildLab()
+    :S.screen==='practice'?buildPractice():'';
 }
 function buildNav(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):null;
@@ -6814,11 +6839,13 @@ function buildHome(){
       <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
       <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
       <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
+      <button class="door" onclick="goPractice()"><span class="door-ic">${icon("heart-pulse")}</span><span class="door-txt"><b>Practice Lab</b><i>sounds, tracings, strips</i></span></button>
       <button class="door door-wide" onclick="goLab()">
         <span class="door-ic">${icon("activity")}</span>
         <span class="door-txt"><b>Rhythm Lab</b><i>every trace, drawn live</i></span>
         <span class="door-go">${icon('arrow-right','icon-sm')}</span>
       </button>
+
     </div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
