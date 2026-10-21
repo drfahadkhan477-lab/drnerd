@@ -288,4 +288,59 @@ function forceFallbacks(html, probes) {
   return { html: out, count: n, counts };
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks };
+/* ── the style that scripts and pages write inline ───────────────────────────────────────────────────────────────────────────────────────────
+   The stylesheets are not the only place a page says how it looks: a style="" attribute, a cssText string, el.style.x = ... and setProperty('x') are read by the
+   same Safari, and cannot carry an @supports rule. So that a feature that is only ever written there is classified like the rest, they are read into uses of
+   the same shape (key, kind, name, line) as the stylesheet reader gives. */
+
+/* The scripts and pages the app ships, as paths under the repository: every script of the three source directories, the shell, the page builder and the two
+   other pages. */
+function scriptFiles() {
+  const out = [];
+  const walk = (rel) => {
+    const dir = path.join(ROOT, rel);
+    if (!fs.existsSync(dir)) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (!/node_modules|fixtures/.test(e.name)) walk(rel + '/' + e.name); }
+      else if (/\.js$/.test(e.name)) out.push(rel + '/' + e.name);
+    }
+  };
+  walk('src'); walk('memorizer/src'); walk('lab/src');
+  for (const f of ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html', 'lab/index.html']) if (fs.existsSync(path.join(ROOT, f))) out.push(f);
+  return out;
+}
+
+const STR = `"((?:[^"\\\\\\n]|\\\\.)*)"|'((?:[^'\\\\\\n]|\\\\.)*)'|\`([^\`]*)\``;
+/* Only what is CSS for certain is taken. A declaration in a string is read for its property, and for the functions of its value when the value is plain: one with a
+   quote, a + or a ${ in it is script putting pieces together, and Math.round( is not round(). A name must look like a property. */
+function inlineUses(text) {
+  const t = blankComments(text);
+  const nl = [0];
+  for (let i = 0; i < t.length; i++) if (t[i] === '\n') nl.push(i + 1);
+  const lineAt = idx => { let lo = 0, hi = nl.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (nl[mid] <= idx) lo = mid; else hi = mid - 1; } return lo + 1; };
+  const out = [];
+  const add = (kind, name, idx) => out.push({ key: kind + ' ' + name, kind, name, line: lineAt(idx), inline: true });
+  const prop = (name, idx) => add('property', name.startsWith('--') ? '--*' : name.toLowerCase(), idx);
+  const decls = (css, idx) => {
+    if (css == null) return;
+    for (const d of css.split(';')) {
+      const m = /^\s*(-{0,2}[a-zA-Z][\w-]*)\s*:([\s\S]*)$/.exec(d);
+      if (!m) continue;
+      prop(m[1], idx);
+      if (!/['"`+]|\$\{/.test(m[2])) for (const f of m[2].matchAll(/(?<![\w.-])(-?[a-zA-Z_][\w-]*)\(/g)) add('function', f[1].toLowerCase(), idx);
+    }
+  };
+  const strings = (re, kept) => { for (const m of t.matchAll(re)) decls(m[kept] ?? m[kept + 1] ?? m[kept + 2], m.index); };
+  for (const m of t.matchAll(/\bstyle\s*=\s*\\?"([^"\\]*)\\?"|\bstyle\s*=\s*\\?'([^'\\]*)\\?'/g)) decls(m[1] ?? m[2], m.index);
+  strings(new RegExp('\\bcssText\\s*\\+?=\\s*(?:' + STR + ')', 'g'), 1);
+  strings(new RegExp('(?<![\\w$.])style\\s*:\\s*(?:' + STR + ')', 'g'), 1);
+  strings(new RegExp('setAttribute\\(\\s*[\'"]style[\'"]\\s*,\\s*(?:' + STR + ')', 'g'), 1);
+  for (const m of t.matchAll(/\.style\.([a-zA-Z]+)\s*(?:=(?!=)|\+=)/g)) {
+    if (/^(cssText|setProperty|removeProperty|getPropertyValue|length)$/.test(m[1])) continue;
+    add('property', m[1] === 'cssFloat' ? 'float' : m[1].replace(/[A-Z]/g, c => '-' + c.toLowerCase()), m.index);
+  }
+  for (const m of t.matchAll(/\.style\.(?:setProperty|removeProperty|getPropertyValue)\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1/g)) prop(m[2], m.index);
+  return out;
+}
+
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineUses };

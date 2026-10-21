@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Every CSS feature the stylesheets use is in tests/css-floor-table.json, and one that the floor (iPadOS 13.4) does not read has what the table says.
+ * Every CSS feature the stylesheets use, or that a script or page writes inline, is in tests/css-floor-table.json, and one that the floor (iPadOS 13.4) does not read has what the table says.
  *
  *   node tests/verify-floor-css-pure.js
  *
@@ -10,7 +10,8 @@
  * Measured with those features made unknown to an engine, the top bar of the app had no ground and its white text lay on the page, the diagram
  * stages were 0 px tall, and the chapter icons and the ring in the study screen were not where they belong.
  *
- * THE TABLE. Every property, function, unit, pseudo-class, at-rule and media feature the stylesheets use is a row, with MDN's first iOS Safari that
+ * THE TABLE. Every property, function, unit, pseudo-class, at-rule and media feature the stylesheets use (and every property and function a script or page writes
+ * inline) is a row, with MDN's first iOS Safari that
  * reads it (scripts/css-floor-table.js writes it from the data). A use that is not in the table fails here, which is how a newer feature is stopped
  * from arriving unclassified: whoever writes it has to run the script and say what the stylesheets do about it. A feature newer than the floor has a
  * class, and the class is a claim that is checked here wherever it can be:
@@ -385,10 +386,11 @@ head('the stylesheets');
 
 head('and a style written in script is held to the rows the table has');
 {
-  /* A style attribute or a script that sets one cannot carry an @supports rule, so a feature that needs one cannot be written there. The table does not
-     list every property a script might set (one used nowhere else is in no row), so this holds what it has: a property or a function that a row says is
-     newer than the floor, in a string that looks like a style or in an assignment to element.style, is found, unless the row says it is read as an
-     older spelling there (the image figure's ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). */
+  /* A style attribute or a script that sets one cannot carry an @supports rule, so a feature that needs one cannot be written there. Two things are held. What the
+     scripts and pages write inline (style attributes, cssText strings, el.style.x, setProperty) is read by the same reader as the stylesheets and must be in the
+     table, so that a feature that is only ever written there cannot arrive unclassified. And a property or a function that a row says is newer than the floor, in a
+     string that looks like a style or in an assignment to element.style, is found, unless the row says it is read as an older spelling there (the image figure's
+     ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). */
   const T = C.loadTable();
   const above = Object.entries(T.above).filter(([k, r]) => (k.startsWith('property ') || k.startsWith('function ')) && r.class !== 'inert');
   const names = above.map(([k]) => k.split(' ')[1]);
@@ -460,15 +462,25 @@ head('and a style written in script is held to the rows the table has');
     const braced = sp("function paint(el) { el.title = '}'; el.style.aspectRatio = '1'; }"), braced2 = sp("function paint(el) { el.title = '}'; el.style.aspectRatio = '1'; }\nfunction other(el) { el.style.aspectRatio = '2'; }");
     ok('the function ends at its own closing brace, whatever a string in it holds', braced.hits.length === 0 && braced.stale.length === 0 && braced2.hits.length === 1 && braced2.stale.length === 0, JSON.stringify(braced));
   }
-  const SRC = [];
-  const walkDir = (dir, rx) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) { if (!/node_modules|fixtures/.test(e.name)) walkDir(p, rx); } else if (rx.test(e.name)) SRC.push(p); } };
-  walkDir(path.join(C.ROOT, 'src'), /\.js$/); walkDir(path.join(C.ROOT, 'memorizer', 'src'), /\.js$/); walkDir(path.join(C.ROOT, 'lab', 'src'), /\.js$/);
-  SRC.push(path.join(C.ROOT, 'app', 'systole.html'), path.join(C.ROOT, 'scripts', 'build-pwa.js'), path.join(C.ROOT, 'memorizer', 'index.html'), path.join(C.ROOT, 'lab', 'index.html'));
-  const rel = f => path.relative(C.ROOT, f).split(path.sep).join('/');
-  const sources = SRC.filter(f => fs.existsSync(f)).map(f => ({ rel: rel(f), text: blankComments(fs.readFileSync(f, 'utf8')) }));
+  const SRC = C.scriptFiles();
+  const sources = SRC.map(rel => ({ rel, text: blankComments(C.readFile(rel)) }));
   const real = scriptProblems(sources, above, found);
   ok('no script or markup that Safari reads sets a property or calls a function the table says is newer than the floor, except in the function its row names', real.hits.length === 0, list0(real.hits) || `${sources.length} files, ${names.length} names`);
   ok('and every exemption of a script names a function that is there and sets the feature', real.stale.length === 0, list0(real.stale) || 'each is used');
+  const IN = text => C.inlineUses(text).map(u => u.key);
+  ok('the inline reader finds a property in a style attribute, a cssText string, a helper\'s style:, setAttribute, an assignment, setProperty and a custom property, and a function of a plain value', IN('<div style="inset:0;color:red">').join() === 'property inset,property color' &&
+     IN("box.style.cssText = 'position:fixed;inset:0;z-index:1'").join() === 'property position,property inset,property z-index' && IN('el.style.aspectRatio = "1 / 1"; el.style.cssFloat = "left"').join() === 'property aspect-ratio,property float' &&
+     IN("h('div', { style: 'container-type:inline-size' })").join() === 'property container-type' && IN("el.setAttribute('style', 'container-type:inline-size')").join() === 'property container-type' &&
+     IN("el.style.setProperty('aspect-ratio', '1'); el.style.setProperty('--x', '1')").join() === 'property aspect-ratio,property --*' && IN('<i style="background:color-mix(in srgb,red,blue)">').join() === 'property background,function color-mix');
+  ok('and nothing in a class name, a comment, a comparison, a read, a style: that is not a declaration, or script putting a value together', !IN('<i class="inset aspect-ratio">').length && !IN('// style="inset:0"').length && !IN('if (el.style.display === "none") {}').length &&
+     !IN('var w = el.style.width;').length && !IN("var o = { style: 'solid' };").length && IN("'<i style=\"width:' + Math.round(w) + 'px\">'").join() === 'property width' && IN('<i style="clip-path:inset(0 ${(100 - x).toFixed(2)}% 0 0 round 5px)">').join() === 'property clip-path');
+  ok('and a line is the line it is on', C.inlineUses('a\nb\n<i style="color:red">').map(u => u.line).join() === '3');
+  const unlistedInline = [];
+  let nInline = 0;
+  for (const { rel, text } of sources) for (const u of C.inlineUses(text)) { nInline++; if (C.classify(T, u).how === 'unlisted') unlistedInline.push(`${rel}:${u.line} ${u.key}`); }
+  ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', unlistedInline.length === 0 && nInline > 0, list0(unlistedInline) || `${nInline} uses`);
+  ok('and the scripts and pages read are the ones the app ships: the shell, the builder, both other pages and the sources of all three', ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html', 'lab/index.html'].every(f => SRC.includes(f)) &&
+     ['src/', 'memorizer/src/', 'lab/src/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
   function list0(a) { return a.slice(0, 4).join(' | '); }
 }
 

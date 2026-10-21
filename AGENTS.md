@@ -129,13 +129,14 @@ The code's comments cite these rules; each was broken at least once.
   unknown pseudo-class, and says nothing; a plain value written before a
   declaration with a `var()` in it is no fallback, because that one is judged
   when the page is drawn. `tests/css-floor-table.json` lists every feature the
-  stylesheets use with the first iOS Safari that reads it, and
-  `tests/verify-floor-css-pure.js` fails on a use that is not in it, or whose
-  row's claim (an `@supports not` rule after the rule, an older value before it,
-  a split selector list, no use) is not so. `tests/verify-floor.js` draws the
-  app with those features made unknown. `scripts/css-floor-table.js` writes a
-  row; it needs MDN's browser-compat-data, which is not a dependency
-  (`docs/BUILD.md`, "When a stylesheet uses CSS that the floor does not read").
+  stylesheets use, and the scripts and pages write inline, with the first iOS
+  Safari that reads it, and `tests/verify-floor-css-pure.js` fails on a use that
+  is not in it, or whose row's claim (an `@supports not` rule after the rule,
+  an older value before it, a split selector list, no use) is not so.
+  `tests/verify-floor.js` draws the app with those features made unknown.
+  `scripts/css-floor-table.js` writes a row; it needs MDN's
+  browser-compat-data, which is not a dependency (`docs/BUILD.md`, "When a
+  stylesheet uses CSS that the floor does not read").
 
 ## Boundaries
 
