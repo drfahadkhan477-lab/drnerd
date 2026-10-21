@@ -518,7 +518,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('every button on them is at least 44 px tall', r.small.length === 0, r.small.join());
     ok('the Flagged card is a labelled group, and nothing spills out of it', r.role === 'group' && /Flagged/.test(r.label) && !r.spill, JSON.stringify([r.role, r.label, r.spill]));
     ok('the Annotated card is one button, which a keyboard reaches', r.annoTag === 'BUTTON');
-    const amber = await tokenColor('amber');
+    const amber = await tokenColor('amber-ink');   /* text in amber is written in its ink (base.css) */
     const badges = await page.evaluate(() => ['#flagCard .fc-badge', '#annoCard .fc-badge'].map(s => getComputedStyle(document.querySelector(s)).color));
     ok('the badges on the two cards are amber', badges.every(c => c === amber), JSON.stringify([badges, amber]));
     await page.click('#flagGo');
@@ -538,7 +538,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.click('#flagClear');
     await drawn('#flagClear.arm'); await page.mouse.move(2, 2); await stilled();
     const armed = await page.evaluate(() => { const b = document.getElementById('flagClear'); return { text: b ? b.textContent.trim() : null, n: flaggedQs().length, raw: S.flagged.size, focus: document.activeElement && document.activeElement.id, color: b ? getComputedStyle(b).color : null }; });
-    const red = await tokenColor('red');
+    const red = await tokenColor('red-ink');
     ok('the first tap on Clear arms it, says how many the card counts, and clears nothing', armed.n === 3 && armed.raw === 4 && /^Tap again to clear all 3$/.test(armed.text || ''), JSON.stringify(armed));
     ok('an armed Clear looks armed: red, and not the colour it rests in', armed.color === red && resting !== red, JSON.stringify([resting, armed.color, red]));
     ok('and the keyboard is still on the button that was pressed', armed.focus === 'flagClear', armed.focus);
@@ -816,7 +816,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       const flaggedRows = r.badges.filter(b => b[1]);
       ok('exactly the flagged hit carries the badge', flaggedRows.length === 1 && flaggedRows[0][0].indexOf(hits[0]) >= 0, JSON.stringify(flaggedRows));
       ok('and it says "flagged"', await page.evaluate(() => document.querySelector('.hit-flag.flagged')?.textContent.trim()) === 'flagged');
-      const amber = await tokenColor('amber'), red = await tokenColor('red');
+      const amber = await tokenColor('amber-ink'), red = await tokenColor('red-ink');
       const hc = await page.evaluate(() => { const badge = document.querySelector('.hit-flag.flagged'); return badge ? getComputedStyle(badge).color : null; });
       ok('and it is amber, which is not the red of "previously missed"', hc === amber && hc !== red, JSON.stringify([hc, amber, red]));
     } finally {
