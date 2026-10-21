@@ -467,6 +467,14 @@ function loadJSON(k,d){ return Store.get(k,d); }
 /* The whole records that more than one window of this app may hold (see "one record, several windows" below), and for each the text this window
    last read or wrote. A write of one of them through here is a write this window knows of. */
 const SEEN=Object.create(null);
+/* A whole record another window may write, read at launch: parsed from the text read, and that text is what this window has seen of it. Reading it
+   a second time for SEEN, later in the script, would take in a write made in between and call it seen, and the window would never take it. */
+function loadSeen(k,d){
+  let text=null; try{ text=localStorage.getItem(k); }catch(_){}
+  SEEN[k]=text;
+  let v; try{ v=text==null?undefined:JSON.parse(text); }catch(_){}
+  return v==null?d:v;
+}
 function saveJSON(k,v){
   if(!Store.set(k,v)) warnStorage();
   else if(k in SEEN){ try{ SEEN[k]=localStorage.getItem(k); }catch(_){} }
@@ -1156,7 +1164,7 @@ function refSeedApply(cur, seed){
   }catch(_){ /* private mode, quota, anything — an unseeded library still works */ }
   return cur;
 }
-let REF = refSeedApply(loadJSON(REF_KEY, []), REF_SEED);          // [{id,title,tags,body,ts,source}]
+let REF = refSeedApply(loadSeen(REF_KEY, []), REF_SEED);          // [{id,title,tags,body,ts,source}]
 /* Figures cited by the reference notes above, keyed by the refimg:// path
    each note uses to name them. Reassignable ('let') because the split PWA
    build empties this and fetches the real map in afterward. */
@@ -4695,7 +4703,8 @@ function save(){try{const text=JSON.stringify(Object.assign({},FOREIGN,{
   catch(_){ warnStorage(); }}
 const NEWER_DATA_NOTE='This copy of Systole is older than the data saved on this device. Nothing has been lost — update this copy to see everything.';
 function load(){try{
-  const raw=JSON.parse(localStorage.getItem(KEY))||{};
+  const text=localStorage.getItem(KEY); SEEN[KEY]=text;
+  const raw=JSON.parse(text)||{};
   /* No schemaVersion means a store written before this step — every store in
      the wild today, and its shape is exactly version 1. Left unstamped until
      the next save rather than backfilled. */
@@ -4737,8 +4746,7 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
    writes; a window that takes a record does not send it back.
    NOT COVERED: the ink, the sticky notes, the chats and the review log live in the database (src/core/store.js), which does not tell other
    windows, and are still decided by who wrote last. */
-SEEN[KEY]=SEEN[REF_KEY]=null;
-try{ SEEN[KEY]=localStorage.getItem(KEY); SEEN[REF_KEY]=localStorage.getItem(REF_KEY); }catch(_){}
+for(const k of [KEY,REF_KEY]) if(!(k in SEEN)) SEEN[k]=null;     // set at launch by the reads that built S and REF, from the text they parsed
 let newerNoted=false;        // a record from a newer copy was taken and the window has said so
 function adoptProgress(text){
   let raw; try{ raw=JSON.parse(text); }catch(_){ return false; }

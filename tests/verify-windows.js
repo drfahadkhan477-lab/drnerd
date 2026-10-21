@@ -373,6 +373,43 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        editing && gone ? `${after.kept} kept, ${after.stored} stored, the deleted note ${after.back ? 'back' : 'not back'}, in the other window: ${inA}` : `arranged: editing ${editing}, deleted in the other ${gone}`);
   }
 
+  head('a write made while a window starts is taken, not marked as seen');
+  {
+    /* A window reads the records to build its state, and starts listening further down its script. A write by another window in between is in
+       neither the state nor the listener: noting what had been seen by reading the storage a second time would call it seen, and the window would
+       keep its older state until the next write. The write is made here in the page itself, straight after the read that built the state (whose
+       it is does not matter to the page, and a storage event is not sent to the page that wrote). The page that starts is a third one. */
+    const rec = await stored(A);
+    const newerTotal = rec.sessionTotal + 5;
+    const newerProgress = JSON.stringify(Object.assign({}, rec, { sessionTotal: newerTotal }));
+    const newerNotes = await A.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('accsap12.ref')).concat([{ id: 'zq-launch', title: 'Zq written while the other window started', tags: 'zq', body: 'A note.', ts: Date.now(), source: 'user' }])));
+    const C = watch(await ctx.newPage(), events, 'C', errors);
+    /* The record is read first by the few lines that adopt the saved theme before anything paints, and the notes are read once. The write is made
+       after the read that builds the state: load() for the record, and the loader of the notes. */
+    await C.addInitScript(([progressKey, notesKey, progress, notes]) => {
+      const read = Storage.prototype.getItem, write = Storage.prototype.setItem;
+      const after = { [progressKey]: { text: progress, by: /(^|[^\w$])load([^\w$]|$)/ }, [notesKey]: { text: notes, by: /loadSeen|lsGet/ } };
+      window.__first = {};
+      Storage.prototype.getItem = function (k) {
+        const v = read.call(this, k);
+        if (this === window.localStorage && Object.prototype.hasOwnProperty.call(after, k) && !(k in window.__first)) {
+          const stack = (new Error().stack || '');
+          if (after[k].by.test(stack)) { window.__first[k] = stack.split('\n').slice(1, 4).join(' | ').slice(0, 240); write.call(this, k, after[k].text); }
+        }
+        return v;
+      };
+    }, ['accsap12.v2', 'accsap12.ref', newerProgress, newerNotes]);
+    await C.goto(base, { waitUntil: 'load', timeout: 200000 });
+    await booted(C, { timeout: 150000 });
+    const first = await C.evaluate(() => window.__first);
+    const took = await until(C, ([total, id]) => S.sessionTotal === total && REF.some(r => r.id === id), [newerTotal, 'zq-launch'], 6000);
+    const now = await C.evaluate(() => ({ total: S.sessionTotal, note: REF.some(r => r.id === 'zq-launch') }));
+    ok('a record written right after the window read it to start is taken when it has started, and so are the notes',
+       !!first['accsap12.v2'] && !!first['accsap12.ref'] && took && now.total === newerTotal && now.note,
+       `${now.total} answered (written: ${newerTotal}), the note ${now.note ? 'there' : 'missing'}; first reads: ${JSON.stringify(first)}`);
+    await C.close();
+  }
+
   head('nothing throws');
   ok('no page errors in either window', errors.length === 0, errors.slice(0, 3).join(' | '));
 
