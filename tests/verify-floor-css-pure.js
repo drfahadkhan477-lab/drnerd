@@ -56,11 +56,14 @@ const selectorsOf = rule => C.splitList(rule.prelude);
 const readAtFloor = (decl, watch) => !Object.keys((watch && watch[decl.prop]) || {}).some(k => new RegExp('(?<![\\w-])' + k + '(?![\\w(-])', 'i').test(decl.value));
 const where = (file, u) => `${file}:${u.line}`;
 
-/* what a use of a feature is followed by: an @supports not (probe) block, right after its rule in the same parent, holding a rule for the same
-   selector (or, for a cell that is only one kind of that selector, a descendant of it) that sets what the use had set */
-function companionProblems(file, uses, row) {
+/* what a use of a feature is followed by: an @supports not (probe) block, right after its rule in the same parent, with a rule for EACH selector of it (the same selector:
+   a rule for a descendant of it leaves the element outside that ancestor with nothing, unless the row says that the fallback is narrower on purpose and why, in
+   "narrower": { selector: { by, why } }) that sets what the use had set. A row that says what a fallback must set ("sets") means all of it: the properties of the
+   rules for that selector in this block and in the @supports not blocks before it in the file (an @media that overrides one of them sets only that one again). */
+function companionProblems(file, uses, row, usedNarrower) {
   const out = [];
   const exempt = Object.keys(row.exempt || {}).map(C.squash);
+  const narrower = row.narrower || {};
   const byRule = new Map();
   for (const u of uses) { if (!byRule.has(u.node)) byRule.set(u.node, []); byRule.get(u.node).push(u); }
   for (const [rule, mine] of byRule) {
@@ -69,11 +72,17 @@ function companionProblems(file, uses, row) {
     if (!sels.length) continue;
     const sibs = rule.parent.children, next = sibs[sibs.indexOf(rule) + 1];
     if (!isNotSupports(next, row.probe)) { out.push(`${where(file, mine[0])} ${rule.prelude.slice(0, 50)}: not followed by @supports not (${row.probe})`); continue; }
-    const needs = row.sets ? [row.sets] : [...new Set(mine.map(u => u.decl.prop))].map(p => [p]);
+    const needs = row.sets ? row.sets.map(p => [p]) : [...new Set(mine.map(u => u.decl.prop))].map(p => [p]);
+    let root = rule; while (root.parent) root = root.parent;
     for (const o of sels) {                              // each selector of a list, since an older Safari that has no rule for one of them draws it without
-      const same = next.children.filter(r => r.t === 'rule' && selectorsOf(r).some(s => s === o || s.endsWith(' ' + o)));
-      if (!same.length) { out.push(`${where(file, mine[0])} ${o}: its @supports not block has no rule for it`); continue; }
-      const set = same.flatMap(r => r.decls.map(d => d.prop));
+      const names = [o, narrower[o] && C.squash(narrower[o].by)].filter(Boolean);
+      const covers = r => r.t === 'rule' && selectorsOf(r).some(s => names.includes(s));
+      const same = next.children.filter(covers);
+      if (!same.length) { out.push(`${where(file, mine[0])} ${o}: its @supports not block has no rule for ${o}${narrower[o] ? ' or ' + narrower[o].by : ''}`); continue; }
+      if (narrower[o] && same.some(r => selectorsOf(r).includes(C.squash(narrower[o].by)))) usedNarrower && usedNarrower.add(o);
+      const order = [...C.blocks(root)];                     // source order, so that what comes before is what the cascade has seen first even on one line
+      const before = row.sets ? order.slice(0, order.indexOf(rule)).filter(b => isNotSupports(b, row.probe)).flatMap(b => b.children.filter(covers)) : [];
+      const set = [...same, ...before].flatMap(r => r.decls.map(d => d.prop));
       for (const need of needs) if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${o}: its fallback sets none of ${need.join(', ')}`);
     }
   }
@@ -136,7 +145,7 @@ function prefixProblems(file, uses, table) {
 }
 
 /* one pass over parsed files: what is not in the table, what is in it wrongly, and what each class says that is not so */
-function analyse(files, table) {
+function analyse(files, table, opts) {
   const res = { unlisted: new Map(), todo: [], malformed: [], rows: {}, stray: [], newerInside: [], unusedRows: [], prefix: [] };
   const all = files.flatMap(f => f.uses.map(u => Object.assign({ file: f.file }, u)));
   for (const u of all) {
@@ -160,7 +169,11 @@ function analyse(files, table) {
     if (row.class !== 'banned' && !mine.length) res.unusedRows.push(key);
     const problems = [];
     if (row.class === 'banned') for (const u of mine) problems.push(`${where(u.file, u)} ${key} is banned: ${row.note}`);
-    else if (row.how === 'companion') for (const f of files) problems.push(...companionProblems(f.file, mine.filter(u => u.file === f.file), row));
+    else if (row.how === 'companion') {
+      const usedNarrower = new Set();
+      for (const f of files) problems.push(...companionProblems(f.file, mine.filter(u => u.file === f.file), row, usedNarrower));
+      if (!(opts && opts.inline)) for (const o of Object.keys(row.narrower || {})) if (!usedNarrower.has(o)) problems.push(`${key}: "narrower" ${o} → ${row.narrower[o].by} excuses nothing: no rule for ${o} has its fallback there`);
+    }
     else if (row.how === 'before') for (const f of files) problems.push(...beforeProblems(f.file, mine.filter(u => u.file === f.file), table.watch));
     else if (row.how === 'split') for (const f of files) problems.push(...splitProblems(f.file, f.root, key.replace(/^selector /, '')));
     else if (row.how === 'guard') problems.push(...(mine.length ? guardProblems(files, row, mine) : []));
@@ -247,7 +260,15 @@ head('the reader, on small stylesheets');
      cm('.a{border-color:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{border:1px solid red}}').length === 0 &&
      cm('.a{border:1px solid color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{color:red}}').length === 1 &&
      cm('.a{background:color-mix(in srgb,var(--x) 10%,transparent);border:1px solid color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}').length === 1);
-  ok('a refinement of the selector counts, and a rule inside an @media follows it inside that @media', cm('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.g .a{background:red}}').length === 0 &&
+  const MIXA = 'background:color-mix(in srgb,var(--x) 10%,transparent)';
+  const NR = { 'function color-mix': row({ since: '16.2', how: 'companion', probe, narrower: { '.a': { by: '.g .a', why: 'a is a swatch outside .g' } } }) };
+  const nr = css => A(css, NR).rows['function color-mix'];
+  const has = (a, re) => a.some(x => re.test(x));
+  ok('a fallback for a descendant of the selector does not cover the selector (an .a outside .g has nothing), unless the row says the fallback is narrower on purpose and by what', has(cm('.a{' + MIXA + '}' + SUP + '{.g .a{background:red}}'), /no rule for \.a/) &&
+     nr('.a{' + MIXA + '}' + SUP + '{.g .a{background:red}}').length === 0 && has(nr('.a{' + MIXA + '}' + SUP + '{.h .a{background:red}}'), /no rule for \.a or \.g \.a/) && cm('.a{' + MIXA + '}' + SUP + '{.a{background:red}}').length === 0);
+  ok('and a narrower entry that excuses nothing is found: no rule for its selector has its fallback there', has(nr('.a{' + MIXA + '}' + SUP + '{.a{background:red}}'), /excuses nothing/) && has(nr('.b{' + MIXA + '}' + SUP + '{.b{background:red}}'), /excuses nothing/) &&
+     !has(nr('.a{' + MIXA + '}' + SUP + '{.g .a{background:red}}'), /excuses nothing/));
+  ok('a rule inside an @media is followed inside that @media', 
      cm('@media (hover:hover){.a:hover{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a:hover{background:red}}}').length === 0 &&
      cm('@media (hover:hover){.a:hover{background:color-mix(in srgb,var(--x) 10%,transparent)}}' + SUP + '{.a:hover{background:red}}').length === 1);
   const MIX = 'background:color-mix(in srgb,var(--x) 10%,transparent)';
@@ -258,10 +279,14 @@ head('the reader, on small stylesheets');
      cm('.a,.b{' + MIX + '}' + SUP + '{.a{background:red}.b{color:red}}').length === 1);
   const AR = { 'property aspect-ratio': row({ how: 'companion', probe: 'aspect-ratio:1', sets: ['height', 'padding-bottom'], exempt: { '.img': 'an image' } }) };
   const ar = css => A(css, AR).rows['property aspect-ratio'];
-  ok('a ratio box has the box made the old way, and an exempt selector has none', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0 && ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{width:1px}}').length === 1 && ar('.s{aspect-ratio:1.5}').length === 1 && ar('.img{aspect-ratio:1.5}').length === 0 && ar('.img,.s{aspect-ratio:1.5}').length === 1);
+  ok('a ratio box has the box made the old way, and an exempt selector has none', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0 && ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{width:1px}}').length === 2 && ar('.s{aspect-ratio:1.5}').length === 1 && ar('.img{aspect-ratio:1.5}').length === 0 && ar('.img,.s{aspect-ratio:1.5}').length === 1);
   const DS = { 'descriptor @font-face size-adjust': row({ since: '17', class: 'progressive' }) };
   ok('a descriptor that is not in the table is found, and one that a row lists as newer than the floor is classified like any other feature', A('@font-face{font-family:x;size-adjust:100%}', {}).unlisted.has('descriptor @font-face size-adjust') &&
      !A('@font-face{font-family:x;size-adjust:100%}', DS).unlisted.has('descriptor @font-face size-adjust') && A('@font-face{font-family:x;size-adjust:100%}', DS).malformed.length === 0);
+  ok('a fallback that must set several things sets all of them: height alone and padding-bottom alone are found, and an @media that overrides one of them sets only that one again, after a fallback that set both', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0}}').length === 1 &&
+     ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{padding-bottom:66%}}').length === 1 &&
+     ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 0 &&
+     ar('@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 1);
   ok('the older spelling uses nothing newer than the floor', A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:color-mix(in srgb,var(--y) 10%,transparent)}}', CM).newerInside.length === 1 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:var(--y)}}', CM).newerInside.length === 0);
   ok('an @supports not that tests a feature the table lists as newer and is no row\'s probe is found, a row\'s is not, and one that tests something else is not either', A('@supports not (color:color-mix(in srgb,red,blue) or x:y){.a{color:red}}', CM).stray.length === 1 && A('@supports not (display:grid){.a{color:red}}', CM).stray.length === 0 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}', CM).stray.length === 0);
 
@@ -507,7 +532,7 @@ head('and a style written in script is held to the rows the table has');
   for (const { rel } of sources) for (const seg of C.inlineSegments(real.rests[rel])) inlineFiles.push(parseFile(rel, seg.css, T));
   const generated = C.generatedSheets();                  // a stylesheet a script builds from data is read as the script makes it
   for (const g of generated) inlineFiles.push(parseFile(g.file, g.css, T));
-  const resIn = analyse(inlineFiles, T);
+  const resIn = analyse(inlineFiles, T, { inline: true });
   const inlineBad = [...[...resIn.unlisted].map(([k, w]) => `${w} ${k} is not in the table`), ...Object.values(resIn.rows).flat(), ...resIn.newerInside, ...resIn.stray, ...resIn.prefix];
   ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', resIn.unlisted.size === 0 && inlineFiles.length > 0, list0([...resIn.unlisted].map(([k, w]) => `${w} ${k}`)) || `${inlineFiles.length} pieces`);
   ok('and what is newer than the floor in it has what its row says it needs, which an attribute cannot give an @supports rule to (an older value written first is all it can have)', inlineBad.length === 0, list0(inlineBad) || 'none');
