@@ -57,11 +57,14 @@ const inNotSupports = node => C.ancestors(node).some(a => a.t === 'at' && /^@sup
 const selectorsOf = rule => C.splitList(rule.prelude);
 const readAtFloor = (decl, watch) => !Object.keys((watch && watch[decl.prop]) || {}).some(k => new RegExp('(?<![\\w-])' + k + '(?![\\w(-])', 'i').test(decl.value));
 const where = (file, u) => `${file}:${u.line}`;
+const scopeOf = node => C.ancestors(node).map(a => C.squash(a.prelude).toLowerCase());
+const reaches = (block, rule) => { const have = scopeOf(rule); return scopeOf(block).every(p => have.includes(p)); };   // every @media or @supports around the block is around the rule too
 
 /* what a use of a feature is followed by: an @supports not (probe) block, right after its rule in the same parent, with a rule for EACH selector of it (the same selector:
    a rule for a descendant of it leaves the element outside that ancestor with nothing, unless the row says that the fallback is narrower on purpose and why, in
    "narrower": { selector: { by, why } }) that sets what the use had set. A row that says what a fallback must set ("sets") means all of it: the properties of the
-   rules for that selector in this block and in the @supports not blocks before it in the file (an @media that overrides one of them sets only that one again). */
+   rules for that selector in this block and in the @supports not blocks before it in the file (an @media that overrides one of them sets only that one again), but only
+   those whose conditions are the use's too: a block inside an @media that the use is not inside is not seen by a Safari that draws the use without it. */
 function companionProblems(file, uses, row, usedNarrower) {
   const out = [];
   const exempt = Object.keys(row.exempt || {}).map(C.squash);
@@ -83,7 +86,7 @@ function companionProblems(file, uses, row, usedNarrower) {
       if (!same.length) { out.push(`${where(file, mine[0])} ${o}: its @supports not block has no rule for ${o}${narrower[o] ? ' or ' + narrower[o].by : ''}`); continue; }
       if (narrower[o] && same.some(r => selectorsOf(r).includes(C.squash(narrower[o].by)))) usedNarrower && usedNarrower.add(o);
       const order = [...C.blocks(root)];                     // source order, so that what comes before is what the cascade has seen first even on one line
-      const before = row.sets ? order.slice(0, order.indexOf(rule)).filter(b => isNotSupports(b, row.probe)).flatMap(b => b.children.filter(covers)) : [];
+      const before = row.sets ? order.slice(0, order.indexOf(rule)).filter(b => isNotSupports(b, row.probe) && reaches(b, rule)).flatMap(b => b.children.filter(covers)) : [];
       const set = [...same, ...before].flatMap(r => r.decls.map(d => d.prop));
       for (const need of needs) if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${o}: its fallback sets none of ${need.join(', ')}`);
     }
@@ -325,6 +328,11 @@ head('the reader, on small stylesheets');
      ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{padding-bottom:66%}}').length === 1 &&
      ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 0 &&
      ar('@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 1);
+  const MQ = (a, b) => '@media (min-width:2000px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}}' + a + '{.s{aspect-ratio:3}@supports not (aspect-ratio:1){.s{padding-bottom:33%}}}' + (b || '');
+  ok('a fallback is completed only by what the use is under too: another @media\'s block does not set a height for it, one around the same condition, around the whole sheet or around the use itself does, and one inside a narrower condition than the use does not', ar(MQ('@media (max-width:100px)')).length === 1 &&
+     ar(MQ('@media (min-width:2000px)')).length === 0 && ar('.s{aspect-ratio:1}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}' + MQ('@media (max-width:100px)')).length === 0 &&
+     ar('@media (min-width:2000px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}@media (max-width:9px){.s{aspect-ratio:3}@supports not (aspect-ratio:1){.s{padding-bottom:33%}}}}').length === 0 &&
+     ar('@media (min-width:2000px){@media (max-width:9px){.s{aspect-ratio:3}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}}.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:33%}}}').length === 1);
   ok('the older spelling uses nothing newer than the floor', A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:color-mix(in srgb,var(--y) 10%,transparent)}}', CM).newerInside.length === 1 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:var(--y)}}', CM).newerInside.length === 0);
   const PRE = { prefixed: { 'property backdrop-filter': { since: '18', prefixedSince: '9' } } };
   const pre = css => A(css, {}, PRE).prefix;
