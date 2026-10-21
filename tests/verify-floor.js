@@ -217,7 +217,9 @@ const palettes = css => {
   ok('and every probe the table names is in the page as an @supports not block, so there is something to put on top', PROBES.every(p => forced.counts[p] > 0), PROBES.map(p => `${p.slice(0, 22)} ×${forced.counts[p]}`).join(', '));
   const FILE_F = path.join(dir, 'f.html');
   fs.writeFileSync(FILE_F, sim.html);
-  ok('the pages differ, and only in their style', sim.html !== html && sim.html.replace(/<style[\s\S]*?<\/style>/g, '') === html.replace(/<style[\s\S]*?<\/style>/g, ''));
+  const apart = h => h.split(/<style[^>]*>[\s\S]*?<\/style>/);                   // what lies between the style elements, which the simulation must leave as it was
+  const [apartSim, apartHtml] = [apart(sim.html), apart(html)];
+  ok('the pages differ, and only in their style', sim.html !== html && apartSim.length === apartHtml.length && apartSim.every((t, i) => t === apartHtml[i]));
 
   /* ── the screens ─────────────────────────────────────────────────────────────────────────────────────────────────────────── */
   head('the screens of the app, as an older Safari would draw them');
