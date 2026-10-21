@@ -66,7 +66,9 @@ const reaches = (block, rule) => { const have = scopeOf(rule); return scopeOf(bl
    rules for that selector in this block and in the @supports not blocks before it in the file (an @media that overrides one of them sets only that one again), but only
    those whose conditions are the use's too (a block inside an @media that the use is not inside is not seen by a Safari that draws the use without it), and not what a rule
    for the same selector set again after it: a plain rule between the block and the use, or the use's own rule, that sets one of those properties again has the last word
-   there, in whatever @media it is (it may apply along with the use, and a fallback that holds only if it does not is not one). */
+   there, in whatever @media it is (it may apply along with the use, and a fallback that holds only if it does not is not one). A use that is !important is not beaten by a
+   companion that is not (a var() in it is judged when the page is drawn, so the use still wins the cascade and comes to nothing): the companion that supplies its property
+   is !important too (a ratio that an older Safari drops as an unknown property has no importance to answer: the row asks for the properties of the box). */
 function companionProblems(file, uses, row, usedNarrower) {
   const out = [];
   const exempt = Object.keys(row.exempt || {}).map(C.squash);
@@ -80,6 +82,7 @@ function companionProblems(file, uses, row, usedNarrower) {
     const sibs = rule.parent.children, next = sibs[sibs.indexOf(rule) + 1];
     if (!isNotSupports(next, row.probe)) { out.push(`${where(file, mine[0])} ${rule.prelude.slice(0, 50)}: not followed by @supports not (${row.probe})`); continue; }
     const needs = row.sets ? row.sets.map(p => [p]) : [...new Set(mine.map(u => u.decl.prop))].map(p => [p]);
+    const important = new Set(mine.filter(u => u.decl.important).map(u => u.decl.prop));          // what a row with "sets" asks for is the box, not the property that is guarded, so nothing is asked of it
     let root = rule; while (root.parent) root = root.parent;
     for (const o of sels) {                              // each selector of a list, since an older Safari that has no rule for one of them draws it without
       const names = [o, narrower[o] && C.squash(narrower[o].by)].filter(Boolean);
@@ -97,8 +100,12 @@ function companionProblems(file, uses, row, usedNarrower) {
         }
         reset(rule);
       }
-      const set = [...same.flatMap(r => r.decls.map(d => d.prop)), ...kept];
-      for (const need of needs) if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${o}: its fallback sets none of ${need.join(', ')}`);
+      const own = same.flatMap(r => r.decls);
+      const set = [...own.map(d => d.prop), ...kept];
+      for (const need of needs) {
+        if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${o}: its fallback sets none of ${need.join(', ')}`);
+        else if (important.has(need[0]) && !own.some(d => d.important && overlaps(need[0], d.prop))) out.push(`${where(file, mine[0])} ${o}: ${need[0]} is !important in the use, and its fallback has none that is`);
+      }
     }
   }
   return out;
@@ -346,9 +353,17 @@ head('the reader, on small stylesheets');
   ok('and one that covers only some of them is found, whichever it leaves out, and so is a selector of it whose rule sets something else', cm('.a,.b{' + MIX + '}' + SUP + '{.a{background:red}}').length === 1 &&
      cm('.a,.b{' + MIX + '}' + SUP + '{.b{background:red}}').length === 1 && cm('.a,.b,.c{' + MIX + '}' + SUP + '{.a{background:red}.c{background:red}}').length === 1 &&
      cm('.a,.b{' + MIX + '}' + SUP + '{.a{background:red}.b{color:red}}').length === 1);
+  const IMP = '.a{border:1px solid color-mix(in srgb,var(--x) 10%,transparent) !important}';
+  ok('a use that is !important is answered by a companion that is: one that is not cannot win the cascade, and one that sets a shorthand or a longhand of it counts, in one rule or two', cm('.a{' + MIX + '!important}' + SUP + '{.a{background:red}}').length === 1 &&
+     cm('.a{' + MIX + ' !important}' + SUP + '{.a{background:red !important}}').length === 0 && cm('.a{' + MIX + '!important}' + SUP + '{.a{background:red;color:blue}.a{background:red!important}}').length === 0 &&
+     cm(IMP + SUP + '{.a{border-color:red !important}}').length === 0 && cm(IMP + SUP + '{.a{border-color:red}}').length === 1);
+  ok('and importance is asked for only where the use has it: a use that is not, with a companion that is or is not, one property of two that is, and a ratio, which an older Safari drops as an unknown property', cm('.a{' + MIX + '}' + SUP + '{.a{background:red !important}}').length === 0 && cm('.a{' + MIX + '}' + SUP + '{.a{background:red}}').length === 0 &&
+     cm('.a{' + MIX + ';color:color-mix(in srgb,var(--x) 10%,transparent) !important}' + SUP + '{.a{background:red;color:red}}').length === 1 &&
+     cm('.a{' + MIX + ';color:color-mix(in srgb,var(--x) 10%,transparent) !important}' + SUP + '{.a{background:red;color:red !important}}').length === 0);
   const AR = { 'property aspect-ratio': row({ how: 'companion', probe: 'aspect-ratio:1', sets: ['height', 'padding-bottom'], exempt: { '.img': 'an image' } }) };
   const ar = css => A(css, AR).rows['property aspect-ratio'];
   ok('a ratio box has the box made the old way, and an exempt selector has none', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0 && ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{width:1px}}').length === 2 && ar('.s{aspect-ratio:1.5}').length === 1 && ar('.img{aspect-ratio:1.5}').length === 0 && ar('.img,.s{aspect-ratio:1.5}').length === 1);
+  ok('a ratio that is !important needs no companion that is: an older Safari drops the property it does not know, so there is no important declaration left to beat the box it is given', ar('.s{aspect-ratio:1.5 !important}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0);
   const DS = { 'descriptor @font-face size-adjust': row({ since: '17', class: 'progressive' }) };
   ok('a descriptor that is not in the table is found, and one that a row lists as newer than the floor is classified like any other feature', A('@font-face{font-family:x;size-adjust:100%}', {}).unlisted.has('descriptor @font-face size-adjust') &&
      !A('@font-face{font-family:x;size-adjust:100%}', DS).unlisted.has('descriptor @font-face size-adjust') && A('@font-face{font-family:x;size-adjust:100%}', DS).malformed.length === 0);
