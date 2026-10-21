@@ -144,12 +144,16 @@ const ACCENT_BY_THEME = {
   });
   ok('a wrong answer option is painted with --danger (border)', wrongAnswer.wrongBorder === rgb(DANGER), `${wrongAnswer.wrongBorder || 'not found'} vs ${rgb(DANGER)}`);
 
+  /* A fill, not text: text in amber is written in --amber-ink, a darker step that reads (base.css), so the streak
+     figure this once probed no longer shows --warning. The mock report's amber bar is still painted with it. */
   const warnProbe = await page.evaluate(() => {
-    const el = document.createElement('div');
-    el.className = 'fc-streak';
-    document.body.appendChild(el);
-    const c = getComputedStyle(el).color;
-    el.remove();
+    const bar = document.createElement('div');
+    bar.className = 'mk-bar a';
+    const el = document.createElement('i');
+    bar.appendChild(el);
+    document.body.appendChild(bar);
+    const c = getComputedStyle(el).backgroundColor;
+    bar.remove();
     return c;
   });
   ok('a --warning-painted element is actually amber-coloured', warnProbe === rgb(WARNING), `${warnProbe} vs ${rgb(WARNING)}`);

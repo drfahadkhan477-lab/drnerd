@@ -579,3 +579,29 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   outward found the pencil's rail lying over half of Send on an iPad in
   portrait, a defect no layout check had seen because each looked at one layer.
   → Rule: a tap target's check walks `elementFromPoint` across the target.
+- **Never wait on every animation on the page.** A precondition that awaited
+  `document.getAnimations()` hung for twenty minutes, because something on the
+  page pulses forever and its `finished` never settles. → Rule: wait on the
+  animations of the element being measured, or on a measurable state.
+
+## Dark-theme text (green, red and amber)
+
+- **A colour that fills under white type cannot also be the text colour on a
+  dark ground.** `--green`, `--red` and `--amber` fill the answer letters under
+  white, so lightening them for dark themes would have broken those letters and
+  the suites that hold them fixed. Text took its own token (`--green-ink`, and so
+  on), equal to the fill in light themes. → Rule: before changing a shared colour,
+  list its uses by role (text, fill under text, fill alone) and change only the
+  role that is wrong.
+- **An injection has to be a defect.** Amber `#D97706` was injected as "too dark"
+  and survived; it measures 5.2 to 5.9:1 on these grounds and was not a defect. → Rule:
+  compute what an injected value should do before reading its survival as a gap.
+- **Measure the other theme before scoping to one.** The first cut fixed the
+  dark themes and promised light pages "unchanged", with a check holding them to
+  it; light text measured 3.2 to 5.0:1 as well, so the promise kept a defect.
+  → Rule: measure every theme before deciding which ones a contrast fix covers.
+- **A check that probes text for a fill colour moves when text gets its own
+  colour.** verify-tokens read `.fc-streak`'s text to prove `--warning` reached
+  a pixel, and verify-flags held three badges' text to `var(--amber)` and
+  `var(--red)`; once light text took the darker inks, all four failed. → Rule:
+  when a role moves to a new token, grep the suites for probes of that role.

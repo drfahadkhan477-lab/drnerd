@@ -26,7 +26,7 @@
 .hp-due{display:inline-flex;align-items:center;gap:5px;padding:5px 8px 5px 12px;border-radius:99px;
   border:1.5px solid color-mix(in srgb, var(--amber) 45%, transparent);
   background:color-mix(in srgb, var(--amber) 15%, transparent);
-  color:var(--amber);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;
+  color:var(--amber-ink);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;
   transition:transform .22s var(--spring),background .18s}
 @supports not (color:color-mix(in srgb,red,blue)){.hp-due{border:1.5px solid var(--amber-b);background:var(--amber-bg)}}
 @media(hover:hover){.hp-due:hover{background:color-mix(in srgb, var(--amber) 22%, transparent)}@supports not (color:color-mix(in srgb,red,blue)){.hp-due:hover{background:var(--amber-bg)}}}
@@ -214,10 +214,10 @@ html [data-home="focus"] .story-rail{display:none}
 
 .opt.correct{border-color:var(--green);background:var(--green-bg)}
 .opt.correct .opt-letter{background:var(--green);color:white;border-color:var(--green)}
-.opt.correct .opt-pct{color:var(--green)}
+.opt.correct .opt-pct{color:var(--green-ink)}
 .opt.wrong{border-color:var(--red);background:var(--red-bg)}
 .opt.wrong .opt-letter{background:var(--red);color:white;border-color:var(--red)}
-.opt.wrong .opt-pct{color:var(--red)}
+.opt.wrong .opt-pct{color:var(--red-ink)}
 
 /* Reveal card */
 .reveal-card{background:var(--card);border-radius:var(--r);overflow:hidden;
@@ -239,7 +239,7 @@ html [data-home="focus"] .story-rail{display:none}
 .dist-bar{height:100%;border-radius:5px;transition:width .6s var(--ease) .1s;min-width:2px}
 .dist-pct{font-size:11px;font-weight:700;position:absolute;right:7px;top:50%;
   transform:translateY(-50%);color:var(--text);font-family:var(--font-mono)}
-.dist-row.correct-row .dist-letter{color:var(--green);font-weight:800}
+.dist-row.correct-row .dist-letter{color:var(--green-ink);font-weight:800}
 .dist-row.correct-row .dist-bar{background:var(--green)}
 .dist-row.wrong-row .dist-bar{background:var(--red)}
 .dist-row:not(.correct-row):not(.wrong-row) .dist-bar{background:var(--border3)}
@@ -261,20 +261,20 @@ html [data-home="focus"] .story-rail{display:none}
 @media (hover:hover){.btn-home:hover{border-color:var(--teal);color:var(--teal)}}
 .btn-skip{background:transparent;border:1.5px solid var(--border);color:var(--muted);
   font-size:13px;flex:0;min-width:70px;padding:15px 10px}
-@media (hover:hover){.btn-skip:hover{border-color:var(--amber);color:var(--amber)}}
+@media (hover:hover){.btn-skip:hover{border-color:var(--amber);color:var(--amber-ink)}}
 /* Flag: a toggle beside Previous. Amber and a filled pennant say it is on (not colour alone). On a phone the word goes
    (it stays for a screen reader): Home, Previous, Flag and Next are 333 px of a 336 px row, and a row that is
    still too narrow wraps Next onto a line of its own rather than running off the screen. */
 .btn-flag{background:var(--card);border:1.5px solid var(--border);color:var(--muted);font-size:13px;flex:0 0 auto;min-width:52px}
-@media (hover:hover){.btn-flag:hover{border-color:var(--amber);color:var(--amber)}}
-.btn-flag.on{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+@media (hover:hover){.btn-flag:hover{border-color:var(--amber);color:var(--amber-ink)}}
+.btn-flag.on{color:var(--amber-ink);border-color:var(--amber-b);background:var(--amber-bg)}
 .btn-flag.on .icon{fill:currentColor}
 @media(max-width:480px){
   .btn-flag{padding-left:0;padding-right:0}
   .btn-flag-l{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 }
 .rate-flag{display:flex;justify-content:center;margin-top:12px}
-.src-badge.flag-badge{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)}
+.src-badge.flag-badge{color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-b)}
 .src-badge.flag-badge[hidden]{display:none}
 
 /* ═══ RESULTS ═══ */

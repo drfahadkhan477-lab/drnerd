@@ -17,13 +17,13 @@
   display:flex;align-items:center;justify-content:center;transition:all .16s var(--ease)}
 .tool:active{transform:scale(.92)}
 .tool.on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal)}
-.tool.danger.on{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.tool.danger.on{background:var(--red-bg);border-color:var(--red);color:var(--red-ink)}
 .tool-sep{height:1px;background:var(--border2);margin:3px 4px}
 .swatches{display:flex;flex-direction:column;gap:5px;align-items:center}
 .sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;
   transition:transform .14s var(--ease)}
 .sw.on{border-color:var(--text);transform:scale(1.16)}
-.pen-badge{font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--green);
+.pen-badge{font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--green-ink);
   text-align:center;text-transform:uppercase;padding-top:2px}
 .size-picker{display:flex;flex-direction:column;gap:7px;align-items:center;padding:2px 0}
 .size-dot{border:none;padding:0;cursor:pointer;border-radius:50%;background:var(--muted);
@@ -119,7 +119,7 @@
   padding:1px 5px;border-radius:4px}
 .msg.bot p{margin:6px 0}
 .msg.err{align-self:stretch;background:var(--red-bg);border:1px solid var(--red-b);
-  color:var(--red);padding:9px 12px;border-radius:10px;font-size:13px}
+  color:var(--red-ink);padding:9px 12px;border-radius:10px;font-size:13px}
 
 /* ── Apex, full page ──────────────────────────────────────────────────────
    Two ids and a class, so this wins over the bare #ai rules inside the
@@ -197,7 +197,7 @@
 .miss-ask{display:inline-flex;align-items:center;gap:5px;font-size:var(--t-tiny);color:var(--accent);background:var(--card);
   border:1px solid var(--accent);border-radius:999px;padding:6px 12px;min-height:32px;cursor:pointer}
 .cb-head{font-size:var(--t-body);color:var(--text);padding:2px 0 10px}
-.cb-head b{color:var(--danger)}
+.cb-head b{color:var(--red-ink)}
 .cb-sub{display:block;font-size:var(--t-tiny);color:var(--muted);margin-top:3px}
 .cb-h2{margin-top:16px}
 .cb-row{display:flex;align-items:center;gap:9px;padding:3px 0}
@@ -394,7 +394,7 @@
 .peek-body{overflow-y:auto;padding:14px 16px;font-size:16px;line-height:1.7;color:var(--text)}
 .peek-opts{list-style:none;margin:10px 0;padding:0}
 .peek-opts li{padding:5px 9px;border-radius:8px;margin:3px 0;background:var(--card);font-size:13px}
-.peek-opts li.ok{background:var(--green-bg);border:1px solid var(--green-b);color:var(--green)}
+.peek-opts li.ok{background:var(--green-bg);border:1px solid var(--green-b);color:var(--green-ink)}
 .peek-ex{margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);
   font-size:13px;color:var(--muted);line-height:1.66}
 .peek-foot{padding:12px 16px;border-top:1px solid var(--border2)}
