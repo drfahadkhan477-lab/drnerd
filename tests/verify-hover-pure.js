@@ -92,7 +92,6 @@ head('the stylesheets');
   const families = [
     ['the Systole app', dirs],
     ['the Memorizer', [path.join('memorizer', 'app.css')]],
-    ['the Lab page', [path.join('lab', 'app.css')]],
   ];
   for (const [name, files] of families) {
     const text = files.map(f => ({ f, css: fs.readFileSync(path.join(ROOT, f), 'utf8') }));

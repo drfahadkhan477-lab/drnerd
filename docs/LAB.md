@@ -1,7 +1,8 @@
-# The Lab
+# The Practice Lab
 
-A second, small app next to Systole and Memorizer for the things a question bank
-teaches badly because they are heard or drawn rather than read:
+A screen of Systole, opened from **Practice Lab** on the home screen, for the
+things a question bank teaches badly because they are heard or drawn rather than
+read:
 
 - **Heart sounds** — twelve lesions, synthesised on the valve events `physio.js`
   already measures. Press play, name what you hear. Each is offered against the
@@ -16,25 +17,33 @@ teaches badly because they are heard or drawn rather than read:
   not written down).
 
 It remembers what you get wrong and brings it back (the same FSRS scheduler as the
-question bank), keeps a day streak, and stores all of that in the browser. Nothing
-leaves the device.
+question bank), keeps a day streak, and stores all of that in the browser, under its
+own key (`systole-lab-v1`), apart from the question bank's record: Systole's backup
+does not carry it, and a reset of one does not touch the other. Nothing leaves the
+device.
 
-## It contains nothing from ACCSAP
+## How it sits in Systole
 
-Unlike Systole it needs no licensed export, so it builds anywhere, CI included.
+It is not the Rhythm Lab (the `lab` screen, live traces to explore); it is the
+`practice` screen beside it.
 
-```bash
-npm run lab              # → dist-lab/index.html (one file, also works opened locally)
-npm run lab:serve        # build, then serve it at http://localhost:8082
-node scripts/build-lab.js --zip   # → lab-cloudflare.zip, for Cloudflare Pages
-```
+- `src/lab/*.js` are the Lab's modules, loaded by the shell after `physio.js`,
+  `rhythms-extra.js` and `fsrs.js`, which they read as they load. `src/lab/ui.js` draws
+  the screens inside the element Systole gives it: Systole's `buildPractice()` draws an
+  empty `#plabRoot`, and `mountPractice()` hands it to `LabUI.mount()` after every draw
+  and calls `LabUI.unmount()` when any other screen is drawn, which stops a heart sound
+  that is playing.
+- `app/css/practice.css` styles it. Every class and id starts `plab-`, so Systole's own
+  `.btn`, `.chip` and `.card` never reach it, and its colours are Systole's theme
+  tokens: it follows the theme chosen, light or dark, palette by palette.
+- Its keys (1 to 9 answer, Enter or n goes on, p plays, Escape goes back to the Lab's
+  home) answer only while it is on screen; Systole's own keys answer only on the quiz
+  and a mock block.
 
-## Putting it on the iPad
-
-Same as Memorizer (see `docs/IPAD.md`): in Cloudflare, **Workers & Pages → Create →
-Pages → Upload assets**, a *new* project (name it `systole-lab`), upload
-`lab-cloudflare.zip`. Open the address in Safari on the iPad and **Add to Home Screen**.
-From a page opened straight from the Files app nothing is stored, and the Lab says so.
+It needs no licensed export and is built with Systole (`npm run build`). Until it moved
+here it was a separate app with its own build, `scripts/build-lab.js`, and its own
+Cloudflare project; that build is gone. Progress kept by the old separate app lived on
+its own address and does not carry over.
 
 ## What has and has not been checked
 
@@ -47,7 +56,7 @@ strip shows what it is named for, nothing leaves the device.
 
 - The teaching points, the look-alike pairs, the chambers each condition loads and
   where to listen were written for this app and have not been reviewed by a clinician.
-  The page says so.
+  The screen says so.
 - Nobody has *listened* to the heart sounds. The tests prove where the energy is;
   they cannot prove it sounds like a murmur. Use headphones: they are low-pitched.
 - The ECG generator cuts a premature beat's T wave off where the next beat starts, a

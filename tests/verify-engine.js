@@ -247,7 +247,7 @@ head('the shared comment blanker blanks comments, and only comments');
       if (e.isDirectory()) walk(p); else if (e.name.endsWith('.js')) corpus.push(p);
     }
   };
-  ['tests', 'scripts', 'tools', 'src', 'memorizer/src', 'memorizer/tools', 'lab/src']
+  ['tests', 'scripts', 'tools', 'src', 'memorizer/src', 'memorizer/tools']
     .forEach(d => walk(path.join(ROOT, d)));
   const compiles = code => {
     try { vm.compileFunction(code.replace(/^#!.*/, ''), ['exports', 'require', 'module', '__filename', '__dirname']); return true; }

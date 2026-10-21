@@ -605,3 +605,20 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   a pixel, and verify-flags held three badges' text to `var(--amber)` and
   `var(--red)`; once light text took the darker inks, all four failed. → Rule:
   when a role moves to a new token, grep the suites for probes of that role.
+
+## The Practice Lab moves into Systole
+
+- **A name already taken is the first thing to look for.** Systole had a `lab`
+  screen (the Rhythm Lab) and `.lab-*` classes before the separate Lab moved in;
+  bringing it in as `lab` would have replaced one with the other. → Rule: grep
+  the screen name, the global names and the class names before choosing them.
+- **An app that owns its page sets rules for the whole page.** The separate Lab
+  styled bare `h1`, `.card` and `.btn`, set `--bg` and `--accent` on `:root` and
+  listened for keys on the document; inside Systole each of those would have
+  restyled or answered for Systole too. → Rule: when a page becomes a screen,
+  prefix every class and id, take colours from the host's tokens, and make every
+  document-level listener ask whether its screen is up.
+- **Two guards on one door hide each other.** The Lab's key handler returned
+  when it was not mounted, and leaving also reset the Lab to its home, where its
+  drill keys do nothing; removing either changed nothing a test could see. The
+  reset was dropped and the mounted guard is the one a defect would be seen by.

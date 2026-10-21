@@ -1,0 +1,104 @@
+/* ═══════════ The Practice Lab (src/lab/ui.js) ═══════════
+   Heart sounds, pressure tracings, ECG strips and the heart map, drawn by the Lab inside the element Systole gives it.
+   Every class and id is plab-, so Systole's own .btn, .chip and .card never style it, and these rules never style
+   Systole. Its colours are Systole's theme tokens, so it follows the theme chosen, light or dark, palette by palette:
+   only the ECG paper, the two sides of the heart and the ink on an accent button are its own. */
+.plab{
+  --plab-bg:var(--bg);--plab-card:var(--card);--plab-ink:var(--text);--plab-muted:var(--muted);--plab-line:var(--border);
+  --plab-accent:var(--accent);--plab-accent-ink:#fff;
+  --plab-good:var(--green-ink);--plab-good-bg:var(--green-bg);--plab-bad:var(--red-ink);--plab-bad-bg:var(--red-bg);
+  --plab-warn:var(--amber-ink);--plab-warn-bg:var(--amber-bg);
+  --plab-trace:var(--text);--plab-grid:#f0d9d9;--plab-grid-major:#e6b9b9;--plab-right:#cfe0f5;--plab-left:#f6d6d0;
+  --plab-radius:14px;--plab-gap:14px;--plab-font:var(--font-sans);
+  color:var(--plab-ink);font-family:var(--plab-font);padding-bottom:28px;
+}
+/* A dark theme chosen, or Auto on a device set to dark. On the pale accents of the dark palettes (Nocturne's violet,
+   Monitor's mint) white type would not read, so an accent button's ink is near-black there. */
+html[data-theme="dark"] .plab{
+  --plab-accent-ink:#0b1220;--plab-grid:#3b2a2c;--plab-grid-major:#5a3a3d;--plab-right:#26405e;--plab-left:#5a2c28;
+}
+@media (prefers-color-scheme:dark){
+  html:not([data-theme]) .plab{
+    --plab-accent-ink:#0b1220;--plab-grid:#3b2a2c;--plab-grid-major:#5a3a3d;--plab-right:#26405e;--plab-left:#5a2c28;
+  }
+}
+.plab h1{font-size:1.7rem;margin:0 0 4px;letter-spacing:-0.01em;line-height:1.2}
+.plab h2{font-size:1.15rem;margin:0 0 6px}
+.plab p{margin:0 0 10px}
+.plab .plab-muted{color:var(--plab-muted)}
+.plab .plab-small{font-size:0.88rem}
+.plab button{font:inherit;color:inherit;cursor:pointer}
+.plab button:focus-visible,.plab select:focus-visible{outline:3px solid var(--plab-accent);outline-offset:2px}
+
+.plab-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:6px 0 14px}
+.plab-topbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;min-height:44px}
+.plab-topbar .plab-title{font-weight:600;flex:1}
+.plab-back{flex:none;border:1px solid var(--plab-line);background:var(--plab-card);border-radius:999px;padding:8px 14px;min-height:44px}
+
+.plab-card{background:var(--plab-card);border:1px solid var(--plab-line);border-radius:var(--plab-radius);padding:16px;margin-bottom:var(--plab-gap)}
+.plab-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--plab-gap);margin-bottom:var(--plab-gap)}
+.plab-tile{text-align:left;background:var(--plab-card);border:1px solid var(--plab-line);border-radius:var(--plab-radius);padding:16px;min-height:120px;display:flex;flex-direction:column;gap:6px}
+@media (hover:hover){.plab-tile:hover{border-color:var(--plab-accent)}}
+.plab-tile .plab-count{margin-top:auto;font-size:0.88rem;color:var(--plab-muted)}
+.plab-tile .plab-due{color:var(--plab-warn);font-weight:600}
+.plab-stats{display:flex;flex-wrap:wrap;gap:8px 22px}
+.plab-stat b{display:block;font-size:1.35rem;line-height:1.1}
+.plab-stat span{font-size:0.82rem;color:var(--plab-muted)}
+
+.plab-stage{position:relative}
+canvas.plab-view{width:100%;display:block;border:1px solid var(--plab-line);border-radius:10px;background:var(--plab-card)}
+.plab-cursor{position:absolute;top:0;bottom:0;width:2px;background:var(--plab-accent);pointer-events:none;opacity:0}
+.plab-cursor.plab-on{opacity:0.8}
+.plab-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
+.plab-btn{border:1px solid var(--plab-line);background:var(--plab-card);border-radius:12px;padding:10px 16px;min-height:48px;font-weight:600}
+.plab-btn.plab-primary,.plab-btn[aria-pressed="true"]{background:var(--plab-accent);color:var(--plab-accent-ink);border-color:var(--plab-accent)}
+.plab-btn:disabled{opacity:0.5;cursor:default}
+
+.plab-options{display:grid;gap:10px;margin:14px 0}
+.plab-option{display:flex;gap:12px;align-items:center;text-align:left;width:100%;border:1px solid var(--plab-line);background:var(--plab-card);border-radius:12px;padding:12px 14px;min-height:52px}
+@media (hover:hover){.plab-option:hover:not(:disabled){border-color:var(--plab-accent)}}
+.plab-option .plab-num{flex:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--plab-line);display:grid;place-items:center;font-size:0.82rem;color:var(--plab-muted)}
+.plab-option.plab-right{background:var(--plab-good-bg);border-color:var(--plab-good)}
+.plab-option.plab-wrong{background:var(--plab-bad-bg);border-color:var(--plab-bad)}
+.plab-option:disabled{cursor:default}
+
+.plab-verdict{font-weight:700;margin-bottom:6px}
+.plab-verdict.plab-right{color:var(--plab-good)}
+.plab-verdict.plab-wrong{color:var(--plab-bad)}
+.plab-points{margin:8px 0 0;padding-left:1.2rem}
+.plab-points li{margin-bottom:6px}
+.plab-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.plab-chip{border:1px solid var(--plab-line);border-radius:999px;padding:3px 10px;font-size:0.85rem;background:var(--plab-bg)}
+
+.plab-banner{border:1px solid var(--amber-b);background:var(--plab-warn-bg);color:var(--plab-ink);border-radius:10px;padding:10px 12px;margin-bottom:var(--plab-gap);font-size:0.92rem}
+
+.plab-explore{display:grid;grid-template-columns:1fr;gap:var(--plab-gap)}
+.plab-explore>div{min-width:0}
+@media (min-width:760px){.plab-explore{grid-template-columns:1.15fr 0.85fr}}
+.plab select{font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--plab-line);background:var(--plab-card);color:var(--plab-ink);min-height:48px;max-width:100%}
+svg.plab-heart,svg.plab-chest{width:100%;height:auto;display:block}
+svg.plab-chest{max-width:260px;margin:0 auto}
+.plab-ch{stroke:var(--plab-ink);stroke-width:1.5}
+.plab-ch.plab-ch-r{fill:var(--plab-right)}
+.plab-ch.plab-ch-l{fill:var(--plab-left)}
+.plab-ch.plab-big{stroke-width:4;stroke-dasharray:10 5}
+.plab-ch.plab-thick{stroke-width:7}
+.plab-ch.plab-site{stroke:var(--plab-accent);stroke-width:5}
+.plab-lbl{fill:var(--plab-ink);font:600 14px var(--plab-font);text-anchor:middle;dominant-baseline:middle;pointer-events:none;paint-order:stroke;stroke:var(--plab-card);stroke-width:4px;stroke-linejoin:round}
+.plab-lbl.plab-lbl-sm{font-size:11px;font-weight:500;fill:var(--plab-muted)}
+.plab-flow-n{stroke:var(--plab-muted);stroke-width:2;fill:none;opacity:0.55;marker-end:url(#plab-arr-n)}
+.plab-flow-a{stroke:var(--plab-warn);stroke-width:5;fill:none;marker-end:url(#plab-arr-a);stroke-dasharray:12 8;animation:plabFlow 1s linear infinite}
+@keyframes plabFlow{to{stroke-dashoffset:-20}}
+@media (prefers-reduced-motion:reduce){.plab-flow-a{animation:none}}
+.plab-valve{stroke:var(--plab-ink);stroke-width:2;fill:var(--plab-card)}
+.plab-valve.plab-stenosis,.plab-valve.plab-prolapse{fill:var(--plab-warn)}
+.plab-valve.plab-regurgitation{fill:var(--plab-bad)}
+.plab-body{fill:none;stroke:var(--plab-muted);stroke-width:2}
+.plab-area{fill:var(--plab-card);stroke:var(--plab-muted);stroke-width:2}
+.plab-area.plab-on{fill:var(--plab-accent);stroke:var(--plab-accent)}
+.plab-legend{font-size:0.85rem;color:var(--plab-muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.plab-kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;margin:10px 0 0}
+.plab-kv dt{color:var(--plab-muted)}
+.plab-kv dd{margin:0}
+.plab-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.plab-foot{margin-top:22px}
