@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 96 suites that are pure Node with no Playwright and no
+#   logic        the 98 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -284,6 +284,10 @@ jobs:
         run: node tests/verify-mockexam-pure.js
       - name: a flag is an id kept once and in order, read back only if it is nothing but ids; the flagged deck holds the questions the bank has; a note or a mark lists a question, found by every word typed (103 checks)
         run: node tests/verify-flagset-pure.js
+      - name: Apex is told how the fellow answers (certain and wrong, why they miss, pace, the last mock block) only with the samples to say, what they chose on the question open, and their recent misses, and in grounded mode never which option or whether it was right (134 checks)
+        run: node tests/verify-apexsignals-pure.js
+      - name: the page's own Apex code, cut from the shell, tells it what the fellow did in both modes and the key never in grounded mode, its misses, plan and flagged-quiz tools answer, and every tool refuses while a mock block is open (60 checks)
+        run: node tests/verify-apexctx-pure.js
       - name: questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair (27 checks)
         run: node tests/verify-topicrun-pure.js
       - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (35 checks)
@@ -647,6 +651,9 @@ jobs:
         name: the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages (20 checks)
         run: node tests/verify-reflist.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
+        run: node tests/verify-apexask.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -926,6 +933,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages (20 checks)
         run: node tests/verify-reflist.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
+        run: node tests/verify-apexask.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
