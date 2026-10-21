@@ -231,6 +231,10 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     await page.evaluate(() => { closeThemeMenu(); AI.provider = 'gemini'; AI.gemini = { key: 'test-key', model: 'gemini-2.5-flash' }; toggleAI(); });
     await page.waitForFunction(() => !!document.getElementById('aiSend') && !!document.getElementById('aiMore'), null, { timeout: 6000 }).catch(() => {});
     await quiet(page);
+    /* Precondition: taps reach the page. While a view transition runs, the engine hit-tests the root, and every point
+       reads as <html>; the composer's text box, not the two buttons under test, says when that window has closed. */
+    await page.waitForFunction(() => { const t = document.getElementById('aiIn'); if (!t) return false; const q = t.getBoundingClientRect();
+      const el = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !!el && el !== document.documentElement; }, null, { timeout: 6000 }).catch(() => {});
     /* The hit area as the engine has it: from the centre outward, in quarter pixels, as far as a tap still lands on the button. */
     const hit = await page.evaluate(() => ['aiMore', 'aiSend'].map(id => {
       const b = document.getElementById(id); if (!b) return { id, drawn: 'missing', w: 0, h: 0 };
