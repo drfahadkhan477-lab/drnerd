@@ -246,10 +246,20 @@ function classify(table, use) {
    `overflow-wrap:var(--wrap)`. The text of the declaration that holds it names the custom property, not the property, so usesOf cannot see it; and it is judged when the
    page is drawn, so a plain value written before the var() is no fallback. Across all the stylesheets given: [{ file, root }] -> uses of kind `value`, with `via` the custom property. */
 function customValueUses(files, watch) {
-  const consumers = new Map();                                   // custom property -> the properties that read it with var()
+  const consumers = new Map();                                   // custom property -> the properties that read it with var(), directly or through another custom property
+  const reads = new Map();                                       // custom property -> the custom properties its value reads with var()
   for (const { root } of files) for (const node of blocks(root)) for (const d of node.decls) {
-    if (d.prop.startsWith('--')) continue;
-    for (const m of d.value.matchAll(/var\(\s*(--[\w-]+)/g)) { if (!consumers.has(m[1])) consumers.set(m[1], new Set()); consumers.get(m[1]).add(d.prop); }
+    for (const m of d.value.matchAll(/var\(\s*(--[\w-]+)/g)) {
+      if (d.prop.startsWith('--')) { if (!reads.has(d.prop)) reads.set(d.prop, new Set()); reads.get(d.prop).add(m[1]); }
+      else { if (!consumers.has(m[1])) consumers.set(m[1], new Set()); consumers.get(m[1]).add(d.prop); }
+    }
+  }
+  for (let changed = true; changed;) {                           // --b:var(--a) read by display: --a is read by display too, to any depth (and a loop ends)
+    changed = false;
+    for (const [from, to] of reads) for (const c of to) for (const prop of consumers.get(from) || []) {
+      if (!consumers.has(c)) consumers.set(c, new Set());
+      if (!consumers.get(c).has(prop)) { consumers.get(c).add(prop); changed = true; }
+    }
   }
   const out = [];
   for (const { file, root } of files) for (const node of blocks(root)) for (const d of node.decls) {
