@@ -654,6 +654,9 @@ jobs:
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (71 checks)
+        run: node tests/verify-readsize.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -936,6 +939,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (71 checks)
+        run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html

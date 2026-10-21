@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/ipad.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -4802,6 +4802,38 @@ function cycleTheme(){
   const i=THEMES.findIndex(t=>t.id===themeDef().id);
   setTheme(THEMES[(i+1)%THEMES.length].id);
 }
+/* ── reading size ──
+   How large the question, its options, the explanation and Apex's thread are drawn (app/css/ipad.css). Kept on the device and
+   not in the saved record or a backup: the iPad and the phone that share one want different sizes. Standard is no attribute
+   at all, so the default page is the page it was. */
+const READ_KEY='accsap12.readsize';
+const READ_SIZES=['Standard','Large','Larger','Largest'];
+function readSize(){
+  try{ const v=Number(localStorage.getItem(READ_KEY)); return Number.isInteger(v)&&v>=0&&v<READ_SIZES.length?v:0; }
+  catch(_){ return 0; }
+}
+function applyReadSize(){
+  const n=readSize(), h=document.documentElement;
+  if(n) h.setAttribute('data-read',String(n)); else h.removeAttribute('data-read');
+}
+function setReadSize(n){
+  if(!(Number.isInteger(n)&&n>=0&&n<READ_SIZES.length)) return;
+  try{ if(n) localStorage.setItem(READ_KEY,String(n)); else localStorage.removeItem(READ_KEY); }catch(_){}
+  applyReadSize();
+  /* What is shown is what was kept: storage that refused the write leaves the size, and the menu, as they were. */
+  const kept=readSize();
+  /* Painted in place: a render would close the menu the fellow is choosing in, and the question would move under them. */
+  document.querySelectorAll('.read-opt').forEach(b=>{ const on=+b.dataset.read===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false'); });
+  const live=document.getElementById('srLive');
+  if(live){ live.textContent=''; live.textContent='Text size: '+READ_SIZES[kept]+'.'; }
+}
+function readSizeHtml(){
+  const cur=readSize();
+  return `<div class="theme-menu-h" id="readSizeH">Text size</div>
+    <div class="read-row" role="group" aria-labelledby="readSizeH">${READ_SIZES.map((label,i)=>
+      `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" aria-checked="${i===cur}" data-read="${i}"
+        aria-label="${label}" title="${label}" onclick="setReadSize(${i})"><span style="font-size:${[13,16,19,23][i]}px">A</span></button>`).join('')}</div>`;
+}
 function themeOptHtml(t){
   const on=themeDef().id===t.id;
   return `<button class="theme-opt${on?' on':''}" role="menuitemradio" aria-checked="${on}"
@@ -6008,6 +6040,7 @@ function buildNav(){
           ${THEMES.filter(t=>t.group==='light').map(themeOptHtml).join('')}
           <div class="theme-menu-h">Dark</div>
           ${THEMES.filter(t=>t.group==='dark').map(themeOptHtml).join('')}
+          ${readSizeHtml()}
         </div>
       </div>
     </div>
@@ -7096,6 +7129,7 @@ document.addEventListener('touchend',ev=>{
   lastTap=now;},{passive:false});
 
 applyTheme();
+applyReadSize();
 /* After applyTheme so the first paint is already right, and before render so
    a flip during boot is not missed. */
 watchSystemTheme();

@@ -52,7 +52,7 @@ const APP = path.join(ROOT, 'app', 'systole.html');
    so it is read there, from the page and the stylesheet that ship. A copy
    kept in this file would go on passing after the app changed. */
 function between(file, first, last) {
-  /* The stylesheet is ten pieces joined in the shell's order (tests/_appcut.js). */
+  /* The stylesheet is eleven pieces joined in the shell's order (tests/_appcut.js). */
   const src = file === 'stylesheet' ? require('./_appcut.js').stylesheet() : fs.readFileSync(file, 'utf8');
   const name = file === 'stylesheet' ? 'the stylesheet' : path.relative(ROOT, file);
   for (const a of [first, last]) {

@@ -552,3 +552,30 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
   checks read the new line alone. → Rule: for anything grounded mode is told,
   ask what it adds to what the model already holds (Profile, the tools), not
   only what it says by itself.
+
+## The iPad pass (the fourth upgrade)
+
+- **A rule with a breakpoint is checked on both sides of it.** The text size
+  scaled an option from 13 px only up to 380 px, but options are 13 px up to
+  767; the suite measured 360 px, the one band where the factor was right, and
+  stayed green while every phone in portrait and every Split View window got
+  options up to 1.7 times larger. → Rule: find the breakpoints the rule depends
+  on (`grep -n "@media" app/css/*.css` for the property) and measure a width in
+  each band.
+- **An entrance animation owns the transform.** The rail's `popIn` leaves
+  `transform` at its last keyframe, so the column meant to be centred with
+  `translateY(-50%)` sat from the middle down and ran off an iPad on its side;
+  and a tap measured during the animation landed nowhere. → Rule: do not
+  centre with a transform an animation also sets; wait for
+  `getAnimations({subtree:true})` to finish as a precondition before measuring
+  where something rests.
+- **Replace a count only inside the label it belongs to.** A `sed` of
+  "(43 checks)" to "(71 checks)" for the new suite also changed the Voice
+  card's, which had 43 too; verify-stats stayed green because both suites are
+  outside the record's comparison. → Rule: edit the one step by its run line,
+  and read the workflow diff before committing.
+- **Look at what lies on top, not only at what is there.** The reviewer of the
+  composer asked for 44 px buttons; measuring the hit area from the centre
+  outward found the pencil's rail lying over half of Send on an iPad in
+  portrait, a defect no layout check had seen because each looked at one layer.
+  → Rule: a tap target's check walks `elementFromPoint` across the target.
