@@ -596,3 +596,12 @@ code's own comments; facts the whole project must obey belong in `AGENTS.md`
 - **An injection has to be a defect.** Amber `#D97706` was injected as "too dark"
   and survived; it measures 5.2 to 5.9:1 on these grounds and was not a defect. → Rule:
   compute what an injected value should do before reading its survival as a gap.
+- **Measure the other theme before scoping to one.** The first cut fixed the
+  dark themes and promised light pages "unchanged", with a check holding them to
+  it; light text measured 3.2 to 5.0:1 as well, so the promise kept a defect.
+  → Rule: measure every theme before deciding which ones a contrast fix covers.
+- **A check that probes text for a fill colour moves when text gets its own
+  colour.** verify-tokens read `.fc-streak`'s text to prove `--warning` reached
+  a pixel, and verify-flags held three badges' text to `var(--amber)` and
+  `var(--red)`; once light text took the darker inks, all four failed. → Rule:
+  when a role moves to a new token, grep the suites for probes of that role.

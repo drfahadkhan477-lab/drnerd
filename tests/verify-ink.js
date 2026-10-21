@@ -1,22 +1,21 @@
 #!/usr/bin/env node
 /*
- * Green, red and amber text that can be read on a dark theme.
+ * Green, red and amber text that can be read, in every theme.
  *
  *   node tests/verify-ink.js build/synthetic/systole.html
  *
  * --green, --red and --amber are one colour in every theme (verify-theme, verify-tokens) and fill the letter badges
- * under white type. On a dark ground the deep colours read at 3.0 to 4.9:1, under the 4.5:1 that text needs, so text
- * in them takes --green-ink, --red-ink or --amber-ink: the colour itself in a light theme, a lighter one in a dark one.
- * What is measured, rather than assumed:
+ * under white type. As text they read at 3.2 to 5.0:1 on the light grounds and 3.0 to 4.9:1 on the dark ones, under the
+ * 4.5:1 that text needs, so text in them takes --green-ink, --red-ink or --amber-ink: a step darker in a light theme, a
+ * step lighter in a dark one. What is measured, rather than assumed:
  *   · no stylesheet rule writes text in a fill colour (the rules as written, comments blanked);
- *   · in each dark theme, and in Auto on a dark device, each ink clears 4.5:1 on the page, a card, the raised surface
- *     and its own tint; the green ink stays clear of Monitor's teal accent;
- *   · in each light theme, and in a light theme on a dark device, each ink is its fill colour, so light pages are as
- *     they were;
- *   · real text the shell colours itself clears 4.5:1 against what is under it in every dark theme: an option's
- *     peer figure, right and wrong, the Flag button on, and on a quiz's results the score, a chapter's figure and Retry
- *     Missed; and in Daylight the same text is the fill colour it always was. The mock report writes its score and
- *     chapter figures through the same semText, and is not opened here;
+ *   · in each of the nine themes, and in Auto and a light theme on a device of the other scheme, each ink clears 4.5:1
+ *     on the page, a card, the raised surface and its own tint, and amber on the home screen's due chip (its fill at
+ *     22%, as .hp-due is hovered) over the page and over a card; the dark green ink stays clear of Monitor's teal accent;
+ *   · real text the shell colours itself clears 4.5:1 against what is under it in every one of those, and is written in
+ *     its ink: an option's peer figure, right and wrong, the Flag button on, and on a quiz's results the score, a
+ *     chapter's figure and Retry Missed. The mock report writes its score and chapter figures through the same semText,
+ *     and is not opened here;
  *   · the correct option's letter badge is still white on the deep green;
  *   · nothing throws.
  */
@@ -40,9 +39,11 @@ const ok = (label, cond, detail = '') => {
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
-/* [theme, the device's own scheme] */
-const DARK = [['auto', 'dark'], ['midnight', 'light'], ['nocturne', 'light'], ['cathlab', 'light'], ['monitor', 'light'], ['contrast', 'light']];
-const LIGHT = [['auto', 'light'], ['daylight', 'light'], ['slate', 'light'], ['parchment', 'light'], ['daylight', 'dark'], ['parchment', 'dark']];
+/* [theme, the device's own scheme, how a check names it] */
+const STATES = [['auto', 'dark', 'Auto on a dark device'], ['midnight', 'light', 'Midnight'], ['nocturne', 'light', 'Nocturne'],
+  ['cathlab', 'light', 'Cath Lab'], ['monitor', 'light', 'Monitor'], ['contrast', 'light', 'Contrast'],
+  ['auto', 'light', 'Auto on a light device'], ['daylight', 'light', 'Daylight'], ['slate', 'light', 'Slate'], ['parchment', 'light', 'Parchment'],
+  ['daylight', 'dark', 'Daylight on a dark device'], ['parchment', 'dark', 'Parchment on a dark device']];
 const INKS = ['green', 'red', 'amber'];
 
 /* In the page: colours as rgba arrays, alpha-composited grounds, WCAG contrast. Installed once per page. */
@@ -58,15 +59,16 @@ const TOOLS = () => {
   const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
   const over = (top, under) => { const a = top[3]; return [0, 1, 2].map(i => top[i] * a + under[i] * (1 - a)).concat(1); };
   /* A token as the cascade resolves it on this page now. */
-  const token = name => { const p = document.createElement('div'); p.style.color = 'var(' + name + ')'; document.body.appendChild(p);
+  const colour = expr => { const p = document.createElement('div'); p.style.color = expr; document.body.appendChild(p);
     const c = parse(getComputedStyle(p).color); p.remove(); return c; };
+  const token = name => colour('var(' + name + ')');
   /* What lies under an element: its own background and its ancestors', composited until one is opaque. */
   const ground = el => { const layers = []; for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
       const c = parse(getComputedStyle(n).backgroundColor); if (c && c[3] > 0) { layers.push(c); if (c[3] >= 1) break; } }
     let g = [255, 255, 255, 1]; for (let i = layers.length - 1; i >= 0; i--) g = over(layers[i], g); return g; };
   const hue = c => { const [r, g, b] = c.slice(0, 3).map(v => v / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
     if (!d) return 0; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
-  window.__ink = { parse, contrast, token, ground, hue, same: (a, b) => !!a && !!b && a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) < 0.6) };
+  window.__ink = { parse, contrast, colour, token, ground, hue, same: (a, b) => !!a && !!b && a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) < 0.6) };
 };
 
 (async () => {
@@ -98,48 +100,43 @@ const TOOLS = () => {
   await page.evaluate(TOOLS);
   const theme = async (id, scheme) => { await page.emulateMedia({ colorScheme: scheme }); await page.evaluate(id => setTheme(id), id); };
 
-  head('each ink on each dark ground');
-  for (const [id, scheme] of DARK) {
+  head('each ink on each ground of each theme');
+  for (const [id, scheme, name] of STATES) {
     await theme(id, scheme);
     const m = await page.evaluate(inks => {
-      const T = window.__ink, grounds = ['--bg', '--card', '--white'];
+      const T = window.__ink;
       return inks.map(k => { const c = T.token('--' + k + '-ink');
-        const r = grounds.concat('--' + k + '-bg').map(g => [g, Math.round(T.contrast(c, T.token(g)) * 100) / 100]);
+        const grounds = [['page', T.token('--bg')], ['card', T.token('--card')], ['raised', T.token('--white')], ['tint', T.token('--' + k + '-bg')]];
+        /* The one text on a tinted chip of its own fill: the home screen's "N due", amber at 15%, 22% when hovered. */
+        if (k === 'amber') grounds.push(['due chip on the page', T.colour('color-mix(in srgb, var(--amber) 22%, var(--bg))')],
+          ['due chip on a card', T.colour('color-mix(in srgb, var(--amber) 22%, var(--card))')]);
+        const r = grounds.map(([g, v]) => [g, c && v ? Math.round(T.contrast(c, v) * 100) / 100 : 0]);
         return { k, ink: c && c.slice(0, 3).map(Math.round).join(','), min: Math.min(...r.map(x => x[1])), r }; });
     }, INKS);
-    for (const x of m) ok(`${id}${id === 'auto' ? ' on a dark device' : ''}: ${x.k} text clears 4.5:1 on the page, a card, the raised surface and its own tint`,
+    for (const x of m) ok(`${name}: ${x.k} text clears 4.5:1 on the page, a card, the raised surface and its own tint${x.k === 'amber' ? ', and on the due chip' : ''}`,
       x.min >= 4.5, `ink ${x.ink}; ` + x.r.map(([g, v]) => g + ' ' + v).join(', '));
   }
   await theme('monitor', 'light');
   const apart = await page.evaluate(() => { const T = window.__ink; return Math.round(Math.abs(T.hue(T.token('--green-ink')) - T.hue(T.token('--teal')))); });
   ok('Monitor: the green ink is at least 20° of hue from the teal accent, so "correct" does not read as the accent', apart >= 20, apart + '°');
 
-  head('in a light theme each ink is its fill, as the page always was');
-  for (const [id, scheme] of LIGHT) {
-    await theme(id, scheme);
-    const m = await page.evaluate(inks => { const T = window.__ink;
-      return inks.map(k => ({ k, same: T.same(T.token('--' + k + '-ink'), T.token('--' + k)), fill: T.token('--' + k) && T.token('--' + k).slice(0, 3).join(','), ink: T.token('--' + k + '-ink') && T.token('--' + k + '-ink').slice(0, 3).map(Math.round).join(',') })); }, INKS);
-    ok(`${id}${scheme === 'dark' ? ' on a dark device' : ''}: green, red and amber text are the fill colours`, m.every(x => x.same), JSON.stringify(m));
-  }
-
   /* Real text, coloured by the stylesheets and the shell's own inline styles. Each is measured against what is under it
-     on the page, in every dark theme, with the page left where it is. */
-  const measure = (probes) => page.evaluate(probes => { const T = window.__ink;
-    return probes.map(([name, sel]) => { const el = document.querySelector(sel); if (!el) return { name, missing: sel };
+     on the page, in every theme, with the page left where it is; and it has to be its ink, so text that reads only because
+     it lost its colour (written in --text, say) is caught as well. */
+  const measure = probes => page.evaluate(probes => { const T = window.__ink;
+    return probes.map(([name, sel, k]) => { const el = document.querySelector(sel); if (!el) return { name, missing: sel };
       const c = T.parse(getComputedStyle(el).color), g = T.ground(el);
-      return { name, ratio: Math.round(T.contrast(c, g) * 100) / 100, c: c.slice(0, 3).map(Math.round).join(',') }; }); }, probes);
+      return { name, ratio: Math.round(T.contrast(c, g) * 100) / 100, inked: T.same(c, T.token('--' + k + '-ink')) }; }); }, probes);
   const sweep = async (probes, where) => {
     const per = {};
-    for (const [id, scheme] of DARK) { await theme(id, scheme); for (const r of await measure(probes)) (per[r.name] = per[r.name] || []).push([id, r]); }
+    for (const [id, scheme, label] of STATES) { await theme(id, scheme); for (const r of await measure(probes)) (per[r.name] = per[r.name] || []).push([label, r]); }
     for (const [name] of probes) {
       const rows = per[name], bad = rows.filter(([, r]) => r.missing || !(r.ratio >= 4.5));
-      ok(`${where}: ${name} clears 4.5:1 in every dark theme`, bad.length === 0,
-        rows.map(([id, r]) => id + ' ' + (r.missing ? 'missing' : r.ratio)).join(', '));
+      ok(`${where}: ${name} clears 4.5:1 in every theme`, bad.length === 0,
+        bad.length ? bad.map(([id, r]) => id + ' ' + (r.missing ? 'missing' : r.ratio)).join(', ') : 'lowest ' + Math.min(...rows.map(([, r]) => r.ratio)));
     }
-    await theme('daylight', 'light');
-    const day = await page.evaluate(probes => { const T = window.__ink;
-      return probes.map(([name, sel, k]) => { const el = document.querySelector(sel); return { name, same: !!el && T.same(T.parse(getComputedStyle(el).color), T.token('--' + k)) }; }); }, probes);
-    ok(`${where}: in Daylight the same text is the fill colour it always was`, day.every(x => x.same), JSON.stringify(day.filter(x => !x.same)));
+    const off = Object.values(per).flat().filter(([, r]) => !r.inked).map(([id, r]) => r.name + ' in ' + id);
+    ok(`${where}: and in every theme that text is written in its ink`, off.length === 0, off.slice(0, 4).join('; ') || 'all');
   };
 
   head('real text on the quiz');

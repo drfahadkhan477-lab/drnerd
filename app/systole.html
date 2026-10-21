@@ -2097,8 +2097,8 @@ function buildStats(){
     </div>
   </div>`;
 }
-/* The text colour for a semantic fill: var(--green) fills a bar or a ring, var(--green-ink) writes its figure, which on a
-   dark ground is a lighter green (base.css). Anything else is its own text colour. */
+/* The text colour for a semantic fill: var(--green) fills a bar or a ring, var(--green-ink) writes its figure, a step of
+   the same green that reads on the theme's ground (base.css). Anything else is its own text colour. */
 function semText(v){ return String(v).replace(/^var\(--(green|red|amber)\)$/,'var(--$1-ink)'); }
 function retentionTile(){
   const r=avgRetention();

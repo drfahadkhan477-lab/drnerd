@@ -591,7 +591,7 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (41 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: green, red and amber text a reader can read on every dark theme, the colours that fill left as they are (40 checks)
+        name: green, red and amber text a reader can read in every theme, the colours that fill left as they are (52 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the welcome bar, the progress bar, three layouts (66 checks)
@@ -889,7 +889,7 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (41 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: green, red and amber text a reader can read on every dark theme, the colours that fill left as they are (40 checks)
+        name: green, red and amber text a reader can read in every theme, the colours that fill left as they are (52 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the welcome bar, the progress bar, three layouts (66 checks)

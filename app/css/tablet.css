@@ -136,5 +136,5 @@ html[data-theme="light"]{
   --text:#0F172A;--muted:#475569;--dim:#94A3B8;--faint:#CBD5E1;
   --green-bg:#ECFDF5;--green-b:#A7F3D0;--red-bg:#FFF1F1;--red-b:#FECACA;
   --amber-bg:#FFFBEB;--amber-b:#FDE68A;--warn-bg:var(--amber-bg);--warn-b:var(--amber-b);
-  --green-ink:var(--green);--red-ink:var(--red);--amber-ink:var(--amber);   /* over base.css's dark block on a dark OS */
+  --green-ink:#046C4E;--red-ink:#B91C1C;--amber-ink:#92400E;   /* base.css's light inks, over its dark block on a dark OS */
 }
