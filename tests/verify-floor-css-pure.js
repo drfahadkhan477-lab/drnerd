@@ -390,7 +390,8 @@ head('and a style written in script is held to the rows the table has');
      scripts and pages write inline (style attributes, cssText strings, el.style.x, setProperty) is read by the same reader as the stylesheets and must be in the
      table, so that a feature that is only ever written there cannot arrive unclassified. And a property or a function that a row says is newer than the floor, in a
      string that looks like a style or in an assignment to element.style, is found, unless the row says it is read as an older spelling there (the image figure's
-     ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). */
+     ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). What is not read: CSS that a function builds from data
+     (the Memorizer's look sheet, memorizer/src/appearance.js css()), and a style assembled from variables entirely. */
   const T = C.loadTable();
   const above = Object.entries(T.above).filter(([k, r]) => (k.startsWith('property ') || k.startsWith('function ')) && r.class !== 'inert');
   const names = above.map(([k]) => k.split(' ')[1]);
@@ -427,7 +428,7 @@ head('and a style written in script is held to the rows the table has');
      use in the same file is found), and the exemptions that excuse nothing: a function that is not there, or does not use the feature, or a file that is
      not read, or a file where a function is meant. */
   const scriptProblems = (sources, above, found) => {
-    const hits = [], stale = [], seen = new Set();
+    const hits = [], stale = [], seen = new Set(), rests = {};
     for (const { rel, text } of sources) {
       let rest = text;
       for (const [k, r] of above) for (const e of Object.keys(r.exempt || {})) {
@@ -441,12 +442,13 @@ head('and a style written in script is held to the rows the table has');
         rest = rest.slice(0, span[0]) + inside.replace(/[^\n]/g, ' ') + rest.slice(span[1]);
       }
       for (const k of found(rest)) hits.push(`${rel}: ${k}`);
+      rests[rel] = rest;
     }
     for (const [k, r] of above) for (const e of Object.keys(r.exempt || {})) {
       if (e.includes('#')) { if (!seen.has(k + ' ' + e)) stale.push(`${e}: no such file is read`); }
       else if (/\.(?:js|html)$/.test(e)) stale.push(`${e}: a file is not an exemption, name the function (file#function)`);
     }
-    return { hits, stale };
+    return { hits, stale, rests };
   };
   {
     const AR = { 'property aspect-ratio': { class: 'fallback', exempt: { 'a.js#paint': 'x' } } };
@@ -467,18 +469,32 @@ head('and a style written in script is held to the rows the table has');
   const real = scriptProblems(sources, above, found);
   ok('no script or markup that Safari reads sets a property or calls a function the table says is newer than the floor, except in the function its row names', real.hits.length === 0, list0(real.hits) || `${sources.length} files, ${names.length} names`);
   ok('and every exemption of a script names a function that is there and sets the feature', real.stale.length === 0, list0(real.stale) || 'each is used');
-  const IN = text => C.inlineUses(text).map(u => u.key);
+  const IN = text => C.inlineUses(text, null).map(u => u.key);
   ok('the inline reader finds a property in a style attribute, a cssText string, a helper\'s style:, setAttribute, an assignment, setProperty and a custom property, and a function of a plain value', IN('<div style="inset:0;color:red">').join() === 'property inset,property color' &&
      IN("box.style.cssText = 'position:fixed;inset:0;z-index:1'").join() === 'property position,property inset,property z-index' && IN('el.style.aspectRatio = "1 / 1"; el.style.cssFloat = "left"').join() === 'property aspect-ratio,property float' &&
      IN("h('div', { style: 'container-type:inline-size' })").join() === 'property container-type' && IN("el.setAttribute('style', 'container-type:inline-size')").join() === 'property container-type' &&
      IN("el.style.setProperty('aspect-ratio', '1'); el.style.setProperty('--x', '1')").join() === 'property aspect-ratio,property --*' && IN('<i style="background:color-mix(in srgb,red,blue)">').join() === 'property background,function color-mix');
-  ok('and nothing in a class name, a comment, a comparison, a read, a style: that is not a declaration, or script putting a value together', !IN('<i class="inset aspect-ratio">').length && !IN('// style="inset:0"').length && !IN('if (el.style.display === "none") {}').length &&
-     !IN('var w = el.style.width;').length && !IN("var o = { style: 'solid' };").length && IN("'<i style=\"width:' + Math.round(w) + 'px\">'").join() === 'property width' && IN('<i style="clip-path:inset(0 ${(100 - x).toFixed(2)}% 0 0 round 5px)">').join() === 'property clip-path');
-  ok('and a line is the line it is on', C.inlineUses('a\nb\n<i style="color:red">').map(u => u.line).join() === '3');
-  const unlistedInline = [];
-  let nInline = 0;
-  for (const { rel, text } of sources) for (const u of C.inlineUses(text)) { nInline++; if (C.classify(T, u).how === 'unlisted') unlistedInline.push(`${rel}:${u.line} ${u.key}`); }
-  ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', unlistedInline.length === 0 && nInline > 0, list0(unlistedInline) || `${nInline} uses`);
+  ok('and it finds what the stylesheet reader finds in a value: a unit, a function with its units, a color', IN('<div style="height:100dvh">').join() === 'property height,unit dvh' && IN('<i style="width:min(88vw,1100px)">').join() === 'property width,function min,unit vw,unit px' &&
+     IN('<i style="color:#1234abcd">').join() === 'property color,color hex-alpha');
+  ok('and a <style> block of a page, with the assembler\'s slots taken out, and a style element that a script fills with literals, are read as stylesheets', IN('<style>.x{container-type:inline-size}</style>').join() === 'property container-type' &&
+     IN('<style>@@SLOT[app:app/css/a.css]@@ .y{color:red}</style>').join() === 'property color' && IN("var st = document.createElement('style'); st.textContent = '.a{width:' + w + 'px}' + '@keyframes k{from{opacity:0}}';").join() === 'property width,unit px,atrule @keyframes,property opacity' &&
+     IN("var st = document.createElement('style'); st.textContent = css(look);").length === 0);
+  ok('and nothing in a class name, a comment, a comparison, a read, a style: that is not a declaration, a text that is not a style element\'s, or script putting a value together', !IN('<i class="inset aspect-ratio">').length && !IN('// style="inset:0"').length && !IN('if (el.style.display === "none") {}').length &&
+     !IN('var w = el.style.width;').length && !IN("var o = { style: 'solid' };").length && !IN("var el = document.createElement('div'); el.textContent = '.a{inset:0}';").length &&
+     IN("'<i style=\"width:' + Math.round(w) + 'px\">'").join() === 'property width' && IN('<i style="clip-path:inset(0 ${(100 - x).toFixed(2)}% 0 0 round 5px)">').join() === 'property clip-path,function inset,unit %,unit px' &&
+     IN('<i style="background:${col}1F;color:${col}">').join() === 'property background,property color');
+  ok('and a line is the line it is on', C.inlineUses('a\nb\n<i style="color:red">', null).map(u => u.line).join() === '3' && C.inlineUses('a\n<style>\n.x{color:red}\n</style>', null).map(u => u.line).join() === '3');
+
+  /* inline CSS goes through the same classification as a stylesheet: each piece is a pseudo-file, and analyse() sorts what is in it */
+  const inlineFiles = [];
+  for (const { rel } of sources) for (const seg of C.inlineSegments(real.rests[rel])) inlineFiles.push(parseFile(rel, seg.css, T));
+  const resIn = analyse(inlineFiles, T);
+  const inlineBad = [...[...resIn.unlisted].map(([k, w]) => `${w} ${k} is not in the table`), ...Object.values(resIn.rows).flat(), ...resIn.newerInside, ...resIn.stray, ...resIn.prefix];
+  ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', resIn.unlisted.size === 0 && inlineFiles.length > 0, list0([...resIn.unlisted].map(([k, w]) => `${w} ${k}`)) || `${inlineFiles.length} pieces`);
+  ok('and what is newer than the floor in it has what its row says it needs, which an attribute cannot give an @supports rule to (an older value written first is all it can have)', inlineBad.length === 0, list0(inlineBad) || 'none');
+  const reads = rel => new Set(inlineFiles.filter(f => f.file === rel).flatMap(f => f.uses.map(u => u.key)));
+  ok('and the pieces the pages make are read: the shell\'s <style> block (@font-face), the style element its script fills (@keyframes, min()), the page builder\'s overlay, the Memorizer\'s scripts', reads('app/systole.html').has('atrule @font-face') && reads('app/systole.html').has('atrule @keyframes') &&
+     reads('app/systole.html').has('function min') && reads('scripts/build-pwa.js').has('property z-index') && reads('memorizer/src/ui.js').has('property width'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);
   ok('and the scripts and pages read are the ones the app ships: the shell, the builder, both other pages and the sources of all three', ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html', 'lab/index.html'].every(f => SRC.includes(f)) &&
      ['src/', 'memorizer/src/', 'lab/src/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
   function list0(a) { return a.slice(0, 4).join(' | '); }

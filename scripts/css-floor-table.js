@@ -99,9 +99,12 @@ function watchOf(prop) {
 /* ── read ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 const firstPass = [];
 for (const fam of C.families()) for (const f of fam.files) firstPass.push(...C.usesOf(C.parseCss(C.readFile(f)).root, null));
-const inline = [];                                       // what scripts and pages write inline (style attributes, cssText, el.style.x): the same Safari reads it
-for (const f of C.scriptFiles()) for (const u of C.inlineUses(C.readFile(f))) inline.push(Object.assign({ node: { line: f + ':' + u.line } }, u));
-firstPass.push(...inline);
+const inlineOf = watch => {                              // what scripts and pages write inline (style attributes, cssText, el.style.x, <style> blocks): the same Safari reads it
+  const out = [];
+  for (const f of C.scriptFiles()) for (const u of C.inlineUses(C.readFile(f), watch)) out.push(Object.assign(u, { node: { line: f + ':' + u.line } }));
+  return out;
+};
+firstPass.push(...inlineOf(null));
 const props = [...new Set(firstPass.filter(u => u.kind === 'property' && u.name !== '--*' && !isWebkit(u.name)).map(u => u.name))].sort();
 const watch = {};
 for (const p of props) {
@@ -111,7 +114,7 @@ for (const p of props) {
 }
 const uses = [];
 for (const fam of C.families()) for (const f of fam.files) uses.push(...C.usesOf(C.parseCss(C.readFile(f)).root, watch));
-uses.push(...inline);
+uses.push(...inlineOf(watch));
 const keys = new Map();
 for (const u of uses) if (!keys.has(u.key)) keys.set(u.key, u);
 

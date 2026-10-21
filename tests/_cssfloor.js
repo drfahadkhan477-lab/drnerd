@@ -288,10 +288,11 @@ function forceFallbacks(html, probes) {
   return { html: out, count: n, counts };
 }
 
-/* ── the style that scripts and pages write inline ───────────────────────────────────────────────────────────────────────────────────────────
-   The stylesheets are not the only place a page says how it looks: a style="" attribute, a cssText string, el.style.x = ... and setProperty('x') are read by the
-   same Safari, and cannot carry an @supports rule. So that a feature that is only ever written there is classified like the rest, they are read into uses of
-   the same shape (key, kind, name, line) as the stylesheet reader gives. */
+/* ── the CSS that scripts and pages write inline ──────────────────────────────────────────────────────────────────────────────────────────────
+   The stylesheets are not the only place a page says how it looks: a style="" attribute, a cssText string, el.style.x = ..., setProperty('x'), a <style> block of a
+   page and a style element that a script fills are read by the same Safari, and a style attribute cannot carry an @supports rule. So that a feature that is only
+   ever written there is classified like the rest, each is turned into STYLESHEET TEXT and read by parseCss and usesOf, the same reader the stylesheets go through:
+   a list of declarations becomes x{...} and a block is itself. The text is padded with lines so that a line in it is a line in the file. */
 
 /* The scripts and pages the app ships, as paths under the repository: every script of the three source directories, the shell, the page builder and the two
    other pages. */
@@ -311,36 +312,75 @@ function scriptFiles() {
 }
 
 const STR = `"((?:[^"\\\\\\n]|\\\\.)*)"|'((?:[^'\\\\\\n]|\\\\.)*)'|\`([^\`]*)\``;
-/* Only what is CSS for certain is taken. A declaration in a string is read for its property, and for the functions of its value when the value is plain: one with a
-   quote, a + or a ${ in it is script putting pieces together, and Math.round( is not round(). A name must look like a property. */
-function inlineUses(text) {
+const TEMPLATE = /\$\{(?:[^{}]|\{[^{}]*\})*\}/g;
+/* A ${...} is a number; one followed by two hex digits is a colour with an alpha (${col}1F), which no unit looks like. */
+const maskTemplate = v => { let o = v; for (let k = 0; k < 3; k++) o = o.replace(new RegExp(TEMPLATE.source + '([0-9a-fA-F]{2})(?![\\w%-])', 'g'), '#000').replace(TEMPLATE, '0'); return o; };
+
+/* The stylesheet text of a list of declarations (a style attribute, a cssText string): x{prop:value;...}. A ${...} of a template is a number. A value that script puts
+   together from pieces ('width:' + Math.round(w) + 'px') has its pieces between quotes, which the reader blanks, so Math.round( is not round(). A name must look like a property. */
+function declsToCss(list) {
+  const out = [];
+  for (const d of maskTemplate(list).split(';')) {
+    const m = /^\s*(-{0,2}[a-zA-Z][\w-]*)\s*:([\s\S]*)$/.exec(d);
+    if (!m) continue;
+    out.push(m[1] + ':' + m[2]);
+  }
+  return out.length ? 'x{' + out.join(';') + '}' : '';
+}
+
+/* The text of an expression of string literals joined with +, from `at`, to the ; that ends it: what a script assigns to a style element. Anything that is not a
+   literal is a 0. */
+function literalsFrom(t, at) {
+  let out = '', k = at, depth = 0;
+  for (; k < t.length; k++) {
+    const c = t[k];
+    if (c === '"' || c === "'" || c === '`') {
+      let e = k + 1;
+      for (; e < t.length && t[e] !== c; e++) if (t[e] === '\\') e++;
+      out += t.slice(k + 1, e).replace(/\\(.)/g, '$1'); k = e; continue;
+    }
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') { if (depth === 0) break; depth--; }
+    else if (c === ';' && depth === 0) break;
+    else if (/[\w$]/.test(c)) { let e = k; while (e < t.length && /[\w$.]/.test(t[e])) e++; if (t[e] === '(') { let d = 0; for (; e < t.length; e++) { if (t[e] === '(') d++; else if (t[e] === ')' && --d === 0) break; } } out += '0'; k = e; }
+  }
+  return out;
+}
+
+/* The stylesheet text of everything inline in a script or page: [{ css, line }]. */
+function inlineSegments(text) {
   const t = blankComments(text);
   const nl = [0];
   for (let i = 0; i < t.length; i++) if (t[i] === '\n') nl.push(i + 1);
   const lineAt = idx => { let lo = 0, hi = nl.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (nl[mid] <= idx) lo = mid; else hi = mid - 1; } return lo + 1; };
   const out = [];
-  const add = (kind, name, idx) => out.push({ key: kind + ' ' + name, kind, name, line: lineAt(idx), inline: true });
-  const prop = (name, idx) => add('property', name.startsWith('--') ? '--*' : name.toLowerCase(), idx);
-  const decls = (css, idx) => {
-    if (css == null) return;
-    for (const d of css.split(';')) {
-      const m = /^\s*(-{0,2}[a-zA-Z][\w-]*)\s*:([\s\S]*)$/.exec(d);
-      if (!m) continue;
-      prop(m[1], idx);
-      if (!/['"`+]|\$\{/.test(m[2])) for (const f of m[2].matchAll(/(?<![\w.-])(-?[a-zA-Z_][\w-]*)\(/g)) add('function', f[1].toLowerCase(), idx);
-    }
-  };
-  const strings = (re, kept) => { for (const m of t.matchAll(re)) decls(m[kept] ?? m[kept + 1] ?? m[kept + 2], m.index); };
-  for (const m of t.matchAll(/\bstyle\s*=\s*\\?"([^"\\]*)\\?"|\bstyle\s*=\s*\\?'([^'\\]*)\\?'/g)) decls(m[1] ?? m[2], m.index);
-  strings(new RegExp('\\bcssText\\s*\\+?=\\s*(?:' + STR + ')', 'g'), 1);
-  strings(new RegExp('(?<![\\w$.])style\\s*:\\s*(?:' + STR + ')', 'g'), 1);
-  strings(new RegExp('setAttribute\\(\\s*[\'"]style[\'"]\\s*,\\s*(?:' + STR + ')', 'g'), 1);
+  const push = (css, idx) => { if (css) { const line = lineAt(idx); out.push({ css: '\n'.repeat(line - 1) + css, line }); } };
+  const lists = (re, kept) => { for (const m of t.matchAll(re)) { const v = m[kept] ?? m[kept + 1] ?? m[kept + 2]; if (v != null) push(declsToCss(v), m.index); } };
+  lists(/\bstyle\s*=\s*\\?"([^"\\]*)\\?"()()|\bstyle\s*=\s*\\?'([^'\\]*)\\?'()()/g, 1);
+  lists(new RegExp('\\bcssText\\s*\\+?=\\s*(?:' + STR + ')', 'g'), 1);
+  lists(new RegExp('(?<![\\w$.])style\\s*:\\s*(?:' + STR + ')', 'g'), 1);
+  lists(new RegExp('setAttribute\\(\\s*[\'"]style[\'"]\\s*,\\s*(?:' + STR + ')', 'g'), 1);
   for (const m of t.matchAll(/\.style\.([a-zA-Z]+)\s*(?:=(?!=)|\+=)/g)) {
     if (/^(cssText|setProperty|removeProperty|getPropertyValue|length)$/.test(m[1])) continue;
-    add('property', m[1] === 'cssFloat' ? 'float' : m[1].replace(/[A-Z]/g, c => '-' + c.toLowerCase()), m.index);
+    push('x{' + (m[1] === 'cssFloat' ? 'float' : m[1].replace(/[A-Z]/g, c => '-' + c.toLowerCase())) + ':0}', m.index);
   }
-  for (const m of t.matchAll(/\.style\.(?:setProperty|removeProperty|getPropertyValue)\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1/g)) prop(m[2], m.index);
+  for (const m of t.matchAll(/\.style\.(?:setProperty|removeProperty|getPropertyValue)\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1/g)) push('x{' + m[2] + ':0}', m.index);
+  // a <style> block of a page, with the assembler's slots (where the stylesheets go) taken out
+  for (const m of t.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)) push(m[1].replace(/@@SLOT\[[^\]]*\]@@/g, ' '), m.index + m[0].indexOf('>') + 1);
+  // a style element a script makes and fills with literals: var st = document.createElement('style'); st.textContent = '...' + '...';
+  for (const mk of t.matchAll(/(\w+)\s*=\s*[\w.]*createElement\(\s*['"]style['"]\s*\)/g)) {
+    const re = new RegExp('(?<![\\w$.])' + mk[1] + '\\.(?:textContent|innerHTML)\\s*\\+?=\\s*', 'g');
+    re.lastIndex = mk.index;
+    for (let m; (m = re.exec(t)) && m.index - mk.index < 4000;) push(maskTemplate(literalsFrom(t, m.index + m[0].length)), m.index);
+  }
   return out;
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineUses };
+/* The uses of the same shape the stylesheet reader gives, for everything inline: property, function, unit, color, value, selector, at-rule. */
+function inlineUses(text, watch) {
+  const out = [];
+  for (const seg of inlineSegments(text)) for (const u of usesOf(parseCss(seg.css).root, watch || null)) out.push(Object.assign(u, { inline: true }));
+  return out;
+}
+
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses };

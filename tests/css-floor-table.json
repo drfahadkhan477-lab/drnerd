@@ -3,6 +3,7 @@
   "source": "@mdn/browser-compat-data 8.1.6, support.safari_ios",
   "ok": {
     "atrule": [
+      "@font-face",
       "@keyframes",
       "@media",
       "@supports"
@@ -18,6 +19,7 @@
       "env",
       "hsl",
       "hsla",
+      "inset",
       "linear-gradient",
       "max",
       "min",
