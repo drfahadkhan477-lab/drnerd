@@ -13,8 +13,10 @@
  * THE TABLE. Every property, function, unit, pseudo-class, at-rule and media feature the stylesheets use (and every property and function a script or page writes
  * inline) is a row, with MDN's first iOS Safari that
  * reads it (scripts/css-floor-table.js writes it from the data). A use that is not in the table fails here, which is how a newer feature is stopped
- * from arriving unclassified: whoever writes it has to run the script and say what the stylesheets do about it. A feature newer than the floor has a
- * class, and the class is a claim that is checked here wherever it can be:
+ * from arriving unclassified: whoever writes it has to run the script and say what the stylesheets do about it. (A value syntax that the data keeps as a subfeature
+ * of a property, and that the text of a value shows, is a use too: display:inline flex. The ones a text shows are detected, in SYNTAX in tests/_cssfloor.js; the data's subfeatures about
+ * behaviour or context, which no text shows (svg_elements, is_animatable, the *_context ones, dutch_ij_digraph, the animation shorthand's timeline), are not.) A feature
+ * newer than the floor has a class, and the class is a claim that is checked here wherever it can be:
  *
  *     fallback     the older spelling is in the stylesheets. "companion": each rule that uses it is followed by an @supports not rule for the same
  *                  selector (the only way for a declaration with a var() in it, which an older Safari takes at face value and then drops);
@@ -234,6 +236,14 @@ head('the reader, on small stylesheets');
      CV(':root{--wrap:anywhere}', '.x{overflow-wrap:var(--wrap)}').join() === 'value overflow-wrap: anywhere <- --wrap @t.css' && CV(':root{--wrap:Anywhere}.x{overflow-wrap:var(--wrap, normal)}').length === 1);
   ok('and only of that property, and only a keyword that is newer: a custom property read by another property, a custom property nobody reads, a keyword the floor reads', CV(':root{--a:anywhere}.x{color:var(--a)}').length === 0 && CV(':root{--a:anywhere}.x{color:red}').length === 0 &&
      CV(':root{--w:normal}.x{overflow-wrap:var(--w)}').length === 0);
+  const SX = css => keysOf(css).filter(k => k.startsWith('syntax ')).join(', ');
+  ok('a value syntax that arrived after the floor is a use of its own kind, named by the property and the data\'s subfeature', SX('.a{display:inline flex}') === 'syntax display multi-keyword_values' && SX('.a{align-items:last baseline}.b{align-self:last-baseline}') === 'syntax align-items last_baseline, syntax align-self last_baseline' &&
+     SX('.a{text-overflow:clip ellipsis}') === 'syntax text-overflow two_value_syntax' && SX('.a{white-space:pre wrap}') === 'syntax white-space shorthand_values' && SX('.a{width:fit-content(10px)}.b{max-height:fit-content(5em)}') === 'syntax width fit-content_function, syntax max-height fit-content_function' &&
+     SX('.a{text-decoration:underline dotted}') === 'syntax text-decoration includes_color-and-style' && SX('.a{text-decoration:underline #f00}') === 'syntax text-decoration includes_color-and-style' && SX('.a{text-decoration:underline 2px}') === 'syntax text-decoration includes_thickness' &&
+     SX('.a{content:"a" / "alt"}') === 'syntax content alt_text' && SX('.a{content:url(x.png) / "alt"}') === 'syntax content alt_text' && SX('.a{cursor:url(x.png) 4 4, auto}') === 'syntax cursor url_positioning_syntax');
+  ok('and the plain forms are not: one keyword, the keyword fit-content, a slash in another property, a cursor with no hotspot, a text-decoration of lines only, !important', SX('.a{display:inline-flex}.b{display:none !important}.c{display:flex}') === '' && SX('.a{align-items:baseline}.b{text-overflow:ellipsis}.c{white-space:nowrap}') === '' &&
+     SX('.a{width:fit-content}.b{width:-webkit-fit-content}.c{height:calc(100% - 4px)}') === '' && SX('.a{font:12px / 1.4 sans-serif}.b{content:"a"}.e{content:counter(a) "/" counter(b)}.c{cursor:url(x.png), auto}.d{cursor:pointer}') === '' && SX('.a{text-decoration:underline line-through}.b{text-decoration:none}') === '');
+  ok('and one the table does not list is found like any other feature, and one a row lists is classified', A('.a{display:inline flex}', {}).unlisted.has('syntax display multi-keyword_values') && !A('.a{display:inline flex}', { 'syntax display multi-keyword_values': row({ since: '15', class: 'progressive' }) }).unlisted.has('syntax display multi-keyword_values'));
   ok('a gap is taken for a flex box\'s, which the text cannot tell', keysOf('.a{gap:4px}.b{row-gap:1px}.c{column-gap:2px}.d{grid-gap:3px}').filter(k => k === 'layout flex-gap').length === 3);
   ok('the descriptors of an @font-face, @page, @property and @counter-style are descriptors of their at-rule and not properties, and the functions and units in their values are read', (() => {
     const k = keysOf('@font-face{font-family:x;src:url(x.woff2) format("woff2");font-display:swap;size-adjust:100%}@property --x{syntax:"<length>";inherits:false}@counter-style c{system:cyclic;symbols:"a"}@page{size:A4;margin:1cm}');

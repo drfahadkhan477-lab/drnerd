@@ -128,6 +128,22 @@ function ancestors(node) {
                 is the cascade's to say, not the text's, so every gap is taken for one that may be
 
    The tested condition of an @supports is not a use: the probe is the point of the block. */
+/* Value syntax that arrived after the floor, where the data keeps it as a subfeature of the property (css.properties.display.multi-keyword_values) and the text of a value
+   shows it: display:inline flex, text-overflow:clip ellipsis, width:fit-content(10px). Each is a use of kind `syntax`, named `property subfeature`, with a row in the table
+   like any other. What no text shows is not here: the data's subfeatures about behaviour (svg_elements, is_animatable, the *_context ones, dutch_ij_digraph, ...). */
+const FIT = ['width', 'height', 'min-width', 'max-width', 'min-height', 'max-height'];
+const SYNTAX = Object.assign({
+  'display multi-keyword_values': { props: ['display'], re: /^\s*[a-z-]+\s+[a-z-]+/i },
+  'align-items last_baseline': { props: ['align-items'], re: /\blast[\s-]baseline\b/i },
+  'align-self last_baseline': { props: ['align-self'], re: /\blast[\s-]baseline\b/i },
+  'text-overflow two_value_syntax': { props: ['text-overflow'], re: /^\s*\S+\s+\S+/ },
+  'white-space shorthand_values': { props: ['white-space'], re: /^\s*[a-z-]+\s+[a-z-]+/i },
+  'text-decoration includes_color-and-style': { props: ['text-decoration'], re: /\b(solid|double|dotted|dashed|wavy)\b|#[0-9a-f]{3,8}\b|\b(rgba?|hsla?)\(|\bcurrentcolor\b/i },
+  'text-decoration includes_thickness': { props: ['text-decoration'], re: /(?<![\w.#-])\d*\.?\d+(px|em|rem|%)(?![\w-])|\bfrom-font\b/i },
+  'content alt_text': { props: ['content'], re: /(^|\s)\/(\s|$)/ },                 // the strings are blanked and the white space squashed: "a" / "alt" is a lone /
+  'cursor url_positioning_syntax': { props: ['cursor'], re: /url\([^)]*\)\s+-?\d*\.?\d+\s+-?\d*\.?\d+/i },
+}, Object.fromEntries(FIT.map(p => [p + ' fit-content_function', { props: [p], re: /(?<![\w-])fit-content\s*\(/i }])));
+
 function usesOf(root, watch) {
   const out = [];
   const add = (kind, name, node, extra) => out.push(Object.assign({ key: kind + ' ' + name, kind, name, line: node.line, node }, extra));
@@ -167,6 +183,7 @@ function usesOf(root, watch) {
       }
       if (/#[0-9a-fA-F]{8}(?![\w-])|#[0-9a-fA-F]{4}(?![\w-])/.test(v)) add('color', 'hex-alpha', node, { decl: d, line: d.line });
       if (/\b(?:rgb|rgba|hsl|hsla)\(\s*[^,()]+\s+[^,()]+\s+[^,()]+\s*(?:\/|\))/i.test(v) && !/\b(?:rgb|rgba|hsl|hsla)\([^)]*,/i.test(v)) add('color', 'space-separated', node, { decl: d, line: d.line });
+      for (const [name, sx] of Object.entries(SYNTAX)) if (sx.props.includes(d.prop) && sx.re.test(v)) add('syntax', name, node, { decl: d, line: d.line });
       const w = watch && watch[d.prop];
       if (w) for (const m of v.toLowerCase().matchAll(/(?<![\w-])([a-z][a-z-]*)(?![\w(-])/g)) if (w[m[1]] !== undefined) add('value', d.prop + ': ' + m[1], node, { decl: d, line: d.line });
     }
@@ -438,4 +455,4 @@ function inlineUses(text, watch) {
   return out;
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets, customValueUses };
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets, customValueUses, SYNTAX };

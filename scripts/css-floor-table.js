@@ -78,6 +78,7 @@ function resolve(use) {
     case 'unit': { const ts = (index[use.name] || []).filter(p => p[1] === 'types' && p[2] === 'length'); return ts.length ? pick([ts[0]]) : null; }
     case 'selector': { const n = use.name.replace(/^::?/, ''); return pick([['css', 'selectors', n], ['css', 'selectors', strip(n)]]); }
     case 'atrule': return pick([['css', 'at-rules', use.name.slice(1)]]);
+    case 'syntax': { const [prop, sub] = use.name.split(' '); return pick([['css', 'properties', prop, sub]]); }
     case 'descriptor': { const [at, d] = use.name.split(' '); return pick([['css', 'at-rules', at.slice(1), d]]); }
     case 'media': return pick([['css', 'at-rules', 'media', use.name]]);
     case 'value': { const [prop, kw] = use.name.split(': '); return pick([['css', 'properties', prop, kw]]); }
