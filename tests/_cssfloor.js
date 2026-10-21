@@ -131,6 +131,36 @@ function ancestors(node) {
    shows it: display:inline flex, text-overflow:clip ellipsis, width:fit-content(10px). Each is a use of kind `syntax`, named `property subfeature`, with a row in the table
    like any other. What no text shows is not here: the data's subfeatures about behaviour (svg_elements, is_animatable, the *_context ones, dutch_ij_digraph, ...). */
 const FIT = ['width', 'height', 'min-width', 'max-width', 'min-height', 'max-height'];
+/* A number with a unit, or a percentage: the divisor that makes a division typed. (An `e` after digits is an exponent.) */
+const DIMENSION = /(?<![\w#.-])[+-]?(?:\d+\.?\d*|\.\d+)(?:%|(?!e[+-]?\d)[a-z]+)(?![\w-])/i;
+
+/* The divisors of the divisions inside calc(), min(), max() and clamp() in the text of a value: what follows each `/` up to the next `*`, `/`, `,`, white space or `)` that is not
+   inside a group of its own, so that `(2 * 1px)` and `calc(1px)` are one divisor each. A slash outside a math function (`font:12px/18px`, `aspect-ratio:16/9`) is none. */
+function divisorsOf(v) {
+  const out = new Set();
+  for (const m of v.matchAll(/(?<![\w-])(?:calc|min|max|clamp)\(/gi)) {
+    const open = m.index + m[0].length - 1;
+    let depth = 0, close = open;
+    for (; close < v.length; close++) { if (v[close] === '(') depth++; else if (v[close] === ')' && --depth === 0) break; }
+    const span = v.slice(open + 1, close);
+    for (let k = 0; k < span.length; k++) {
+      if (span[k] !== '/') continue;
+      let j = k + 1;
+      while (j < span.length && /\s/.test(span[j])) j++;
+      let from = j, d = 0;
+      for (; j < span.length; j++) {
+        const c = span[j];
+        if (c === '(') d++;
+        else if (c === ')') { if (d === 0) break; d--; }
+        else if (d === 0 && /[\s*\/,]/.test(c)) break;
+      }
+      if (j > from) out.add(span.slice(from, j));
+    }
+  }
+  return [...out];
+}
+const TYPED_DIVISION = 'calc typed_division_produces_unitless_number';
+
 const SYNTAX = Object.assign({
   'display multi-keyword_values': { props: ['display'], re: /^\s*[a-z-]+\s+[a-z-]+/i },
   'align-items last_baseline': { props: ['align-items'], re: /\blast[\s-]baseline\b/i },
@@ -143,10 +173,10 @@ const SYNTAX = Object.assign({
   'cursor url_positioning_syntax': { props: ['cursor'], re: /url\([^)]*\)\s+-?\d*\.?\d+\s+-?\d*\.?\d+/i },
   // syntax of a value that is not a property's own (props '*': in any declaration, so a custom property that stores it is found where it is stored)
   'calc constants': { props: '*', re: /(?:calc|min|max|clamp)\([^;]*?(?<![\w.#-])(?:pi|e|infinity|nan)(?![\w(.-])/i },
-  // a division whose divisor is a dimension (a number with a unit, or a percentage) inside calc()/min()/max()/clamp(): the divisor's unit cancels the dividend's, a typed
-  // division that a Safari before 26 drops. Followed through two levels of parentheses, so that `font:calc(12px)/18px` (a slash outside the function) is not one; a divisor that
-  // arrives through var() or a function is not shown by the text.
-  'calc typed_division_produces_unitless_number': { props: '*', re: new RegExp(String.raw`(?:calc|min|max|clamp)\(` + String.raw`(?:[^()]|\((?:[^()]|\([^()]*\))*\))*?` + String.raw`\/\s*\(*\s*[+-]?(?:\d+\.?\d*|\.\d+)(?:%|(?!e[+-]?\d)[a-z]+)(?![\w-])`, 'i') },
+  // a division whose divisor is a dimension (a number with a unit, a percentage, or a group or function that holds one) inside calc()/min()/max()/clamp(): the divisor's unit cancels
+  // the dividend's, a typed division that a Safari before 26 drops. A divisor that is a var() is a use where the custom property is defined with a dimension (customValueUses);
+  // one set from a script or from markup is not shown by the text.
+  [TYPED_DIVISION]: { props: '*', re: { test: v => divisorsOf(v).some(op => DIMENSION.test(op)) } },
   'gradient interpolation_color_space': { props: '*', re: /gradient\(\s*(?:[^(),]*?\s)?in\s+(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|lab|oklab|xyz|xyz-d50|xyz-d65|hsl|hwb|lch|oklch)(?![\w-])/i },
   'transition allow-discrete': { props: ['transition', 'transition-behavior'], re: /(?<![\w-])allow-discrete(?![\w-])/i },
 }, Object.fromEntries(FIT.map(p => [p + ' fit-content_function', { props: [p], re: /(?<![\w-])fit-content\s*\(/i }])));
@@ -266,6 +296,17 @@ function customValueUses(files, watch) {
     }
   }
   const out = [];
+  const dimensional = new Set();                                 // custom properties whose value is a dimension, or reads (to any depth) one that is: --unit:1px
+  for (const { root } of files) for (const node of blocks(root)) for (const d of node.decls) if (d.prop.startsWith('--') && DIMENSION.test(d.value)) dimensional.add(d.prop);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [from, to] of reads) if (!dimensional.has(from) && [...to].some(c => dimensional.has(c))) { dimensional.add(from); changed = true; }
+  }
+  for (const { file, root } of files) for (const node of blocks(root)) for (const d of node.decls) {
+    for (const op of divisorsOf(d.value)) for (const m of op.matchAll(/var\(\s*(--[\w-]+)/g)) {       // calc(100vw / var(--unit)): a typed division when --unit is a dimension
+      if (dimensional.has(m[1])) out.push({ file, key: 'syntax ' + TYPED_DIVISION, kind: 'syntax', name: TYPED_DIVISION, node, decl: d, line: d.line, via: m[1] });
+    }
+  }
   for (const { file, root } of files) for (const node of blocks(root)) for (const d of node.decls) {
     if (!d.prop.startsWith('--')) continue;
     for (const prop of consumers.get(d.prop) || []) {
@@ -475,4 +516,4 @@ function inlineUses(text, watch) {
   return out;
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets, customValueUses, SYNTAX };
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets, customValueUses, divisorsOf, SYNTAX };
