@@ -13,7 +13,8 @@ clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 spaced repetition, a timed mock exam that gives no feedback until you hand it in,
 a flag for questions to come back to and a list of every question you have
 written on, and Apex — an AI tutor that can be grounded in your own reference
-notes, reads the figures they cite, and remembers you between sessions.
+notes, reads the figures they cite, knows what you chose and how you tend to
+miss, plans a session from it, and remembers you between sessions.
 
 The home screen says one thing: a live ECG, one pearl drawn from your own
 reference notes — broken at its own joints into a numbered ladder, over ECG
@@ -48,7 +49,7 @@ record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 96 suites that need neither a browser nor a build all stay green. See
+the 98 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 226 checks can't run here.
 
