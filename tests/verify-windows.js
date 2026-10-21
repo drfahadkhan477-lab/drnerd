@@ -176,6 +176,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('and does not redraw it', renders === 0, `${renders} redraws`);
     ok('while the record under it is the new one', after.total === 8, `${after.total} answered`);
 
+    /* The flag of the question on screen follows the other window, painted in place: a flag that looks off and is on would be taken off by the
+       press that was meant to put it on. The question itself is still not drawn again. */
+    const flagState = () => B.evaluate(() => { const b = document.getElementById('qFlag'), g = document.getElementById('qFlagBadge'); return { on: b.classList.contains('on'), pressed: b.getAttribute('aria-pressed'), badge: !g.hidden, renders: window.__renders }; });
+    const qidB = await B.evaluate(() => S.questions[S.qIdx].id);
+    await A.evaluate(id => { S.flagged.delete(id); save(); }, qidB);
+    await until(B, id => !S.flagged.has(id), qidB);
+    const flagBefore = await flagState();
+    await A.evaluate(id => { S.flagged.add(id); save(); }, qidB);
+    const flagOn = await until(B, () => document.getElementById('qFlag').classList.contains('on'));
+    const flagAfter = await flagState();
+    await A.evaluate(id => { S.flagged.delete(id); save(); }, qidB);
+    const flagOff = await until(B, () => !document.getElementById('qFlag').classList.contains('on'));
+    const flagGone = await flagState();
+    ok('the flag of the question on screen follows the other window, in place: on, then off, and the question is not drawn again',
+       !flagBefore.on && flagBefore.pressed === 'false' && !flagBefore.badge && flagOn && flagAfter.on && flagAfter.pressed === 'true' && flagAfter.badge && flagOff && !flagGone.on &&
+       flagGone.pressed === 'false' && !flagGone.badge && flagGone.renders === 0,
+       `before ${JSON.stringify(flagBefore)}, flagged ${JSON.stringify(flagAfter)}, unflagged ${JSON.stringify(flagGone)}`);
+
     await B.evaluate(() => { goHome(); });
     await until(B, () => S.screen === 'home' && !!document.querySelector('.hero-h1'));
     await B.evaluate(() => { window.__renders = 0; });

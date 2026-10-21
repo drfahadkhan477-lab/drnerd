@@ -4768,6 +4768,7 @@ function fieldFocused(){ const a=document.activeElement, app=document.getElement
 function drawShared(){
   const s=S.screen, p=sharedStale.progress, r=sharedStale.refs;
   sharedStale.progress=sharedStale.refs=false;
+  if(p&&s==='quiz'){ const q=S.questions[S.qIdx]; if(q) paintFlag(S.flagged.has(q.id)); }   // the question stays as it is; its flag follows, painted in place
   if(fieldFocused()) return;
   if((p&&(s==='home'||s==='stats'||s==='study'||s==='search'||s==='annotations'))||(r&&(s==='home'||(s==='refs'&&!refEditing&&!refDrafted())))) render();
 }
