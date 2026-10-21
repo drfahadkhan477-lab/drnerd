@@ -116,6 +116,7 @@ function beforeProblems(file, uses, watch) {
   const out = [];
   for (const u of uses) {
     if (u.via) { out.push(`${where(file, u)} ${u.key}: reached through var(${u.via}), which is judged when the page is drawn, so no older value written before it is a fallback`); continue; }
+    if (!u.decl) { out.push(`${where(file, u)} ${u.key}: in the condition of a media query, where nothing can be written before it`); continue; }
     const rule = u.node, at = rule.decls.indexOf(u.decl);
     const prior = rule.decls.slice(0, at);
     let found = false;
@@ -173,13 +174,31 @@ function prefixProblems(file, uses, table) {
 }
 
 /* one pass over parsed files: what is not in the table, what is in it wrongly, and what each class says that is not so */
+/* A custom property is followed across the boundary between the stylesheets and the CSS the scripts and pages write inline, in both directions: --wrap:anywhere in a stylesheet and
+   el.style.overflowWrap = 'var(--wrap)' in a script. Each set is analysed on its own, and so cannot see the other's custom properties; what is found only when they are read together
+   is what is found here. It has to be in the table, and a feature that a row holds with an older value written first, or bans, is not held where it arrives through var(). */
+function crossProblems(a, b, table) {
+  const key = u => [u.key, u.file, u.line, u.via].join('|');
+  const own = new Set([...C.customValueUses(a, table.watch), ...C.customValueUses(b, table.watch)].map(key));
+  const out = [];
+  for (const u of C.customValueUses([...a, ...b], table.watch)) {
+    if (own.has(key(u))) continue;
+    const c = C.classify(table, u);
+    if (c.how === 'unlisted') out.push(`${where(u.file, u)} ${u.key} (through ${u.via}, across a stylesheet and inline CSS) is not in the table`);
+    else if (c.how === 'above' && (c.row.class === 'banned' || (c.row.class === 'fallback' && ['before', 'companion', 'guard'].includes(c.row.how)))) out.push(`${where(u.file, u)} ${u.key} arrives through var(${u.via}) across a stylesheet and inline CSS, which is judged when the page is drawn, so what its row holds it with is no fallback`);
+  }
+  return out;
+}
+
 function analyse(files, table, opts) {
-  const res = { unlisted: new Map(), todo: [], malformed: [], rows: {}, stray: [], newerInside: [], unusedRows: [], prefix: [] };
+  const res = { unlisted: new Map(), todo: [], malformed: [], rows: {}, stray: [], newerInside: [], newerInMedia: [], unusedRows: [], prefix: [] };
   const all = files.flatMap(f => f.uses.map(u => Object.assign({ file: f.file }, u))).concat(C.customValueUses(files, table.watch));
   for (const u of all) {
     const c = C.classify(table, u);
     if (c.how === 'unlisted' && !res.unlisted.has(u.key)) res.unlisted.set(u.key, where(u.file, u));
     if (c.how === 'above' && inNotSupports(u.node) && u.kind !== 'atrule') res.newerInside.push(`${where(u.file, u)} ${u.key}`);
+    // a unit, a function or a syntax the floor does not read, in the condition of a media query, makes the query false and skips its whole block: a row that says it has a fallback is not so there
+    if (c.how === 'above' && c.row.class === 'fallback' && ['unit', 'function', 'syntax'].includes(u.kind) && u.node && u.node.t === 'at' && /^@media\b/i.test(u.node.prelude)) res.newerInMedia.push(`${where(u.file, u)} ${u.key}`);
   }
   const used = new Set(all.map(u => u.key));
   for (const [key, row] of Object.entries(table.above)) {
@@ -364,6 +383,23 @@ head('the reader, on small stylesheets');
   const ar = css => A(css, AR).rows['property aspect-ratio'];
   ok('a ratio box has the box made the old way, and an exempt selector has none', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0 && ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{width:1px}}').length === 2 && ar('.s{aspect-ratio:1.5}').length === 1 && ar('.img{aspect-ratio:1.5}').length === 0 && ar('.img,.s{aspect-ratio:1.5}').length === 1);
   ok('a ratio that is !important needs no companion that is: an older Safari drops the property it does not know, so there is no important declaration left to beat the box it is given', ar('.s{aspect-ratio:1.5 !important}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0);
+  const MK = css => [...new Set(keysOf(css).filter(k => /^(unit|function|syntax) /.test(k)))].join(', ');
+  ok('the values in the condition of a media query are read like those of a declaration: a unit, a function and a syntax, in a range query and in a query with no space after @media', MK('@media (min-width:1dvw){.x{color:red}}') === 'unit dvw' && MK('@media(min-width:768px){.x{color:red}}') === 'unit px' &&
+     MK('@media (min-width:calc(1px + 1dvw)){.x{color:red}}') === 'function calc, unit px, unit dvw' && MK('@media (width >= 40rem) and (min-resolution:2dppx){.x{color:red}}') === 'unit rem, unit dppx' &&
+     MK('@media (min-width:calc(100vw / 1px)){.x{color:red}}') === 'function calc, unit vw, unit px, syntax calc typed_division_produces_unitless_number');
+  ok('and a plain condition holds only what it has: the units of the floor, no function, and no unit in a ratio, a pixel ratio or a keyword', MK('@media (min-width:600px) and (hover:hover) and (orientation:landscape){.x{color:red}}') === 'unit px' && MK('@media (min-aspect-ratio:16/9), (-webkit-min-device-pixel-ratio:1.5){.x{color:red}}') === '' &&
+     MK('@media screen and (min-width:48rem){.x{color:red}}') === 'unit rem' && MK('@media (prefers-reduced-motion:reduce){.x{color:red}}') === '');
+  const DVH = { 'unit dvh': row({ since: '15.4', class: 'fallback', how: 'elsewhere' }) }, DVP = { 'unit dvh': row({ since: '15.4', class: 'progressive' }) }, DVB = { 'unit dvh': row({ since: '15.4', class: 'fallback', how: 'before' }) };
+  ok('a feature that a row holds with a fallback is not allowed in the condition of a media query, which cannot have one, and is where a declaration has it: a progressive one is allowed, and a unit in a rule inside the query is the declaration\'s', A('@media (min-height:100dvh){.x{color:red}}', DVH).newerInMedia.length === 1 &&
+     A('@media (min-height:100dvh){.x{color:red}}', DVP).newerInMedia.length === 0 && A('@media (min-width:1px){.x{height:100dvh}}', DVH).newerInMedia.length === 0 && A('.x{height:100dvh}', DVH).newerInMedia.length === 0);
+  ok('and a row that holds it with an older value written before it has none to give in a condition: it is found, and the guard does not fail on it', (() => { try { const r = A('@media (min-height:100dvh){.x{color:red}}', DVB).rows['unit dvh']; return r.length === 1 && /condition of a media query/.test(r[0]); } catch (e) { return false; } })());
+  const OWB = { 'value overflow-wrap: anywhere': row({ since: '15.4', how: 'before' }) };
+  const XP = (sheet, inline, rows) => { const t = Object.assign({}, T, { above: rows || {} }); return crossProblems([parseFile('a.css', sheet, t)], [parseFile('b.js', inline, t)], t); };
+  ok('a custom property is followed across a stylesheet and inline CSS, in both directions and through a chain that crosses between them: what arrives from the other side is classified, and a feature a row holds with an older value written first is not held there', XP(':root{--wrap:anywhere}', 'x{overflow-wrap:var(--wrap)}').length === 1 &&
+     XP('.x{overflow-wrap:var(--wrap)}', 'x{--wrap:anywhere}').length === 1 && XP(':root{--a:anywhere}.x{overflow-wrap:var(--b)}', 'x{--b:var(--a)}').length === 1 && XP(':root{--unit:1px}', 'x{width:calc(100vw / var(--unit))}').length === 1 &&
+     XP(':root{--wrap:anywhere}', 'x{overflow-wrap:var(--wrap)}', OWB).length === 1 && /judged when the page is drawn/.test(XP(':root{--wrap:anywhere}', 'x{overflow-wrap:var(--wrap)}', OWB)[0]));
+  ok('and nothing is found that either side finds alone, or that has no consumer, or that is read by another property', XP(':root{--wrap:anywhere}.x{overflow-wrap:var(--wrap)}', 'x{color:red}').length === 0 && XP(':root{--wrap:anywhere}', 'x{color:red}').length === 0 &&
+     XP(':root{--wrap:anywhere}', 'x{width:var(--wrap)}').length === 0 && XP('.x{width:1px}', 'x{--wrap:anywhere;overflow-wrap:var(--wrap)}').length === 0);
   const DS = { 'descriptor @font-face size-adjust': row({ since: '17', class: 'progressive' }) };
   ok('a descriptor that is not in the table is found, and one that a row lists as newer than the floor is classified like any other feature', A('@font-face{font-family:x;size-adjust:100%}', {}).unlisted.has('descriptor @font-face size-adjust') &&
      !A('@font-face{font-family:x;size-adjust:100%}', DS).unlisted.has('descriptor @font-face size-adjust') && A('@font-face{font-family:x;size-adjust:100%}', DS).malformed.length === 0);
@@ -487,11 +523,13 @@ head('the table');
   ok('every prefixed row is read at the floor behind a prefix and not without one', Object.entries(T.prefixed).every(([, r]) => (r.since === null || C.versionCmp(r.since, T.floor) > 0) && C.versionCmp(r.prefixedSince, T.floor) <= 0));
 }
 
+let SHEETS = [];                                           // the shipped stylesheets as read, for the checks that need them beside the inline CSS
 head('the stylesheets');
 {
   const T = C.loadTable();
   const fams = C.families();
   const files = [];
+  SHEETS = files;
   for (const fam of fams) {
     const read = fam.files.map(f => parseFile(f, C.readFile(f), T));
     files.push(...read);
@@ -516,6 +554,7 @@ head('the stylesheets');
   }
   ok('every @supports not in the stylesheets is a row\'s probe, and every row\'s probe is used', res.stray.length === 0 && Object.values(T.above).filter(r => r.probe).every(r => files.some(f => [...C.blocks(f.root)].some(b => isNotSupports(b, r.probe)))), list(res.stray));
   ok('the older spelling uses nothing newer than the floor, which would be no fallback', res.newerInside.length === 0, list(res.newerInside));
+  ok('and no feature that a row holds with a fallback is in the condition of a media query, which cannot have one: the whole block is skipped where the condition is false', res.newerInMedia.length === 0, list(res.newerInMedia) || 'none');
   ok('what the floor reads only behind -webkit- is written with it in the same rule', res.prefix.length === 0, list(res.prefix));
   const flex = T.above['layout flex-gap'];
   ok('the table says what a gap on a flex box does before the Safari that reads it, because the text cannot show it', !!flex && flex.class === 'accepted' && files.some(f => f.uses.some(u => u.key === 'layout flex-gap')), flex ? `since ${flex.since}` : 'no row');
@@ -638,9 +677,11 @@ head('and a style written in script is held to the rows the table has');
   const generated = C.generatedSheets();                  // a stylesheet a script builds from data is read as the script makes it
   for (const g of generated) inlineFiles.push(parseFile(g.file, g.css, T));
   const resIn = analyse(inlineFiles, T, { inline: true });
-  const inlineBad = [...[...resIn.unlisted].map(([k, w]) => `${w} ${k} is not in the table`), ...Object.values(resIn.rows).flat(), ...resIn.newerInside, ...resIn.stray, ...resIn.prefix];
+  const inlineBad = [...[...resIn.unlisted].map(([k, w]) => `${w} ${k} is not in the table`), ...Object.values(resIn.rows).flat(), ...resIn.newerInside, ...resIn.newerInMedia, ...resIn.stray, ...resIn.prefix];
   ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', resIn.unlisted.size === 0 && inlineFiles.length > 0, list0([...resIn.unlisted].map(([k, w]) => `${w} ${k}`)) || `${inlineFiles.length} pieces`);
   ok('and what is newer than the floor in it has what its row says it needs, which an attribute cannot give an @supports rule to (an older value written first is all it can have)', inlineBad.length === 0, list0(inlineBad) || 'none');
+  const crossBad = crossProblems(SHEETS, inlineFiles, T);
+  ok('and a custom property is followed across a stylesheet and what the scripts write inline, so a feature that arrives through var() from the other side is classified too', crossBad.length === 0 && SHEETS.length > 0 && inlineFiles.length > 0, list0(crossBad) || `${SHEETS.length} stylesheets, ${inlineFiles.length} inline pieces`);
   const reads = rel => new Set(inlineFiles.filter(f => f.file === rel).flatMap(f => f.uses.map(u => u.key)));
   ok('and the pieces the pages make are read: the shell\'s <style> block (@font-face), the style element its script fills (@keyframes, min()), the page builder\'s overlay, the Memorizer\'s scripts', reads('app/systole.html').has('atrule @font-face') && reads('app/systole.html').has('atrule @keyframes') &&
      reads('app/systole.html').has('function min') && reads('app/systole.html').has('descriptor @font-face font-display') && reads('scripts/build-pwa.js').has('property z-index') && reads('memorizer/src/ui.js').has('property width'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);

@@ -181,6 +181,9 @@ const SYNTAX = Object.assign({
   'transition allow-discrete': { props: ['transition', 'transition-behavior'], re: /(?<![\w-])allow-discrete(?![\w-])/i },
 }, Object.fromEntries(FIT.map(p => [p + ' fit-content_function', { props: [p], re: /(?<![\w-])fit-content\s*\(/i }])));
 
+/* a number with its unit, or a percentage, in the text of a value or of a media condition */
+const UNITS = /(?<![\w#.-])(-?\d*\.?\d+)(%|[a-zA-Z]+)(?![\w-])/g;
+
 function usesOf(root, watch) {
   const out = [];
   const add = (kind, name, node, extra) => out.push(Object.assign({ key: kind + ' ' + name, kind, name, line: node.line, node }, extra));
@@ -203,6 +206,10 @@ function usesOf(root, watch) {
         for (const m of q.matchAll(MEDIA_FEATURE)) add('media', m[1].toLowerCase().replace(/^(min|max)-/, ''), node);
         if (/[<>]=?/.test(q.replace(/\([^()]*:[^()]*\)/g, ''))) add('media', 'range-syntax', node);
         if (/(^|\s)(not|or)(\s|\()/i.test(q.replace(/\([^()]*\)/g, ' ()'))) add('media', 'not-or', node);
+        // the values in the condition are read like the values of a declaration: a unit, a function, a syntax (a query that holds one the floor does not read is false, and its whole block is skipped)
+        for (const m of q.matchAll(/(?<![\w-])(-?[a-zA-Z_][\w-]*)\(/g)) add('function', m[1].toLowerCase(), node);
+        for (const m of q.matchAll(UNITS)) { const u = m[2].toLowerCase(); if (u !== 'e') add('unit', u, node); }
+        for (const [sname, sx] of Object.entries(SYNTAX)) if (sx.props === '*' && sx.re.test(q)) add('syntax', sname, node);
       }
       if (name === 'supports') for (const m of node.prelude.matchAll(/(?<![\w-])(selector|font-tech|font-format|at-rule|named-feature)\s*\(/gi)) add('supports', m[1].toLowerCase() + '()', node);
     }
@@ -213,7 +220,7 @@ function usesOf(root, watch) {
       if (d.prop === 'gap' || d.prop === 'row-gap' || d.prop === 'column-gap') add('layout', 'flex-gap', node, { decl: d, line: d.line });
       const v = d.value;
       for (const m of v.matchAll(/(-?[a-zA-Z_][\w-]*)\(/g)) add('function', m[1].toLowerCase(), node, { decl: d, line: d.line });
-      for (const m of v.matchAll(/(?<![\w#.-])(-?\d*\.?\d+)(%|[a-zA-Z]+)(?![\w-])/g)) {
+      for (const m of v.matchAll(UNITS)) {
         const u = m[2].toLowerCase();
         if (u === 'e') continue;
         add('unit', u, node, { decl: d, line: d.line });
