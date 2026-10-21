@@ -307,10 +307,13 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      break; and a value that merely has no new unit in it is not a fallback either (`height:not-a-value` is dropped by the same Safari, and takes
      the fallback with it).
 
-     The two values are compared as written, quoted text and case included, but for the white space and the unit. A string is blanked to find a
-     unit, never to compare (`url("old.png") 100vh` is no fallback for `url("new.png") 100dvh`). A unit is a number followed by the unit, not the
-     end of a name (`icon100dvh.png`, `--h100dvh`), and text inside a string or a url() is left alone when the unit is rewritten for the
-     comparison. The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not a
+     The two declarations are compared as written, character for character, and nothing is normalised first, so nothing that differs can pass
+     as equal: the quoted text, the case, the spacing, a comment inside the declaration and a !important all have to be the same on both, but
+     for the units, which are the one thing that differs (the dvh declaration with each unit in its older spelling must be the vh one). What is
+     round a declaration is not part of it: the space and the comments before it and after its value. A string is blanked to find a unit, never
+     to compare (`url("old.png") 100vh` is no fallback for `url("new.png") 100dvh`). A unit is a number followed by the unit, not the end of a
+     name (`icon100dvh.png`, `--h100dvh`), and text inside a string or a url() is left alone when the unit is rewritten for the comparison.
+     The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not a
      declaration that can fall back at all: it parses, and the declaration that uses it fails later, past every earlier one. None is in use; the
      reader finds one if it is added. A declaration marked !important is compared with its mark.
 
@@ -318,7 +321,8 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      innermost braces, so the declarations of the outer rule would go unread, and a new unit in one of them would pass. Rules inside an at-rule
      (@media, @supports, @layer, @keyframes) are not nested in this sense, but an at-rule that holds declarations and a block of its own (@page
      with a margin box) is refused all the same: its own declarations would go unread. Braces that do not balance are refused for the same
-     reason: a block that is never closed is never read. A unit in the condition of an at-rule is neither: it is not a declaration that can lose
+     reason: a block that is never closed is never read. So is an unquoted url() with a comment marker in it, which css reads as part of the address
+     and the blanker as the start of a comment, that would blank the code up to the next comment's close. A unit in the condition of an at-rule is neither: it is not a declaration that can lose
      its value, an older Safari reads the condition as false and skips the rule, which is what a condition is for. */
   const NUMBER = '(?<![\\w.-])[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?';    // a number token: not the end of a name, as in icon100 or a-1
   const NEW_UNIT = new RegExp(NUMBER + '[dsl]v(?:h|w|i|b|min|max)\\b', 'i');
@@ -327,8 +331,8 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
   const PROTECT = '"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'|url\\((?:\\\\.|[^)\\\\])*\\)';   // text that is not css to read
   const hasNewUnit = v => NEW_UNIT.test(v.replace(URL_TOKEN, ' '));
   const older = v => v.replace(new RegExp(PROTECT + '|(' + NUMBER + ')(' + Object.keys(OLDER).join('|') + ')\\b', 'gi'), (m, n, u) => n === undefined ? m : n + OLDER[u.toLowerCase()]);
-  const squash = v => v.trim().replace(/\s+/g, ' ');
   const lineOf = (text, i) => text.slice(0, i).split('\n').length;
+  const commentInUrl = css => { const out = []; let m; const re = /url\(\s*(?!["'])[^)]*?\/\*/gi; while ((m = re.exec(css))) out.push(lineOf(css, m.index)); return out; };    // an unquoted url holding a comment marker is read as a comment by the blanker, as css does not
   const blankStrings = text => text.replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
   const blankCss = css => blankStrings(blankComments(css));
   function braces(css) {               // where a style rule is opened inside a style rule, where a block holds declarations and a block of its own, and whether the braces balance
@@ -349,7 +353,7 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
     return { nested, mixed, balanced: balanced && open.length === 0 };
   }
   function newUnitsWithoutFallback(css) {
-    const text = blankComments(css), blank = blankStrings(text);     // the same length, the same lines: the second has the quoted text in spaces
+    const blank = blankCss(css);       // the same length, the same lines as css: the comments and the quoted text are spaces
     const bad = []; let used = 0, b;
     const block = /\{([^{}]*)\}/g;
     while ((b = block.exec(blank))) {
@@ -359,15 +363,17 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
         if (c === '(') depth++; else if (c === ')') depth = Math.max(0, depth - 1);
         if ((c === ';' && depth === 0) || i === body.length) { decls.push({ text: body.slice(start, i), at: b.index + 1 + start }); start = i + 1; }
       }
-      let read = null;                 // the last declaration an older Safari reads: its property and its value
+      let read = null;                 // the last declaration an older Safari reads, as it is written
       for (const d of decls) {
         const m = /^\s*([-\w]+)\s*:([\s\S]*)$/.exec(d.text);
         if (!m) continue;
-        const prop = m[1].toLowerCase(), value = squash(text.slice(d.at, d.at + d.text.length).replace(/^\s*[-\w]+\s*:/, ''));
-        if (!hasNewUnit(m[2])) { read = { prop, value }; continue; }
+        /* From the first character that is not a space in the blanked copy to the last: a comment before the declaration or after its value is a space
+           there, so it is not part of what is compared, and a comment inside it is. */
+        const prop = m[1].toLowerCase(), written = css.slice(d.at + d.text.search(/\S/), d.at + d.text.replace(/\s+$/, '').length);
+        if (!hasNewUnit(m[2])) { read = written; continue; }
         used++;
-        if (prop.startsWith('--') || !read || read.prop !== prop || read.value !== older(value))
-          bad.push(`${prop}:${value.slice(0, 40)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
+        if (prop.startsWith('--') || read === null || read !== older(written))
+          bad.push(`${written.replace(/\s+/g, ' ').slice(0, 50)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
       }
     }
     return { bad, used };
@@ -403,7 +409,17 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
   ok('nor is a fallback whose quoted text, or whose case, is not the same, though the strings are blanked to find a unit',
      bad('.a{background:url("old.png") center/100vh;background:url("new.png") center/100dvh}') === 1 && bad('.a{background:url("Old.png") 100vh;background:url("old.png") 100dvh}') === 1 &&
      bad('.a{background:url(old.png) 100vh;background:url(new.png) 100dvh}') === 1 && bad('.a{content:"a";content:"b";height:100dvh}') === 1 &&
-     bad('.a{background:url("x.png") center/100vh;background:url("x.png") center/100dvh}') === 0);
+     bad('.a{background:url("x.png") center/100vh;background:url("x.png") center/100dvh}') === 0 &&
+     bad('.a{background:url("hero  wide.png") center/100vh;background:url("hero wide.png") center/100dvh}') === 1);
+  ok('and nothing is normalised before the two are compared, so a fallback has the same spacing, the same comment and the same case as the dvh declaration, units aside',
+     bad('.a{height:100vh;height: 100dvh}') === 1 && bad('.a{height:  100vh ;height:\n100dvh}') === 1 && bad('.a{background:url("a b.png")   center/100vh;background:url("a b.png") center/100dvh}') === 1 &&
+     bad('.a{height:/* a */100vh;height:/* b */100dvh}') === 1 && bad('.a{HEIGHT:100vh;height:100dvh}') === 1 && bad('.a{height:100vh !IMPORTANT;height:100dvh !important}') === 1 &&
+     bad('.a{height:/* a */100vh;height:/* a */100dvh}') === 0);
+  ok('but what is round a declaration is not part of it: the space and the comments before it and after its value',
+     bad('.a{height:100vh ;height:100dvh }') === 0 && bad('.a{height:100vh;\n  height:100dvh}') === 0 && bad('.a{/* x */height:100vh /* y */;/* z */height:100dvh/* w */}') === 0);
+  ok('a comment marker in an unquoted url is found, as the blanker would take it for a comment and blank the code up to the next one\'s close',
+     commentInUrl('.a{background:url(a/*x*/.png)}').length === 1 && commentInUrl('.a{background:url( a/*x*/.png )}').length === 1 &&
+     commentInUrl('.a{background:url("a/*x*/.png")}').length === 0 && commentInUrl('.a{background:url(a.png)}').length === 0);
   ok('nor is a fallback whose url is another file, though the file name looks like a unit: a name is no unit, and is not rewritten with one',
      bad('.a{background:url(icon100vh.png) center/100vh;background:url(icon100dvh.png) center/100dvh}') === 1 &&
      bad('.a{background:url(i100dvh.png) center/100vh;background:url(i100dvh.png) center/100dvh}') === 0 &&
@@ -437,7 +453,8 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
   }
   ok('and there are such declarations to check, so the scan is not reading nothing', used > 0, `${used} declarations`);
   const shape = FAMILIES.flatMap(([, files]) => files.map(f => ({ f, ...braces(fs.readFileSync(f, 'utf8')) })));
-  const unread = shape.flatMap(r => [...r.nested.map(n => `${rel(r.f)} line ${n} is nested`), ...r.mixed.map(n => `${rel(r.f)} line ${n} holds declarations and a block`),
+  const unread = shape.flatMap(r => [...commentInUrl(fs.readFileSync(r.f, 'utf8')).map(n => `${rel(r.f)} line ${n} has a comment marker in an unquoted url`),
+                                      ...r.nested.map(n => `${rel(r.f)} line ${n} is nested`), ...r.mixed.map(n => `${rel(r.f)} line ${n} holds declarations and a block`),
                                       ...(r.balanced ? [] : [`${rel(r.f)} does not balance`])]);
   ok('no style rule in them is nested in another, no at-rule holds declarations and a block of its own, and every file\'s braces balance, or the reader would not read all of it',
      unread.length === 0, unread.slice(0, 3).join(' | ') || `${shape.length} files`);
