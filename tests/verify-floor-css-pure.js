@@ -17,7 +17,7 @@
  *
  *     fallback     the older spelling is in the stylesheets. "companion": each rule that uses it is followed by an @supports not rule for the same
  *                  selector (the only way for a declaration with a var() in it, which an older Safari takes at face value and then drops);
- *                  "guard": such a rule exists for a named selector; "before": the same property, in the same rule, with a value the floor reads,
+ *                  "guard": such a rule exists for a named selector, and every use of the feature is on that selector; "before": the same property, in the same rule, with a value the floor reads,
  *                  is written first; "split": no selector list holds it with a selector that does not need it, because the whole rule goes;
  *                  "elsewhere": another suite holds it.
  *     progressive  not having it is the older default, and the row says what that is.
@@ -64,15 +64,17 @@ function companionProblems(file, uses, row) {
   for (const u of uses) { if (!byRule.has(u.node)) byRule.set(u.node, []); byRule.get(u.node).push(u); }
   for (const [rule, mine] of byRule) {
     if (rule.t !== 'rule') { out.push(`${where(file, mine[0])} ${mine[0].key} is not in a style rule`); continue; }
-    const sels = selectorsOf(rule);
-    if (sels.every(s => exempt.includes(s))) continue;
+    const sels = selectorsOf(rule).filter(s => !exempt.includes(s));
+    if (!sels.length) continue;
     const sibs = rule.parent.children, next = sibs[sibs.indexOf(rule) + 1];
     if (!isNotSupports(next, row.probe)) { out.push(`${where(file, mine[0])} ${rule.prelude.slice(0, 50)}: not followed by @supports not (${row.probe})`); continue; }
-    const same = next.children.filter(r => r.t === 'rule' && selectorsOf(r).some(s => sels.some(o => s === o || s.endsWith(' ' + o))));
-    if (!same.length) { out.push(`${where(file, mine[0])} ${rule.prelude.slice(0, 50)}: its @supports not block has no rule for it`); continue; }
-    const set = same.flatMap(r => r.decls.map(d => d.prop));
     const needs = row.sets ? [row.sets] : [...new Set(mine.map(u => u.decl.prop))].map(p => [p]);
-    for (const need of needs) if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${rule.prelude.slice(0, 50)}: its fallback sets none of ${need.join(', ')}`);
+    for (const o of sels) {                              // each selector of a list, since an older Safari that has no rule for one of them draws it without
+      const same = next.children.filter(r => r.t === 'rule' && selectorsOf(r).some(s => s === o || s.endsWith(' ' + o)));
+      if (!same.length) { out.push(`${where(file, mine[0])} ${o}: its @supports not block has no rule for it`); continue; }
+      const set = same.flatMap(r => r.decls.map(d => d.prop));
+      for (const need of needs) if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${o}: its fallback sets none of ${need.join(', ')}`);
+    }
   }
   return out;
 }
@@ -106,9 +108,20 @@ function splitProblems(file, root, name) {
   return out;
 }
 
-const guardProblems = (roots, row) => {
+/* the simple selectors of the last compound of a selector: .x .sr.on > i  is  i,  and  .x .sr.on  is  .sr, .on */
+const lastCompound = s => (s.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() || '').match(/[.#][\w-]+|\[[^\]]*\]|::?[\w-]+(?:\([^)]*\))?|[\w-]+|\*/g) || [];
+/* a guard is an @supports not (probe) block with a rule for the named selector, and every use of the feature is on that selector (or on a refinement of it):
+   a use anywhere else has no rule that says what an older Safari draws instead */
+const guardProblems = (roots, row, uses) => {
+  const out = [];
   const found = roots.some(({ root }) => [...C.blocks(root)].some(b => isNotSupports(b, row.probe) && b.children.some(r => r.t === 'rule' && selectorsOf(r).includes(row.guard))));
-  return found ? [] : [`no @supports not (${row.probe}) block has a rule for ${row.guard}`];
+  if (!found) out.push(`no @supports not (${row.probe}) block has a rule for ${row.guard}`);
+  const want = lastCompound(row.guard);
+  for (const u of uses || []) {
+    if (u.node.t !== 'rule') { out.push(`${where(u.file, u)} ${u.key} is not in a style rule`); continue; }
+    for (const s of selectorsOf(u.node)) if (!want.every(t => lastCompound(s).includes(t))) out.push(`${where(u.file, u)} ${s}: uses ${u.key} and is not ${row.guard}, the one its guard is for`);
+  }
+  return out;
 };
 
 /* every plain use of a feature that is read at the floor only behind -webkit- has the prefixed one in its rule */
@@ -149,7 +162,7 @@ function analyse(files, table) {
     else if (row.how === 'companion') for (const f of files) problems.push(...companionProblems(f.file, mine.filter(u => u.file === f.file), row));
     else if (row.how === 'before') for (const f of files) problems.push(...beforeProblems(f.file, mine.filter(u => u.file === f.file), table.watch));
     else if (row.how === 'split') for (const f of files) problems.push(...splitProblems(f.file, f.root, key.replace(/^selector /, '')));
-    else if (row.how === 'guard') problems.push(...(mine.length ? guardProblems(files, row) : []));
+    else if (row.how === 'guard') problems.push(...(mine.length ? guardProblems(files, row, mine) : []));
     res.rows[key] = problems;
   }
   for (const f of files) {
@@ -229,10 +242,15 @@ head('the reader, on small stylesheets');
      cm('.a{border-color:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{border:1px solid red}}').length === 0 &&
      cm('.a{border:1px solid color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{color:red}}').length === 1 &&
      cm('.a{background:color-mix(in srgb,var(--x) 10%,transparent);border:1px solid color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}').length === 1);
-  ok('a selector list is covered by one rule that has a selector of it, a refinement of one counts, and a rule inside an @media follows it inside that @media', cm('.a,.b{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}').length === 0 &&
-     cm('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.g .a{background:red}}').length === 0 &&
+  ok('a refinement of the selector counts, and a rule inside an @media follows it inside that @media', cm('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.g .a{background:red}}').length === 0 &&
      cm('@media (hover:hover){.a:hover{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a:hover{background:red}}}').length === 0 &&
      cm('@media (hover:hover){.a:hover{background:color-mix(in srgb,var(--x) 10%,transparent)}}' + SUP + '{.a:hover{background:red}}').length === 1);
+  const MIX = 'background:color-mix(in srgb,var(--x) 10%,transparent)';
+  ok('a selector list is covered when every selector of it is: by one rule that lists them, or by a rule each', cm('.a,.b{' + MIX + '}' + SUP + '{.a,.b{background:red}}').length === 0 &&
+     cm('.a,.b{' + MIX + '}' + SUP + '{.a{background:red}.b{background:red}}').length === 0 && cm('.a,.b{' + MIX + '}' + SUP + '{.b,.a{background:red}}').length === 0);
+  ok('and one that covers only some of them is found, whichever it leaves out, and so is a selector of it whose rule sets something else', cm('.a,.b{' + MIX + '}' + SUP + '{.a{background:red}}').length === 1 &&
+     cm('.a,.b{' + MIX + '}' + SUP + '{.b{background:red}}').length === 1 && cm('.a,.b,.c{' + MIX + '}' + SUP + '{.a{background:red}.c{background:red}}').length === 1 &&
+     cm('.a,.b{' + MIX + '}' + SUP + '{.a{background:red}.b{color:red}}').length === 1);
   const AR = { 'property aspect-ratio': row({ how: 'companion', probe: 'aspect-ratio:1', sets: ['height', 'padding-bottom'], exempt: { '.img': 'an image' } }) };
   const ar = css => A(css, AR).rows['property aspect-ratio'];
   ok('a ratio box has the box made the old way, and an exempt selector has none', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0 && ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{width:1px}}').length === 1 && ar('.s{aspect-ratio:1.5}').length === 1 && ar('.img{aspect-ratio:1.5}').length === 0 && ar('.img,.s{aspect-ratio:1.5}').length === 1);
@@ -259,6 +277,11 @@ head('the reader, on small stylesheets');
   const GD = { 'property translate': row({ since: '14.5', how: 'guard', probe: 'translate:0 1px', guard: '.sr' }) };
   const gd = css => A(css, GD).rows['property translate'];
   ok('a named selector has an @supports not block for the probe, anywhere: nothing is found, and without one it is', gd('.sr{translate:0 1px}@supports not (translate:0 1px){.sr{opacity:1}}').length === 0 && gd('.sr{translate:0 1px}.sr{opacity:1}').length === 1 && gd('.sr{translate:0 1px}@supports not (translate:0 1px){.x{opacity:1}}').length === 1);
+  ok('every use of the feature is on the guarded selector or a refinement of it', gd('.sr{translate:0 1px}.sr.on{translate:0 0}.x .sr{translate:none}@supports not (translate:0 1px){.sr{opacity:1}}').length === 0 &&
+     gd('.sr{translate:0 1px}@media (hover:hover){.sr:hover{translate:0 0}}@supports not (translate:0 1px){.sr{opacity:1}}').length === 0);
+  ok('and one anywhere else is found, with the guard in place: another selector, one of a list, a child of it, a use outside a rule', gd('.sr{translate:0 1px}.other{translate:0 1px}@supports not (translate:0 1px){.sr{opacity:1}}').length === 1 &&
+     gd('.sr,.other{translate:0 1px}@supports not (translate:0 1px){.sr{opacity:1}}').length === 1 && gd('.sr{translate:0 1px}.sr .kid{translate:0 1px}@supports not (translate:0 1px){.sr{opacity:1}}').length === 1 &&
+     gd('.sr{translate:0 1px}.sr-x{translate:0 1px}@supports not (translate:0 1px){.sr{opacity:1}}').length === 1 && gd('.sr{translate:0 1px}@keyframes k{from{translate:0 1px}}@supports not (translate:0 1px){.sr{opacity:1}}').length === 1);
 
   /* prefixed */
   const pf = css => A(css, {}).prefix;

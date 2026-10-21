@@ -334,7 +334,7 @@ jobs:
         run: node tests/verify-swlifetime-pure.js
       - name: no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind (25 checks)
         run: node tests/verify-hover-pure.js
-      - name: every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says (86 checks)
+      - name: every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says (90 checks)
         run: node tests/verify-floor-css-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)
         run: node tests/verify-ui-pure.js
