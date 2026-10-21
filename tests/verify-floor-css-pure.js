@@ -64,7 +64,9 @@ const reaches = (block, rule) => { const have = scopeOf(rule); return scopeOf(bl
    a rule for a descendant of it leaves the element outside that ancestor with nothing, unless the row says that the fallback is narrower on purpose and why, in
    "narrower": { selector: { by, why } }) that sets what the use had set. A row that says what a fallback must set ("sets") means all of it: the properties of the
    rules for that selector in this block and in the @supports not blocks before it in the file (an @media that overrides one of them sets only that one again), but only
-   those whose conditions are the use's too: a block inside an @media that the use is not inside is not seen by a Safari that draws the use without it. */
+   those whose conditions are the use's too (a block inside an @media that the use is not inside is not seen by a Safari that draws the use without it), and not what a rule
+   for the same selector set again after it: a plain rule between the block and the use, or the use's own rule, that sets one of those properties again has the last word
+   there, in whatever @media it is (it may apply along with the use, and a fallback that holds only if it does not is not one). */
 function companionProblems(file, uses, row, usedNarrower) {
   const out = [];
   const exempt = Object.keys(row.exempt || {}).map(C.squash);
@@ -86,8 +88,16 @@ function companionProblems(file, uses, row, usedNarrower) {
       if (!same.length) { out.push(`${where(file, mine[0])} ${o}: its @supports not block has no rule for ${o}${narrower[o] ? ' or ' + narrower[o].by : ''}`); continue; }
       if (narrower[o] && same.some(r => selectorsOf(r).includes(C.squash(narrower[o].by)))) usedNarrower && usedNarrower.add(o);
       const order = [...C.blocks(root)];                     // source order, so that what comes before is what the cascade has seen first even on one line
-      const before = row.sets ? order.slice(0, order.indexOf(rule)).filter(b => isNotSupports(b, row.probe) && reaches(b, rule)).flatMap(b => b.children.filter(covers)) : [];
-      const set = [...same, ...before].flatMap(r => r.decls.map(d => d.prop));
+      const kept = new Set();                                 // the properties an earlier fallback set that nothing since has set again
+      const reset = r => { for (const d of r.decls) for (const p of [...kept]) if (overlaps(p, d.prop)) kept.delete(p); };
+      if (row.sets) {
+        for (const b of order.slice(0, order.indexOf(rule))) {
+          if (isNotSupports(b, row.probe)) { if (reaches(b, rule)) for (const r of b.children.filter(covers)) for (const d of r.decls) kept.add(d.prop); }
+          else if (b.t === 'rule' && !inNotSupports(b) && covers(b)) reset(b);
+        }
+        reset(rule);
+      }
+      const set = [...same.flatMap(r => r.decls.map(d => d.prop)), ...kept];
       for (const need of needs) if (!need.some(n => set.some(s => overlaps(n, s)))) out.push(`${where(file, mine[0])} ${o}: its fallback sets none of ${need.join(', ')}`);
     }
   }
@@ -256,6 +266,11 @@ head('the reader, on small stylesheets');
      SX('.a{transition:opacity .3s allow-discrete}.b{transition-behavior:allow-discrete}') === 'syntax transition allow-discrete');
   ok('and the plain forms are not: a variable named like a constant, an exponent, a color-mix inside a gradient, a gradient with stops only, a transition without the keyword', SX('.a{width:calc(100% - var(--e))}.b{width:calc(1e3px)}.c{width:calc(10px + 2px)}') === '' &&
      SX('.a{background:repeating-linear-gradient(0deg, color-mix(in srgb, var(--teal) 22%, transparent) 0 1px, transparent 1px 5px)}.b{background:linear-gradient(red, blue)}.c{transition:opacity .3s}') === '');
+  const TD = 'syntax calc typed_division_produces_unitless_number';
+  ok('a division by a dimension inside calc(), min(), max() or clamp() is found, in any declaration, after parentheses and inside another function', SX('.a{width:calc(100vw / 1px * 1%)}') === TD && SX('.a{width:calc(10px / 2em)}') === TD && SX('.a{width:min(100%, 20px/1px*1%)}') === TD &&
+     SX('.a{width:clamp(1px, (100vw - 10px) / 1px * 1px, 5px)}') === TD && SX('.a{--x:calc(100vw / 1px)}') === TD && SX('.a{width:calc(10px + max(1px, 2px / 1px))}') === TD);
+  ok('and the plain forms are not: a division by a number, by a percentage-free group, by an exponent, by a variable, a slash outside the function', SX('.a{width:calc(100% / 3)}.b{width:calc(10px / 2)}.c{width:calc(100% / 1e3)}.d{width:calc(1e3px / 2)}') === '' &&
+     SX('.a{width:calc((100% - 4px) / 3)}.b{width:calc(100% / (2 + 1))}.c{width:calc(100vw / var(--n))}') === '' && SX('.a{font:12px/18px sans-serif}.b{font:calc(12px)/18px sans-serif}.c{grid-area:1/2}.d{aspect-ratio:16/9}') === '');
   ok('and one the table does not list is found like any other feature, and one a row lists is classified', A('.a{display:inline flex}', {}).unlisted.has('syntax display multi-keyword_values') && !A('.a{display:inline flex}', { 'syntax display multi-keyword_values': row({ since: '15', class: 'progressive' }) }).unlisted.has('syntax display multi-keyword_values'));
   ok('a value syntax that arrived after the floor, stored in a custom property, is the property\'s that reads it with var(), and is a finding whatever is written before the var()', CV(':root{--d:inline flex}.x{display:inline-flex;display:var(--d)}').join() === 'syntax display multi-keyword_values <- --d @t.css' &&
      CV(':root{--d:inline flex}', '.x{display:var(--d)}').join() === 'syntax display multi-keyword_values <- --d @t.css' && CV(':root{--d:inline flex}.x{color:var(--d)}').length === 0 && CV(':root{--d:flex}.x{display:var(--d)}').length === 0 &&
@@ -333,6 +348,12 @@ head('the reader, on small stylesheets');
      ar(MQ('@media (min-width:2000px)')).length === 0 && ar('.s{aspect-ratio:1}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}' + MQ('@media (max-width:100px)')).length === 0 &&
      ar('@media (min-width:2000px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}@media (max-width:9px){.s{aspect-ratio:3}@supports not (aspect-ratio:1){.s{padding-bottom:33%}}}}').length === 0 &&
      ar('@media (min-width:2000px){@media (max-width:9px){.s{aspect-ratio:3}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:50%}}}.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:33%}}}').length === 1);
+  const CS = (mid, use, own) => ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}' + mid + '@media (max-width:9px){.s{aspect-ratio:2' + (use || '') + '}@supports not (aspect-ratio:1){.s{' + (own || 'padding-bottom:50%') + '}}}').length;
+  ok('what a fallback set is not borrowed once a rule for the same selector has set it again: a plain rule between them, one for a list that holds the selector, one that sets a shorthand of it, or the use\'s own rule, and an @media that need not apply together with the use does not excuse it',
+     CS('.s{height:auto}') === 1 && CS('.s,.t{height:auto}') === 1 && CS('.s{padding:0}', '', 'height:0') === 1 && CS('', ';height:auto') === 1 && CS('@media (min-width:2000px){.s{height:auto}}') === 1);
+  ok('and what does not set it again leaves the fallback standing: another property, a property that only ends like it, another selector, a rule before the fallback, the fallback of its own that sets it again after the rule',
+     CS('.s{color:red}') === 0 && CS('.s{max-height:5px}') === 0 && CS('.t{height:auto}') === 0 && CS('.s{padding:0}') === 0 && CS('.s{height:auto}', '', 'height:0;padding-bottom:50%') === 0 &&
+     ar('.s{height:auto}.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}@media (max-width:9px){.s{aspect-ratio:2}@supports not (aspect-ratio:1){.s{padding-bottom:50%}}}').length === 0);
   ok('the older spelling uses nothing newer than the floor', A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:color-mix(in srgb,var(--y) 10%,transparent)}}', CM).newerInside.length === 1 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:var(--y)}}', CM).newerInside.length === 0);
   const PRE = { prefixed: { 'property backdrop-filter': { since: '18', prefixedSince: '9' } } };
   const pre = css => A(css, {}, PRE).prefix;

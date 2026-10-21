@@ -143,6 +143,10 @@ const SYNTAX = Object.assign({
   'cursor url_positioning_syntax': { props: ['cursor'], re: /url\([^)]*\)\s+-?\d*\.?\d+\s+-?\d*\.?\d+/i },
   // syntax of a value that is not a property's own (props '*': in any declaration, so a custom property that stores it is found where it is stored)
   'calc constants': { props: '*', re: /(?:calc|min|max|clamp)\([^;]*?(?<![\w.#-])(?:pi|e|infinity|nan)(?![\w(.-])/i },
+  // a division whose divisor is a dimension (a number with a unit, or a percentage) inside calc()/min()/max()/clamp(): the divisor's unit cancels the dividend's, a typed
+  // division that a Safari before 26 drops. Followed through two levels of parentheses, so that `font:calc(12px)/18px` (a slash outside the function) is not one; a divisor that
+  // arrives through var() or a function is not shown by the text.
+  'calc typed_division_produces_unitless_number': { props: '*', re: new RegExp(String.raw`(?:calc|min|max|clamp)\(` + String.raw`(?:[^()]|\((?:[^()]|\([^()]*\))*\))*?` + String.raw`\/\s*\(*\s*[+-]?(?:\d+\.?\d*|\.\d+)(?:%|(?!e[+-]?\d)[a-z]+)(?![\w-])`, 'i') },
   'gradient interpolation_color_space': { props: '*', re: /gradient\(\s*(?:[^(),]*?\s)?in\s+(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|lab|oklab|xyz|xyz-d50|xyz-d65|hsl|hwb|lch|oklch)(?![\w-])/i },
   'transition allow-discrete': { props: ['transition', 'transition-behavior'], re: /(?<![\w-])allow-discrete(?![\w-])/i },
 }, Object.fromEntries(FIT.map(p => [p + ' fit-content_function', { props: [p], re: /(?<![\w-])fit-content\s*\(/i }])));

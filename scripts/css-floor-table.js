@@ -58,6 +58,7 @@ const ALIASES = {
   'function rect': ['css', 'properties', 'clip'],           // clip: rect(), which every Safari has; BCD's other rect() is the basic shape of 17.2
   'function format': ['css', 'at-rules', 'font-face', 'src', 'format_keyword'],      // the format() hint of a @font-face src, which is not a function type in the data
   'syntax calc constants': ['css', 'types', 'calc-keyword'],
+  'syntax calc typed_division_produces_unitless_number': ['css', 'types', 'calc', 'typed_division_produces_unitless_number'],
   'syntax gradient interpolation_color_space': ['css', 'types', 'gradient', 'linear-gradient', 'interpolation_color_space'],
   'syntax transition allow-discrete': ['css', 'properties', 'transition-behavior'],
   'layout flex-gap': ['css', 'properties', 'gap', 'flex_context'],
