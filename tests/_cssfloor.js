@@ -255,6 +255,9 @@ function customValueUses(files, watch) {
       if (!w) continue;
       for (const m of d.value.toLowerCase().matchAll(/(?<![\w-])([a-z][a-z-]*)(?![\w(-])/g)) if (w[m[1]] !== undefined) out.push({ file, key: 'value ' + prop + ': ' + m[1], kind: 'value', name: prop + ': ' + m[1], node, decl: d, line: d.line, via: d.prop });
     }
+    for (const prop of consumers.get(d.prop) || []) {               // a value syntax stored in a custom property is the property's, too: --d:inline flex; display:var(--d)
+      for (const [name, sx] of Object.entries(SYNTAX)) if (sx.props.includes(prop) && sx.re.test(d.value)) out.push({ file, key: 'syntax ' + name, kind: 'syntax', name, node, decl: d, line: d.line, via: d.prop });
+    }
   }
   return out;
 }

@@ -145,8 +145,9 @@ function prefixProblems(file, uses, table) {
   for (const u of uses) {
     if (u.kind !== 'property' || !table.prefixed[u.key] || u.name.startsWith('-webkit-')) continue;
     const twins = u.node.decls.filter(d => d.prop === '-webkit-' + u.name);
+    const winner = twins.filter(d => d.important).pop() || twins[twins.length - 1];     // the one the cascade applies: the last, unless an earlier one is !important
     if (!twins.length) out.push(`${where(file, u)} ${u.name}: no -webkit-${u.name} in its rule`);
-    else if (!twins.some(d => same(d, u.decl))) out.push(`${where(file, u)} ${u.name}: its -webkit-${u.name} has another value (${twins[twins.length - 1].value.slice(0, 30)}), and that is the one the floor reads`);
+    else if (!same(winner, u.decl)) out.push(`${where(file, u)} ${u.name}: its -webkit-${u.name} that wins has another value (${winner.value.slice(0, 30)}), and that is the one the floor reads`);
   }
   return out;
 }
@@ -244,6 +245,9 @@ head('the reader, on small stylesheets');
   ok('and the plain forms are not: one keyword, the keyword fit-content, a slash in another property, a cursor with no hotspot, a text-decoration of lines only, !important', SX('.a{display:inline-flex}.b{display:none !important}.c{display:flex}') === '' && SX('.a{align-items:baseline}.b{text-overflow:ellipsis}.c{white-space:nowrap}') === '' &&
      SX('.a{width:fit-content}.b{width:-webkit-fit-content}.c{height:calc(100% - 4px)}') === '' && SX('.a{font:12px / 1.4 sans-serif}.b{content:"a"}.e{content:counter(a) "/" counter(b)}.c{cursor:url(x.png), auto}.d{cursor:pointer}') === '' && SX('.a{text-decoration:underline line-through}.b{text-decoration:none}') === '');
   ok('and one the table does not list is found like any other feature, and one a row lists is classified', A('.a{display:inline flex}', {}).unlisted.has('syntax display multi-keyword_values') && !A('.a{display:inline flex}', { 'syntax display multi-keyword_values': row({ since: '15', class: 'progressive' }) }).unlisted.has('syntax display multi-keyword_values'));
+  ok('a value syntax that arrived after the floor, stored in a custom property, is the property\'s that reads it with var(), and is a finding whatever is written before the var()', CV(':root{--d:inline flex}.x{display:inline-flex;display:var(--d)}').join() === 'syntax display multi-keyword_values <- --d @t.css' &&
+     CV(':root{--d:inline flex}', '.x{display:var(--d)}').join() === 'syntax display multi-keyword_values <- --d @t.css' && CV(':root{--d:inline flex}.x{color:var(--d)}').length === 0 && CV(':root{--d:flex}.x{display:var(--d)}').length === 0 &&
+     (() => { const T2 = { floor: '13.4', ok: { property: ['display'] }, above: { 'syntax display multi-keyword_values': row({ since: '15', how: 'before', class: 'fallback' }) }, prefixed: {}, watch: T.watch }; const r = analyse([{ file: 't.css', root: C.parseCss(':root{--d:inline flex}.x{display:inline-flex;display:var(--d)}').root, uses: [] }], T2); return r.rows['syntax display multi-keyword_values'].length === 1 && /var\(--d\)/.test(r.rows['syntax display multi-keyword_values'][0]); })());
   ok('a gap is taken for a flex box\'s, which the text cannot tell', keysOf('.a{gap:4px}.b{row-gap:1px}.c{column-gap:2px}.d{grid-gap:3px}').filter(k => k === 'layout flex-gap').length === 3);
   ok('the descriptors of an @font-face, @page, @property and @counter-style are descriptors of their at-rule and not properties, and the functions and units in their values are read', (() => {
     const k = keysOf('@font-face{font-family:x;src:url(x.woff2) format("woff2");font-display:swap;size-adjust:100%}@property --x{syntax:"<length>";inherits:false}@counter-style c{system:cyclic;symbols:"a"}@page{size:A4;margin:1cm}');
@@ -313,6 +317,9 @@ head('the reader, on small stylesheets');
   ok('what the floor reads only behind -webkit- has the prefixed twin, with the same value: no twin, and a twin with another value (the one the floor reads), are found', pre('.a{backdrop-filter:blur(12px)}').length === 1 &&
      pre('.a{backdrop-filter:blur(12px);-webkit-backdrop-filter:none}').length === 1 && pre('.a{-webkit-backdrop-filter:none;backdrop-filter:blur(12px)}').length === 1 &&
      pre('.a{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}').length === 0 && pre('.a{-webkit-backdrop-filter: BLUR(12px)  ;backdrop-filter:blur(12px)}').length === 0 && pre('.a{-webkit-backdrop-filter:blur(12px) !important;backdrop-filter:blur(12px)}').length === 1);
+  ok('and it is the twin that wins the cascade that has to match: a later twin with another value, an earlier one that is !important', pre('.a{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);-webkit-backdrop-filter:none}').length === 1 &&
+     pre('.a{-webkit-backdrop-filter:none;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}').length === 0 && pre('.a{-webkit-backdrop-filter:none !important;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}').length === 1 &&
+     pre('.a{-webkit-backdrop-filter:blur(12px) !important;-webkit-backdrop-filter:none;backdrop-filter:blur(12px) !important}').length === 0);
   ok('an @supports not that tests a feature the table lists as newer and is no row\'s probe is found, a row\'s is not, and one that tests something else is not either', A('@supports not (color:color-mix(in srgb,red,blue) or x:y){.a{color:red}}', CM).stray.length === 1 && A('@supports not (display:grid){.a{color:red}}', CM).stray.length === 0 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}', CM).stray.length === 0);
 
   /* before */
