@@ -365,12 +365,12 @@ head('and a style written in script is held to the rows the table has');
   /* A style attribute or a script that sets one cannot carry an @supports rule, so a feature that needs one cannot be written there. The table does not
      list every property a script might set (one used nowhere else is in no row), so this holds what it has: a property or a function that a row says is
      newer than the floor, in a string that looks like a style or in an assignment to element.style, is found, unless the row says it is read as an
-     older spelling there (the image figure's ratio in the Memorizer is exempt by name). */
+     older spelling there (the image figure's ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). */
   const T = C.loadTable();
   const above = Object.entries(T.above).filter(([k, r]) => (k.startsWith('property ') || k.startsWith('function ')) && r.class !== 'inert');
   const names = above.map(([k]) => k.split(' ')[1]);
   const camel = n => n.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-  const found = (text) => {
+  const makeFound = above => (text) => {
     const out = [];
     for (const [k, r] of above) {
       const n = k.split(' ')[1];
@@ -381,16 +381,71 @@ head('and a style written in script is held to the rows the table has');
     }
     return out;
   };
+  const found = makeFound(above);
   ok('the reader finds a newer property in a style attribute, a cssText string and an assignment, and a newer function in a style', found('<div style="inset:0;color:red">').includes('property inset') && found("box.style.cssText = 'position:fixed;inset:0;z-index:1'").includes('property inset') &&
      found('el.style.aspectRatio = "1 / 1"').includes('property aspect-ratio') && found("el.style.setProperty('aspect-ratio', '1')").includes('property aspect-ratio') && found('<i style="background:color-mix(in srgb,red 10%,blue)">').includes('function color-mix'), names.join(' '));
   ok('and nothing in a clip-path inset() shape, a class name or a comment', !found('<i style="clip-path:inset(0 4% 0 0 round 5px)">').length && !found('<i class="inset aspect-ratio">').length && !found('// inset: 0 is the same').length);
+  /* The span of `function name(...) {...}` in a script (comments blanked): from the word to its closing brace, strings stepped over. */
+  const functionSpan = (t, name) => {
+    const m = new RegExp('(?<![\\w$])function\\s+' + name + '\\s*\\(').exec(t);
+    const open = m ? t.indexOf('{', m.index) : -1;
+    if (open < 0) return null;
+    for (let k = open, depth = 0; k < t.length; k++) {
+      const c = t[k];
+      if (c === '"' || c === "'" || c === '`') { for (k++; k < t.length && t[k] !== c; k++) if (t[k] === '\\') k++; continue; }
+      if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) return [m.index, k + 1];
+    }
+    return null;
+  };
+  /* What the scripts and pages set that the table says is newer than the floor, except in the function a row exempts (file#function, so that a second
+     use in the same file is found), and the exemptions that excuse nothing: a function that is not there, or does not use the feature, or a file that is
+     not read, or a file where a function is meant. */
+  const scriptProblems = (sources, above, found) => {
+    const hits = [], stale = [], seen = new Set();
+    for (const { rel, text } of sources) {
+      let rest = text;
+      for (const [k, r] of above) for (const e of Object.keys(r.exempt || {})) {
+        const [file, fn] = e.split('#');
+        if (!fn || file !== rel) continue;
+        seen.add(k + ' ' + e);
+        const span = functionSpan(rest, fn);
+        if (!span) { stale.push(`${e}: no function by that name`); continue; }
+        const inside = rest.slice(span[0], span[1]);
+        if (!found(inside).includes(k)) stale.push(`${e}: the function does not set ${k}`);
+        rest = rest.slice(0, span[0]) + inside.replace(/[^\n]/g, ' ') + rest.slice(span[1]);
+      }
+      for (const k of found(rest)) hits.push(`${rel}: ${k}`);
+    }
+    for (const [k, r] of above) for (const e of Object.keys(r.exempt || {})) {
+      if (e.includes('#')) { if (!seen.has(k + ' ' + e)) stale.push(`${e}: no such file is read`); }
+      else if (/\.(?:js|html)$/.test(e)) stale.push(`${e}: a file is not an exemption, name the function (file#function)`);
+    }
+    return { hits, stale };
+  };
+  {
+    const AR = { 'property aspect-ratio': { class: 'fallback', exempt: { 'a.js#paint': 'x' } } };
+    const sp = (text, exempt) => scriptProblems([{ rel: 'a.js', text }], Object.entries(exempt === undefined ? AR : exempt), makeFound(Object.entries(exempt === undefined ? AR : exempt)));
+    const USE = "function paint(el) { el.style.aspectRatio = '1 / 1'; el.onload = function () { el.style.aspectRatio = ''; }; }\n";
+    const bad = sp(USE + "function other(el) { el.style.aspectRatio = '2 / 1'; }");
+    const stale1 = sp("function other(el) { el.style.aspectRatio = '2 / 1'; }"), stale2 = sp("function paint(el) { el.title = '{'; }");
+    const file = sp(USE, { 'property aspect-ratio': { class: 'fallback', exempt: { 'a.js': 'x' } } }), gone = sp(USE, { 'property aspect-ratio': { class: 'fallback', exempt: { 'b.js#paint': 'x' } } });
+    ok('a script that sets a newer property is excused in the function its row names and only there', sp(USE).hits.length === 0 && sp(USE).stale.length === 0 && bad.hits.length === 1 && bad.stale.length === 0 && stale1.hits.length === 1,
+       `${JSON.stringify(sp(USE))} ${JSON.stringify(bad)}`);
+    ok('and an exemption that excuses nothing is found: a function that is not there, one that does not set it, a file where a function is meant, a file that is not read', stale1.stale.length === 1 && stale2.stale.length === 1 && file.stale.length === 1 && gone.stale.length === 1,
+       [stale1, stale2, file, gone].map(r => r.stale.join(';')).join(' | '));
+    const braced = sp("function paint(el) { el.title = '}'; el.style.aspectRatio = '1'; }"), braced2 = sp("function paint(el) { el.title = '}'; el.style.aspectRatio = '1'; }\nfunction other(el) { el.style.aspectRatio = '2'; }");
+    ok('the function ends at its own closing brace, whatever a string in it holds', braced.hits.length === 0 && braced.stale.length === 0 && braced2.hits.length === 1 && braced2.stale.length === 0, JSON.stringify(braced));
+  }
   const SRC = [];
   const walkDir = (dir, rx) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) { if (!/node_modules|fixtures/.test(e.name)) walkDir(p, rx); } else if (rx.test(e.name)) SRC.push(p); } };
   walkDir(path.join(C.ROOT, 'src'), /\.js$/); walkDir(path.join(C.ROOT, 'memorizer', 'src'), /\.js$/); walkDir(path.join(C.ROOT, 'lab', 'src'), /\.js$/);
   SRC.push(path.join(C.ROOT, 'app', 'systole.html'), path.join(C.ROOT, 'scripts', 'build-pwa.js'), path.join(C.ROOT, 'memorizer', 'index.html'), path.join(C.ROOT, 'lab', 'index.html'));
-  const hits = [];
-  for (const f of SRC) { if (!fs.existsSync(f)) continue; const t = blankComments(fs.readFileSync(f, 'utf8')); for (const k of found(t)) if (!(T.above[k].exempt && Object.keys(T.above[k].exempt).some(e => e.includes(path.relative(C.ROOT, f).split(path.sep).join('/'))))) hits.push(`${path.relative(C.ROOT, f).split(path.sep).join('/')}: ${k}`); }
-  ok('no script or markup that Safari reads sets a property or calls a function the table says is newer than the floor, but where its row exempts the file', hits.length === 0, list0(hits) || `${SRC.length} files, ${names.length} names`);
+  const rel = f => path.relative(C.ROOT, f).split(path.sep).join('/');
+  const sources = SRC.filter(f => fs.existsSync(f)).map(f => ({ rel: rel(f), text: blankComments(fs.readFileSync(f, 'utf8')) }));
+  const real = scriptProblems(sources, above, found);
+  ok('no script or markup that Safari reads sets a property or calls a function the table says is newer than the floor, except in the function its row names', real.hits.length === 0, list0(real.hits) || `${sources.length} files, ${names.length} names`);
+  ok('and every exemption of a script names a function that is there and sets the feature', real.stale.length === 0, list0(real.stale) || 'each is used');
   function list0(a) { return a.slice(0, 4).join(' | '); }
 }
 

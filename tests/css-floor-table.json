@@ -317,7 +317,7 @@
       "exempt": {
         ".echo-teaching-image": "An img: where aspect-ratio is not read it is shown at its own proportions, without the black bars of its box.",
         ".pages .fig img": "An img in the Memorizer, whose script holds the figure's space itself (memorizer/src/ui.js lazyImage): where it is not read the page grows as the figure is drawn.",
-        "memorizer/src/ui.js": "The figure's box is held by script until the image is drawn (lazyImage), and says it holds nothing where aspect-ratio is not read."
+        "memorizer/src/ui.js#lazyImage": "The figure's box is held by script until the image is drawn, and the function says it holds nothing where aspect-ratio is not read. Exempt in this function only: another use in that file is found."
       },
       "note": "A box that has only a ratio is 0 px tall where it is not read: the heat map and the two diagram stages. Each is followed by an @supports not rule that makes the same box with a height of 0 and a padding-bottom that is a share of the width (under min() with the max-height, which clamps the height), the max-width that a max-height gives a ratio box, and the canvas laid over it."
     },
