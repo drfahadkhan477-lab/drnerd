@@ -4754,6 +4754,7 @@ function adoptProgress(text){
   let p; try{ p=progressFromBackup(raw); }catch(_){ return false; }               // what a restore would refuse is not taken
   if(+raw.schemaVersion>DATA_SCHEMA_VERSION&&!newerNoted){ newerNoted=true; toast(NEWER_DATA_NOTE); }   // as load() says it of a record read at launch
   delete p.resumed;                                                               // whether this window has resumed a deck is its own
+  delete p.focusMode;                                                             // and so is its focus mode: the chrome of this window is not set by another
   const themeWas=S.theme;
   Object.assign(S,p);
   FOREIGN={}; for(const k in raw) if(SCHEMA_KEYS.indexOf(k)===-1) FOREIGN[k]=raw[k];
