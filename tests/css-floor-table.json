@@ -8,6 +8,13 @@
       "@media",
       "@supports"
     ],
+    "descriptor": [
+      "@font-face font-display",
+      "@font-face font-family",
+      "@font-face font-style",
+      "@font-face font-weight",
+      "@font-face src"
+    ],
     "function": [
       "blur",
       "brightness",
@@ -17,6 +24,7 @@
       "cubic-bezier",
       "drop-shadow",
       "env",
+      "format",
       "hsl",
       "hsla",
       "inset",

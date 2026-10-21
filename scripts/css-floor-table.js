@@ -56,6 +56,7 @@ const ALIASES = {
   'unit dvh': ['css', 'types', 'length', 'viewport_percentage_units_dynamic'], 'unit dvw': ['css', 'types', 'length', 'viewport_percentage_units_dynamic'],
   'unit svh': ['css', 'types', 'length', 'viewport_percentage_units_small'], 'unit lvh': ['css', 'types', 'length', 'viewport_percentage_units_large'],
   'function rect': ['css', 'properties', 'clip'],           // clip: rect(), which every Safari has; BCD's other rect() is the basic shape of 17.2
+  'function format': ['css', 'at-rules', 'font-face', 'src', 'format_keyword'],      // the format() hint of a @font-face src, which is not a function type in the data
   'layout flex-gap': ['css', 'properties', 'gap', 'flex_context'],
   'color hex-alpha': ['css', 'types', 'color', 'hex_rgba'],
   'color space-separated': ['css', 'types', 'color', 'rgb', 'space_separated_parameters'],
@@ -77,6 +78,7 @@ function resolve(use) {
     case 'unit': { const ts = (index[use.name] || []).filter(p => p[1] === 'types' && p[2] === 'length'); return ts.length ? pick([ts[0]]) : null; }
     case 'selector': { const n = use.name.replace(/^::?/, ''); return pick([['css', 'selectors', n], ['css', 'selectors', strip(n)]]); }
     case 'atrule': return pick([['css', 'at-rules', use.name.slice(1)]]);
+    case 'descriptor': { const [at, d] = use.name.split(' '); return pick([['css', 'at-rules', at.slice(1), d]]); }
     case 'media': return pick([['css', 'at-rules', 'media', use.name]]);
     case 'value': { const [prop, kw] = use.name.split(': '); return pick([['css', 'properties', prop, kw]]); }
   }
@@ -102,6 +104,7 @@ for (const fam of C.families()) for (const f of fam.files) firstPass.push(...C.u
 const inlineOf = watch => {                              // what scripts and pages write inline (style attributes, cssText, el.style.x, <style> blocks): the same Safari reads it
   const out = [];
   for (const f of C.scriptFiles()) for (const u of C.inlineUses(C.readFile(f), watch)) out.push(Object.assign(u, { node: { line: f + ':' + u.line } }));
+  for (const g of C.generatedSheets()) for (const u of C.usesOf(C.parseCss(g.css).root, watch)) out.push(Object.assign(u, { node: { line: g.file + ':' + u.line } }));
   return out;
 };
 firstPass.push(...inlineOf(null));

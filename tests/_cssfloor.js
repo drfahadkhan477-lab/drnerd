@@ -154,8 +154,9 @@ function usesOf(root, watch) {
       if (name === 'supports' && /\bselector\s*\(/i.test(node.prelude)) add('supports', 'selector()', node);
     }
     for (const d of node.decls) {
-      if (node.t === 'at' && /^@(font-face|page|property|counter-style)\b/i.test(node.prelude)) continue;   // descriptors, not properties
-      add('property', d.prop.startsWith('--') ? '--*' : d.prop, node, { decl: d, line: d.line });
+      const desc = node.t === 'at' && /^@(font-face|page|property|counter-style)\b/i.exec(node.prelude);     // descriptors, not properties: a row of their own, by the at-rule
+      if (desc) add('descriptor', desc[0].toLowerCase() + ' ' + d.prop.toLowerCase(), node, { decl: d, line: d.line });
+      else add('property', d.prop.startsWith('--') ? '--*' : d.prop, node, { decl: d, line: d.line });
       if (d.prop === 'gap' || d.prop === 'row-gap' || d.prop === 'column-gap') add('layout', 'flex-gap', node, { decl: d, line: d.line });
       const v = d.value;
       for (const m of v.matchAll(/(-?[a-zA-Z_][\w-]*)\(/g)) add('function', m[1].toLowerCase(), node, { decl: d, line: d.line });
@@ -402,6 +403,13 @@ function inlineSegments(text) {
   return out;
 }
 
+/* Stylesheets that a script builds from data and does not write out in text: the Memorizer's look sheet, which memorizer/src/appearance.js css() returns. They are read
+   as the script makes them, so that what they hold is classified like the rest. */
+function generatedSheets() {
+  const look = require(path.join(ROOT, 'memorizer', 'src', 'appearance.js'));
+  return [{ file: 'memorizer/src/appearance.js', css: look.css(look.DEFAULT) }];
+}
+
 /* The uses of the same shape the stylesheet reader gives, for everything inline: property, function, unit, color, value, selector, at-rule. */
 function inlineUses(text, watch) {
   const out = [];
@@ -409,4 +417,4 @@ function inlineUses(text, watch) {
   return out;
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses };
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets };

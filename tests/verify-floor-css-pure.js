@@ -212,7 +212,11 @@ head('the reader, on small stylesheets');
   ok('range syntax and not/or in a media query are found, and min- and max- are one feature', keysOf('@media (width >= 600px){.a{color:red}}').includes('media range-syntax') && keysOf('@media not all and (hover:hover){.a{color:red}}').includes('media not-or') && keysOf('@media (min-width:1px) and (max-width:9px){.a{color:red}}').filter(k => k === 'media width').length === 2 && !keysOf('@media (min-width:1px){.a{color:red}}').includes('media range-syntax'));
   ok('a keyword the watch list names is a use of the property it is the value of, and only of that one', keysOf('.a{overflow-wrap:anywhere}.b{display:anywhere}', T.watch).filter(k => k.startsWith('value')).join() === 'value overflow-wrap: anywhere' && !keysOf('.a{overflow-wrap:break-word}', T.watch).some(k => k.startsWith('value')));
   ok('a gap is taken for a flex box\'s, which the text cannot tell', keysOf('.a{gap:4px}.b{row-gap:1px}.c{column-gap:2px}.d{grid-gap:3px}').filter(k => k === 'layout flex-gap').length === 3);
-  ok('the descriptors of an @font-face are not properties', !keysOf('@font-face{font-family:x;src:url(x.woff2);font-display:swap}').some(k => k === 'property src' || k === 'property font-display'));
+  ok('the descriptors of an @font-face, @page, @property and @counter-style are descriptors of their at-rule and not properties, and the functions and units in their values are read', (() => {
+    const k = keysOf('@font-face{font-family:x;src:url(x.woff2) format("woff2");font-display:swap;size-adjust:100%}@property --x{syntax:"<length>";inherits:false}@counter-style c{system:cyclic;symbols:"a"}@page{size:A4;margin:1cm}');
+    return ['descriptor @font-face src', 'descriptor @font-face size-adjust', 'descriptor @property syntax', 'descriptor @counter-style system', 'descriptor @page size', 'function url', 'function format', 'unit %', 'unit cm'].every(x => k.includes(x)) &&
+      !k.some(x => x === 'property src' || x === 'property font-display' || x === 'property size' || x === 'property margin');
+  })());
 
   /* the table */
   ok('a feature that is in no part of the table is unlisted, and one in ok, in prefixed or in above is not', A('.a{scroll-snap-type:x}', {}).unlisted.has('property scroll-snap-type') && !A('.a{color:red}', {}).unlisted.size && !A('.a{backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px)}', {}).unlisted.size && !A('.a{inset:0}', { 'property inset': row({ class: 'banned' }) }).unlisted.size);
@@ -255,6 +259,9 @@ head('the reader, on small stylesheets');
   const AR = { 'property aspect-ratio': row({ how: 'companion', probe: 'aspect-ratio:1', sets: ['height', 'padding-bottom'], exempt: { '.img': 'an image' } }) };
   const ar = css => A(css, AR).rows['property aspect-ratio'];
   ok('a ratio box has the box made the old way, and an exempt selector has none', ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{height:0;padding-bottom:66%}}').length === 0 && ar('.s{aspect-ratio:1.5}@supports not (aspect-ratio:1){.s{width:1px}}').length === 1 && ar('.s{aspect-ratio:1.5}').length === 1 && ar('.img{aspect-ratio:1.5}').length === 0 && ar('.img,.s{aspect-ratio:1.5}').length === 1);
+  const DS = { 'descriptor @font-face size-adjust': row({ since: '17', class: 'progressive' }) };
+  ok('a descriptor that is not in the table is found, and one that a row lists as newer than the floor is classified like any other feature', A('@font-face{font-family:x;size-adjust:100%}', {}).unlisted.has('descriptor @font-face size-adjust') &&
+     !A('@font-face{font-family:x;size-adjust:100%}', DS).unlisted.has('descriptor @font-face size-adjust') && A('@font-face{font-family:x;size-adjust:100%}', DS).malformed.length === 0);
   ok('the older spelling uses nothing newer than the floor', A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:color-mix(in srgb,var(--y) 10%,transparent)}}', CM).newerInside.length === 1 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:var(--y)}}', CM).newerInside.length === 0);
   ok('an @supports not that tests a feature the table lists as newer and is no row\'s probe is found, a row\'s is not, and one that tests something else is not either', A('@supports not (color:color-mix(in srgb,red,blue) or x:y){.a{color:red}}', CM).stray.length === 1 && A('@supports not (display:grid){.a{color:red}}', CM).stray.length === 0 && A('.a{background:color-mix(in srgb,var(--x) 10%,transparent)}' + SUP + '{.a{background:red}}', CM).stray.length === 0);
 
@@ -498,13 +505,17 @@ head('and a style written in script is held to the rows the table has');
   /* inline CSS goes through the same classification as a stylesheet: each piece is a pseudo-file, and analyse() sorts what is in it */
   const inlineFiles = [];
   for (const { rel } of sources) for (const seg of C.inlineSegments(real.rests[rel])) inlineFiles.push(parseFile(rel, seg.css, T));
+  const generated = C.generatedSheets();                  // a stylesheet a script builds from data is read as the script makes it
+  for (const g of generated) inlineFiles.push(parseFile(g.file, g.css, T));
   const resIn = analyse(inlineFiles, T);
   const inlineBad = [...[...resIn.unlisted].map(([k, w]) => `${w} ${k} is not in the table`), ...Object.values(resIn.rows).flat(), ...resIn.newerInside, ...resIn.stray, ...resIn.prefix];
   ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', resIn.unlisted.size === 0 && inlineFiles.length > 0, list0([...resIn.unlisted].map(([k, w]) => `${w} ${k}`)) || `${inlineFiles.length} pieces`);
   ok('and what is newer than the floor in it has what its row says it needs, which an attribute cannot give an @supports rule to (an older value written first is all it can have)', inlineBad.length === 0, list0(inlineBad) || 'none');
   const reads = rel => new Set(inlineFiles.filter(f => f.file === rel).flatMap(f => f.uses.map(u => u.key)));
   ok('and the pieces the pages make are read: the shell\'s <style> block (@font-face), the style element its script fills (@keyframes, min()), the page builder\'s overlay, the Memorizer\'s scripts', reads('app/systole.html').has('atrule @font-face') && reads('app/systole.html').has('atrule @keyframes') &&
-     reads('app/systole.html').has('function min') && reads('scripts/build-pwa.js').has('property z-index') && reads('memorizer/src/ui.js').has('property width'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);
+     reads('app/systole.html').has('function min') && reads('app/systole.html').has('descriptor @font-face font-display') && reads('scripts/build-pwa.js').has('property z-index') && reads('memorizer/src/ui.js').has('property width'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);
+  ok('and the stylesheets that scripts build from data are read as built: the Memorizer\'s look sheet has its themes (:root blocks), its dark scheme (@media) and its custom properties', generated.length > 0 && generated.every(g => g.css.length > 500) && reads('memorizer/src/appearance.js').has('atrule @media') &&
+     reads('memorizer/src/appearance.js').has('property --*') && generated.some(g => /:root\[data-look="auto"\]/.test(g.css)), generated.map(g => `${g.file} ${g.css.length} chars`).join(', '));
   ok('and the scripts and pages read are the ones the app ships: the shell, the builder, both other pages and the sources of all three', ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html', 'lab/index.html'].every(f => SRC.includes(f)) &&
      ['src/', 'memorizer/src/', 'lab/src/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
   function list0(a) { return a.slice(0, 4).join(' | '); }
