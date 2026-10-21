@@ -305,31 +305,38 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      the older Safari with the margin of 0, and this reader does not know which names are shorthands, so it asks for nothing between them).
      After the dvh the vh would override it in a Safari that knows it; in another rule it is a cascade that the next edit to either rule can
      break; and a value that merely has no new unit in it is not a fallback either (`height:not-a-value` is dropped by the same Safari, and takes
-     the fallback with it). The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not
-     a declaration that can fall back at all: it parses, and the declaration that uses it fails later, past every earlier one. None is in use;
-     the reader finds one if it is added. A declaration marked !important is compared with its mark. A style rule nested in another (CSS nesting,
-     Safari 16.5) is refused, not read: the reader takes the innermost braces, so the declarations of the outer rule would go unread, and a new
-     unit in one of them would pass. Rules inside an at-rule (@media, @supports, @layer, @keyframes) are not nested in this sense. */
+     the fallback with it). The two values are compared as written, quoted text and case included, but for the white space and the unit: a string
+     is blanked to find a unit, never to compare (`url("old.png") 100vh` is no fallback for `url("new.png") 100dvh`). The inline and block forms
+     have no older spelling, so nothing clears them. A custom property holding the unit is not a declaration that can fall back at all: it
+     parses, and the declaration that uses it fails later, past every earlier one. None is in use; the reader finds one if it is added. A
+     declaration marked !important is compared with its mark.
+
+     WHAT IT DOES NOT READ IS REFUSED, NOT SKIPPED. A style rule nested in another (CSS nesting, Safari 16.5) is refused: the reader takes the
+     innermost braces, so the declarations of the outer rule would go unread, and a new unit in one of them would pass. Rules inside an at-rule
+     (@media, @supports, @layer, @keyframes) are not nested in this sense. Braces that do not balance are refused for the same reason: a block that
+     is never closed is never read. A unit in the condition of an at-rule is neither: it is not a declaration that can lose its value, an older
+     Safari reads the condition as false and skips the rule, which is what a condition is for. */
   const NEW_UNIT = /(?:\d|\.)[dsl]v(?:h|w|i|b|min|max)\b/i;
   const OLDER = { dvh: 'vh', svh: 'vh', lvh: 'vh', dvw: 'vw', svw: 'vw', lvw: 'vw', dvmin: 'vmin', svmin: 'vmin', lvmin: 'vmin', dvmax: 'vmax', svmax: 'vmax', lvmax: 'vmax' };
   const older = v => v.replace(new RegExp('(\\d|\\.)(' + Object.keys(OLDER).join('|') + ')\\b', 'gi'), (m, d, u) => d + OLDER[u.toLowerCase()]);
-  const squash = v => v.trim().replace(/\s+/g, ' ').toLowerCase();
+  const squash = v => v.trim().replace(/\s+/g, ' ');
   const lineOf = (text, i) => text.slice(0, i).split('\n').length;
-  const blankCss = css => blankComments(css).replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
-  function nestedStyleRules(css) {     // the lines where a style rule is opened inside a style rule
-    const blank = blankCss(css), inAtRule = [], lines = []; let start = 0;
+  const blankStrings = text => text.replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
+  const blankCss = css => blankStrings(blankComments(css));
+  function braces(css) {               // the lines where a style rule is opened inside a style rule, and whether the braces balance
+    const blank = blankCss(css), inAtRule = [], nested = []; let start = 0, balanced = true;
     for (let i = 0; i < blank.length; i++) {
       const c = blank[i];
       if (c === '{') {
-        if (inAtRule.length && !inAtRule[inAtRule.length - 1]) lines.push(lineOf(blank, i));
+        if (inAtRule.length && !inAtRule[inAtRule.length - 1]) nested.push(lineOf(blank, i));
         inAtRule.push(blank.slice(start, i).trim().startsWith('@')); start = i + 1;
-      } else if (c === '}') { inAtRule.pop(); start = i + 1; }
+      } else if (c === '}') { if (!inAtRule.length) balanced = false; else inAtRule.pop(); start = i + 1; }
       else if (c === ';') start = i + 1;
     }
-    return lines;
+    return { nested, balanced: balanced && inAtRule.length === 0 };
   }
   function newUnitsWithoutFallback(css) {
-    const blank = blankCss(css);
+    const text = blankComments(css), blank = blankStrings(text);     // the same length, the same lines: the second has the quoted text in spaces
     const bad = []; let used = 0, b;
     const block = /\{([^{}]*)\}/g;
     while ((b = block.exec(blank))) {
@@ -343,8 +350,8 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
       for (const d of decls) {
         const m = /^\s*([-\w]+)\s*:([\s\S]*)$/.exec(d.text);
         if (!m) continue;
-        const prop = m[1].toLowerCase(), value = squash(m[2]);
-        if (!NEW_UNIT.test(value)) { read = { prop, value }; continue; }
+        const prop = m[1].toLowerCase(), value = squash(text.slice(d.at, d.at + d.text.length).replace(/^\s*[-\w]+\s*:/, ''));
+        if (!NEW_UNIT.test(m[2])) { read = { prop, value }; continue; }
         used++;
         if (prop.startsWith('--') || !read || read.prop !== prop || read.value !== older(value))
           bad.push(`${prop}:${value.slice(0, 40)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
@@ -376,13 +383,21 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      bad('/* height:100dvh */ .a{content:"height:100dvh"}') === 0 && bad('.a{height:100vh;width:50%;top:4px}') === 0);
   ok('and a semicolon inside parentheses does not end a declaration, so a fallback written inside a url() is none',
      bad('.a{background:url(data:image/png;height:100vh;);height:100dvh}') === 1 && bad('.a{background:url(data:image/png;base64,AAAA);height:100vh;height:100dvh}') === 0);
-  const nested = css => nestedStyleRules(css).length;
+  const nested = css => braces(css).nested.length;
   ok('a style rule nested in another is found, whether it follows a declaration or not, whether it is a rule or a conditional, and after a statement at the top',
      nested('.a{height:100dvh;.child{color:red}}') === 1 && nested('.a{.child{color:red}}') === 1 && nested('.a{&:hover{color:red}}') === 1 &&
      nested('.a{@media (min-width:1px){color:red}}') === 1 && nested('@import "x.css";.a{.b{color:red}}') === 1);
+  ok('nor is a fallback whose quoted text, or whose case, is not the same, though the strings are blanked to find a unit',
+     bad('.a{background:url("old.png") center/100vh;background:url("new.png") center/100dvh}') === 1 && bad('.a{background:url("Old.png") 100vh;background:url("old.png") 100dvh}') === 1 &&
+     bad('.a{background:url(old.png) 100vh;background:url(new.png) 100dvh}') === 1 && bad('.a{content:"a";content:"b";height:100dvh}') === 1 &&
+     bad('.a{background:url("x.png") center/100vh;background:url("x.png") center/100dvh}') === 0);
+  ok('but a unit is a unit in any case, and a fallback written in lowercase clears it', bad('.a{height:100DVH}') === 1 && bad('.a{height:100vh;height:100DVH}') === 0);
   ok('but the rules inside an at-rule are not nested ones, at any depth, and neither are rules side by side',
      nested('@media (min-width:1px){.a{color:red}}') === 0 && nested('@supports (display:grid){@media (min-width:1px){.a{color:red}.b{color:blue}}}') === 0 &&
      nested('@keyframes k{from{opacity:0}to{opacity:1}}.c{color:red}') === 0 && nested('.a{color:red}.b{color:blue}') === 0 && nested('@font-face{font-family:x;src:url(x.woff2)}') === 0);
+  ok('braces that do not balance are found, a block never closed and a brace closed twice, and a quoted brace does not count',
+     !braces('.a{height:100dvh').balanced && !braces('.a{}}').balanced && !braces('@media (x){.a{color:red}').balanced &&
+     braces('.a{color:red}.b{content:"}"}').balanced && braces('@media (x){.a{color:red}}').balanced);
 
   const FAMILIES = [['the Systole app', CSS_FILES],
                     ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]],
@@ -396,8 +411,9 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
        lost.slice(0, 3).join(' | ') || `${read.reduce((n, r) => n + r.used, 0)} declarations in ${files.length} file(s)`);
   }
   ok('and there are such declarations to check, so the scan is not reading nothing', used > 0, `${used} declarations`);
-  const nestedIn = FAMILIES.flatMap(([, files]) => files.flatMap(f => nestedStyleRules(fs.readFileSync(f, 'utf8')).map(n => `${rel(f)} line ${n}`)));
-  ok('no style rule in them is nested in another, which the reader would not read the outer declarations of', nestedIn.length === 0, nestedIn.slice(0, 3).join(' | ') || 'none');
+  const shape = FAMILIES.flatMap(([, files]) => files.map(f => ({ f, ...braces(fs.readFileSync(f, 'utf8')) })));
+  const unread = shape.flatMap(r => [...r.nested.map(n => `${rel(r.f)} line ${n} is nested`), ...(r.balanced ? [] : [`${rel(r.f)} does not balance`])]);
+  ok('no style rule in them is nested in another and every file\'s braces balance, or the reader would not read all of it', unread.length === 0, unread.slice(0, 3).join(' | ') || `${shape.length} files`);
   const inline = [...SAFARI_FILES, SHELL].filter(f => NEW_UNIT.test(blanked(f))).map(rel);
   ok('none is written in the shell\'s markup or script or in a src/ module, where a style attribute cannot carry a fallback', inline.length === 0, inline.join(', ') || 'none');
 }
