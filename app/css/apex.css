@@ -54,14 +54,18 @@
   font:inherit;color:inherit;overflow:hidden}
 
 /* AI panel */
-/* The bar is out of the flow now, so the panes have to step around it. */
-#shell{display:flex;align-items:stretch;min-height:100dvh;
+/* The bar is out of the flow now, so the panes have to step around it.
+   EVERY dvh IN THESE STYLESHEETS HAS THE SAME PROPERTY AND VALUE IN vh DIRECTLY BEFORE IT. Safari before 15.4 does not know the unit and drops the
+   declaration that uses it, whole; in portrait, where html and body are overflow:hidden and #shell takes its height from this unit, the shell then
+   grows to its content, the body clips it, and nothing scrolls. Nothing else between the two: a declaration there, a shorthand of the property
+   among them, is the one that Safari ends up with. tests/verify-ipad-pure.js holds the pairing. */
+#shell{display:flex;align-items:stretch;min-height:100vh;min-height:100dvh;
   padding-top:calc(var(--navh) + var(--sat))}
 #app{flex:1;min-width:0}
 #ai{width:0;flex:0 0 0;overflow:hidden;transition:flex-basis .28s var(--ease);
   border-left:1px solid var(--border);background:var(--white);
   display:flex;flex-direction:column;position:sticky;
-  top:calc(var(--navh) + var(--sat));height:calc(100dvh - var(--navh) - var(--sat))}
+  top:calc(var(--navh) + var(--sat));height:calc(100vh - var(--navh) - var(--sat));height:calc(100dvh - var(--navh) - var(--sat))}
 #shell.ai-open #ai{flex:0 0 min(46vw,560px);width:auto}
 .grounded-btn{background:var(--card);border-color:var(--border);color:var(--muted)}
 .grounded-btn.on{background:var(--teal4);border-color:var(--teal);color:var(--teal)}
@@ -262,7 +266,7 @@
   #ai{position:fixed;inset:auto 0 0 0;width:100%;height:0;border-left:none;
     border-top:1px solid var(--border);z-index:80;
     border-radius:18px 18px 0 0;box-shadow:0 -10px 40px rgba(15,30,61,.2)}
-  #shell.ai-open #ai{height:74dvh;flex-basis:auto}
+  #shell.ai-open #ai{height:74vh;height:74dvh;flex-basis:auto}
   .tool-rail{left:auto;right:max(10px,env(safe-area-inset-right));top:auto;
     bottom:calc(max(14px,env(safe-area-inset-bottom)) + 62px);transform:none;
     flex-direction:row;padding:6px 8px}
@@ -284,7 +288,7 @@
 @media (min-width:768px) and (orientation:landscape){
   #shell{display:flex;align-items:stretch}
   #ai{position:sticky;inset:auto;top:calc(var(--navh) + var(--sat));
-    height:calc(100dvh - var(--navh) - var(--sat));
+    height:calc(100vh - var(--navh) - var(--sat));height:calc(100dvh - var(--navh) - var(--sat));
     width:0;flex:0 0 0;max-width:none;
     border-left:1px solid var(--border);border-top:none;
     border-radius:0;box-shadow:none;z-index:1}
@@ -296,7 +300,7 @@
    #app keeps its max-width, because a wide line of prose is no better here. */
 @media (min-width:700px) and (orientation:portrait){
   html,body{height:100%;overflow:hidden}
-  #shell{display:flex;flex-direction:column;height:100dvh;min-height:0}
+  #shell{display:flex;flex-direction:column;height:100vh;height:100dvh;min-height:0}
   /* width:100% is doing real work here. #app carries margin:0 auto to centre
      itself, and an auto margin on the cross axis DISABLES flex stretching — so
      in this column flex container #app was sized to fit its contents and then
@@ -383,7 +387,7 @@
   align-items:center;justify-content:center;padding:18px;
   backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .peek-card{background:var(--white);border-radius:18px;max-width:660px;width:100%;
-  max-height:86dvh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  max-height:86vh;max-height:86dvh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .peek-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border2)}
 .peek-ch{font-weight:700;font-size:13px}
 .peek-sub{font-size:11px;color:var(--muted)}

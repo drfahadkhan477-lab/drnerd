@@ -45,6 +45,7 @@
      it is the whole of the overflow. The portrait split already zeroes this
      for its own reasons; landscape never did. */
   #app[data-screen="home"]{max-width:none;padding:0 clamp(20px,3vw,44px);
+    min-height:calc(100vh - var(--navh) - var(--sat));
     min-height:calc(100dvh - var(--navh) - var(--sat))}
   #app[data-screen="home"] .home-wrap{
     display:grid;
@@ -59,6 +60,7 @@
        taller than a short screen can still push past it and scroll rather
        than being cut off. A long PEARL does not push: it scrolls inside its
        own card, which the rule on .pearl-card below is what enforces. */
+    min-height:calc(100vh - var(--navh) - var(--sat) - 40px);
     min-height:calc(100dvh - var(--navh) - var(--sat) - 40px);
     padding:16px 0 20px}
   #app[data-screen="home"] .hero-live{grid-area:hero;margin:0}

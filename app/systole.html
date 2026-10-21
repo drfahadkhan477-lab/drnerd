@@ -464,7 +464,21 @@ let NOTES = loadJSON(NOTE_KEY, {});  // { qid: [ {id,x,y,text,color} ] }
    IndexedDB once it has hydrated and from localStorage before that; everything
    else passes straight through to localStorage exactly as it always did. */
 function loadJSON(k,d){ return Store.get(k,d); }
-function saveJSON(k,v){ if(!Store.set(k,v)) warnStorage(); }
+/* The whole records that more than one window of this app may hold (see "one record, several windows" below), and for each the text this window
+   last read or wrote. A write of one of them through here is a write this window knows of. */
+const SEEN=Object.create(null);
+/* A whole record another window may write, read at launch: parsed from the text read, and that text is what this window has seen of it. Reading it
+   a second time for SEEN, later in the script, would take in a write made in between and call it seen, and the window would never take it. */
+function loadSeen(k,d){
+  let text=null; try{ text=localStorage.getItem(k); }catch(_){}
+  SEEN[k]=text;
+  let v; try{ v=text==null?undefined:JSON.parse(text); }catch(_){}
+  return v==null?d:v;
+}
+function saveJSON(k,v){
+  if(!Store.set(k,v)) warnStorage();
+  else if(k in SEEN){ try{ SEEN[k]=localStorage.getItem(k); }catch(_){} }
+}
 let storageWarned=false;
 function warnStorage(){
   if(storageWarned)return; storageWarned=true;
@@ -1150,7 +1164,7 @@ function refSeedApply(cur, seed){
   }catch(_){ /* private mode, quota, anything — an unseeded library still works */ }
   return cur;
 }
-let REF = refSeedApply(loadJSON(REF_KEY, []), REF_SEED);          // [{id,title,tags,body,ts,source}]
+let REF = refSeedApply(loadSeen(REF_KEY, []), REF_SEED);          // [{id,title,tags,body,ts,source}]
 /* Figures cited by the reference notes above, keyed by the refimg:// path
    each note uses to name them. Reassignable ('let') because the split PWA
    build empties this and fetches the real map in afterward. */
@@ -2869,8 +2883,11 @@ function refSave(){
   const g=document.getElementById('refG').value.trim();
   const b=document.getElementById('refB').value.trim();
   if(!b){ toast('Write something in the note body first.'); return; }
-  if(refEditing){ refUpdate(refEditing,{title:t,tags:g,body:b}); refEditing=null; }
+  /* The note being edited may be gone: the other window of the app deleted it while this one had it open. What was typed is then kept as a
+     note of its own, not dropped under a "Saved". */
+  if(refEditing&&REF.some(r=>r.id===refEditing)) refUpdate(refEditing,{title:t,tags:g,body:b});
   else refAdd(t,b,g);
+  refEditing=null;
   refViewing=null;
   render(); toast('Saved — this note is now searchable.');
 }
@@ -4672,26 +4689,29 @@ function progressFromBackup(raw){
     ...(raw.flagged!=null?{flagged:new Set(FlagSet.clean(raw.flagged))}:{})};
 }
 
-function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},FOREIGN,{
+function save(){try{const text=JSON.stringify(Object.assign({},FOREIGN,{
   schemaVersion:DATA_SCHEMA_VERSION,
   chStats:S.chStats,missed:[...S.missed],theme:S.theme,homeLayout:S.homeLayout,
   sessionCorrect:S.sessionCorrect,sessionTotal:S.sessionTotal,
   srs:S.srs,reviewStreak:S.reviewStreak,lastReviewDay:S.lastReviewDay,daily:S.daily,
   practice:S.practice,sinceBackup:S.sinceBackup,lastBackup:S.lastBackup,
-  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null,exams:S.mocks,flagged:[...S.flagged]})));}
+  resume:S.resume,focusMode:!!S.focusMode,examDate:S.examDate||null,exams:S.mocks,flagged:[...S.flagged]}));
+  localStorage.setItem(KEY,text); SEEN[KEY]=text;}
   /* This holds the statistics and all 639 FSRS cards. It had a bare catch, so
      the one store whose loss you would most want to hear about was the only
      one that died without a word. */
   catch(_){ warnStorage(); }}
+const NEWER_DATA_NOTE='This copy of Systole is older than the data saved on this device. Nothing has been lost — update this copy to see everything.';
 function load(){try{
-  const raw=JSON.parse(localStorage.getItem(KEY))||{};
+  const text=localStorage.getItem(KEY); SEEN[KEY]=text;
+  const raw=JSON.parse(text)||{};
   /* No schemaVersion means a store written before this step — every store in
      the wild today, and its shape is exactly version 1. Left unstamped until
      the next save rather than backfilled. */
   FOREIGN={}; for(const k in raw) if(SCHEMA_KEYS.indexOf(k)===-1) FOREIGN[k]=raw[k];
   /* Deferred past the splash, which is still up at boot. */
   if(+raw.schemaVersion>DATA_SCHEMA_VERSION)
-    setTimeout(()=>toast('This copy of Systole is older than the data saved on this device. Nothing has been lost — update this copy to see everything.'),4200);
+    setTimeout(()=>toast(NEWER_DATA_NOTE),4200);
   return raw;
 }catch(_){return{};}}
 
@@ -4714,6 +4734,77 @@ let S={screen:'home',chapter:null,questions:[],qIdx:0,selected:null,answered:fal
   /* Question ids flagged to come back to, oldest flag first (src/core/flagset.js). Reset leaves them: they are
      the fellow's own marks, as the ink and the sticky notes are, not a score. */
   flagged:new Set(FlagSet.clean(boot.flagged))};
+
+/* ── one record, several windows ──
+   The progress record and the reference notes are one record each per origin, and a window holds its own copy and writes the whole of it at
+   every answer or edit. Two windows of this app on one origin (two tabs; two Safari windows in Split View) therefore decided between them by who
+   wrote last: an answer given in one was lost when the other, which had loaded before it, answered next, and a window left open for days wiped
+   the days between at its first answer. The browser says when another window has written (a storage event), and a window that was suspended
+   and missed that is caught up the next time it is seen. The record is then taken as this window's own, by the path a restore takes
+   (progressFromBackup, on the record as it was written: one a restore would refuse is not taken, not trimmed to what it would accept), and
+   nothing else is touched: not the question on screen, the answer chosen, the deck being worked, or the notes being typed. Nothing here
+   writes; a window that takes a record does not send it back.
+   NOT COVERED: the ink, the sticky notes, the chats and the review log live in the database (src/core/store.js), which does not tell other
+   windows, and are still decided by who wrote last. */
+for(const k of [KEY,REF_KEY]) if(!(k in SEEN)) SEEN[k]=null;     // set at launch by the reads that built S and REF, from the text they parsed
+let newerNoted=false;        // a record from a newer copy was taken and the window has said so
+function adoptProgress(text){
+  let raw; try{ raw=JSON.parse(text); }catch(_){ return false; }
+  if(!statRecord(raw)) return false;
+  let p; try{ p=progressFromBackup(raw); }catch(_){ return false; }               // what a restore would refuse is not taken
+  if(+raw.schemaVersion>DATA_SCHEMA_VERSION&&!newerNoted){ newerNoted=true; toast(NEWER_DATA_NOTE); }   // as load() says it of a record read at launch
+  delete p.resumed;                                                               // whether this window has resumed a deck is its own
+  delete p.focusMode;                                                             // and so is its focus mode: the chrome of this window is not set by another
+  const themeWas=S.theme;
+  Object.assign(S,p);
+  FOREIGN={}; for(const k in raw) if(SCHEMA_KEYS.indexOf(k)===-1) FOREIGN[k]=raw[k];
+  if(S.theme!==themeWas){ applyTheme(); try{ notifyThemeRenderers(); }catch(_){} }
+  return true;
+}
+function adoptRefs(text){
+  let list; try{ list=JSON.parse(text); }catch(_){ return false; }
+  if(!Array.isArray(list)||list.some(r=>!r||typeof r!=='object'||typeof r.body!=='string')) return false;
+  REF=list; invalidateIndex();
+  return true;
+}
+/* What was taken is drawn where it shows: the progress record on the screens that show it (the lists of questions carry its missed and flagged
+   marks), the notes on the library and on the home screen (its pearl comes from them). A screen with a question on it is not drawn again, nor
+   one with a field being typed in or a note being written, and it shows what was taken the next time it is. A window that is hidden draws when
+   it is seen. */
+const sharedStale={progress:false,refs:false};
+function refDrafted(){ return ['refT','refG','refB'].some(id=>{ const el=document.getElementById(id); return !!el&&el.value.trim()!==''; }); }
+function fieldFocused(){ const a=document.activeElement, app=document.getElementById('app'); return !!a&&!!app&&app.contains(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }
+function drawShared(){
+  const s=S.screen, p=sharedStale.progress, r=sharedStale.refs;
+  sharedStale.progress=sharedStale.refs=false;
+  if(p&&s==='quiz'){ const q=S.questions[S.qIdx]; if(q) paintFlag(S.flagged.has(q.id)); }   // the question stays as it is; its flag follows, painted in place
+  if(fieldFocused()) return;
+  if((p&&(s==='home'||s==='stats'||s==='study'||s==='search'||s==='annotations'))||(r&&(s==='home'||(s==='refs'&&!refEditing&&!refDrafted())))) render();
+}
+function showShared(what){
+  sharedStale[what]=true;
+  if(document.visibilityState!=='hidden') drawShared();
+}
+function takeShared(k,text){
+  if(typeof text!=='string'||text===SEEN[k]) return;
+  SEEN[k]=text;
+  if(k===KEY){ if(adoptProgress(text)) showShared('progress'); }
+  else if(k===REF_KEY){ if(adoptRefs(text)) showShared('refs'); }
+}
+function onProgressStorage(e){
+  if(e.storageArea!==localStorage||(e.key!==KEY&&e.key!==REF_KEY)) return;
+  takeShared(e.key,e.newValue);
+}
+function catchUpShared(){
+  for(const k of [KEY,REF_KEY]){ let text=null; try{ text=localStorage.getItem(k); }catch(_){ return; } takeShared(k,text); }
+}
+window.addEventListener('storage',onProgressStorage);
+window.addEventListener('pageshow',catchUpShared);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') return;
+  catchUpShared();
+  if(sharedStale.progress||sharedStale.refs) drawShared();
+});
 
 /* ── theme ──
    A theme is a mode (which drives every existing component style) paired with

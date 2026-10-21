@@ -678,6 +678,9 @@ jobs:
         name: a restored backup appears now, not only after the next launch (135 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone (37 checks)
+        run: node tests/verify-windows.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
         run: node tests/verify-tokens.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -963,6 +966,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: a restored backup appears now, not only after the next launch (135 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone (37 checks)
+        run: node tests/verify-windows.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
         run: node tests/verify-tokens.js build/synthetic/systole.html
