@@ -290,6 +290,178 @@ head('and a file is read through the fallbacks, because the list cannot tell a B
      verdict.join() === 'false,false,false,true,true,true,true', verdict.join());
 }
 
+head('and a viewport height Safari before 15.4 does not know always has one it does before it');
+{
+  /* dvh, svh and lvh came in Safari 15.4. A browser that does not know a unit drops the declaration that uses it, whole, so a height set only in
+     dvh is no height there. In portrait the page sets html and body to overflow:hidden and gives #shell its height in dvh; without the height the
+     shell grows to its content, the body clips it, and nothing scrolls: measured with the unit made unknown to the engine, the home screen of an
+     iPad 11" in portrait ended at 1553 px on a 1194 px screen, with no way to reach the rest. The way out is the one base.css already takes for
+     the body: the same property in vh first, which the older Safari reads and the newer one overrides.
+
+     WHAT IS HELD IS THE ORDER, THE PROPERTY AND THE VALUE. The last declaration before it that an older Safari reads must be the same property
+     with the dvh value in the older spelling (dvh, svh and lvh as vh; the same for w, min and max). A declaration with a new unit is not read
+     there, so a ladder of vh, svh and dvh is one fallback; anything else is, and takes the place of the vh: a plain declaration of the property,
+     and a declaration of another property, which is why a shorthand does (`margin:0` between `margin-top:100vh` and `margin-top:100dvh` leaves
+     the older Safari with the margin of 0, and this reader does not know which names are shorthands, so it asks for nothing between them).
+     After the dvh the vh would override it in a Safari that knows it; in another rule it is a cascade that the next edit to either rule can
+     break; and a value that merely has no new unit in it is not a fallback either (`height:not-a-value` is dropped by the same Safari, and takes
+     the fallback with it).
+
+     The two declarations are compared as written, character for character, and nothing is normalised first, so nothing that differs can pass
+     as equal: the quoted text, the case, the spacing, a comment inside the declaration and a !important all have to be the same on both, but
+     for the units, which are the one thing that differs (the dvh declaration with each unit in its older spelling must be the vh one). What is
+     round a declaration is not part of it: the space and the comments before it and after its value. A string is blanked to find a unit, never
+     to compare (`url("old.png") 100vh` is no fallback for `url("new.png") 100dvh`). A unit is a number followed by the unit, not the end of a
+     name (`icon100dvh.png`, `--h100dvh`), and text inside a string or a url() is left alone when the unit is rewritten for the comparison.
+     The inline and block forms have no older spelling, so nothing clears them. A custom property holding the unit is not a
+     declaration that can fall back at all: it parses, and the declaration that uses it fails later, past every earlier one. None is in use; the
+     reader finds one if it is added. A declaration marked !important is compared with its mark.
+
+     WHAT IT DOES NOT READ IS REFUSED, NOT SKIPPED. A style rule nested in another (CSS nesting, Safari 16.5) is refused: the reader takes the
+     innermost braces, so the declarations of the outer rule would go unread, and a new unit in one of them would pass. Rules inside an at-rule
+     (@media, @supports, @layer, @keyframes) are not nested in this sense, but an at-rule that holds declarations and a block of its own (@page
+     with a margin box) is refused all the same: its own declarations would go unread. Braces that do not balance are refused for the same
+     reason: a block that is never closed is never read. So is an unquoted url() with a comment marker in it, which css reads as part of the address
+     and the blanker as the start of a comment, that would blank the code up to the next comment's close. A unit in the condition of an at-rule is neither: it is not a declaration that can lose
+     its value, an older Safari reads the condition as false and skips the rule, which is what a condition is for. */
+  const NUMBER = '(?<![\\w.-])[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?';    // a number token: not the end of a name, as in icon100 or a-1
+  const NEW_UNIT = new RegExp(NUMBER + '[dsl]v(?:h|w|i|b|min|max)\\b', 'i');
+  const OLDER = { dvh: 'vh', svh: 'vh', lvh: 'vh', dvw: 'vw', svw: 'vw', lvw: 'vw', dvmin: 'vmin', svmin: 'vmin', lvmin: 'vmin', dvmax: 'vmax', svmax: 'vmax', lvmax: 'vmax' };
+  const URL_TOKEN = /url\((?:\\.|[^)\\])*\)/gi;     // an unquoted url: a file name that looks like a unit is no unit
+  const PROTECT = '"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'|url\\((?:\\\\.|[^)\\\\])*\\)';   // text that is not css to read
+  const hasNewUnit = v => NEW_UNIT.test(v.replace(URL_TOKEN, ' '));
+  const older = v => v.replace(new RegExp(PROTECT + '|(' + NUMBER + ')(' + Object.keys(OLDER).join('|') + ')\\b', 'gi'), (m, n, u) => n === undefined ? m : n + OLDER[u.toLowerCase()]);
+  const lineOf = (text, i) => text.slice(0, i).split('\n').length;
+  const commentInUrl = css => { const out = []; let m; const re = /url\(\s*(?!["'])[^)]*?\/\*/gi; while ((m = re.exec(css))) out.push(lineOf(css, m.index)); return out; };    // an unquoted url holding a comment marker is read as a comment by the blanker, as css does not
+  const blankStrings = text => text.replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, m => m.replace(/[^\n]/g, ' '));
+  const blankCss = css => blankStrings(blankComments(css));
+  function braces(css) {               // where a style rule is opened inside a style rule, where a block holds declarations and a block of its own, and whether the braces balance
+    const blank = blankCss(css), open = [], nested = [], mixed = []; let start = 0, balanced = true;
+    const statement = end => { const top = open[open.length - 1]; if (top && /^\s*[-\w]+\s*:/.test(blank.slice(start, end))) top.decls = true; };
+    for (let i = 0; i < blank.length; i++) {
+      const c = blank[i];
+      if (c === '{') {
+        const top = open[open.length - 1];
+        if (top) { if (!top.atRule) nested.push(lineOf(blank, i)); top.blocks = true; }
+        open.push({ atRule: blank.slice(start, i).trim().startsWith('@'), decls: false, blocks: false, line: lineOf(blank, i) }); start = i + 1;
+      } else if (c === '}') {
+        statement(i);
+        if (!open.length) balanced = false; else { const done = open.pop(); if (done.decls && done.blocks) mixed.push(done.line); }
+        start = i + 1;
+      } else if (c === ';') { statement(i); start = i + 1; }
+    }
+    return { nested, mixed, balanced: balanced && open.length === 0 };
+  }
+  function newUnitsWithoutFallback(css) {
+    const blank = blankCss(css);       // the same length, the same lines as css: the comments and the quoted text are spaces
+    const bad = []; let used = 0, b;
+    const block = /\{([^{}]*)\}/g;
+    while ((b = block.exec(blank))) {
+      const body = b[1], decls = []; let depth = 0, start = 0;
+      for (let i = 0; i <= body.length; i++) {
+        const c = body[i];
+        if (c === '(') depth++; else if (c === ')') depth = Math.max(0, depth - 1);
+        if ((c === ';' && depth === 0) || i === body.length) { decls.push({ text: body.slice(start, i), at: b.index + 1 + start }); start = i + 1; }
+      }
+      let read = null;                 // the last declaration an older Safari reads, as it is written
+      for (const d of decls) {
+        const m = /^\s*([-\w]+)\s*:([\s\S]*)$/.exec(d.text);
+        if (!m) continue;
+        /* From the first character that is not a space in the blanked copy to the last: a comment before the declaration or after its value is a space
+           there, so it is not part of what is compared, and a comment inside it is. */
+        const prop = m[1].toLowerCase(), written = css.slice(d.at + d.text.search(/\S/), d.at + d.text.replace(/\s+$/, '').length);
+        if (!hasNewUnit(m[2])) { read = written; continue; }
+        used++;
+        if (prop.startsWith('--') || read === null || read !== older(written))
+          bad.push(`${written.replace(/\s+/g, ' ').slice(0, 50)} at line ${lineOf(blank, d.at + d.text.search(/\S/))}`);
+      }
+    }
+    return { bad, used };
+  }
+  const bad = css => newUnitsWithoutFallback(css).bad.length;
+  ok('the reader finds a height in dvh with nothing before it', bad('.a{height:100dvh}') === 1);
+  ok('and not one with the same property in vh before it, in a calc or not', bad('.a{height:100vh;height:100dvh}') === 0 && bad('.a{min-height:calc(100vh - 4px);min-height:calc(100dvh - 4px)}') === 0);
+  ok('but a vh after it is no fallback: a browser that knows dvh then uses the vh', bad('.a{height:100dvh;height:100vh}') === 1);
+  ok('nor is a vh on another property', bad('.a{min-height:100vh;height:100dvh}') === 1);
+  ok('nor is a vh that a declaration of the property in between has overridden, for the older Safari reads that one',
+     bad('.a{height:100vh;height:auto;height:100dvh}') === 1 && bad('.a{height:100vh;height:50dvh;height:100dvh}') === 1 && bad('.a{height:100vh;height:100dvh;height:100dvh}') === 0);
+  ok('nor is a vh that a declaration of another property in between has changed, a shorthand among them, but a ladder of new units is one fallback',
+     bad('.a{margin-top:100vh;margin:0;margin-top:100dvh}') === 1 && bad('.a{height:100vh;position:fixed;height:100dvh}') === 1 &&
+     bad('.a{height:100vh;height:100svh;height:100dvh}') === 0 && bad('.a{height:100vh;height:100svh;width:4px;height:100dvh}') === 1);
+  ok('nor is a value that is merely not a new unit, or a vh that is not the same one',
+     bad('.a{height:not-a-value;height:100dvh}') === 1 && bad('.a{height:auto;height:100dvh}') === 1 && bad('.a{height:90vh;height:100dvh}') === 1 &&
+     bad('.a{height:calc(100vh - 4px);height:calc(100dvh - 8px)}') === 1);
+  ok('nor a vh in another rule', bad('.a{height:100vh}.a{height:100dvh}') === 1);
+  ok('svh and lvh are as new as dvh, and so are the width, inline, block and min and max forms, each cleared by its own older spelling',
+     bad('.a{height:100svh}.b{height:100lvh}') === 2 && bad('.a{width:100dvw}.b{width:100svi}.c{height:100lvb}.d{width:50dvmin}.e{width:50svmax}') === 5 &&
+     bad('.a{height:100vh;height:100svh}.b{height:100vh;height:100lvh}.c{width:100vw;width:100dvw}.d{width:50vmin;width:50dvmin}.e{width:50vmax;width:50svmax}') === 0);
+  ok('but the inline and block forms have no older spelling, so a vi or a vb does not clear them', bad('.a{width:100vi;width:100dvi}') === 1 && bad('.a{height:100vb;height:100svb}') === 1);
+  ok('a rule inside @media is read like any other', bad('@media (min-width:700px){.a{height:100dvh}}') === 1 && bad('@media (min-width:700px){.a{height:100vh;height:100dvh}}') === 0);
+  ok('a custom property holding the unit is found even after one that does not, because it cannot fall back', bad(':root{--h:100dvh}') === 1 && bad(':root{--h:100vh;--h:100dvh}') === 1);
+  ok('a unit in a comment or a string is not a declaration, and vh, % and px are not new',
+     bad('/* height:100dvh */ .a{content:"height:100dvh"}') === 0 && bad('.a{height:100vh;width:50%;top:4px}') === 0);
+  ok('and a semicolon inside parentheses does not end a declaration, so a fallback written inside a url() is none',
+     bad('.a{background:url(data:image/png;height:100vh;);height:100dvh}') === 1 && bad('.a{background:url(data:image/png;base64,AAAA);height:100vh;height:100dvh}') === 0);
+  const nested = css => braces(css).nested.length;
+  ok('a style rule nested in another is found, whether it follows a declaration or not, whether it is a rule or a conditional, and after a statement at the top',
+     nested('.a{height:100dvh;.child{color:red}}') === 1 && nested('.a{.child{color:red}}') === 1 && nested('.a{&:hover{color:red}}') === 1 &&
+     nested('.a{@media (min-width:1px){color:red}}') === 1 && nested('@import "x.css";.a{.b{color:red}}') === 1);
+  ok('nor is a fallback whose quoted text, or whose case, is not the same, though the strings are blanked to find a unit',
+     bad('.a{background:url("old.png") center/100vh;background:url("new.png") center/100dvh}') === 1 && bad('.a{background:url("Old.png") 100vh;background:url("old.png") 100dvh}') === 1 &&
+     bad('.a{background:url(old.png) 100vh;background:url(new.png) 100dvh}') === 1 && bad('.a{content:"a";content:"b";height:100dvh}') === 1 &&
+     bad('.a{background:url("x.png") center/100vh;background:url("x.png") center/100dvh}') === 0 &&
+     bad('.a{background:url("hero  wide.png") center/100vh;background:url("hero wide.png") center/100dvh}') === 1);
+  ok('and nothing is normalised before the two are compared, so a fallback has the same spacing, the same comment and the same case as the dvh declaration, units aside',
+     bad('.a{height:100vh;height: 100dvh}') === 1 && bad('.a{height:  100vh ;height:\n100dvh}') === 1 && bad('.a{background:url("a b.png")   center/100vh;background:url("a b.png") center/100dvh}') === 1 &&
+     bad('.a{height:/* a */100vh;height:/* b */100dvh}') === 1 && bad('.a{HEIGHT:100vh;height:100dvh}') === 1 && bad('.a{height:100vh !IMPORTANT;height:100dvh !important}') === 1 &&
+     bad('.a{height:/* a */100vh;height:/* a */100dvh}') === 0);
+  ok('but what is round a declaration is not part of it: the space and the comments before it and after its value',
+     bad('.a{height:100vh ;height:100dvh }') === 0 && bad('.a{height:100vh;\n  height:100dvh}') === 0 && bad('.a{/* x */height:100vh /* y */;/* z */height:100dvh/* w */}') === 0);
+  ok('a comment marker in an unquoted url is found, as the blanker would take it for a comment and blank the code up to the next one\'s close',
+     commentInUrl('.a{background:url(a/*x*/.png)}').length === 1 && commentInUrl('.a{background:url( a/*x*/.png )}').length === 1 &&
+     commentInUrl('.a{background:url("a/*x*/.png")}').length === 0 && commentInUrl('.a{background:url(a.png)}').length === 0);
+  ok('nor is a fallback whose url is another file, though the file name looks like a unit: a name is no unit, and is not rewritten with one',
+     bad('.a{background:url(icon100vh.png) center/100vh;background:url(icon100dvh.png) center/100dvh}') === 1 &&
+     bad('.a{background:url(i100dvh.png) center/100vh;background:url(i100dvh.png) center/100dvh}') === 0 &&
+     bad('.a{background:url(100vh.png) center/100vh;background:url(100dvh.png) center/100dvh}') === 1 &&
+     bad('.a{background:url(100dvh.png) center/100vh;background:url(100dvh.png) center/100dvh}') === 0 &&
+     bad('.a{background:url(100dvh.png)}') === 0 && bad('.a{animation-name:spin100dvh}') === 0 && bad('.a{height:var(--h100dvh)}') === 0 &&
+     bad('.a{height:-100dvh}') === 1 && bad('.a{height:calc(100vh - -50vh);height:calc(100dvh - -50dvh)}') === 0);
+  ok('but a unit is a unit in any case, and a fallback written in lowercase clears it', bad('.a{height:100DVH}') === 1 && bad('.a{height:100vh;height:100DVH}') === 0);
+  ok('but the rules inside an at-rule are not nested ones, at any depth, and neither are rules side by side',
+     nested('@media (min-width:1px){.a{color:red}}') === 0 && nested('@supports (display:grid){@media (min-width:1px){.a{color:red}.b{color:blue}}}') === 0 &&
+     nested('@keyframes k{from{opacity:0}to{opacity:1}}.c{color:red}') === 0 && nested('.a{color:red}.b{color:blue}') === 0 && nested('@font-face{font-family:x;src:url(x.woff2)}') === 0);
+  ok('an at-rule with declarations and a block of its own is found, as its declarations would go unread, and one with only one of the two is not',
+     braces('@page{size:100dvh;@top-left{content:"x"}}').mixed.length === 1 && braces('@page{margin:1cm;size:A4;@top-left{content:"x"}}').mixed.length === 1 &&
+     braces('@page{@top-left{content:"x"}size:100dvh}').mixed.length === 1 &&
+     braces('@page{@top-left{content:"x"}}').mixed.length === 0 && braces('@page{margin:1cm}').mixed.length === 0 && braces('@font-face{font-family:x}').mixed.length === 0 &&
+     braces('@media (x){.a{color:red}}').mixed.length === 0 && braces('@keyframes k{from{opacity:0}to{opacity:1}}').mixed.length === 0);
+  ok('braces that do not balance are found, a block never closed and a brace closed twice, and a quoted brace does not count',
+     !braces('.a{height:100dvh').balanced && !braces('.a{}}').balanced && !braces('@media (x){.a{color:red}').balanced &&
+     braces('.a{color:red}.b{content:"}"}').balanced && braces('@media (x){.a{color:red}}').balanced);
+
+  const FAMILIES = [['the Systole app', CSS_FILES],
+                    ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]],
+                    ['the Lab page', [path.join(ROOT, 'lab', 'app.css')]]];
+  let used = 0;
+  for (const [name, files] of FAMILIES) {
+    const read = files.map(f => ({ f, ...newUnitsWithoutFallback(fs.readFileSync(f, 'utf8')) }));
+    used += read.reduce((n, r) => n + r.used, 0);
+    const lost = read.flatMap(r => r.bad.map(x => `${rel(r.f)}: ${x}`));
+    ok(`${name}: every viewport height Safari before 15.4 does not know has one it does before it`, lost.length === 0,
+       lost.slice(0, 3).join(' | ') || `${read.reduce((n, r) => n + r.used, 0)} declarations in ${files.length} file(s)`);
+  }
+  ok('and there are such declarations to check, so the scan is not reading nothing', used > 0, `${used} declarations`);
+  const shape = FAMILIES.flatMap(([, files]) => files.map(f => ({ f, ...braces(fs.readFileSync(f, 'utf8')) })));
+  const unread = shape.flatMap(r => [...commentInUrl(fs.readFileSync(r.f, 'utf8')).map(n => `${rel(r.f)} line ${n} has a comment marker in an unquoted url`),
+                                      ...r.nested.map(n => `${rel(r.f)} line ${n} is nested`), ...r.mixed.map(n => `${rel(r.f)} line ${n} holds declarations and a block`),
+                                      ...(r.balanced ? [] : [`${rel(r.f)} does not balance`])]);
+  ok('no style rule in them is nested in another, no at-rule holds declarations and a block of its own, and every file\'s braces balance, or the reader would not read all of it',
+     unread.length === 0, unread.slice(0, 3).join(' | ') || `${shape.length} files`);
+  const inline = [...SAFARI_FILES, SHELL].filter(f => NEW_UNIT.test(blanked(f))).map(rel);
+  ok('none is written in the shell\'s markup or script or in a src/ module, where a style attribute cannot carry a fallback', inline.length === 0, inline.join(', ') || 'none');
+}
+
 head('and the floor is written down where somebody will find it');
 {
   /* Prose follows the record here too. A floor that lives only in this file is
