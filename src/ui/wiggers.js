@@ -69,10 +69,11 @@ function mount(canvas, opts) {
        the beating heart beside it rather than a second animation that agrees
        with it only until one of them drops a frame. */
     src: opts.timeSource || null,
-    /* Called once a frame with the cycle fraction just drawn. The phase caption
-       used to be repainted by whatever else was animating alongside the
-       diagram; now that the diagram is the only thing on the panel, it has to
-       announce its own time. */
+    /* Called once a frame with the cycle fraction just drawn, on each frame the
+       loop drew (see tick: a diagram that is not moving draws none). The phase
+       caption used to be repainted by whatever else was animating alongside
+       the diagram; now that the diagram is the only thing on the panel, it has
+       to announce its own time. */
     onFrame: typeof opts.onFrame === 'function' ? opts.onFrame : null,
     zones: [],            // hit regions, in CSS px
     hoverT: null,
@@ -879,8 +880,10 @@ function mount(canvas, opts) {
   }
 
   /* ── draw ─────────────────────────────────────────────────────────────── */
+  let painted = false;
   function draw() {
     if (!fit()) return;
+    painted = true;
     const p = palette();
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = p.paper; ctx.fillRect(0, 0, W, H);
@@ -894,17 +897,33 @@ function mount(canvas, opts) {
     else drawWiggers(p);
   }
 
+  /* A DIAGRAM THAT IS NOT MOVING IS NOT REDRAWN. This drew on every frame whatever the state, and a Wiggers view costs about three milliseconds
+     a draw (Chromium, headless; WebKit about the same): paused, or on the Curves view, which has no time in it, that was a sixth of a core
+     spent putting the same picture on the canvas sixty times a second. What can change the picture between two frames is the model's time and
+     the size of the canvas. Everything else (a view, a theme, a rate, an intervention, a scrub) draws where it is set, as it did before, so
+     the loop only has to notice these two. A canvas that has not been drawn yet, because it had no size when this mounted, counts as resized. */
+  function resized() {
+    if (!painted) return true;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    const dpr = Math.min(root.devicePixelRatio || 1, 3);
+    return canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr);
+  }
+
   function tick(now) {
     S.raf = root.requestAnimationFrame(tick);
     if (!S.last) S.last = now;
     const dt = Math.min(now - S.last, 100) / 1000;
     S.last = now;
+    let moved = false;
     if (S.src && !S.scrub) {
       const t = S.src();
-      if (t != null && t >= 0) S.t = Ph.wrap(t);
+      if (t != null && t >= 0) { S.t = Ph.wrap(t); moved = true; }
     } else if (S.playing && !S.scrub && S.view !== 'curves') {
       S.t = Ph.wrap(S.t + dt / (secs() * (S.slow || 1)));
+      moved = true;
     }
+    if (!moved && !resized()) return;
     draw();
     if (S.onFrame) S.onFrame(S.t);
   }

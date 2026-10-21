@@ -307,6 +307,27 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
      await within(hb.pg.evaluate(() => !!window.__appRan && window.__appRan.q === 2), 5000) === true, String(hs));
   await within(hb.ctx.close(), 5000);
 
+  section = 'old Safari';
+  head('on a Safari without Blob.arrayBuffer(), the import screen still reads the package');
+  /* The method came in Safari 14 and the floor is iPadOS 13.4. The loader's import screen reads the package before the app can open at all, so
+     a call that is a TypeError there leaves the device with a screen that says the file could not be read and nothing behind it. The page is
+     made to lack the method the way that Safari does, before the loader runs, and the same two methods are gone again when it reloads into the
+     app. */
+  const lack = () => { delete Blob.prototype.arrayBuffer; delete Blob.prototype.text; };
+  const ob = await open(true, null, lack);
+  await settle(ob.pg, () => document.getElementById('bankFile'));
+  const lacks = await within(ob.pg.evaluate(() => { const f = new File(['x'], 'p.zip'); return typeof f.arrayBuffer === 'undefined' && typeof f.text === 'undefined'; }), 5000);
+  const navO = ob.pg.waitForNavigation({ timeout: 20000 }).catch(() => null);
+  if (await ob.pg.$('#bankFile')) await ob.pg.setInputFiles('#bankFile', { name: 'systole-content-v1.zip', mimeType: 'application/zip', buffer: GOOD });
+  const saidO = await ob.pg.waitForFunction(() => { const s = document.getElementById('bankStatus'); return s && /Imported|Not imported/.test(s.textContent) && s.textContent; }, null, { timeout: 20000 }).then(h => h.jsonValue(), () => null);
+  ok('the page lacks both methods, as Safari 13 does', lacks === true);
+  ok('and the package is read and imported all the same', /^Imported 2 questions and 2 figures/.test(saidO), saidO || '(nothing within 20 s)');
+  await navO;
+  await settle(ob.pg, () => window.__appRan);
+  ok('and the app starts on it at the next launch, the page still lacking the method',
+     await within(ob.pg.evaluate(() => !!window.__appRan && window.__appRan.q === 2 && typeof new File(['x'], 'p.zip').arrayBuffer === 'undefined'), 5000) === true);
+  await within(ob.ctx.close(), 5000);
+
   section = 'normal build';
   head('a normal build\'s loader is exactly as it was');
   contentHits.length = 0;

@@ -11,6 +11,15 @@ gives you something better than Documents ever could: **Add to Home Screen**
 turns Systole into a real app — its own icon, no browser chrome, its own window
 in Split View — and the service worker keeps it working with the network off.
 
+Two windows of it at once in one browser (two tabs, or two Safari windows in
+Split View) share one progress record and one set of reference notes, and each
+takes what the other wrote as it is written, or when it is next looked at if it
+was suspended; the question on screen is left alone. Two answers given in the
+two windows within a moment of each other, before either has heard of the other,
+are still decided by whichever wrote last. The ink, the sticky notes, the chats
+and the review log are kept in the database, which does not tell the other
+window: for those, whichever window wrote last wins, so annotate in one.
+
 Build the thing you host:
 
 ```bash

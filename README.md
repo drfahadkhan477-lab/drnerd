@@ -13,7 +13,8 @@ clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 spaced repetition, a timed mock exam that gives no feedback until you hand it in,
 a flag for questions to come back to and a list of every question you have
 written on, and Apex — an AI tutor that can be grounded in your own reference
-notes, reads the figures they cite, and remembers you between sessions.
+notes, reads the figures they cite, knows what you chose and how you tend to
+miss, plans a session from it, and remembers you between sessions.
 
 The home screen says one thing: a live ECG, one pearl drawn from your own
 reference notes — broken at its own joints into a numbered ladder, over ECG
@@ -48,7 +49,7 @@ record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 96 suites that need neither a browser nor a build all stay green. See
+the 98 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 226 checks can't run here.
 
@@ -67,9 +68,21 @@ rest. One character costs an older tablet the whole application.
 
 Everything above that floor is either used freely or feature-guarded —
 `ResizeObserver` falls back to a `resize` listener, `startViewTransition` is
-guarded four times over, and `backdrop-filter` carries its `-webkit-` prefix.
-Nothing in the app requires a Safari newer than 13.4 unconditionally, and
-`tests/verify-ipad-pure.js` holds it to that.
+guarded four times over, `backdrop-filter` carries its `-webkit-` prefix, every
+`dvh` has the same value in `vh` before it (Safari before 15.4 drops the whole declaration), and a
+file the picker hands over is read through `FileReader` where `Blob.arrayBuffer()`
+and `Blob.text()` (Safari 14) are missing. What holds this is narrower than the
+sentence: `tests/verify-ipad-pure.js` holds the script to a list of constructs
+that arrived later, and cannot see a method that is older on one object than on
+another, so it counts the places that read a file instead (the shell, and the
+page that opens a code-only deploy), and `tests/verify-assets.js` and
+`tests/verify-bankstore.js` run the two imports on a page made to lack those
+two methods. The stylesheets are held to the prefix and that `vh`, and to nothing
+else: they also use `color-mix()`, `aspect-ratio`, `:has()` and a `gap` on flex
+boxes, which are newer than the floor, and below the Safari that introduced each
+the declaration or the rule is skipped, and what that leaves on screen has not
+been measured. Anything else that is not on the list is not measured against the
+floor either. Nothing has been run on a Safari as old as 13.4.
 
 - **[docs/BUILD.md](docs/BUILD.md)** — how to build and verify it
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why

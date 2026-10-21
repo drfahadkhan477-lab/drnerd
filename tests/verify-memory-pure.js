@@ -163,7 +163,10 @@ head('grounded mode keeps who is taught, and withholds the key');
   const code = [
     cut(APP, 'const BANK=(window.SYSTOLE_BANK', '\n/* ═══════════ custom line-icon system'),
     cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
+    cut(APP, 'function apexAway(){', '\nfunction runTool(name,input){'),
     cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),
+    /* What aiCtx() reads about the answer just given and how the fellow answers: apexStandingLines() to apexDid(). */
+    cut(APP, 'function apexStandingLines(){', '\nfunction aiCtx(q){'),
     cut(APP, 'function aiCtx(q){', '\nconst CHIPS=['),
   ].join('\n');
   const { M } = fresh();
@@ -172,9 +175,15 @@ head('grounded mode keeps who is taught, and withholds the key');
     s: 'An invented stem: transthyretin amyloidosis, tafamidis or not.',
     o: ['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((t, i) => ({ l: 'ABCDE'[i], t: t + 'opt', p: 10 + i })),
     ex: 'Invented commentary, keyed sentinel kz9.' };
+  /* The world the answer-aware parts read: no block open, one question answered, the review log, and the module that turns them into
+     lines. The page's own helpers run over it; nothing here is a copy of what they do. */
   const ctx = { ALL_Q: [q], REF: [{ id: 'r1', title: 'Amyloidosis note', tags: '', body: 'Apical sparing on strain is the amyloidosis pattern.' }],
     Memory: M, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false,
-    window: {}, BANK_INFO: require('../scripts/which-bank.js').ACCSAP };
+    window: {}, BANK_INFO: require('../scripts/which-bank.js').ACCSAP,
+    document: { documentElement: { hasAttribute: () => false } },
+    ApexSignals: require('../src/core/apexsignals.js').ApexSignals, LOG: [], QBYID: { ZZ_7: q },
+    S: { screen: 'home', questions: [q], qIdx: 0, answered: false, selected: null, answers: {}, flagged: new Set(), missed: new Set(), mocks: [], examDate: null },
+    flaggedQs: () => [], FSRS: { todayISO: () => '2026-10-16', daysBetween: (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000) } };
   vm.runInNewContext(code, ctx);
   /* A note outranks a question on shared words (notes are boosted), so the
      query carries words only the question has: both must come back. */
