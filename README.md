@@ -12,7 +12,7 @@ clock, a 12-lead derived from one electrical dipole, a computed cardiac cycle
 (Wiggers, pressure–volume loop, coronary flow, Starling and Guyton), FSRS-5–derived
 spaced repetition, a timed mock exam that gives no feedback until you hand it in,
 a flag for questions to come back to and a list of every question you have
-written on, and Apex — an AI tutor that can be grounded in your own reference
+written on, a text size for the question that each device keeps for itself, and Apex — an AI tutor that can be grounded in your own reference
 notes, reads the figures they cite, knows what you chose and how you tend to
 miss, plans a session from it, and remembers you between sessions.
 
