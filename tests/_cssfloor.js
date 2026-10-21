@@ -328,10 +328,13 @@ function declsToCss(list) {
   return out.length ? 'x{' + out.join(';') + '}' : '';
 }
 
-/* The text of an expression of string literals joined with +, from `at`, to the ; that ends it: what a script assigns to a style element. Anything that is not a
-   literal is a 0. */
+/* The text of an expression of string literals, from `at`: what a script assigns to a style or sets as a value. Literals joined with + are one text ('rgba(' + r + ',' +
+   g + ')' is rgba(0,0)), anything that is not a literal is a 0, and any other operator ( ? : , || ) separates, so that cond ? 'none' : 'block' is not one word. It ends at the ;
+   or the bracket that ends the statement, or at a line end that the expression does not go on past (an operator ends the line or starts the next). */
 function literalsFrom(t, at) {
   let out = '', k = at, depth = 0;
+  const prev = idx => { while (idx >= at && /\s/.test(t[idx])) idx--; return t[idx] || ''; };
+  const next = idx => { while (idx < t.length && /\s/.test(t[idx])) idx++; return t[idx] || ''; };
   for (; k < t.length; k++) {
     const c = t[k];
     if (c === '"' || c === "'" || c === '`') {
@@ -342,7 +345,14 @@ function literalsFrom(t, at) {
     if (c === '(' || c === '[' || c === '{') depth++;
     else if (c === ')' || c === ']' || c === '}') { if (depth === 0) break; depth--; }
     else if (c === ';' && depth === 0) break;
-    else if (/[\w$]/.test(c)) { let e = k; while (e < t.length && /[\w$.]/.test(t[e])) e++; if (t[e] === '(') { let d = 0; for (; e < t.length; e++) { if (t[e] === '(') d++; else if (t[e] === ')' && --d === 0) break; } } out += '0'; k = e; }
+    else if (c === '\n') { if (depth === 0 && !/[+?:,|&=(]/.test(prev(k - 1)) && !/[+?:|&.,)]/.test(next(k + 1))) break; }
+    else if (/[\w$]/.test(c)) {
+      let e = k; while (e < t.length && /[\w$.]/.test(t[e])) e++;
+      if (t[e] === '(') { let d = 0; for (; e < t.length; e++) { if (t[e] === '(') d++; else if (t[e] === ')' && --d === 0) break; } k = e; }   // a call: to its ), which the loop steps past
+      else k = e - 1;                                                                                                                      // a name: the loop steps to what follows it
+      out += '0';
+    }
+    else if (c !== '+' && !/\s/.test(c)) out += ' ';
   }
   return out;
 }
@@ -362,9 +372,10 @@ function inlineSegments(text) {
   lists(new RegExp('setAttribute\\(\\s*[\'"]style[\'"]\\s*,\\s*(?:' + STR + ')', 'g'), 1);
   for (const m of t.matchAll(/\.style\.([a-zA-Z]+)\s*(?:=(?!=)|\+=)/g)) {
     if (/^(cssText|setProperty|removeProperty|getPropertyValue|length)$/.test(m[1])) continue;
-    push('x{' + (m[1] === 'cssFloat' ? 'float' : m[1].replace(/[A-Z]/g, c => '-' + c.toLowerCase())) + ':0}', m.index);
+    push('x{' + (m[1] === 'cssFloat' ? 'float' : m[1].replace(/[A-Z]/g, c => '-' + c.toLowerCase())) + ':' + (maskTemplate(literalsFrom(t, m.index + m[0].length)) || '0') + '}', m.index);
   }
-  for (const m of t.matchAll(/\.style\.(?:setProperty|removeProperty|getPropertyValue)\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1/g)) push('x{' + m[2] + ':0}', m.index);
+  for (const m of t.matchAll(/\.style\.setProperty\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1\s*,?/g)) push('x{' + m[2] + ':' + (maskTemplate(literalsFrom(t, m.index + m[0].length)) || '0') + '}', m.index);
+  for (const m of t.matchAll(/\.style\.(?:removeProperty|getPropertyValue)\(\s*(['"])(-{0,2}[a-zA-Z][\w-]*)\1/g)) push('x{' + m[2] + ':0}', m.index);
   // a <style> block of a page, with the assembler's slots (where the stylesheets go) taken out
   for (const m of t.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)) push(m[1].replace(/@@SLOT\[[^\]]*\]@@/g, ' '), m.index + m[0].indexOf('>') + 1);
   // a style element a script makes and fills with literals: var st = document.createElement('style'); st.textContent = '...' + '...';
