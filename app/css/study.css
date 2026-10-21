@@ -24,9 +24,9 @@
 .pg-legend .lg-recall::before{background:var(--green2)}
 .plan-ready{margin-top:10px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--teal) 7%,transparent);border:1px solid color-mix(in srgb,var(--teal) 18%,transparent)}
 .pace-pill{font-size:var(--t-tiny);font-weight:800;letter-spacing:.04em;border-radius:99px;padding:3px 10px;border:1px solid}
-.pace-pill.good{color:var(--green);background:var(--green-bg);border-color:var(--green-b)}
+.pace-pill.good{color:var(--green-ink);background:var(--green-bg);border-color:var(--green-b)}
 .pace-pill.ok{color:var(--teal);background:var(--teal4);border-color:var(--teal3)}
-.pace-pill.warn{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)}
+.pace-pill.warn{color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-b)}
 .plan-card .plan-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px;padding:0}
 .plan-card .plan-chip{display:flex;align-items:center;justify-content:center;gap:6px;min-height:52px;padding:0 10px;border-radius:14px;
   color:var(--text);font-variant-numeric:tabular-nums}
@@ -57,7 +57,7 @@
 .exam-ctl input{flex:1;min-width:0;min-height:44px;max-width:100%;padding:0 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:inherit;font:inherit}
 .exam-x{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;border:1.5px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer}
 .exam-x .icon{width:18px;height:18px}
-@media(hover:hover){.exam-x:hover{color:var(--red);border-color:var(--red-b)}}
+@media(hover:hover){.exam-x:hover{color:var(--red-ink);border-color:var(--red-b)}}
 .exam-left{font-size:var(--t-meta);font-weight:700}
 .exam-count{flex:none;text-align:center;line-height:1;padding:0 4px}
 .exam-count b{display:block;font-size:var(--t-h3);font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums;
@@ -171,7 +171,7 @@ body.voice-on #app{padding-bottom:104px}
 .mock-quiet,.flag-quiet{display:block;width:100%;min-height:44px;margin-top:6px;padding:0 10px;border:0;border-radius:12px;background:transparent;color:var(--muted);
   font:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;text-align:center}
 .mock-quiet:disabled{opacity:.6;cursor:default}
-.mock-quiet.arm,.flag-quiet.arm{color:var(--red);background:var(--red-bg)}
+.mock-quiet.arm,.flag-quiet.arm{color:var(--red-ink);background:var(--red-bg)}
 
 /* the block: a bar with the clock, the question as the quiz draws it, a picked option instead of a verdict */
 .mock-bar .mock-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
@@ -180,20 +180,20 @@ body.voice-on #app{padding-bottom:104px}
 .mock-clock{font-size:var(--t-h4);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
 .mock-clockbox.big .mock-clock{font-size:var(--t-h2)}
 .mock-clock.sm{font-size:var(--t-lead)}
-.mock-clock[data-urgency="low"]{color:var(--amber)}
-.mock-clock[data-urgency="critical"]{color:var(--red)}
+.mock-clock[data-urgency="low"]{color:var(--amber-ink)}
+.mock-clock[data-urgency="critical"]{color:var(--red-ink)}
 .mock-clock-lab{font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .mock-mini{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:12px;border:1.5px solid var(--border);
   background:var(--card);color:var(--muted);font:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;white-space:nowrap}
 @media(hover:hover){.mock-mini:hover{border-color:var(--teal);color:var(--teal)}}
 .mock-subrow{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
-.mock-pace[data-status="behind"]{color:var(--amber)}
-.mock-pace[data-status="ahead"]{color:var(--green)}
+.mock-pace[data-status="behind"]{color:var(--amber-ink)}
+.mock-pace[data-status="ahead"]{color:var(--green-ink)}
 .opt.mock-opt.picked{border-color:var(--teal);background:var(--teal4)}
 .opt.mock-opt.picked .opt-letter{background:var(--teal);color:#fff;border-color:var(--teal)}
 .opt.mock-opt.picked::before{background:var(--teal);transform:scaleY(1)}
 .mock-actions .mock-flag{flex:0 0 auto;min-width:112px;padding:15px 16px;background:var(--card);border:1.5px solid var(--border);color:var(--muted)}
-.mock-actions .mock-flag.on{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+.mock-actions .mock-flag.on{color:var(--amber-ink);border-color:var(--amber-b);background:var(--amber-bg)}
 /* The last question's row is Previous, Flag and "Review and hand in": 355 px, and a phone's row is 336. The word goes (it stays for a screen reader). */
 @media(max-width:380px){
   .mock-actions .mock-flag{min-width:52px;padding-left:0;padding-right:0;justify-content:center}
@@ -224,11 +224,11 @@ body.voice-on #app{padding-bottom:104px}
 .mock-pause-ic .icon{width:26px;height:26px}
 .mock-end-sub{font-size:var(--t-meta);font-weight:700;color:var(--muted);margin-bottom:var(--s4)}
 .mock-end-sec{margin-bottom:var(--s4);font-size:var(--t-meta);line-height:1.5}
-.mock-end-sec.ok{color:var(--green);font-weight:700}
+.mock-end-sec.ok{color:var(--green-ink);font-weight:700}
 .mock-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:var(--s2)}
 .mock-chip{min-width:44px;min-height:44px;padding:0 10px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);color:var(--text);
   font:inherit;font-size:var(--t-meta);font-weight:800;font-variant-numeric:tabular-nums;cursor:pointer}
-.mock-chip.flag{border-color:var(--amber-b);background:var(--amber-bg);color:var(--amber)}
+.mock-chip.flag{border-color:var(--amber-b);background:var(--amber-bg);color:var(--amber-ink)}
 .mock-end-actions{margin-top:var(--s5);padding-bottom:0}
 .btn.wide{flex:1;min-width:0}
 .mock-report .mock-timeline{margin-top:var(--s2);font-size:var(--t-meta);font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -250,9 +250,9 @@ html[data-mock] .ai-fab,html[data-mock] #ai{display:none!important}
 @media(prefers-reduced-motion:reduce){.mock-card.live>.fc-glow{animation:none!important}}
 
 /* ══ Flag and annotations: the Study cards and the list of what was written on ══ */
-.fc-badge.amber{color:var(--amber);border-color:var(--amber-b);background:var(--amber-bg)}
+.fc-badge.amber{color:var(--amber-ink);border-color:var(--amber-b);background:var(--amber-bg)}
 .flag-card{cursor:default}
-.anno-card .fc-cta{color:var(--amber)}
+.anno-card .fc-cta{color:var(--amber-ink)}
 .anno-text{margin:2px 0 8px;padding:8px 10px;border-radius:10px;background:var(--amber-bg);border:1px solid var(--amber-b);
   color:var(--text);font-size:var(--t-meta);line-height:1.5;overflow-wrap:break-word;overflow-wrap:anywhere;word-break:break-word}
 .anno-text.none{background:transparent;border-style:dashed;color:var(--muted);font-style:italic}

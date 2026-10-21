@@ -2072,10 +2072,13 @@ function buildStats(){
     </div>
   </div>`;
 }
+/* The text colour for a semantic fill: var(--green) fills a bar or a ring, var(--green-ink) writes its figure, which on a
+   dark ground is a lighter green (base.css). Anything else is its own text colour. */
+function semText(v){ return String(v).replace(/^var\(--(green|red|amber)\)$/,'var(--$1-ink)'); }
 function retentionTile(){
   const r=avgRetention();
   if(r===null) return '';
-  const col=r>=85?'var(--green)':r>=65?'var(--amber)':'var(--red)';
+  const col=r>=85?'var(--green-ink)':r>=65?'var(--amber-ink)':'var(--red-ink)';
   const fc=forecast7();
   const maxN=Math.max(1,...fc.map(d=>d.n));
   const bars=fc.map((d,i)=>{
@@ -5809,7 +5812,7 @@ function buildMockReport(){
     const cp=Math.round(c.correct/c.n*100), cc=cp>=70?'var(--green)':cp>=50?'var(--amber)':'var(--red)', bc=CH_COLORS[c.ch]||'var(--teal)';
     return `<div class="chp-row mock-chrow" data-ch="${e(c.ch)}" style="--accent:${bc}"><span class="chp-icon">${chIcon(c.ch)}</span>
       <div class="chp-info"><div class="chp-name">${e(c.ch)}</div><div class="chp-bar"><div class="chp-fill" style="transform:scaleX(${cp/100});background:${cc}"></div></div></div>
-      <div class="chp-score"><div class="chp-pct" style="color:${cc}">${cp}%</div><div class="chp-count">${c.correct}/${c.n}</div></div></div>`;
+      <div class="chp-score"><div class="chp-pct" style="color:${semText(cc)}">${cp}%</div><div class="chp-count">${c.correct}/${c.n}</div></div></div>`;
   }).join('');
   const used=MockExam.fmtClock(g.usedMs), lim=g.limitMs!=null?MockExam.fmtClock(g.limitMs,'down'):null;
   const timeLine=g.expired?'Time ran out at '+lim:lim?used+' of '+lim:used+', no time limit';
@@ -5821,7 +5824,7 @@ function buildMockReport(){
   const missed=MockExam.reviewIds(g,'missed').length;
   return `<div class="results-wrap mock-report anim-fade">
     <div class="score-hero">
-      <div class="score-circle">${ring}<div class="score-num"><span class="score-pct" style="color:${col}">${p}%</span><span class="score-label">Mock block</span></div></div>
+      <div class="score-circle">${ring}<div class="score-num"><span class="score-pct" style="color:${semText(col)}">${p}%</span><span class="score-label">Mock block</span></div></div>
       <div class="score-msg">${icon(msgIcon,'icon-lg')} ${msg}</div>
       <div class="score-sub" id="mockSummary">${g.correct} correct · ${g.wrong} wrong · ${g.skipped} not answered · of ${g.n}</div>
       <div class="mock-timeline" id="mockTime">${e(timeLine)}${per}</div>
@@ -7022,7 +7025,7 @@ function buildQuiz(){
     if(answered){
       if(i===q.ci)cls+=' correct';
       else if(i===selected)cls+=' wrong';
-      const col=i===q.ci?'var(--green)':(i===selected?'var(--red)':'var(--muted)');
+      const col=i===q.ci?'var(--green-ink)':(i===selected?'var(--red-ink)':'var(--muted)');
       if(typeof o.p==='number') pctEl=`<span class="opt-pct" style="color:${col}">${o.p}%</span>`;
     }
     return `<button class="${cls}" ${answered?'disabled':''} data-idx="${i}" type="button"
@@ -7052,7 +7055,7 @@ function buildQuiz(){
       <div class="reveal-body">
         <div class="exp-text">${e(q.ex).replace(/\n+/g,'<br><br>')}</div>
         ${q.tr?`<div class="exp-trunc">${icon("alert","icon-sm")} The ${e(BANK.name)} text export truncated this commentary. Open the item in ${e(BANK.name)} for the complete discussion.</div>`:''}
-        ${q.src?`<div class="exp-trunc" style="color:var(--green);font-style:normal">${icon('check','icon-sm')} Question, answer key, peer statistics and full commentary verified against the ${e(BANK.name)} source export.</div>`:''}
+        ${q.src?`<div class="exp-trunc" style="color:var(--green-ink);font-style:normal">${icon('check','icon-sm')} Question, answer key, peer statistics and full commentary verified against the ${e(BANK.name)} source export.</div>`:''}
         ${hasPeers(q)?`<div class="dist-title">Answer Distribution</div>${distRows}`:''}${missRowHtml(ok)}
       </div></div>`;
   }
@@ -7101,7 +7104,7 @@ function buildQuiz(){
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}
         <span class="src-badge flag-badge" id="qFlagBadge"${flagOn?'':' hidden'}>${icon('flag','icon-sm')} flagged</span>
-        ${typeof hasMarkup==='function'&&hasMarkup(q.id)?`<span class="src-badge" style="color:var(--amber);background:var(--amber-bg);border-color:var(--amber-b)">${icon('pencil','icon-sm')} annotated</span>`:''}</div>
+        ${typeof hasMarkup==='function'&&hasMarkup(q.id)?`<span class="src-badge" style="color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-b)">${icon('pencil','icon-sm')} annotated</span>`:''}</div>
       ${e(q.s)}
       ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
@@ -7136,7 +7139,7 @@ function buildResults(){
     return `<div class="chp-row" style="--accent:${bc}"><span class="chp-icon">${chIcon(ch)}</span>
       <div class="chp-info"><div class="chp-name">${e(ch)}</div>
         <div class="chp-bar"><div class="chp-fill" style="transform:scaleX(${cp / 100});background:${cc}"></div></div></div>
-      <div class="chp-score"><div class="chp-pct" style="color:${cc}">${cp}%</div>
+      <div class="chp-score"><div class="chp-pct" style="color:${semText(cc)}">${cp}%</div>
         <div class="chp-count">${s.correct}/${s.total}</div></div></div>`;
   }).filter(Boolean).join('');
 
@@ -7145,7 +7148,7 @@ function buildResults(){
   return `<div class="results-wrap anim-fade">
     <div class="score-hero">
       <div class="score-circle">${svgCircle}
-        <div class="score-num"><span class="score-pct" style="color:${col}">${p}%</span>
+        <div class="score-num"><span class="score-pct" style="color:${semText(col)}">${p}%</span>
         <span class="score-label">Score</span></div></div>
       <div class="score-msg">${icon(msgIcon,'icon-lg')} ${msg}</div>
       <div class="score-sub">${sc} correct · ${st-sc} wrong · ${st} answered${
@@ -7154,7 +7157,7 @@ function buildResults(){
     ${rows?`<div class="section-label">Cumulative Chapter Performance</div><div class="ch-perf">${rows}</div>`:''}
     <div class="results-btns">
       <button class="btn btn-next" onclick="goHome()" type="button">${icon('arrow-left','icon-sm')} Back to Chapters</button>
-      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red);border:1.5px solid var(--red-b)" onclick="startQuiz(null,'missed')">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
+      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red-ink);border:1.5px solid var(--red-b)" onclick="startQuiz(null,'missed')">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
       ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--accent)" onclick="askApexMisses()">${icon('zap','icon-sm')} Explain my misses</button>`:''}
       <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
         onclick="startQuiz(${S.mode==='due'?'null':'S.chapter'},'${restartMode}')">${restartLabel}</button>

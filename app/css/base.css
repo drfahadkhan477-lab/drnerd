@@ -46,6 +46,12 @@
   --success:#059669;--success-2:#10B981;--green:var(--success);--green2:var(--success-2);--green-bg:#ECFDF5;--green-b:#A7F3D0;
   --danger:#DC2626;--danger-2:#EF4444;--red:var(--danger);--red2:var(--danger-2);--red-bg:#FFF1F1;--red-b:#FECACA;
   --warning:#B45309;--warning-2:#D97706;--amber:var(--warning);--amber2:var(--warning-2);--amber-bg:#FFFBEB;--amber-b:#FDE68A;
+  /* Text in those colours. --green, --red and --amber are one colour in every theme, and fill the letter badges under
+     white type, so they stay put; text takes its own ink. In light themes the ink is the colour itself. On a dark ground
+     the deep colours read at 3.0-4.9:1, under the 4.5:1 text needs, so the dark blocks below (and tablet.css's) give
+     lighter ones: each clears 4.5:1 on every dark palette's ground and on its own tint (verify-ink). The green leans
+     yellow, away from Monitor's teal accent, and the amber keeps the light theme's hue. */
+  --green-ink:var(--green);--red-ink:var(--red);--amber-ink:var(--amber);
   --purple:#7C3AED;
   /* Type — a minor third (1.2) from a 16px body. Named by role rather than by
      size, because a role survives a change of ratio and "--t-14" does not. */
@@ -85,6 +91,7 @@
     --green-bg:#022C22;--green-b:#065F46;
     --red-bg:#2D0A0A;--red-b:#7F1D1D;
     --amber-bg:#271B04;--amber-b:#78350F;
+    --green-ink:#4ADE80;--red-ink:#F87171;--amber-ink:#FB923C;
   }
 }
 

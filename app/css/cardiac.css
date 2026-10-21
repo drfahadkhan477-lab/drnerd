@@ -349,7 +349,7 @@
 /* Nothing left to fetch: the bar is the whole width and the prose stops
    asking for something that has already happened. */
 .off-card.all-here .off-note{color:var(--teal)}
-.off-card.has-trouble .off-note{color:var(--amber)}
+.off-card.has-trouble .off-note{color:var(--amber-ink)}
 .off-card.has-trouble .off-fill{background:linear-gradient(90deg,var(--amber2),var(--amber))}
 @media(max-width:520px){
   .off-foot{flex-direction:column;align-items:stretch}
@@ -687,8 +687,8 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
 .fc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .fc-badge{font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--muted);
   border:1px solid var(--border);border-radius:99px;padding:3px 9px}
-.fc-badge.red{color:var(--red);border-color:var(--red-b);background:var(--red-bg)}
-.fc-streak{font-size:13px;font-weight:800;color:var(--amber)}
+.fc-badge.red{color:var(--red-ink);border-color:var(--red-b);background:var(--red-bg)}
+.fc-streak{font-size:13px;font-weight:800;color:var(--amber-ink)}
 .fc-title{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:3px}
 .fc-sub{font-size:13px;color:var(--muted);line-height:1.5}
 .fc-cta{margin-top:10px;font-size:13px;font-weight:800;color:var(--teal)}
@@ -702,7 +702,7 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
 .review-card>*{position:relative;z-index:1}
 .review-card>.fc-glow{position:absolute;z-index:0}
 .miss-card{border-color:var(--red-b)}
-.miss-card .fc-cta{color:var(--red)}
+.miss-card .fc-cta{color:var(--red-ink)}
 .all-card{background:linear-gradient(135deg,var(--hero-a),var(--hero-b));border-color:rgba(255,255,255,.12)}
 .all-card .fc-title{color:#fff}
 .all-card .fc-sub{color:rgba(255,255,255,.6)}
