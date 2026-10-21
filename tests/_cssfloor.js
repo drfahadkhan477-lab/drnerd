@@ -120,7 +120,7 @@ function ancestors(node) {
      atrule     every at-rule by name
      media      every feature a media query asks about (min-/max- taken off), and range-syntax for width >= 600px, and not-or for the
                 level 4 logic
-     supports   selector() in an @supports condition, the one thing it tests that a Safari before 14.1 cannot read
+     supports   a function in an @supports condition that a Safari older than it cannot read: selector(), font-tech(), font-format(), at-rule(), named-feature()
      color      #rrggbbaa, and the space-separated rgb(0 0 0 / .5)
      value      a keyword an above-floor row of the table's watch list names, for the property it is the value of
      layout     flex-gap, for every gap: a Safari before 14.5 reads it on a grid and not on a flex box, and whether a rule's box is a flex box
@@ -141,6 +141,10 @@ const SYNTAX = Object.assign({
   'text-decoration includes_thickness': { props: ['text-decoration'], re: /(?<![\w.#-])\d*\.?\d+(px|em|rem|%)(?![\w-])|\bfrom-font\b/i },
   'content alt_text': { props: ['content'], re: /(^|\s)\/(\s|$)/ },                 // the strings are blanked and the white space squashed: "a" / "alt" is a lone /
   'cursor url_positioning_syntax': { props: ['cursor'], re: /url\([^)]*\)\s+-?\d*\.?\d+\s+-?\d*\.?\d+/i },
+  // syntax of a value that is not a property's own (props '*': in any declaration, so a custom property that stores it is found where it is stored)
+  'calc constants': { props: '*', re: /(?:calc|min|max|clamp)\([^;]*?(?<![\w.#-])(?:pi|e|infinity|nan)(?![\w(.-])/i },
+  'gradient interpolation_color_space': { props: '*', re: /gradient\(\s*(?:[^(),]*?\s)?in\s+(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|lab|oklab|xyz|xyz-d50|xyz-d65|hsl|hwb|lch|oklch)(?![\w-])/i },
+  'transition allow-discrete': { props: ['transition', 'transition-behavior'], re: /(?<![\w-])allow-discrete(?![\w-])/i },
 }, Object.fromEntries(FIT.map(p => [p + ' fit-content_function', { props: [p], re: /(?<![\w-])fit-content\s*\(/i }])));
 
 function usesOf(root, watch) {
@@ -166,7 +170,7 @@ function usesOf(root, watch) {
         if (/[<>]=?/.test(q.replace(/\([^()]*:[^()]*\)/g, ''))) add('media', 'range-syntax', node);
         if (/(^|\s)(not|or)(\s|\()/i.test(q.replace(/\([^()]*\)/g, ' ()'))) add('media', 'not-or', node);
       }
-      if (name === 'supports' && /\bselector\s*\(/i.test(node.prelude)) add('supports', 'selector()', node);
+      if (name === 'supports') for (const m of node.prelude.matchAll(/(?<![\w-])(selector|font-tech|font-format|at-rule|named-feature)\s*\(/gi)) add('supports', m[1].toLowerCase() + '()', node);
     }
     for (const d of node.decls) {
       const desc = node.t === 'at' && /^@(font-face|page|property|counter-style)\b/i.exec(node.prelude);     // descriptors, not properties: a row of their own, by the at-rule
@@ -182,7 +186,7 @@ function usesOf(root, watch) {
       }
       if (/#[0-9a-fA-F]{8}(?![\w-])|#[0-9a-fA-F]{4}(?![\w-])/.test(v)) add('color', 'hex-alpha', node, { decl: d, line: d.line });
       if (/\b(?:rgb|rgba|hsl|hsla)\(\s*[^,()]+\s+[^,()]+\s+[^,()]+\s*(?:\/|\))/i.test(v) && !/\b(?:rgb|rgba|hsl|hsla)\([^)]*,/i.test(v)) add('color', 'space-separated', node, { decl: d, line: d.line });
-      for (const [name, sx] of Object.entries(SYNTAX)) if (sx.props.includes(d.prop) && sx.re.test(v)) add('syntax', name, node, { decl: d, line: d.line });
+      for (const [name, sx] of Object.entries(SYNTAX)) if ((sx.props === '*' || sx.props.includes(d.prop)) && sx.re.test(v)) add('syntax', name, node, { decl: d, line: d.line });
       const w = watch && watch[d.prop];
       if (w) for (const m of v.toLowerCase().matchAll(/(?<![\w-])([a-z][a-z-]*)(?![\w(-])/g)) if (w[m[1]] !== undefined) add('value', d.prop + ': ' + m[1], node, { decl: d, line: d.line });
     }
@@ -256,7 +260,7 @@ function customValueUses(files, watch) {
       for (const m of d.value.toLowerCase().matchAll(/(?<![\w-])([a-z][a-z-]*)(?![\w(-])/g)) if (w[m[1]] !== undefined) out.push({ file, key: 'value ' + prop + ': ' + m[1], kind: 'value', name: prop + ': ' + m[1], node, decl: d, line: d.line, via: d.prop });
     }
     for (const prop of consumers.get(d.prop) || []) {               // a value syntax stored in a custom property is the property's, too: --d:inline flex; display:var(--d)
-      for (const [name, sx] of Object.entries(SYNTAX)) if (sx.props.includes(prop) && sx.re.test(d.value)) out.push({ file, key: 'syntax ' + name, kind: 'syntax', name, node, decl: d, line: d.line, via: d.prop });
+      for (const [name, sx] of Object.entries(SYNTAX)) if (sx.props !== '*' && sx.props.includes(prop) && sx.re.test(d.value)) out.push({ file, key: 'syntax ' + name, kind: 'syntax', name, node, decl: d, line: d.line, via: d.prop });
     }
   }
   return out;
