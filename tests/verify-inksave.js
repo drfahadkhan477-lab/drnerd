@@ -141,17 +141,27 @@ const STORED = `new Promise(resolve => {
 
   head('writing that never pauses');
   {
-    /* A stroke added and the save asked for every 400 ms for 11.2 s: the pen is never still for 900 ms, so only the ceiling can write. */
-    const { base, times } = await page.evaluate(async () => {
-      const key = currentQ().id + ':q', base = window.__puts.length, t0 = performance.now();
+    /* A stroke added and the save asked for every 400 ms for 11.2 s: the pen is never still for 900 ms, so only the ceiling can write, and it writes
+       once. The gaps between the asks are kept, and the last one runs to the moment the writes are read: a stream that stalled for 800 ms or more
+       (a machine under load) let the pen count as still, and a pause that long may have a write of its own. So the writes are held to one in a stream
+       that did not stall, and to one and one more for each stall in one that did (where the ceiling's moment is not held either: a write for a
+       pause may come before it). */
+    const { base, times, gaps } = await page.evaluate(async () => {
+      const key = currentQ().id + ':q', base = window.__puts.length, t0 = performance.now(), gaps = [];
+      let last = t0;
       for (let i = 0; i < 28; i++) {
         (INK[key] || (INK[key] = [])).push({ t: 'pen', c: '#EF4444', sz: 'M', p: [[0.1, 0.1, 0.5, 0], [0.2, 0.2, 0.5, 0]] });
         saveInkSoon();
+        const now = performance.now(); gaps.push(Math.round(now - last)); last = now;
         await new Promise(r => setTimeout(r, 400));
       }
-      return { base, times: window.__puts.slice(base).map(t => Math.round(t - t0)) };
+      gaps.push(Math.round(performance.now() - last));
+      return { base, times: window.__puts.slice(base).map(t => Math.round(t - t0)), gaps };
     });
-    ok('the ceiling writes it, once, after about ten seconds and not before, though the pen was never still', times.length >= 1 && times.length <= 2 && times[0] >= 9000 && times[0] <= 11800, `writes at ${JSON.stringify(times)} ms`);
+    const stalls = gaps.filter(g => g >= 800).length;
+    ok('the ceiling writes it, once, after about ten seconds and not before, though the pen was never still, and nothing else writes while the writing goes on',
+       times.length >= 1 && times.length <= 1 + stalls && (stalls > 0 || (times[0] >= 9000 && times[0] <= 11800)),
+       `writes at ${JSON.stringify(times)} ms; ${stalls} stall(s) of 800 ms or more, the longest gap ${Math.max(...gaps)} ms`);
     /* What was added after the ceiling is written when the writing stops. The wait is a precondition and its answer is read, and so is the database:
        a trailing write that never came would otherwise be made by the undos below, and the suite would go on past it. */
     const trailing = await putBy(base + times.length + 1, 3000);
