@@ -473,7 +473,7 @@ function privateWhere(root) {
     if (rel.startsWith('..') || path.isAbsolute(rel)) return '';
     const top = rel.split(path.sep)[0];
     if (allowed.includes(top)) return '';
-    return `${what} is in the repository at ${rel || '.'}, outside ${allowed.map(a => a + '/').join(', ')}: a licensed bank is ${what === 'the bank' ? 'written' : 'read'} only where Git ignores it and leak-guard refuses it`;
+    return `${what} is in the repository at ${rel.split(path.sep).join('/') || '.'}, outside ${allowed.map(a => a + '/').join(', ')}: a licensed bank is ${what === 'the bank' ? 'written' : 'read'} only where Git ignores it and leak-guard refuses it`;
   };
 }
 

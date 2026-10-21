@@ -310,14 +310,18 @@ const pixels = () => {
     ok('the home tiles count what was seen: all twelve sounds and fifteen strips', /12 of 12 seen/.test(tiles[0]) && /15 of 15 seen/.test(tiles[2]), tiles.map(t => t.split('\n').pop()).join(' | '));
     ok('and the stats say a streak of one day', /1\s*day streak/.test(await text(p, '.plab-stats')));
     const before = await p.evaluate(() => JSON.stringify(window.__lab.progress()));
-    await p.reload(); await booted(p); await toLab(p);
+    await p.reload(); await booted(p);
+    const reopened = await toLab(p);
     ok('after a reload the record is the same one', (await p.evaluate(() => JSON.stringify(window.__lab.progress()))) === before);
-    ok('and the home screen shows it', /12 of 12 seen/.test((await p.locator('.plab-tile').allInnerTexts())[0]));
+    const kept = await p.locator('.plab-tile').allInnerTexts();
+    ok('and the home screen shows it', /12 of 12 seen/.test(kept[0]), reopened ? (kept[0] || 'no tile').split('\n').pop() : 'the Lab did not open after the reload');
     await p.click('[data-act="reset"]');
     const after = await p.evaluate(() => window.__lab.progress());
     ok('Reset forgets it: no cards, no days', Object.keys(after.cards).length === 0 && Object.keys(after.days).length === 0 && /0 of 12 seen/.test((await p.locator('.plab-tile').allInnerTexts())[0]));
-    await p.reload(); await booted(p); await toLab(p);
-    ok('and stays forgotten after a reload', /0 of 12 seen/.test((await p.locator('.plab-tile').allInnerTexts())[0]));
+    await p.reload(); await booted(p);
+    const again = await toLab(p);
+    const gone = await p.locator('.plab-tile').allInnerTexts();
+    ok('and stays forgotten after a reload', /0 of 12 seen/.test(gone[0]), again ? (gone[0] || 'no tile').split('\n').pop() + '; stored: ' + JSON.stringify(await p.evaluate(() => { const r = window.__lab.progress(); return [Object.keys(r.cards).length, Object.keys(r.days).length]; })) : 'the Lab did not open after the reload');
   }
 
   /* ── the keyboard ──────────────────────────────────────────────────── */
