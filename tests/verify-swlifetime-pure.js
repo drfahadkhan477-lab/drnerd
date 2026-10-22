@@ -190,6 +190,43 @@ const JS = 'text/javascript', IMG = 'image/webp', HTML = 'text/html; charset=utf
     ok('and the event is over', ev.refused.length === 0 && ev.pending === 0, `${ev.refused.length} refused, ${ev.pending} outstanding`);
   }
 
+  head('an HTML refresh follows an authentication redirect to another origin');
+  {
+    for (const p of ['/', '/index.html']) {
+      const w = worker({ shell: { [p]: ['cached application shell', HTML] } });
+      const ev = w.get(p);
+      await settle();
+      const login = reply('<html>external sign in</html>', HTML);
+      Object.defineProperties(login, {
+        url: { value: 'https://identity.test/login' },
+        redirected: { value: true },
+      });
+      w.calls[0].answer(login);
+      await settle();
+      const poisoned = w.st.writes.length;
+      for (const write of w.st.writes) await write.release();
+      await settle();
+      ok(`an external login redirect cannot replace the cached HTML at ${p}`,
+         poisoned === 0 && w.st.read(w.names.SHELL, p) === 'cached application shell');
+    }
+    // Pages canonicalizes index.html to /. Refusing every redirected response
+    // would stop a legitimate HTML refresh (and the next worker's install).
+    const w = worker({ shell: { '/index.html': ['old shell', HTML] } });
+    const ev = w.get('/index.html');
+    await settle();
+    const canonical = reply('updated application shell', HTML);
+    Object.defineProperties(canonical, {
+      url: { value: ORIGIN + '/' },
+      redirected: { value: true },
+    });
+    w.calls[0].answer(canonical);
+    await settle();
+    for (const write of w.st.writes) await write.release();
+    await settle();
+    ok('a same-origin canonical HTML redirect can still refresh the shell',
+       w.st.writes.length === 1 && w.st.read(w.names.SHELL, '/index.html') === 'updated application shell');
+  }
+
   head('a shell file the cache does not have');
   {
     const w = worker();
