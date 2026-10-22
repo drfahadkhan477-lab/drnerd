@@ -153,5 +153,7 @@ The code's comments cite these rules; each was broken at least once.
 - Do not count skipped, unavailable, or unmeasured checks as passing. Keep
   recorded test results distinct from newly observed results.
 
+“Claude may build from the licensed export and deploy it to my Access-protected systole Pages project.”
+
 Finish with the changed behavior, validation results, remaining limits, and
 the next useful step. Update this guide only when the working facts change.
