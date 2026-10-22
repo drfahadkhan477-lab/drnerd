@@ -267,6 +267,12 @@ ok('and pearlAll() hands it to harvest()',
   ok('a bolded grade is not the title; the note names the topic', !!grade && grade.concept !== 'Class IIb' && grade.concept === 'Section', grade ? grade.concept : 'no pearl');
   const ext = one('## Extracted text (7)\n\nInvented therapy should be continued for 6 weeks, followed by long-term suppression in invented infections.');
   ok('an extraction heading is not the title either', !!ext && !/extracted text/i.test(ext.concept), ext ? ext.concept : 'no pearl');
+  /* The claim rule is no narrower than the scorer: on the owner's notes, held to its own word list, it dropped pearls
+     that said what to do ("requires…") or told one thing from another ("distinguished from…") and had nothing wrong. */
+  const act = one('An invented syndrome requires a repeat invented scan whenever the first invented scan is uncertain, and that second scan is read by the invented team at the invented centre.');
+  ok('a run that says what to do ("requires") is a claim', !!act, act ? act.text.slice(0, 60) : 'no pearl');
+  const tell = one('Invented type A is distinguished from invented type B by the invented marker pattern seen on the invented scan at presentation, as read by the invented team at the invented centre.');
+  ok('a run that tells one thing from another ("distinguished from") is a claim', !!tell, tell ? tell.text.slice(0, 60) : 'no pearl');
   const tidy = P.clean('The invented fol- low-up visit should occur within 6 weeks (p. 927). Short- and long-term care differ.');
   ok('a word broken across a line is joined, a page number dropped, and a writer\'s own hyphen kept',
      tidy === 'The invented follow-up visit should occur within 6 weeks. Short- and long-term care differ.', tidy);

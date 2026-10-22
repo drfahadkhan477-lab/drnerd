@@ -298,7 +298,9 @@ function bestRun(body) {
    their meaning for the Memorizer. */
 function teaching(raw) {
   const t = clean(raw);
-  if (!CLAIM.test(t) && !UNIT.test(t)) return false;
+  /* ACT and DISC are what score() rewards; a run scored for "requires…" or "distinguished from…" is a claim too. Held to
+     CLAIM alone, the owner's notes lost pearls that had nothing wrong with them (22 October 2026). */
+  if (!CLAIM.test(t) && !ACT.test(t) && !DISC.test(t) && !UNIT.test(t)) return false;
   const opening = t.split(',')[0].split(/\s+/).slice(0, 6).join(' ');
   if (/\b(similarly|likewise|also|another|the latter|the former|utili[sz]ing|as with|as noted)\b/i.test(opening)) return false;
   return !/\b(?:HR|OR|RR|CI)\s*[:=,]?\s*\(?\d|\b[Pp]\s*[=<>≤≥]\s*0?\.\d|\b(?:hazard|odds|risk) ratios?\b|\bconfidence intervals?\b|\bpatient-years?\b/.test(t);
