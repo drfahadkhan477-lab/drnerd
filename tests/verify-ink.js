@@ -17,6 +17,13 @@
  *     chapter's figure and Retry Missed. The mock report writes its score and chapter figures through the same semText,
  *     and is not opened here;
  *   · the correct option's letter badge is still white on the deep green;
+ *   · the accent as text takes --teal-ink, the same way: no rule or inline style writes text in --teal, --teal2 or
+ *     --accent, and in each of those twelve states the ink clears 4.5:1 on the page, a card, the raised surface, the
+ *     accent's tint (--teal4) and the green tint some of it sits on;
+ *   · real accent and chapter text, in every state: a chapter's badge on the quiz and its label in search results, a
+ *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, and the
+ *     Echo screen's selected tab (text on the ink rather than in it);
+ *   · every <select> on those screens has a name a screen reader can say (two had none);
  *   · nothing throws.
  */
 'use strict';
@@ -87,6 +94,15 @@ const TOOLS = () => {
     const shell = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
     const inline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(green|red|amber|success|danger|warning)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
     ok('nor does any inline style the shell writes', inline.length === 0, inline.length ? 'lines ' + inline.join(', ') : 'none');
+    /* The accent the same way: as text it read at 3.6-4.1:1 in Daylight and 3.7-4.4:1 in Midnight. */
+    const accent = [];
+    for (const f of files) {
+      const src = blankComments(fs.readFileSync(path.join(dir, f), 'utf8'));
+      for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
+    }
+    const accentInline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
+    ok('no stylesheet or inline style sets color: to --teal, --teal2 or --accent; accent text takes --teal-ink', accent.length === 0 && accentInline.length === 0,
+      accent.concat(accentInline.map(l => 'systole.html:' + l)).slice(0, 6).join('; ') || 'none');
   }
 
   const browser = await launch();
@@ -115,6 +131,15 @@ const TOOLS = () => {
     }, INKS);
     for (const x of m) ok(`${name}: ${x.k} text clears 4.5:1 on the page, a card, the raised surface and its own tint${x.k === 'amber' ? ', and on the due chip' : ''}`,
       x.min >= 4.5, `ink ${x.ink}; ` + x.r.map(([g, v]) => g + ' ' + v).join(', '));
+  }
+  head('the accent ink on each ground of each theme');
+  for (const [id, scheme, name] of STATES) {
+    await theme(id, scheme);
+    /* Read only if the theme defines it: an undefined token falls back to the body's text, which reads, and would pass. */
+    const t = await page.evaluate(() => { const T = window.__ink, c = getComputedStyle(document.documentElement).getPropertyValue('--teal-ink').trim() ? T.token('--teal-ink') : null;
+      const r = [['page', '--bg'], ['card', '--card'], ['raised', '--white'], ['tint', '--teal4'], ['green tint', '--green-bg']].map(([g, v]) => [g, c ? Math.round(T.contrast(c, T.token(v)) * 100) / 100 : 0]);
+      return { ink: c && c.slice(0, 3).map(Math.round).join(','), min: Math.min(...r.map(x => x[1])), r }; });
+    ok(`${name}: accent text clears 4.5:1 on the page, a card, the raised surface, its tint and the green tint`, t.min >= 4.5, `ink ${t.ink}; ` + t.r.map(([g, v]) => g + ' ' + v).join(', '));
   }
   await theme('monitor', 'light');
   const apart = await page.evaluate(() => { const T = window.__ink; return Math.round(Math.abs(T.hue(T.token('--green-ink')) - T.hue(T.token('--teal')))); });
@@ -160,6 +185,54 @@ const TOOLS = () => {
   await quiet(page);
   ok('the results are up (precondition)', res);
   await sweep([['the score', '.score-pct', 'red'], ['a chapter\'s figure', '.chp-pct', 'red'], ['Retry Missed', 'button[onclick*="\'missed\'"]', 'red']], 'results');
+
+  head('real accent and chapter text');
+  {
+    /* Each screen is drawn again for each state: the chapter colour is mixed for the theme when the screen is drawn. */
+    /* A screen fades in, so it is read at rest: each entrance and transition that has an end is put at it (what the app's
+       settleEntrances does for a redraw); one that goes on for ever is left. Read mid-fade, the text was at 1-3:1. */
+    const rest = () => page.evaluate(() => { for (let k = 0; k < 4; k++) { const a = document.getAnimations().filter(x => x.playState === 'running' && x.effect && x.effect.getComputedTiming().iterations !== Infinity); if (!a.length) break; a.forEach(x => { try { x.finish(); } catch (_) {} }); } });
+    const at = async (go, then) => { await page.evaluate(`(${go})()`); await quiet(page); if (then) { await page.evaluate(`(${then})()`); await quiet(page); } await rest(); };
+    const read = probes => page.evaluate(probes => { const T = window.__ink;
+      /* The text as painted: its colour's alpha times the opacity of it and every ancestor, over what is under it. The
+         zoom hint was faint by opacity, not by colour. */
+      return probes.map(([name, sel]) => { const el = document.querySelector(sel); if (!el) return { name, missing: sel };
+        let a = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) a *= parseFloat(getComputedStyle(n).opacity);
+        const c = T.parse(getComputedStyle(el).color), g = T.ground(el), seen = [0, 1, 2].map(i => c[i] * c[3] * a + g[i] * (1 - c[3] * a));
+        return { name, ratio: Math.round(T.contrast(seen, g) * 100) / 100 }; }); }, probes);
+    const screens = [
+      ['the quiz, a question with a figure', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, null,
+        [['a chapter\'s badge', '.ch-badge'], ['a figure\'s zoom hint', '.fig-zoom-hint']]],
+      ['the search screen', () => { openSearch(); }, () => {
+        /* A word the bank's own questions hold, so there are results on any bank. */
+        let w = null;
+        for (const q of POOL) { for (const x of (q.s + ' ' + q.ex).split(/[^A-Za-z]+/)) if (x.length >= 7 && search(x, { limit: 5 }).some(h => h.meta.kind === 'q')) { w = x; break; } if (w) break; }
+        searchGo(w || ''); }, [['a result\'s chapter label', '.hit-ch']]],
+      ['the notes', () => { goRefs(); }, null, [['a note\'s tag', '.ref-tags span:not(.ref-more)']]],
+      ['Apex\'s settings', () => { startAdhocQuiz([POOL.find(x => !x.bad)], null); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); },
+        [['the source picked', '.prov-pick.on .pp-name']]],
+      ['the rhythm lab', () => { goLab(); }, null, [['the phase chip', '#physioPhase']]],
+      ['the Echo screen', () => { goEcho(); }, null, [['the selected tab', '.echo-tab.on']]],
+    ];
+    const per = {}, names = [];
+    for (const [id, scheme, label] of STATES) {
+      await theme(id, scheme);
+      for (const [where, go, then, probes] of screens) {
+        await page.evaluate(() => { if (document.getElementById('shell').classList.contains('ai-open')) toggleAI(); });
+        await at(go, then);
+        for (const r of await read(probes)) { const k = where + ': ' + r.name; if (!per[k]) { per[k] = []; names.push(k); } per[k].push([label, r]); }
+      }
+    }
+    for (const k of names) {
+      const bad = per[k].filter(([, r]) => r.missing || !(r.ratio >= 4.5));
+      ok(`${k} clears 4.5:1 in every theme`, bad.length === 0,
+        bad.length ? bad.slice(0, 4).map(([l, r]) => l + ' ' + (r.missing ? 'missing' : r.ratio)).join(', ') : 'lowest ' + Math.min(...per[k].map(([, r]) => r.ratio)));
+    }
+    await at(() => { openSearch(); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); });
+    const unnamed = await page.evaluate(() => { const s = [...document.querySelectorAll('select')];
+      return { n: s.length, bare: s.filter(x => !x.labels.length && !(x.getAttribute('aria-label') || '').trim() && !x.getAttribute('aria-labelledby')).map(x => '#' + x.id) }; });
+    ok('every <select> on the search screen and in Apex\'s settings has a name', unnamed.n >= 2 && unnamed.bare.length === 0, `${unnamed.n} selects; unnamed: ${unnamed.bare.join(' ') || 'none'}`);
+  }
 
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));

@@ -27,7 +27,7 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
 .read-row{display:flex;gap:6px;padding:2px 7px 6px}
 .read-opt{flex:1 1 0;display:flex;align-items:center;justify-content:center;border-radius:9px;cursor:pointer;
   border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-weight:700;line-height:1}
-.read-opt.on{border-color:var(--teal);color:var(--teal);background:var(--teal4)}
+.read-opt.on{border-color:var(--teal);color:var(--teal-ink);background:var(--teal4)}
 .theme-menu{max-height:calc(100vh - 80px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Touch targets. The chips beside these are already 44 px tall (refinements.css: about the least a finger on an iPad can

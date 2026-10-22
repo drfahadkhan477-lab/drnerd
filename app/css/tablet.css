@@ -129,6 +129,7 @@ html[data-theme="dark"]{
   --green-bg:#022C22;--green-b:#065F46;--red-bg:#2D0A0A;--red-b:#7F1D1D;
   --amber-bg:#271B04;--amber-b:#78350F;--warn-bg:var(--amber-bg);--warn-b:var(--amber-b);
   --green-ink:#4ADE80;--red-ink:#F87171;--amber-ink:#FB923C;
+  --teal-ink:#38BDF8;--teal3:#13406A;--teal4:#0B2540;
 }
 html[data-theme="light"]{
   --bg:#EFF3F8;--white:#FFFFFF;--card:#FFFFFF;
@@ -137,4 +138,5 @@ html[data-theme="light"]{
   --green-bg:#ECFDF5;--green-b:#A7F3D0;--red-bg:#FFF1F1;--red-b:#FECACA;
   --amber-bg:#FFFBEB;--amber-b:#FDE68A;--warn-bg:var(--amber-bg);--warn-b:var(--amber-b);
   --green-ink:#046C4E;--red-ink:#B91C1C;--amber-ink:#92400E;   /* base.css's light inks, over its dark block on a dark OS */
+  --teal-ink:#0369A1;--teal3:#BAE6FD;--teal4:#E0F2FE;
 }

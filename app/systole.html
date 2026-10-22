@@ -3058,7 +3058,7 @@ function buildSearch(){
   const total=SQ.hits.length;
   const chips=TOPIC_SUGGEST.map(t=>
     `<button class="chip${SQ.q===t?' hot':''}" onclick="searchGo(${JSON.stringify(t).replace(/"/g,'&quot;')})">${e(t)}</button>`).join('');
-  const chSel=`<select id="sCh" onchange="searchChapter(this.value)">
+  const chSel=`<select id="sCh" aria-label="Chapter" onchange="searchChapter(this.value)">
       <option value="">All chapters</option>
       ${CHAPTERS.map(c=>`<option value="${e(c)}"${SQ.ch===c?' selected':''}>${e(c)}</option>`).join('')}
     </select>`;
@@ -3068,7 +3068,7 @@ function buildSearch(){
     const missed=S.missed.has(q.id);
     return `<button class="hit" onclick="jumpTo('${q.id}')" style="border-left-color:${col}">
       <div class="hit-top">
-        <span class="hit-ch" style="background:${col}1F;color:${col}">${e(q.ch)} · ${q.n}</span>
+        <span class="hit-ch" style="background:${col}1F;color:${chInk(col)}">${e(q.ch)} · ${q.n}</span>
         ${missed?'<span class="hit-flag">previously missed</span>':''}
         ${S.flagged.has(q.id)?'<span class="hit-flag flagged">flagged</span>':''}
         ${q.img?`<span class="hit-fig">${icon('image','icon-sm')} ${q.img}</span>`:''}
@@ -3862,7 +3862,7 @@ function setupHtml(){
       <button class="key-paste" id="aiPaste" title="Paste from clipboard">${icon("clipboard","icon-sm")}</button>
     </div>
     <div id="keyMsg" class="key-msg"></div>
-    <select id="aiModel">${models.map(m=>`<option value="${m[0]}"${active.model===m[0]?' selected':''}>${m[1]}</option>`).join('')}</select>
+    <select id="aiModel" aria-label="Model">${models.map(m=>`<option value="${m[0]}"${active.model===m[0]?' selected':''}>${m[1]}</option>`).join('')}</select>
     <button class="btn btn-next" id="aiSave" style="width:100%;margin-top:10px">Connect</button>
     <div class="note" id="setupNote">${meta[3]} Stored only in this device's storage, sent only to the provider you picked, never written into this file.</div>
   </div>`;
@@ -4652,6 +4652,13 @@ const CH_SHORT={"Arrhythmias":"Rhythm","Congenital Heart Disease":"Congenital",
   "Pulmonary Circulation Disorders":"Pulm Circ","Systemic Disorders":"Systemic Dz",
   "Systemic Hypertension & Hypotension":"BP","Valvular Disease":"Valves","Vascular Disease":"Vascular"};
 const CH_COLORS={"Arrhythmias":"#6366F1","Congenital Heart Disease":"#EC4899","Coronary Artery Disease":"#EF4444","Heart Failure & Cardiomyopathies":"#3B82F6","Miscellaneous Topics":"#8B5CF6","Pericardial Disease":"#F59E0B","Pulmonary Circulation Disorders":"#10B981","Systemic Disorders":"#F97316","Systemic Hypertension & Hypotension":"#0891B2","Valvular Disease":"#7C3AED","Vascular Disease":"#14B8A6"};
+/* A chapter's colour as text: its badge's name sits on the colour at a tint, and the colour itself read at 3.2-3.8:1 there.
+   The ink is the colour taken 45% of the way to the theme's text, dark or light, so the hue still says which chapter. */
+function chInk(hex){
+  const m=/^#([0-9a-f]{6})$/i.exec(hex||''); if(!m) return hex;
+  const to=themeIsDark()?[255,255,255]:[15,23,42], n=parseInt(m[1],16), c=[n>>16&255,n>>8&255,n&255];
+  return '#'+c.map((v,k)=>Math.round(v+(to[k]-v)*0.45).toString(16).padStart(2,'0')).join('');
+}
 
 /* Quarantined items never enter a quiz pool. */
 const POOL     = ALL_Q.filter(q=>!q.bad);
@@ -5419,7 +5426,7 @@ function annoCountText(all,shown){
 function annoRowHtml(r){
   const q=r.q, col=CH_COLORS[q.ch]||'var(--teal)', w=ANNO.q;
   return `<button class="hit anno-row" type="button" data-anno="${e(r.id)}" style="border-left-color:${col}">
-    <div class="hit-top"><span class="hit-ch" style="background:${col}1F;color:${col}">${e(q.ch)} · ${q.n}</span>
+    <div class="hit-top"><span class="hit-ch" style="background:${col}1F;color:${chInk(col)}">${e(q.ch)} · ${q.n}</span>
       ${S.flagged.has(r.id)?'<span class="hit-flag flagged">flagged</span>':''}
       ${S.missed.has(r.id)?'<span class="hit-flag">previously missed</span>':''}
       ${r.notes?`<span class="hit-fig">${icon('sticky-note','icon-sm')} ${r.notes>1?r.notes+' notes':'note'}</span>`:''}
@@ -5806,7 +5813,7 @@ function buildMock(){
     </div>
     <div class="fig-zone"></div>
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:var(--teal)">
-      <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:var(--teal)"></span>Question ${r.i+1}</div>
+      <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:var(--teal-ink)"></span>Question ${r.i+1}</div>
       ${e(q.s)}
       ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
@@ -7144,7 +7151,7 @@ function buildQuiz(){
   return `<div class="quiz-wrap">
     <div class="qbar anim-slide">
       <div class="qbar-top">
-        <span class="ch-badge" style="background:${chColor}22;color:${chColor}">${e(q.ch)}</span>
+        <span class="ch-badge" style="background:${chColor}22;color:${chInk(chColor)}">${e(q.ch)}</span>
         <span class="q-counter">Q ${qIdx+1} / ${questions.length}</span>
         ${S.resumed?`<button class="q-restart" type="button" onclick="restartQuiz()"
           title="Deal this chapter again from the beginning">Resumed · start over</button>`:''}
@@ -7210,7 +7217,7 @@ function buildResults(){
     <div class="results-btns">
       <button class="btn btn-next" onclick="goHome()" type="button">${icon('arrow-left','icon-sm')} Back to Chapters</button>
       ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red-ink);border:1.5px solid var(--red-b)" onclick="startQuiz(null,'missed')">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
-      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--accent)" onclick="askApexMisses()">${icon('zap','icon-sm')} Explain my misses</button>`:''}
+      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--teal-ink)" onclick="askApexMisses()">${icon('zap','icon-sm')} Explain my misses</button>`:''}
       <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
         onclick="startQuiz(${S.mode==='due'?'null':'S.chapter'},'${restartMode}')">${restartLabel}</button>
     </div>

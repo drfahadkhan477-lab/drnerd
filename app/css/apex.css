@@ -16,7 +16,7 @@
   background:transparent;color:var(--muted);font-size:19px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;transition:all .16s var(--ease)}
 .tool:active{transform:scale(.92)}
-.tool.on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal)}
+.tool.on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal-ink)}
 .tool.danger.on{background:var(--red-bg);border-color:var(--red);color:var(--red-ink)}
 .tool-sep{height:1px;background:var(--border2);margin:3px 4px}
 .swatches{display:flex;flex-direction:column;gap:5px;align-items:center}
@@ -32,7 +32,7 @@
 .size-dot[data-sz="S"]{width:7px;height:7px}
 .size-dot[data-sz="M"]{width:11px;height:11px}
 .size-dot[data-sz="L"]{width:16px;height:16px}
-.tool.auto-on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal)}
+.tool.auto-on{background:var(--teal-bg,#E6FBF7);border-color:var(--teal);color:var(--teal-ink)}
 .tool-auto{font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
 
 /* sticky notes */
@@ -68,9 +68,9 @@
   top:calc(var(--navh) + var(--sat));height:calc(100vh - var(--navh) - var(--sat));height:calc(100dvh - var(--navh) - var(--sat))}
 #shell.ai-open #ai{flex:0 0 min(46vw,560px);width:auto}
 .grounded-btn{background:var(--card);border-color:var(--border);color:var(--muted)}
-.grounded-btn.on{background:var(--teal4);border-color:var(--teal);color:var(--teal)}
+.grounded-btn.on{background:var(--teal4);border-color:var(--teal);color:var(--teal-ink)}
 .grounded-tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--teal);font-weight:600}
+  text-transform:uppercase;color:var(--teal-ink);font-weight:600}
 .ref-src{font-family:var(--font-mono);font-size:13px;color:var(--muted);margin-top:5px;line-height:1.45}
 .ai-head{display:flex;align-items:center;gap:9px;padding:12px 14px;
   border-bottom:1px solid var(--border2);background:var(--card)}
@@ -111,7 +111,7 @@
 .msg.user{align-self:flex-end;background:var(--teal);color:#fff;padding:9px 13px;
   border-radius:14px 14px 4px 14px}
 .msg.bot{align-self:flex-start;color:var(--text)}
-.msg.bot h3{font-size:13px;margin:10px 0 4px;color:var(--teal);letter-spacing:-.01em}
+.msg.bot h3{font-size:13px;margin:10px 0 4px;color:var(--teal-ink);letter-spacing:-.01em}
 .msg.bot strong{font-weight:700}
 .msg.bot ul,.msg.bot ol{margin:6px 0 6px 18px}
 .msg.bot li{margin:3px 0}
@@ -154,7 +154,7 @@
    hierarchy taken from the modular scale rather than invented. The first
    version of this used 17px and 15px, which are not steps on that ladder —
    the type suite exists to catch exactly that and did. */
-.msg.bot h3{font-size:var(--t-lead);font-weight:700;color:var(--teal);
+.msg.bot h3{font-size:var(--t-lead);font-weight:700;color:var(--teal-ink);
   margin:22px 0 7px;line-height:1.3;letter-spacing:-.012em}
 .msg.bot h4{font-size:var(--t-body);font-weight:700;color:var(--text);
   margin:18px 0 5px;line-height:1.35;letter-spacing:-.008em}
@@ -167,7 +167,7 @@
 .msg.bot ul{list-style:disc}
 .msg.bot li{margin:0 0 7px;padding-left:2px}
 .msg.bot li:last-child{margin-bottom:0}
-.msg.bot li::marker{color:var(--teal);font-weight:600}
+.msg.bot li::marker{color:var(--teal-ink);font-weight:600}
 /* A quote from a guideline or a stem, set as an aside rather than a wall. */
 .msg.bot blockquote{margin:0 0 14px;padding:2px 0 2px 15px;
   border-left:3px solid var(--teal);color:var(--muted)}
@@ -189,12 +189,12 @@
 .cf-chip,.miss-chip{font-size:var(--t-tiny);color:var(--muted);background:var(--card);
   border:1px solid var(--border);border-radius:999px;padding:5px 11px;cursor:pointer;
   transition:border-color .18s,color .18s,background .18s}
-.cf-chip.on,.miss-chip.on{color:var(--accent);border-color:var(--accent);background:var(--teal4)}
+.cf-chip.on,.miss-chip.on{color:var(--teal-ink);border-color:var(--accent);background:var(--teal4)}
 .miss-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:14px}
 /* Not a .miss-chip: the five reasons are the chips, and a sixth would be counted as one. Not pushed to the right-hand
    end of the row either: that edge is where Apex's own floating button passes over whatever is scrolled beneath it
    (cardiac.css, .hello-x), so the button follows the reasons. */
-.miss-ask{display:inline-flex;align-items:center;gap:5px;font-size:var(--t-tiny);color:var(--accent);background:var(--card);
+.miss-ask{display:inline-flex;align-items:center;gap:5px;font-size:var(--t-tiny);color:var(--teal-ink);background:var(--card);
   border:1px solid var(--accent);border-radius:999px;padding:6px 12px;min-height:32px;cursor:pointer}
 .cb-head{font-size:var(--t-body);color:var(--text);padding:2px 0 10px}
 .cb-head b{color:var(--red-ink)}
@@ -217,12 +217,12 @@
   border:1.5px solid var(--border);background:var(--card);color:var(--muted);
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   transition:color .16s var(--ease),border-color .16s var(--ease),background .16s var(--ease)}
-.ai-more.on{border-color:var(--teal);color:var(--teal);background:var(--teal4)}
+.ai-more.on{border-color:var(--teal);color:var(--teal-ink);background:var(--teal4)}
 .chip{border:1.5px solid var(--border);background:var(--card);color:var(--muted);
   border-radius:99px;padding:6px 11px;font-size:11px;font-weight:600;cursor:pointer;
   transition:all .16s var(--ease)}
 .chip:active{transform:scale(.95)}
-.chip.hot{border-color:var(--teal);color:var(--teal)}
+.chip.hot{border-color:var(--teal);color:var(--teal-ink)}
 .ai-foot{border-top:1px solid var(--border2);padding:10px 12px;
   padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--card)}
 .ai-input{display:flex;gap:8px;align-items:flex-end}
@@ -381,7 +381,7 @@
 .src-pill{border:1px solid var(--border);background:var(--card);color:var(--muted);
   border-radius:99px;padding:3px 9px;font-size:11px;font-weight:600;cursor:pointer;
   font-family:var(--font-mono)}
-.src-pill.ref{border-color:var(--teal);color:var(--teal);cursor:default;font-family:var(--font-sans)}
+.src-pill.ref{border-color:var(--teal);color:var(--teal-ink);cursor:default;font-family:var(--font-sans)}
 #peek{display:none}
 #peek.peek-open{display:flex;position:fixed;top:0;right:0;bottom:0;left:0;z-index:120;background:rgba(10,22,40,.55);
   align-items:center;justify-content:center;padding:18px;
@@ -415,7 +415,7 @@
 .ref-acts{display:flex;gap:5px}
 .ref-tags{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
 .ref-tags .ref-more{color:var(--muted);background:transparent;border-style:dashed;cursor:default}
-.ref-tags span{font-size:11px;font-weight:600;color:var(--teal);background:var(--green-bg);
+.ref-tags span{font-size:11px;font-weight:600;color:var(--teal-ink);background:var(--green-bg);
   border:1px solid var(--green-b);border-radius:99px;padding:2px 8px}
 .ref-body{font-size:16px;line-height:1.7;color:var(--text);margin-top:10px;
   max-height:300px;overflow-y:auto;padding-right:4px}

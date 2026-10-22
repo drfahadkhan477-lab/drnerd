@@ -104,7 +104,7 @@ const SUITES = [
   ['backup',       'a restored backup appears now, not only after the next launch'],
   ['windows',      'a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
-  ['ink',          'green, red and amber text a reader can read in every theme, the colours that fill left as they are'],
+  ['ink',          'green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are'],
   /* The three below need no browser and no build — they load a src/ module
      the way verify-fsrs does and assert properties over it. That is what lets
      CI run them: CI has the repository but never the licensed export, so a

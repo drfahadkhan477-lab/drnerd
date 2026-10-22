@@ -590,7 +590,7 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (41 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: green, red and amber text a reader can read in every theme, the colours that fill left as they are (52 checks)
+        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (73 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (67 checks)
@@ -894,7 +894,7 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (41 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: green, red and amber text a reader can read in every theme, the colours that fill left as they are (52 checks)
+        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (73 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (67 checks)
