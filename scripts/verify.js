@@ -364,6 +364,7 @@ const SUITES = [
   ['glass', 'neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone'],
   ['refimgdefer-pure', 'the note figures load after the home screen has drawn, one unit at a time, the pearl\'s first'],
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
+  ['cssdocs-pure', 'the split build omits CSS documentation while preserving strings, URLs and token boundaries'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
   ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it'],
   /* Retrieval quality as a number rather than an impression. It exists because
@@ -515,7 +516,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['backup-ids', 'floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
+const PENDING_RECORD = ['cssdocs-pure', 'backup-ids', 'floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
