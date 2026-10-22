@@ -6,13 +6,14 @@
  *
  * Four claims:
  *   · the welcome bar (the hero ECG strip) is genuinely larger than it was;
- *   · the progress bar reports the REAL state of the bank — its mastery layer
- *     is FSRS's own recall estimate and its width matches the number shown,
+ *   · the Brain page's gauge reports the REAL state of the bank — its mastery
+ *     ring is FSRS's own recall estimate and is drawn to the number it shows,
  *     and mastery never exceeds coverage (you cannot have mastered more than
- *     you have seen);
- *   · home says ONE thing: the trace, the pearl, the progress bar and a row of
- *     doors — and the study material it used to carry is behind a door rather
- *     than below the fold;
+ *     you have seen). The progress bar that said this on Home is gone (the
+ *     owner's call: its numbers were the gauge's);
+ *   · home says ONE thing: the trace and the pearl — the study material it
+ *     used to carry is behind a door on the Labs page rather than below the
+ *     fold;
  *   · S.homeLayout still persists and still reaches the home screen's own
  *     hero sizing on a cold load. It used to also drive a visible three-way
  *     switch — Signal/Focus/Grid — but studyflow removed that control: it
@@ -68,7 +69,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
 
-  /* Seed a realistic spread of progress so the bar and the numbers are testable
+  /* Seed a realistic spread of progress so the gauge and the numbers are testable
      and mastery lands strictly below coverage. */
   await page.evaluate(() => {
     const now = todayISO();
@@ -82,28 +83,18 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     }
     save(); render();
   });
-  /* Wait for the grow animation to END before measuring rendered widths — a
-     mid-flight bar is narrower than its settled value and would fail the
-     width-matches-aria check for a reason that has nothing to do with the
-     number being right.
-
-     This used to be waitForTimeout(1400) against a 1.05s animation, which is a
-     bet on the machine rather than a wait for the thing. Under load the bet
-     loses: three concurrent runs of this suite sampled the bar at 0% and 13%
-     against an aria value of 16. So it now waits for the animation itself to
-     finish and for the width to hold still — the quantity the check asserts.
-     Looping decorations (.hp-shine) never finish, so only finite animations
-     are waited on. */
-  await page.waitForFunction(() => {
-    const busy = document.getAnimations().some(a =>
-      a.playState === 'running' &&
-      Number.isFinite(a.effect && a.effect.getTiming().iterations));
-    const m = document.querySelector('.hp-mast');
-    const w = m ? Math.round(m.getBoundingClientRect().width * 100) : -1;
-    window.__bs = (window.__bl === w && !busy) ? (window.__bs || 0) + 1 : 0;
-    window.__bl = w;
-    return window.__bs >= 5;
-  }, null, { timeout: 15000, polling: 'raf' });
+  /* The gauge's rings are drawn when the Brain page is first shown (homeFillBrain), and grow over 1.3s. Measured once
+     they have stopped: a ring mid-growth is shorter than its value and would fail for a reason that has nothing to do
+     with the number. */
+  await page.evaluate(() => homeGo(1, true));
+  await settled(page, () => { const c = document.querySelector('#homePage1 .bg-mast');
+    return !!c && !!c.style.strokeDasharray && !document.getAnimations().some(a => a.playState === 'running' && a.effect && Number.isFinite(a.effect.getTiming().iterations)); },
+    { timeout: 15000, label: 'the gauge to be drawn' });
+  await page.evaluate(() => homeGo(0, true));
+  /* Back on Home, and landed: a page still gliding is drawn scaled (it eases back as it arrives), which would read every
+     size on it short. */
+  await settled(page, () => !homeTween && document.getElementById('homePager').scrollLeft === 0 &&
+    document.getElementById('homePage0').style.getPropertyValue('--hp-d') === '0.0000', { timeout: 15000, label: 'Home to land' });
 
   head('the welcome bar is larger');
   const ecgH = await page.evaluate(() => {
@@ -112,39 +103,24 @@ onDeath(() => ({ section, checks: passed + failed, errors,
   });
   ok('the hero ECG strip is taller than the old 104px ceiling at its minimum', ecgH >= 88, `${ecgH.toFixed(0)}px`);
 
-  head('the progress bar reflects the real bank');
+  head('the Brain page\'s gauge reflects the real bank');
   const prog = await page.evaluate(() => {
-    const track = document.querySelector('.hp-track');
-    const seen = document.querySelector('.hp-seen'), mast = document.querySelector('.hp-mast');
-    /* .hp-val was one caption stating both figures in a single line; homeprog
-       split it into a legend with one .hp-stat per figure. The claim below —
-       that both words appear somewhere on the card — still holds over the
-       legend's combined text, so this reads that instead of a span that no
-       longer exists. */
-    const val = document.querySelector('.hp-legend')?.textContent || '';
-    const trackW = track.getBoundingClientRect().width;
-    return {
-      aria: +track.getAttribute('aria-valuenow'),
-      seenW: seen.getBoundingClientRect().width / trackW,
-      mastW: mast.getBoundingClientRect().width / trackW,
-      seenPctStyle: seen.style.width, mastPctStyle: mast.style.width,
-      val, hasShine: !!document.querySelector('.hp-shine'),
-    };
+    const seen = document.querySelector('#homePage1 .bg-seen'), mast = document.querySelector('#homePage1 .bg-mast');
+    const drawn = c => parseFloat(getComputedStyle(c).strokeDasharray);
+    return { seenFrac: +seen.dataset.frac, mastFrac: +mast.dataset.frac, seenDrawn: drawn(seen), mastDrawn: drawn(mast),
+      mid: document.querySelector('#homePage1 .brain-mid b').textContent.trim(),
+      label: document.querySelector('#homePage1 .brain-gauge').getAttribute('aria-label'),
+      bar: !!document.querySelector('.hp-track') };
   });
-  ok('the bar has both a coverage layer and a mastery layer', /%$/.test(prog.seenPctStyle) && /%$/.test(prog.mastPctStyle),
-     `seen ${prog.seenPctStyle}, mastered ${prog.mastPctStyle}`);
-  ok('mastery never exceeds coverage — you cannot master the unseen',
-     parseFloat(prog.mastPctStyle) <= parseFloat(prog.seenPctStyle) + 0.5,
-     `${prog.mastPctStyle} ≤ ${prog.seenPctStyle}`);
-  ok('the rendered mastery width matches its aria value',
-     Math.abs(prog.mastW * 100 - prog.aria) < 2, `width ${(prog.mastW * 100).toFixed(0)}% vs aria ${prog.aria}`);
-  /* Case-insensitive: the claim is that both words are legible somewhere on
-     the card, not that they keep the exact casing of the sentence .hp-val
-     used to embed them in. The legend states them as title-cased keys
-     ("Mastered", "Seen") rather than lowercase inside a run-on caption —
-     a real, deliberate change in presentation, not a loss of the words. */
-  ok('the caption states both figures', /mastered/i.test(prog.val) && /seen/i.test(prog.val), prog.val);
-  ok('a highlight sweeps the bar', prog.hasShine);
+  ok('the gauge has both a coverage ring and a mastery ring, and some of the bank is seen', prog.seenFrac > 0 && prog.mastFrac >= 0,
+     `seen ${prog.seenFrac}, mastered ${prog.mastFrac}`);
+  ok('mastery never exceeds coverage — you cannot master the unseen', prog.mastFrac <= prog.seenFrac,
+     `${prog.mastFrac} ≤ ${prog.seenFrac}`);
+  ok('the drawn mastery ring matches its number', Math.abs(prog.mastDrawn - prog.mastFrac) < 1 && prog.mid === prog.mastFrac + '%',
+     `drawn ${prog.mastDrawn} of 100, number ${prog.mid}`);
+  ok('and so does the coverage ring', Math.abs(prog.seenDrawn - prog.seenFrac) < 1, `drawn ${prog.seenDrawn}, ${prog.seenFrac}%`);
+  ok('the gauge states both figures in words', /mastered/i.test(prog.label) && /seen/i.test(prog.label), prog.label);
+  ok('and the progress bar it replaced is gone from Home', !prog.bar);
 
   head('it fills the display, like an app');
   /* Added to the Home Screen, iPadOS gives a web app the whole screen and draws
@@ -225,27 +201,27 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     pearl: !!document.querySelector('.pearl-card'),
     pearlPV: !!document.querySelector('.pearl-card #pearlPV'),
     pearlCurrent: !!document.querySelector('.pearl-card #pearlCurrent'),
-    progress: !!document.querySelector('.hp-track'),
-    doors: document.querySelectorAll('.door-row .door').length,
+    homeDoors: document.querySelectorAll('#homePage0 .door').length,
+    doors: document.querySelectorAll('#homePage2 .door-row .door').length,
     rail: !!document.querySelector('.story-rail'),
     feed: !!document.querySelector('.feed'),
     tiles: document.querySelectorAll('.ch-tile').length,
     /* The doors label where they lead; a row of bare icons would be a puzzle. */
     labels: [...document.querySelectorAll('.door .door-txt b')].map(b => b.textContent.trim()),
   }));
-  ok('the trace, the pearl and the progress bar are all on it',
-     homeShape.hero && homeShape.pearl && homeShape.progress);
+  ok('the trace and the pearl are on it, and no doors',
+     homeShape.hero && homeShape.pearl && homeShape.homeDoors === 0, `${homeShape.homeDoors} doors on Home`);
   /* The pressure-volume loop was a good drawing in a bad place — 104px pinned
      in the corner of the prose column. It is now a full-width ECG trace running
      behind the words, which is what the card wanted along its foot. */
   ok('the pearl carries a current of its own', homeShape.pearlCurrent);
   ok('and the corner loop it replaced is gone', homeShape.pearlPV === false);
-  ok('and a row of doors under them', homeShape.doors >= 5, String(homeShape.doors));
+  ok('the doors are a row on the Labs page, under the labs', homeShape.doors >= 5, String(homeShape.doors));
   const firstDoor = await page.evaluate(() => {
-    const d = document.querySelector('.door-row .door');
+    const d = document.querySelector('#homePage2 .door-row .door');
     return { wide: d.classList.contains('door-wide'),
              widerThanNext: d.getBoundingClientRect().width >
-                            document.querySelectorAll('.door-row .door')[1].getBoundingClientRect().width };
+                            document.querySelectorAll('#homePage2 .door-row .door')[1].getBoundingClientRect().width };
   });
   ok('Chapters is the first door, and the widest',
      homeShape.labels[0] === 'Chapters' && firstDoor.wide && firstDoor.widerThanNext,
@@ -428,7 +404,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
                  over: document.documentElement.scrollHeight - innerHeight,
                  screen: app.dataset.screen,
                  hero: R('.hero-live'), pearl: R('.pearl-card'), doors: R('.door-row'), col: R('#homePage0 .home-page-in'),
-                 homeDoors: document.querySelectorAll(document.getElementById('homePage0') ? '#homePage0 .door' : '#app .door').length, brainDoors: document.querySelectorAll('#homePage1 .door').length };
+                 homeDoors: document.querySelectorAll(document.getElementById('homePage0') ? '#homePage0 .door' : '#app .door').length, labDoors: document.querySelectorAll('#homePage2 .door').length };
       });
     };
 
@@ -442,10 +418,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        pro.pearl.x > pro.hero.x + pro.hero.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
     ok('and it runs taller than the letterbox it used to be',
        pro.pearl.h > 400, `${pro.pearl.h}px tall`);
-    /* The doors moved off Home: it is the hero, the pearl and the progress bar now, and the doors are on the Brain page,
-       a swipe away (verify-homepager). */
-    ok('no doors under the hero any more: they are on the Brain page',
-       pro.homeDoors === 0 && pro.brainDoors >= 5, `${pro.homeDoors} on Home, ${pro.brainDoors} on Brain`);
+    /* The doors moved off Home: it is the hero and the pearl now, and the doors are on the Labs page, two swipes away
+       (verify-homepager). */
+    ok('no doors under the hero any more: they are on the Labs page',
+       pro.homeDoors === 0 && pro.labDoors >= 5, `${pro.homeDoors} on Home, ${pro.labDoors} on Labs`);
 
     const air = await at(1194, 834);
     ok('an 11-inch iPad in landscape fits too',
@@ -621,8 +597,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
   }
 
   head('and the hint itself is readable, on every theme');
-  /* The same AA floor the progress card is now held to, applied to the new
-     card rather than assumed of it — this is the component most likely to be
+  /* The AA floor, applied to the new card rather than assumed of it — this is
+     the component most likely to be
      written in whatever colour looked nice. */
   {
     const rows = await page.evaluate(async () => {

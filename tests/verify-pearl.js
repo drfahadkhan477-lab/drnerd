@@ -309,7 +309,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     }
     return {
       mounted: !!pearlTrace,
-      lit, topOfInk: lowest, bottomOfInk: highest,
+      lit, topOfInk: lowest, bottomOfInk: highest, cssH: r.height,
+      proseFoot: Math.round(r.bottom - cardEl.querySelector('.pearl-main').getBoundingClientRect().bottom),
+      band: !!(cardEl.querySelector('.pearl-fig') || cardEl.querySelector('.pearl-emblem')) && getComputedStyle(cardEl).flexDirection === 'column',
       /* Against the card's CONTENT box, not its border box. The card has a
          1px border either side, so a canvas that fills it perfectly measures
          exactly 2px narrower than the border box — and the old `< 2` fudge
@@ -328,7 +330,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      should report four failures, not throw on the second line and take the
      rest of the suite with it. */
   const T = trace || { mounted: false, fullWidth: false, backing: 0, dpr: 1, behind: false,
-                       topOfInk: 0, bottomOfInk: 0, lit: 0 };
+                       topOfInk: 0, bottomOfInk: 0, lit: 0, cssH: 0, proseFoot: NaN, band: false };
   ok('the pearl carries a current, and it is running', T.mounted === true);
   ok('it spans the whole card, where the loop was a corner',
      T.fullWidth, `${T.backing.toFixed(1)}× backing`);
@@ -339,11 +341,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      the body of the prose, the contrast check further down is the only thing
      standing between the fellow and an unreadable pearl — so it is held here
      as well, structurally, rather than relying on one number. */
+  /* Stacked, the figure (or the emblem) is a band under the prose with a ground of its own, and a trace along the foot
+     of the whole card ran under it, out of sight. It ends where the prose column ends. */
+  ok('the trace ends where the prose does, never under the figure\'s band', Math.abs(T.proseFoot) <= 1,
+     `${T.proseFoot}px from the prose column's foot${T.band ? ', a band under it' : ', side by side'}`);
   ok('the trace runs along the foot of the card, not through the prose',
      T.topOfInk > 0.55, `ink from ${(T.topOfInk * 100).toFixed(0)}% down`);
+  /* In CSS pixels, the unit the trace is drawn in: its height is capped at 34px so it stays clear of the prose. This was
+     a fraction of the canvas, which measured the column as much as the trace: stacked in portrait, the prose column is
+     taller, and the same 34px waveform read as 4.9% of it. A flat line is a stroke, two or three pixels; a waveform
+     spans its QRS. */
+  const inkPx = (T.bottomOfInk - T.topOfInk) * T.cssH;
   ok('and it is a real waveform, not a flat line',
-     T.bottomOfInk - T.topOfInk > 0.05 && T.lit > 500,
-     `${T.lit} lit px across ${((T.bottomOfInk - T.topOfInk) * 100).toFixed(0)}% of height`);
+     inkPx >= 20 && T.lit > 500,
+     `${T.lit} lit px, the ink spanning ${inkPx.toFixed(0)}px (${((T.bottomOfInk - T.topOfInk) * 100).toFixed(0)}% of ${Math.round(T.cssH)}px)`);
 
   const marks = await page.evaluate(() => {
     const all = pearlAll();
@@ -499,7 +510,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the figure\'s caption is at a reading size', kinds.capPx >= 13, kinds.capPx + 'px');
 
   /* Landscape on a tablet gives the card a fixed height, and the steps scroll inside it: a line cut at the edge read as
-     the end of the pearl. While more is below, the card says so; at the end it does not. */
+     the end of the pearl. While more is below, the card says so (its foot fades, and a Show all button is under it); at
+     the end the fade clears, and the button stays, since the card still holds less than the pearl. Show all opens the
+     whole pearl and Show less folds it back. */
   await page.setViewportSize({ width: 1180, height: 820 });
   await page.evaluate(() => {
     pearlCurrent = pearlAll().slice().sort((a, b) => Pearl.lesson(b.text).length - Pearl.lesson(a.text).length || b.text.length - a.text.length)[0];
@@ -510,7 +523,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     { label: 'the steps to arrive' });
   const more = await page.evaluate(() => {
     const wrap = document.getElementById('pearlBody'), card = document.getElementById('pearlCard');
-    const cue = () => getComputedStyle(card.querySelector('.pearl-morecue')).display !== 'none';
+    const cue = () => { const b = card.querySelector('.pearl-morecue'); return !!b && getComputedStyle(b).display !== 'none' && b.tagName === 'BUTTON'; };
     return { over: wrap.scrollHeight - wrap.clientHeight, cue: cue(), cls: card.classList.contains('pearl-more') };
   });
   if (more.over > 4) {
@@ -518,12 +531,36 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await page.evaluate(() => { const w = document.getElementById('pearlBody'); w.scrollTop = w.scrollHeight; });
     await settled(page, () => !document.getElementById('pearlCard').classList.contains('pearl-more'), { timeout: 3000, label: 'the cue to clear at the end' })
       .catch(() => {});
-    const end = await page.evaluate(() => getComputedStyle(document.querySelector('#pearlCard .pearl-morecue')).display);
-    ok('and at the end it no longer does', end === 'none', end);
+    const end = await page.evaluate(() => ({ fade: document.getElementById('pearlCard').classList.contains('pearl-more'),
+      btn: getComputedStyle(document.getElementById('pearlMore')).display }));
+    ok('and at the end its foot no longer fades, while Show all stays', !end.fade && end.btn !== 'none', JSON.stringify(end));
+    const tapAll = () => page.evaluate(() => { document.getElementById('pearlMore').click();
+      const w = document.getElementById('pearlBody'), c = document.getElementById('pearlCard'), b = document.getElementById('pearlMore');
+      return { all: c.classList.contains('pearl-all'), over: w.scrollHeight - w.clientHeight, label: b.textContent.trim(), expanded: b.getAttribute('aria-expanded'),
+        steps: w.querySelectorAll('.pearl-step').length,
+        lastInView: (() => { const r = w.querySelector('.pearl-step:last-child').getBoundingClientRect(), cr = c.getBoundingClientRect(); return r.bottom <= cr.bottom + 1; })() }; });
+    const opened = await tapAll();
+    ok('Show all opens the whole pearl: every step inside the card, nothing left to scroll', opened.all && opened.over <= 4 && opened.lastInView && opened.label === 'Show less' && opened.expanded === 'true', JSON.stringify(opened));
+    const folded = await tapAll();
+    ok('and Show less folds it back', !folded.all && folded.over > 4 && folded.label === 'Show all' && folded.expanded === 'false', JSON.stringify(folded));
   } else {
-    ok('while the steps run past the card, it says there is more', false, `UNMEASURED: the longest pearl fits (${more.over}px over), so nothing ran past`);
-    ok('and at the end it no longer does', false, 'UNMEASURED: nothing ran past the card');
+    for (const l of ['while the steps run past the card, it says there is more', 'and at the end its foot no longer fades, while Show all stays',
+      'Show all opens the whole pearl: every step inside the card, nothing left to scroll', 'and Show less folds it back'])
+      ok(l, false, `UNMEASURED: the longest pearl fits (${more.over}px over), so nothing ran past`);
   }
+
+  /* THE OWNER'S iPAD, IN PORTRAIT: nothing runs past the card there, and yet the last step sat faded under a "More" that
+     did nothing when tapped. The card had been measured once, while the steps were still rising in, when a moving
+     transform made every pearl run past it, and never again. Read once the steps have landed. */
+  await page.setViewportSize({ width: 834, height: 1091 });
+  await page.evaluate(() => { S.screen = 'home'; render(); });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl in portrait' });
+  await settled(page, () => !document.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity),
+    { label: 'the steps to land, in portrait' });
+  const port = await page.evaluate(() => { const w = document.getElementById('pearlBody'), c = document.getElementById('pearlCard'), b = document.getElementById('pearlMore');
+    return { over: w.scrollHeight - w.clientHeight, fade: c.classList.contains('pearl-more'), btn: getComputedStyle(b).display, stacked: getComputedStyle(c).flexDirection }; });
+  ok('in portrait the pearl is stacked, the steps across the whole card', port.stacked === 'column', port.stacked);
+  ok('and where every step fits, no step is faded and nothing offers more', port.over <= 4 && !port.fade && port.btn === 'none', JSON.stringify(port));
   await page.setViewportSize({ width: 1100, height: 1100 });
 
   head('a pearl always has a picture beside it');

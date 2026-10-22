@@ -4,8 +4,9 @@
  *
  *   node tests/verify-homepager.js build/synthetic/systole.html
  *
- * The claims: Home holds the hero, the pearl and the progress bar and nothing else of the old doors; Brain holds the
- * gauge, a row per chapter and the study doors; Labs holds the Rhythm Lab, Echo and the Practice Lab. A horizontal swipe
+ * The claims: Home holds the hero and the pearl, and nothing else (the progress bar is gone, and the doors); Brain holds
+ * the gauge, a row per chapter and the brain, which is live while it shows, turns, and runs at Systole's own rates; Labs
+ * holds the Rhythm Lab, Echo and the Practice Lab, and under them the study doors. A horizontal swipe
  * lands on the next page; the tab bar's pill follows the finger (it is placed from the scroll position, so half a swipe
  * puts it half way); a tab, or an arrow key on the tab bar, glides to its page and lands on it; the pages that are off
  * the screen are inert, so Tab never walks into them; the page that was showing is the one that shows on the way back
@@ -72,18 +73,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return {
       pages: document.querySelectorAll('#homePager > .home-page').length,
       tabs: [...document.querySelectorAll('.home-tabs [role="tab"]')].map(t => t.textContent.trim()),
-      home: { hero: !!p(0).querySelector('.hero-live'), pearl: !!p(0).querySelector('#pearlCard'), prog: !!p(0).querySelector('#homeProgress'),
+      home: { hero: !!p(0).querySelector('.hero-live'), pearl: !!p(0).querySelector('#pearlCard'), prog: !!document.getElementById('homeProgress'),
         doors: p(0).querySelectorAll('.door').length },
       brain: { gauge: !!p(1).querySelector('.brain-gauge'), rows: p(1).querySelectorAll('.brain-ch').length, chapters: CHAPTERS.length,
-        doors: [...p(1).querySelectorAll('.door b')].map(b => b.textContent) },
+        doors: p(1).querySelectorAll('.door').length },
       labs: [...p(2).querySelectorAll('.lab-card')].map(c => c.getAttribute('onclick')),
+      labDoors: [...p(2).querySelectorAll('.door b')].map(b => b.textContent),
+      after: (() => { const c = p(2).querySelectorAll('.lab-card'), d = p(2).querySelector('.door'); return !!(c.length && d && (c[c.length - 1].compareDocumentPosition(d) & 4)); })(),
     };
   });
   ok('there are three pages and three tabs: Home, Brain, Labs', parts.pages === 3 && parts.tabs.join('|') === 'Home|Brain|Labs', parts.pages + ' pages; ' + parts.tabs.join(' · '));
-  ok('Home holds the hero, the pearl and the progress bar, and no doors', parts.home.hero && parts.home.pearl && parts.home.prog && parts.home.doors === 0, JSON.stringify(parts.home));
-  ok('Brain holds the gauge and a row for every chapter', parts.brain.gauge && parts.brain.rows === parts.brain.chapters && parts.brain.rows > 0, `${parts.brain.rows} rows for ${parts.brain.chapters} chapters`);
-  ok('and the study doors, Chapters first', parts.brain.doors[0] === 'Chapters' && ['Search', 'Progress', 'Notes', 'Memory', 'Annotations'].every(d => parts.brain.doors.includes(d)), parts.brain.doors.join(' · '));
+  ok('Home holds the hero and the pearl, no progress bar and no doors', parts.home.hero && parts.home.pearl && !parts.home.prog && parts.home.doors === 0, JSON.stringify(parts.home));
+  ok('Brain holds the gauge and a row for every chapter, and no doors', parts.brain.gauge && parts.brain.rows === parts.brain.chapters && parts.brain.rows > 0 && parts.brain.doors === 0,
+     `${parts.brain.rows} rows for ${parts.brain.chapters} chapters, ${parts.brain.doors} doors`);
   ok('Labs holds the Rhythm Lab, Echo and the Practice Lab', parts.labs.join('|') === 'goLab()|goEcho()|goPractice()', parts.labs.join(' · '));
+  ok('and under them the study tools, Chapters first', parts.after && parts.labDoors[0] === 'Chapters' && ['Search', 'Progress', 'Notes', 'Memory', 'Annotations'].every(d => parts.labDoors.includes(d)),
+     parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
   head('one screen tall');
   const fits = async (label) => {
@@ -180,6 +185,34 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await settled(page, (f) => brainLiveRun && brainLiveRun.frames > f + 2 && brainLiveRun.st.fired > 0, { arg: f0, timeout: 5000, label: 'the brain to draw a few frames' }).catch(() => {});
   const f1 = await page.evaluate(() => ({ frames: brainLiveRun ? brainLiveRun.frames : -1, fired: brainLiveRun ? brainLiveRun.st.fired : 0 }));
   ok('while Brain is showing, the brain is live: impulses fire and it is redrawn', f1.frames > f0 + 2 && f1.fired > 0, `${f0} → ${f1.frames} frames, ${f1.fired} fired`);
+  /* The turn: the brain sways on its axes, the light on the cortex moves as it turns, and the wiring slides against the
+     tissue. Read twice, some frames apart: one reading cannot tell a turning brain from one set at an angle once. */
+  const turnAt = () => page.evaluate(() => ({ frames: brainLiveRun ? brainLiveRun.frames : -1,
+    tilt: (document.getElementById('brainTilt') || {}).style ? document.getElementById('brainTilt').style.transform : '',
+    net: (document.getElementById('brainNet') || { getAttribute: () => '' }).getAttribute('transform') || '',
+    light: (document.querySelector('#brainArt #sbTissue') || { getAttribute: () => '' }).getAttribute('cx') }));
+  const t0 = await turnAt();
+  await settled(page, (f) => brainLiveRun && brainLiveRun.frames > f + 3, { arg: t0.frames, timeout: 5000, label: 'more frames of the turn' }).catch(() => {});
+  const t1 = await turnAt();
+  const ang = t => { const m = /rotateY\((-?[\d.]+)deg\)/.exec(t.tilt); return m ? +m[1] : NaN; };
+  ok('it turns: the brain is drawn at an angle that changes from frame to frame', Number.isFinite(ang(t0)) && Number.isFinite(ang(t1)) && t0.tilt !== t1.tilt,
+     `${t0.tilt || 'none'} → ${t1.tilt || 'none'} (${t0.frames} → ${t1.frames} frames)`);
+  ok('and the light and the wiring move with it', t0.light !== t1.light && /^translate\(/.test(t1.net) && t0.net !== t1.net, `light ${t0.light} → ${t1.light}, wiring ${t0.net} → ${t1.net}`);
+  const tune = await page.evaluate(() => ({ run: brainLiveRun && brainLiveRun.st.live ? brainLiveRun.st.live.PASS['new'] : null, want: BRAIN_TUNE.PASS['new'], base: BrainMap.LIVE.PASS['new'] }));
+  ok('and it runs at Systole\'s own rates, where an unseen neuron passes impulses on more often than in Memorizer', tune.run === tune.want && tune.want > tune.base,
+     `passes on ${tune.run} (Systole ${tune.want}, Memorizer ${tune.base})`);
+  /* Under a pointer it holds still: a neuron is a target, and one that never stops moving is a hard one to hit. The
+     pointer is over the stage before it taps, as a real one is; the angle is read twice, frames apart. */
+  await page.hover('#brain3d', { position: { x: 40, y: 40 } });
+  const h0f = await page.evaluate(() => brainLiveRun.frames);
+  /* Precondition: frames enough for the lean towards the pointer to land (a fifth of the way a frame, then exact within
+     0.3 degrees: about twenty frames from the widest sway). */
+  await settled(page, (f) => brainLiveRun && brainLiveRun.frames > f + 40, { arg: h0f, timeout: 20000, label: 'the brain to lean to the pointer' }).catch(() => {});
+  const hA = await turnAt();
+  await settled(page, (f) => brainLiveRun && brainLiveRun.frames > f + 4, { arg: hA.frames, timeout: 5000, label: 'frames under the pointer' }).catch(() => {});
+  const hB = await turnAt();
+  ok('under a pointer the brain holds still, so a neuron can be tapped', hB.frames > hA.frames && hA.tilt === hB.tilt && hA.net === hB.net && !!hA.tilt,
+     `${hA.tilt} → ${hB.tilt} over ${hB.frames - hA.frames} frames`);
   await page.locator('#brainArt .neuron').nth(3).click();
   const tap = await page.evaluate(() => ({ sel: brainSel, info: document.getElementById('brainInfo').textContent.replace(/\s+/g, ' ').trim(),
     tapped: brainLiveRun && brainLiveRun.st.lastTap ? brainLiveRun.st.lastTap.i : null, pressed: document.querySelector('#brainArt .neuron[data-i="3"]').getAttribute('aria-pressed') }));

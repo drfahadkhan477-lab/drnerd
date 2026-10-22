@@ -35,9 +35,10 @@
    and wastes 64px, which is not worth a second layout to reclaim. Everything
    here is scoped to [data-screen="home"], so a question stem keeps its column.
 
-   The grid rows are sized so the whole thing lands inside one viewport:
-   auto for the hero and the progress bar, 1fr for the pearl — which is what
-   gives a long pearl somewhere to go — and auto for the doors. */
+   The grid is one row, sized so the whole thing lands inside one viewport:
+   the hero on the left, as tall as the row, and the pearl beside it. (The
+   progress bar and the doors that once stacked under the hero are gone: the
+   numbers are the Brain page's, and the doors the Labs page's.) */
 @media (min-width:1024px) and (orientation:landscape){
   /* min-height too, not only max-width. #app carries min-height:100dvh and
      sits BELOW a fixed 62px navigation bar, so a full-height home screen was
@@ -50,8 +51,8 @@
   #app[data-screen="home"] .home-wrap{
     display:grid;
     grid-template-columns:minmax(360px,0.85fr) minmax(420px,1.15fr);
-    grid-template-rows:auto auto 1fr auto;
-    grid-template-areas:"hero pearl" "prog pearl" "gap pearl" "doors doors";
+    grid-template-rows:minmax(0,1fr);
+    grid-template-areas:"hero pearl";
     column-gap:clamp(18px,2.4vw,34px);
     row-gap:0;
     align-content:flex-start;align-content:start;
@@ -64,7 +65,6 @@
     min-height:calc(100dvh - var(--navh) - var(--sat) - 40px);
     padding:16px 0 20px}
   #app[data-screen="home"] .hero-live{grid-area:hero;margin:0}
-  #app[data-screen="home"] .home-progress{grid-area:prog;margin:14px 2px 0}
   /* SIZED BY THE GRID, NOT BY ITS TEXT. min-height:0 here and on
      .pearl-main below only remove the card's MINIMUM contribution. The grid
      has a min-height, not a height, so its block size is indefinite, and in
@@ -81,16 +81,20 @@
      Safari has had it since 15.4; an older one ignores the property and
      keeps the old behaviour, which is a long pearl scrolling the page. */
   #app[data-screen="home"] .pearl-card{
-    grid-area:pearl;margin:0;height:100%;min-height:0;contain:size}
-  #app[data-screen="home"] .door-row{grid-area:doors;margin-top:18px}
+    grid-area:pearl;margin:0;height:100%;min-height:0}
+  #app[data-screen="home"] .pearl-card:not(.pearl-all){contain:size}
   /* The pearl's own column has to be able to shrink inside the grid row, or
      its content sets the row height and the footer is pushed off screen. */
   #app[data-screen="home"] .pearl-main{min-height:0;overflow:hidden}
+  /* Opened (Show all), the pearl is as tall as its steps: the card stops
+     taking its size from the row, and the page scrolls to the rest of it. */
+  #app[data-screen="home"] .pearl-card.pearl-all{height:auto}
+  #app[data-screen="home"] .pearl-card.pearl-all .pearl-main{overflow:visible}
   /* Nothing else on the home screen belongs in a two-column arrangement — the
      story rail and the feed live on the Chapters page now, but a build that
      still renders them should stack them under the doors rather than land in
      an unnamed grid area. */
-  #app[data-screen="home"] .home-wrap>*:not(.hero-live):not(.home-progress):not(.pearl-card):not(.door-row){
+  #app[data-screen="home"] .home-wrap>*:not(.hero-live):not(.pearl-card){
     grid-column:1 / -1}
 }
 

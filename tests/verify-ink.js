@@ -10,8 +10,7 @@
  * step lighter in a dark one. What is measured, rather than assumed:
  *   · no stylesheet rule writes text in a fill colour (the rules as written, comments blanked);
  *   · in each of the nine themes, and in Auto and a light theme on a device of the other scheme, each ink clears 4.5:1
- *     on the page, a card, the raised surface and its own tint, and amber on the home screen's due chip (its fill at
- *     22%, as .hp-due is hovered) over the page and over a card; the dark green ink stays clear of Monitor's teal accent;
+ *     on the page, a card, the raised surface and its own tint; the dark green ink stays clear of Monitor's teal accent;
  *   · real text the shell colours itself clears 4.5:1 against what is under it in every one of those, and is written in
  *     its ink: an option's peer figure, right and wrong, the Flag button on, and on a quiz's results the score, a
  *     chapter's figure and Retry Missed. The mock report writes its score and chapter figures through the same semText,
@@ -125,13 +124,10 @@ const TOOLS = () => {
       const T = window.__ink;
       return inks.map(k => { const c = T.token('--' + k + '-ink');
         const grounds = [['page', T.token('--bg')], ['card', T.token('--card')], ['raised', T.token('--white')], ['tint', T.token('--' + k + '-bg')]];
-        /* The one text on a tinted chip of its own fill: the home screen's "N due", amber at 15%, 22% when hovered. */
-        if (k === 'amber') grounds.push(['due chip on the page', T.colour('color-mix(in srgb, var(--amber) 22%, var(--bg))')],
-          ['due chip on a card', T.colour('color-mix(in srgb, var(--amber) 22%, var(--card))')]);
         const r = grounds.map(([g, v]) => [g, c && v ? Math.round(T.contrast(c, v) * 100) / 100 : 0]);
         return { k, ink: c && c.slice(0, 3).map(Math.round).join(','), min: Math.min(...r.map(x => x[1])), r }; });
     }, INKS);
-    for (const x of m) ok(`${name}: ${x.k} text clears 4.5:1 on the page, a card, the raised surface and its own tint${x.k === 'amber' ? ', and on the due chip' : ''}`,
+    for (const x of m) ok(`${name}: ${x.k} text clears 4.5:1 on the page, a card, the raised surface and its own tint`,
       x.min >= 4.5, `ink ${x.ink}; ` + x.r.map(([g, v]) => g + ' ' + v).join(', '));
   }
   head('the accent ink on each ground of each theme');

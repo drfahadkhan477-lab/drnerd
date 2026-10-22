@@ -40,12 +40,14 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
 .home-page-in{max-width:900px;margin:0 auto;transform-origin:50% 20%;
   transform:scale(calc(1 - var(--hp-d,0) * .06));opacity:calc(1 - var(--hp-d,0) * .45)}
 @media(prefers-reduced-motion:reduce){.home-page-in{transform:none;opacity:1}.home-tab-pill{will-change:auto}}
-/* Landscape on a tablet: the first page is the one-screen grid of tablet.css (hero, progress and the pearl beside them),
+/* Landscape on a tablet: the first page is the one-screen grid of tablet.css (the hero, and the pearl beside it),
    now sized by its page rather than by the viewport, since the tab bar takes a strip off the top. */
 @media (min-width:1024px) and (orientation:landscape){
   #homePage0{padding-bottom:18px}
   #homePage0 .home-page-in{max-width:none;height:100%}
   #app[data-screen="home"] #homePage0 .home-wrap{min-height:0;height:100%;padding:0}
+  #app[data-screen="home"] #homePage0 .home-wrap.pearl-all-open{height:auto;grid-template-rows:auto}
+  #app[data-screen="home"] #homePage0 .home-wrap.pearl-all-open .hero-live{align-self:flex-start}
 }
 
 /* ── a page's heading ── */
@@ -156,17 +158,23 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
 }
 
 /* ── Brain: Memorizer's brain (src/core/brain.js), drawn from the bank ──
-   Its rules are Memorizer's (memorizer/app.css), scoped to .brain-svg, in Memorizer's dark tones: the brain sits on the
-   Brain card's night-blue glass in every theme. */
-.brain-hero{--brain-t1:rgba(120,200,170,.22);--brain-t2:rgba(80,120,140,.14);--brain-t3:rgba(30,50,60,.40);--brain-sulcus:rgba(180,230,210,.18);
-  --brain-rim:rgba(170,230,210,.35);--brain-sheen:rgba(255,255,255,.08);--brain-axon:rgba(170,220,210,.16);--brain-dendrite:rgba(170,220,210,.38);
-  --brain-dormant:#1B2226;--brain-spark:#F2FFF9;--brain-glint:rgba(200,255,235,.30);--brain-n-solid:#5EF2B0;--brain-n-fading:#FFC857;--brain-n-weak:#FF6B7A;
+   Its rules are Memorizer's (memorizer/app.css), scoped to .brain-svg. The tissue is solid and shaded, as Memorizer's
+   light themes paint it, where its dark tones (the faint glass this first borrowed) let the card show through and read
+   flat: a lit mauve at the top left, deepening to plum where it turns away, with the folds cut darker and a sheen on
+   top, so it reads as an organ with a surface. It sits on the Brain card's night-blue glass in every theme. Unseen
+   neurons are a soft violet, not a dark hole: a bank not opened yet is a brain at rest, not a dead one. */
+.brain-hero{--brain-t1:#E6D2F3;--brain-t2:#AE90CF;--brain-t3:#4A3473;--brain-sulcus:rgba(46,18,78,.46);
+  --brain-rim:rgba(248,238,255,.75);--brain-sheen:rgba(255,255,255,.46);--brain-axon:rgba(255,244,255,.24);--brain-dendrite:rgba(252,242,255,.6);
+  --brain-dormant:#7A68A6;--brain-spark:#F2FFF9;--brain-glint:rgba(255,255,255,.4);--brain-n-solid:#5EF2B0;--brain-n-fading:#FFC857;--brain-n-weak:#FF6B7A;
   display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-template-areas:"stage gauge" "stage side";align-items:center;column-gap:22px;row-gap:14px}
 .brain-stage{grid-area:stage;position:relative;z-index:1;min-width:0;display:flex;flex-direction:column;gap:10px}
 .brain-hero .brain-gauge{grid-area:gauge;margin:0 auto}
 .brain-hero .brain-side{grid-area:side}
 @media(max-width:760px){.brain-hero{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "gauge" "side"}}
 .brain-svg{display:block;width:100%;height:auto;max-height:420px;overflow:visible;-webkit-user-select:none;user-select:none;shape-rendering:geometricPrecision}
+/* The turn (mountBrainLive): the stage is the lens, the tilt the brain on it, drawn by the live loop a frame at a time. */
+.brain-3d{position:relative;perspective:1000px}
+.brain-tilt{transform-origin:50% 55%;will-change:transform;filter:drop-shadow(0 18px 22px rgba(10,4,30,.55))}
 .brain-svg .brain-stem{fill:var(--brain-t3);stroke:var(--brain-rim);stroke-width:2}
 .brain-svg .brain-cbl{fill:var(--brain-t2);stroke:var(--brain-rim);stroke-width:2}
 .brain-svg .brain-folia path,.brain-svg .brain-sulci path,.brain-svg .brain-grooves path,.brain-svg .brain-gyri-lit path,.brain-svg .brain-stem-lines path{fill:none;stroke-linecap:round;stroke-linejoin:round}
@@ -207,7 +215,7 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
 .brain-svg .bspark .core{fill:var(--brain-spark);stroke:var(--brain-spark);stroke-opacity:.35;stroke-width:3}
 .brain-svg .bspark .tail{fill:var(--brain-spark)}
 .brain-svg .bspark .t1{opacity:.75}.brain-svg .bspark .t2{opacity:.55}.brain-svg .bspark .t3{opacity:.35}.brain-svg .bspark .t4{opacity:.18}
-.brain-svg .bspark[data-state="new"]{opacity:.5}
+.brain-svg .bspark[data-state="new"]{opacity:.8}
 .brain-svg .bgl-0{stop-color:var(--brain-glint);stop-opacity:0}.brain-svg .bgl-1{stop-color:var(--brain-glint);stop-opacity:1}
 .brain-svg .brain-glint{pointer-events:none;animation:brainGlint 9s ease-in-out infinite}
 @keyframes brainGlint{0%{transform:translateX(0)}40%,100%{transform:translateX(1800px)}}
@@ -250,6 +258,7 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
   .brain-svg .brain-signals path,.brain-svg .brain-glint,.brain-svg .brain-cortex,.brain-svg .brain-glow circle,.brain-livetag i{animation:none}
   .brain-svg .brain-glint{display:none}
   .brain-svg .neuron{transition:none}
+  .brain-tilt{will-change:auto}
 }
 
 /* ── the pearl, larger: more of the row, a picture always, and a little life ──
@@ -280,6 +289,34 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
   text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:700px){.pearl-emblem{flex:1 1 100%;max-width:none;min-height:180px;border-left:0;border-top:1px solid var(--border2)}}
 @media(prefers-reduced-motion:reduce){.pearl-card .pearl-fig img,.pearl-emblem::before,.pe-ring{animation:none}}
+/* ── the pearl, stacked: everywhere but a tablet's landscape grid ──
+   Side by side, in portrait, the steps had half the card and the figure a thin column with a caption and then nothing:
+   the text wrapped every few words beside a well of empty card. Stacked, the steps take the whole width, and under
+   them the figure is a band as wide as the card, the picture beside its caption (one above the other on a phone); a
+   pearl with no figure ends in a band with its chapter's emblem. The rule of step colours runs along the top. */
+@media (max-width:1023px),(orientation:portrait){
+  .pearl-card{flex-direction:column}
+  .pearl-card .pearl-rule{flex:0 0 4px;background:linear-gradient(90deg,var(--teal-ink),var(--pk-violet) 45%,var(--pk-pink) 75%,var(--amber-ink))}
+  .pearl-card .pearl-fig{flex:none;max-width:none;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);
+    grid-template-areas:"label label" "img cap";column-gap:20px;row-gap:4px;align-items:center;
+    padding:18px 24px 22px;border-left:0;border-top:1px solid var(--border2)}
+  .pearl-card .pearl-fig .pearl-fig-label{grid-area:label}
+  .pearl-card .pearl-fig img{grid-area:img;width:auto;max-width:100%;max-height:300px;margin:0 auto}
+  .pearl-card .pearl-fig figcaption{grid-area:cap;padding:0;font-size:var(--t-body);line-height:1.55}
+  .pearl-emblem{flex:none;max-width:none;flex-direction:row;justify-content:flex-start;gap:20px;min-height:0;
+    padding:22px 28px;border-left:0;border-top:1px solid var(--border2)}
+  .pearl-emblem::before{top:50%;left:70px;width:180px;height:180px;margin:-90px 0 0 -90px}
+  .pearl-emblem .pe-ring{left:70px}
+  .pearl-emblem .pe-ring.r1{margin:-60px 0 0 -60px}
+  .pearl-emblem .pe-ring.r2{margin:-84px 0 0 -84px}
+  .pearl-emblem .pe-ring.r3{display:none}
+  .pearl-emblem .pe-orb{flex:none;margin:0 0 0 0;width:84px;height:84px}
+  .pearl-emblem .pe-cap{font-size:var(--t-meta);text-align:left;white-space:normal}
+}
+@media (max-width:560px){
+  .pearl-card .pearl-fig{grid-template-columns:minmax(0,1fr);grid-template-areas:"label" "img" "cap";row-gap:10px;padding:16px 18px 20px}
+  .pearl-emblem{padding:18px 20px}
+}
 
 /* ── the hero, refined: an aurora behind the heart, a halo that beats with it, glass for its numbers ──
    Additions only: nothing here moves or sizes what the hero already lays out. */

@@ -6119,7 +6119,6 @@ function renderNow(){
   if(typeof mountPractice==='function') mountPractice();
   if(typeof mountInk==='function') mountInk();
   if(typeof mockMount==='function') mockMount();
-  if(typeof mountHomeProgress==='function') mountHomeProgress();
   if(typeof mountChapterBars==='function') mountChapterBars();
   if(typeof mountRefPager==='function') mountRefPager();
   mountScrollReveal();
@@ -6143,7 +6142,7 @@ function mountScrollReveal(){
   const scrolls=/auto|scroll/.test(getComputedStyle(app).overflowY);
   const root=scrolls?app:null;
   const bottom=root?root.getBoundingClientRect().bottom:window.innerHeight;
-  const cards=Array.from(app.querySelectorAll('.ch-tile,.feed-card,.ref-card,.door,.home-progress'))
+  const cards=Array.from(app.querySelectorAll('.ch-tile,.feed-card,.ref-card,.door'))
     .filter(el=>el.getBoundingClientRect().top>=bottom);
   if(!cards.length)return;
   surfaceRevealObserver=new IntersectionObserver(entries=>{
@@ -6348,15 +6347,53 @@ function mountPearlCurrent(){
   pearlTrace=state;
 }
 /* In a landscape grid the steps can run past the card and scroll inside it, and a line cut at the edge read as the end
-   of the pearl. While there is more below, the card says so: the column's foot fades and a cue points down. */
+   of the pearl. While there is more below, the card says so: the column's foot fades, and a button under it opens the
+   whole pearl (the card grows and the page scrolls) or folds it back.
+
+   MEASURED AGAIN WHENEVER THE ANSWER CAN CHANGE, not once. It was measured once, as the screen was drawn, while the
+   steps were still rising into place: a moving transform counts towards the column's scroll height, so for the length
+   of the entrance every pearl ran past its card. On an iPad in portrait, where nothing does once the steps land, that
+   one reading stood: the last step sat faded under a "More" that had nothing to open and did nothing when tapped. So it
+   is measured when each step's entrance ends, and when the column or the card changes size. */
+let pearlRO=null, pearlFitRaf=0;
 function pearlFit(){
   const wrap=document.getElementById('pearlBody'), card=document.getElementById('pearlCard');
   if(!wrap||!card) return;
-  card.classList.toggle('pearl-more',!wrap.hidden&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
+  /* The current runs along the foot of the PROSE. Stacked, the figure's band is under the prose and would hide it, so
+     the canvas stops where the prose column does (--pc-foot, the band's height; 0 side by side). */
+  const main=card.querySelector('.pearl-main');
+  if(main) card.style.setProperty('--pc-foot',Math.max(0,card.clientHeight-main.offsetTop-main.offsetHeight)+'px');
+  const all=card.classList.contains('pearl-all'), over=!wrap.hidden&&wrap.scrollHeight-wrap.clientHeight>4;
+  card.classList.toggle('pearl-more',!all&&over&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
+  const btn=document.getElementById('pearlMore');
+  if(btn){
+    btn.hidden=wrap.hidden||!(all||over);
+    btn.setAttribute('aria-expanded',String(all));
+    btn.lastElementChild.textContent=all?'Show less':'Show all';
+  }
+}
+function pearlWatch(){
+  if(pearlRO){ pearlRO.disconnect(); pearlRO=null; }
+  const wrap=document.getElementById('pearlBody'), card=document.getElementById('pearlCard');
+  if(!wrap||!card) return;
+  /* Measured on the next frame, not inside the observer: pearlFit changes the card (the fade, the button), and a change
+     made in the callback to what is observed is a ResizeObserver loop, which the page reports as an error. */
+  if(window.ResizeObserver){ pearlRO=new ResizeObserver(()=>{ if(!pearlFitRaf) pearlFitRaf=requestAnimationFrame(()=>{ pearlFitRaf=0; pearlFit(); }); });
+    pearlRO.observe(wrap); pearlRO.observe(card); }
+  wrap.onanimationend=()=>pearlFit();
+  requestAnimationFrame(()=>pearlFit());
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>pearlFit(),()=>{});
+}
+function pearlToggleAll(){
+  const card=document.getElementById('pearlCard'), wrap=document.getElementById('pearlBody'); if(!card||!wrap) return;
+  const all=card.classList.toggle('pearl-all');
+  const home=card.closest('.home-wrap'); if(home) home.classList.toggle('pearl-all-open',all);
+  if(!all){ wrap.scrollTop=0; if(card.getBoundingClientRect().top<0) card.scrollIntoView({block:'start'}); }
+  pearlFit();
 }
 function mountHero(){
   mountPearlCurrent();
-  pearlFit();
+  pearlWatch();
   if(heroMon){ heroMon.destroy(); heroMon=null; }
   if(heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
   const cv=document.getElementById('heroECG');
@@ -6632,7 +6669,8 @@ function pearlNext(){
   if(card&&html) card.insertAdjacentHTML('beforeend',html);
   else if(card) card.insertAdjacentHTML('beforeend',pearlEmblem(pearlCurrent));
   if(card) card.classList.toggle('has-fig',!!html);
-  if(card)card.classList.remove('is-recalling');
+  if(card){ card.classList.remove('is-recalling','pearl-all'); const home=card.closest('.home-wrap'); if(home) home.classList.remove('pearl-all-open'); }
+  el.scrollTop=0;
   pearlFit();
 }
 /* ═══════════ Putting the whole bank on the device ═══════════
@@ -6762,36 +6800,6 @@ function offlinePaint(){
     btn.onclick=offlineJob.busy?offlineStop:offlineDownload;
   }
 }
-/* Counts every .hp-num up from 0 to its data-count over the same window the
-   bar spends growing. A no-op wherever the card is not on screen — called
-   unconditionally from renderNow(), the same as every other mount* here. */
-function mountHomeProgress(){
-  const nums=document.querySelectorAll('#homeProgress .hp-num');
-  if(!nums.length)return;
-  const reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  nums.forEach(el=>{
-    const target=+el.dataset.count||0;
-    if(reduced){ el.textContent=target; return; }
-    const dur=900,start=performance.now();
-    const tick=now=>{
-      /* CLAMPED AT BOTH ENDS, and the lower end is not theoretical. start is
-         a performance.now() taken when the animation is scheduled; now is
-         the timestamp requestAnimationFrame hands the callback, which is the
-         START of that frame. Schedule from inside a frame's own task — which
-         is exactly what happens here, because render() runs this from a view
-         transition callback — and the next callback can carry a timestamp
-         EARLIER than start. t then goes negative, 1-(1-t)^3 goes negative
-         with it, and the card paints "-2" before counting up. Caught by
-         verify-homeprog about one run in three, with data-count reading a
-         perfectly valid 91 and 100 while the text read -1 and -2. */
-      const t=Math.max(0,Math.min(1,(now-start)/dur));
-      const eased=1-Math.pow(1-t,3);
-      el.textContent=Math.round(target*eased);
-      if(t<1)requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-}
 /* TRUE on failure, deliberately: if the dismissal cannot be remembered then
    showing the card would mean showing it on every launch for ever. */
 function helloSeen(){
@@ -6873,7 +6881,7 @@ function buildHome(){
           </div>
           <h2 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h2>
           <div class="pearl-bodywrap" id="pearlBody" onscroll="pearlFit()">${pearlLadder(p)}</div>
-          <span class="pearl-morecue" aria-hidden="true">${icon('chevron-down','icon-sm')} More</span>
+          <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
           <p class="pearl-prompt" id="pearlPrompt" hidden aria-label="Recall this concept">?</p>
           <div class="pearl-actions">
@@ -6885,23 +6893,6 @@ function buildHome(){
         </div>
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
-
-    <div class="home-progress" id="homeProgress" aria-label="Bank progress">
-      <div class="hp-head">
-        <span class="hp-cap">${icon('trending-up','icon-sm')} Your progress</span>
-        ${dueN?`<button class="hp-due" onclick="startQuiz(null,'due')" aria-label="${dueN} due for review">${dueN} due ${icon('arrow-right','icon-sm')}</button>`:''}
-      </div>
-      <div class="hp-track" role="progressbar" aria-valuenow="${masteryPct}" aria-valuemin="0" aria-valuemax="100"
-        aria-label="${masteryPct}% mastered, ${covered}% seen">
-        <div class="hp-seen" style="width:${covered}%"></div>
-        <div class="hp-mast" style="width:${masteryPct}%"><span class="hp-shine"></span></div>
-      </div>
-      <div class="hp-legend">
-        <span class="hp-stat"><i class="hp-dot hp-dot-mast"></i>Mastered <b class="hp-num" data-count="${masteryPct}">0</b>%</span>
-        <span class="hp-stat hp-stat-sub"><i class="hp-dot hp-dot-seen"></i>Seen <b class="hp-num" data-count="${covered}">0</b>%</span>
-        <span class="hp-stat-count">${seenN} of ${TOTAL_Q}</span>
-      </div>
-    </div>
 
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
@@ -6915,14 +6906,14 @@ function buildHome(){
     </div>`:''}
     </div></div></section>
     <section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>
-    <section class="home-page home-labs" id="homePage2" role="tabpanel" aria-labelledby="homeTab2"><div class="home-page-in">${buildLabs()}</div></section>
+    <section class="home-page home-labs" id="homePage2" role="tabpanel" aria-labelledby="homeTab2"><div class="home-page-in">${buildLabs(dueN)}</div></section>
     </div>
   </div>`;
 }
 
 /* ═══════════ The home screen's three pages ═══════════
-   Home (the hero, the pearl, the progress bar), Brain (what is remembered, chapter by chapter, and the study doors)
-   and Labs (the Rhythm Lab, Echo and the Practice Lab), side by side in one horizontal scroller that snaps a page at a
+   Home (the hero and the pearl), Brain (what is remembered, chapter by chapter) and Labs (the Rhythm Lab, Echo and the
+   Practice Lab, and under them the study tools: Chapters, Search, Progress, Notes, Memory and Annotations), side by side in one horizontal scroller that snaps a page at a
    time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
    the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
    was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
@@ -6945,7 +6936,7 @@ function buildBrain(dueN,seenN,covered,masteryPct,today){
       <h2 class="page-title">What you remember</h2>
       <p class="page-sub">Mastery is FSRS's own estimate of what you would recall today, chapter by chapter.</p></header>
     <div class="brain-hero">
-      <div class="brain-stage">${buildBrainArt()}
+      <div class="brain-stage"><div class="brain-3d" id="brain3d"><div class="brain-tilt" id="brainTilt">${buildBrainArt()}</div></div>
         <div class="brain-legend" aria-hidden="true"><span><i data-state="solid"></i>solid</span><span><i data-state="fading"></i>fading</span><span><i data-state="weak"></i>weak</span><span><i data-state="new"></i>not seen yet</span><span class="brain-livetag"><i></i>live</span></div>
         <div class="brain-info" id="brainInfo" aria-live="polite">${brainInfoHtml()}</div>
       </div>
@@ -6969,22 +6960,9 @@ function buildBrain(dueN,seenN,covered,masteryPct,today){
       </div>
     </div>
     <h3 class="page-h3">Chapters</h3>
-    <div class="brain-chs">${rows}</div>
-    <h3 class="page-h3">Study tools</h3>
-    <div class="door-row brain-doors">
-      <button class="door door-wide" onclick="goStudy()">
-        <span class="door-ic">${icon("book")}</span>
-        <span class="door-txt"><b>Chapters</b><i>${S.mock?'A mock block is open · resume it here':`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
-        <span class="door-go">${icon('arrow-right','icon-sm')}</span>
-      </button>
-      <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
-      <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
-      <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
-      <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
-      <button class="door" onclick="goAnnotations()"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
-    </div>`;
+    <div class="brain-chs">${rows}</div>`;
 }
-function buildLabs(){
+function buildLabs(dueN){
   return `<header class="page-head"><span class="page-eyebrow">${icon('activity','icon-sm')} Labs</span>
       <h2 class="page-title">Hear it, see it, read it</h2>
       <p class="page-sub">Traces drawn live, echo views to explore, and sounds and strips to practise on.</p></header>
@@ -7007,6 +6985,19 @@ function buildLabs(){
         <span class="lab-txt"><b>Practice Lab</b><i>Sounds, tracings, strips</i></span>
         <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
       </button>
+    </div>
+    <h3 class="page-h3">Study tools</h3>
+    <div class="door-row lab-doors">
+      <button class="door door-wide" onclick="goStudy()">
+        <span class="door-ic">${icon("book")}</span>
+        <span class="door-txt"><b>Chapters</b><i>${S.mock?'A mock block is open · resume it here':`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
+        <span class="door-go">${icon('arrow-right','icon-sm')}</span>
+      </button>
+      <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
+      <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
+      <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
+      <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
+      <button class="door" onclick="goAnnotations()"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
     </div>`;
 }
 /* ═══════════ The brain on the Brain page ═══════════
@@ -7015,6 +7006,10 @@ function buildLabs(){
    today: solid (85% or more), fading (60% or more), weak, or not yet seen. A connection is lit when both its neurons are,
    impulses run what is known and die at the edge of what is not, and a tap fires a neuron and says what it holds. */
 const BRAIN_PER=16, BRAIN_STATE_LABEL={solid:'solid',fading:'fading',weak:'weak','new':'not seen yet'};
+/* Systole's brain runs hotter than Memorizer's (BrainMap.LIVE): a bank that has not been opened yet is every neuron
+   "not seen yet", and at Memorizer's rates those pass an impulse on one time in seven, so a new fellow's brain sat
+   still and read as a picture. Here the unseen still crackle, more faintly and more slowly than what is known. */
+const BRAIN_TUNE={MAX_SPARKS:24, AMBIENT_MS:260, FIRE:{'new':2}, RELAY:{'new':0.5}, PASS:{'new':0.45}};
 let brainArtL=null, brainLiveRun=null, brainSel=-1;
 function qRecall(q){
   const c=S.srs[q.id], t=todayISO();
@@ -7087,14 +7082,14 @@ function buildBrainArt(){
   const glow=`<g class="brain-glow" aria-hidden="true">${nodes.map(x=>x.state==='new'?'':`<circle cx="${x.x}" cy="${x.y}" r="${(x.r*2.6).toFixed(1)}" fill="${glowOf(x.state)}" style="animation-delay:-${(brainHash(x.key)%36)/10}s"/>`).join('')}</g>`;
   const flashes=`<g class="brain-flashes" aria-hidden="true">${nodes.map((x,i)=>`<circle class="flash" data-i="${i}" cx="${x.x}" cy="${x.y}" r="${(x.r*3.4).toFixed(1)}" fill="${glowOf(x.state)}" style="opacity:0"/>`).join('')}</g>`;
   const sparkR=Math.max(18,L.gap*0.8).toFixed(1);
-  const sparks=`<g class="brain-sparks" aria-hidden="true">${Array.from({length:BrainMap.LIVE.MAX_SPARKS},()=>`<g class="bspark" style="display:none"><circle class="tail t1" r="4.2"/><circle class="tail t2" r="3.5"/><circle class="tail t3" r="2.8"/><circle class="tail t4" r="2.1"/><g class="head"><circle class="halo" r="${sparkR}" fill="url(#sbGlowSpark)"/><circle class="core" r="5"/></g></g>`).join('')}</g>`;
+  const sparks=`<g class="brain-sparks" aria-hidden="true">${Array.from({length:BrainMap.liveTune(BRAIN_TUNE).MAX_SPARKS},()=>`<g class="bspark" style="display:none"><circle class="tail t1" r="4.2"/><circle class="tail t2" r="3.5"/><circle class="tail t3" r="2.8"/><circle class="tail t4" r="2.1"/><g class="head"><circle class="halo" r="${sparkR}" fill="url(#sbGlowSpark)"/><circle class="core" r="5"/></g></g>`).join('')}</g>`;
   const cells=`<g class="brain-neurons">${nodes.map((x,i)=>{ const label=`${x.title}, ${BRAIN_STATE_LABEL[x.state]}${x.recall!=null?`, recall ${x.recall}% today`:''}`;
     return `<g class="neuron${i===brainSel?' sel':''}" data-i="${i}" data-state="${x.state}" role="button" tabindex="${i===(brainSel<0?0:brainSel)?0:-1}" aria-label="${e(label)}" aria-pressed="${i===brainSel}">
       <circle class="nhit" cx="${x.x}" cy="${x.y}" r="${Math.max(x.r*1.9,L.gap*0.5).toFixed(1)}"/><path class="dendrite" d="${brainDendrites(x)}"/>
       <circle class="soma" cx="${x.x}" cy="${x.y}" r="${x.r}"/><circle class="soma-shine" cx="${x.x}" cy="${x.y}" r="${x.r}" fill="url(#sbSoma)"/>
       <circle class="nucleus" cx="${(x.x-x.r*0.25).toFixed(1)}" cy="${(x.y-x.r*0.25).toFixed(1)}" r="${(x.r*0.34).toFixed(1)}"/></g>`; }).join('')}</g>`;
   return `<svg class="brain-svg" id="brainArt" viewBox="${B.VIEW}" role="group" aria-label="Your brain: ${lit} of ${nodes.length} parts of the bank lit. Arrow keys move between them; Enter practises that chapter."
-      onclick="brainTap(event)" onkeydown="brainKey(event)">${defs}${body}${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</svg>`;
+      onclick="brainTap(event)" onkeydown="brainKey(event)">${defs}${body}<g class="brain-net" id="brainNet">${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</g></svg>`;
 }
 function brainInfoHtml(){
   const L=brainArtL&&brainArtL.L, x=L&&L.nodes[brainSel];
@@ -7127,7 +7122,7 @@ function mountBrainLive(){
   const art=document.getElementById('brainArt');
   if(!art||typeof BrainMap==='undefined'||!homeMotionOK()||!window.requestAnimationFrame){ brainLiveRun=null; return; }
   const L=brainArtL.L, prev=brainLiveRun;
-  const run=brainLiveRun={L, st:prev&&prev.L===L?prev.st:BrainMap.liveInit(L), frames:prev&&prev.L===L?prev.frames:0, running:true};
+  const run=brainLiveRun={L, st:prev&&prev.L===L?prev.st:BrainMap.liveInit(L,BRAIN_TUNE), frames:prev&&prev.L===L?prev.frames:0, running:true, turn:{x:0,y:0}};
   const pool=[...art.querySelectorAll('.bspark')].map(g=>({g,tails:g.querySelectorAll('.tail'),head:g.querySelector('.head'),halo:g.querySelector('.halo')}));
   const flashEls={}, hotEls={}; let shown={}, hot={}, last=0, drawn=0;
   art.querySelectorAll('.flash').forEach(c=>{ flashEls[c.getAttribute('data-i')]=c; });
@@ -7143,19 +7138,48 @@ function mountBrainLive(){
       for(let t=0;t<p.tails.length;t++){ const b=BrainMap.sparkAt(L,st,s,0.045*(t+1)); p.tails[t].setAttribute('cx',b.x.toFixed(1)); p.tails[t].setAttribute('cy',b.y.toFixed(1)); }
     });
     Object.keys(st.flash).forEach(i=>{ const el=flashEls[i]; if(!el) return;
-      el.style.opacity=(st.flash[i]/BrainMap.LIVE.FLASH_MS*(L.nodes[i].state==='new'?0.5:1)).toFixed(2); shown[i]=true; });
+      el.style.opacity=(st.flash[i]/st.live.FLASH_MS*(L.nodes[i].state==='new'?0.5:1)).toFixed(2); shown[i]=true; });
     Object.keys(shown).forEach(i=>{ if(!(i in st.flash)){ flashEls[i].style.opacity='0'; delete shown[i]; } });
     const now={}; st.sparks.forEach(x=>{ now[x.e]=true; });
     Object.keys(now).forEach(k=>{ if(!hot[k]&&hotEls[k]) hotEls[k].setAttribute('data-hot',''); });
     Object.keys(hot).forEach(k=>{ if(!now[k]&&hotEls[k]) hotEls[k].removeAttribute('data-hot'); });
     hot=now;
   };
+  /* THE TURN. The brain is a drawing, so it is given depth the way a drawing can be: it sways slowly on its vertical
+     axis and nods on its horizontal one, the light on the cortex moves the other way as it turns, and the neurons and
+     their wiring ride a little above the tissue, sliding against it (parallax).
+
+     IT HOLDS STILL UNDER A FINGER. A neuron is something to tap, and a target that never stops moving is a hard one to
+     hit: while a finger is on the stage the brain stays at the angle it had, and while a pointer that can hover is over
+     it, it leans towards the pointer and settles there, exactly, rather than easing towards it for ever. The sway comes
+     back when the pointer leaves. run.turn holds the angle (degrees) the last frame drew. */
+  const tilt=document.getElementById('brainTilt'), stage=document.getElementById('brain3d'), net=document.getElementById('brainNet');
+  const tissue=art.querySelector('#sbTissue'), shade=art.querySelector('#sbShade');
+  let aim=null, held=false;
+  if(stage){
+    const over=ev=>{ if(ev.pointerType==='touch'){ held=true; return; } const r=stage.getBoundingClientRect(); if(!r.width) return;
+      aim={x:Math.max(-1,Math.min(1,(ev.clientX-r.left)/r.width*2-1)), y:Math.max(-1,Math.min(1,(ev.clientY-r.top)/r.height*2-1))}; };
+    stage.onpointerenter=over; stage.onpointermove=over; stage.onpointerdown=over;
+    stage.onpointerleave=stage.onpointercancel=()=>{ aim=null; held=false; };
+  }
+  const turn=ts=>{
+    const t=ts/1000, k=run.turn;
+    if(held) return;
+    const ry=aim?aim.x*14:Math.sin(t*0.42)*13, rx=aim?-aim.y*8:Math.sin(t*0.31+1)*5;
+    const dy=ry-k.y, dx=rx-k.x;
+    if(aim&&Math.abs(dy)<0.3&&Math.abs(dx)<0.3){ if(k.y===ry&&k.x===rx) return; k.y=ry; k.x=rx; }
+    else { const e=aim?0.2:0.12; k.y+=dy*e; k.x+=dx*e; }
+    if(tilt) tilt.style.transform='rotateX('+k.x.toFixed(2)+'deg) rotateY('+k.y.toFixed(2)+'deg)';
+    if(net) net.setAttribute('transform','translate('+(k.y*0.9).toFixed(1)+' '+(-k.x*0.9).toFixed(1)+')');
+    if(tissue){ tissue.setAttribute('cx',(42-k.y*1.6).toFixed(1)+'%'); tissue.setAttribute('cy',(36+k.x*1.8).toFixed(1)+'%'); }
+    if(shade) shade.setAttribute('cx',(68-k.y*1.2).toFixed(1)+'%');
+  };
   const frame=ts=>{
     if(brainLiveRun!==run) return;
     if(!art.isConnected||S.screen!=='home'){ run.running=false; return; }
     if(homePage!==1||document.hidden){ last=ts; requestAnimationFrame(frame); return; }
     const dt=last?Math.min(0.1,(ts-last)/1000):0;
-    if(ts-drawn>=30){ BrainMap.liveStep(run.st,L,dt,Math.random); draw(); drawn=ts; last=ts; run.frames++; }
+    if(ts-drawn>=30){ BrainMap.liveStep(run.st,L,dt,Math.random); draw(); turn(ts); drawn=ts; last=ts; run.frames++; }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

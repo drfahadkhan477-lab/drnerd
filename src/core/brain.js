@@ -291,30 +291,47 @@ function brainNet(L) {
   });
   return { adj: adj, len: len, ctrl: ctrl };
 }
-function liveInit(L) {
-  var tally = {};
+/* `tune`, when given, overrides any of LIVE's numbers for this brain alone
+   (its maps key by key), so an app can run the same physiology hotter or
+   cooler; without it the brain runs on LIVE, as Memorizer's always has. */
+function liveTune(tune) {
+  if (!tune) return LIVE;
+  var t = {}, k;
+  for (k in LIVE) t[k] = LIVE[k];
+  ['FIRE', 'RELAY', 'PASS'].forEach(function (m) {
+    if (!tune[m]) return;
+    var o = {}, s;
+    for (s in LIVE[m]) o[s] = s in tune[m] ? tune[m][s] : LIVE[m][s];
+    t[m] = o;
+  });
+  ['SPEED', 'MAX_SPARKS', 'AMBIENT_MS', 'FLASH_MS'].forEach(function (n) { if (typeof tune[n] === 'number') t[n] = tune[n]; });
+  return t;
+}
+function liveInit(L, tune) {
+  var tally = {}, T = liveTune(tune);
   ['solid', 'fading', 'weak', 'new'].forEach(function (k) { tally[k] = { arrived: 0, relayed: 0, spont: 0 }; });
-  return { net: brainNet(L), sparks: [], flash: {}, wait: LIVE.AMBIENT_MS * 0.3, fired: 0, tally: tally };
+  return { net: brainNet(L), sparks: [], flash: {}, wait: T.AMBIENT_MS * 0.3, fired: 0, tally: tally, live: T };
 }
 /* Neuron i fires. `from` is the neuron the impulse came from (-1 for none);
    `how` is 'arrive' (it relays at its state's chance), 'spont' (it fires on
    its own) or 'tap' (down every connection). */
 function liveFire(st, L, i, rand, from, how) {
-  var n = L.nodes[i];
+  var n = L.nodes[i], T = st.live || LIVE;
   if (!n) return;
-  st.flash[i] = LIVE.FLASH_MS; st.fired++;
-  if (how === 'arrive') { st.tally[n.state].arrived++; if (rand() >= LIVE.RELAY[n.state]) return; st.tally[n.state].relayed++; }
+  st.flash[i] = T.FLASH_MS; st.fired++;
+  if (how === 'arrive') { st.tally[n.state].arrived++; if (rand() >= T.RELAY[n.state]) return; st.tally[n.state].relayed++; }
   if (how === 'spont') st.tally[n.state].spont++;
   var sent = 0;
   st.net.adj[i].forEach(function (x) {
-    if (x.j === from || st.sparks.length >= LIVE.MAX_SPARKS) return;
-    if (how !== 'tap' && rand() >= LIVE.PASS[L.nodes[x.j].state]) return;
+    if (x.j === from || st.sparks.length >= T.MAX_SPARKS) return;
+    if (how !== 'tap' && rand() >= T.PASS[L.nodes[x.j].state]) return;
     st.sparks.push({ e: x.e, a: i, b: x.j, t: 0, len: st.net.len[x.e], state: n.state }); sent++;
   });
   if (how === 'tap') st.lastTap = { i: i, sent: sent };
 }
-function livePick(L, rand) {
-  var total = 0, w = L.nodes.map(function (n) { return (total += LIVE.FIRE[n.state]); }), r = rand() * total;
+function livePick(L, rand, T) {
+  T = T || LIVE;
+  var total = 0, w = L.nodes.map(function (n) { return (total += T.FIRE[n.state]); }), r = rand() * total;
   for (var i = 0; i < w.length; i++) if (r < w[i]) return i;
   return w.length - 1;
 }
@@ -322,12 +339,12 @@ function livePick(L, rand) {
    fire on, and now and then a neuron fires on its own. */
 function liveStep(st, L, dt, rand) {
   if (!(dt > 0) || !L.nodes.length) return st;
-  var ms = dt * 1000, arrived = [];
+  var ms = dt * 1000, arrived = [], T = st.live || LIVE;
   Object.keys(st.flash).forEach(function (k) { st.flash[k] -= ms; if (st.flash[k] <= 0) delete st.flash[k]; });
-  st.sparks = st.sparks.filter(function (s) { s.t += LIVE.SPEED * dt / Math.max(1, s.len); if (s.t >= 1) { arrived.push(s); return false; } return true; });
+  st.sparks = st.sparks.filter(function (s) { s.t += T.SPEED * dt / Math.max(1, s.len); if (s.t >= 1) { arrived.push(s); return false; } return true; });
   arrived.forEach(function (s) { liveFire(st, L, s.b, rand, s.a, 'arrive'); });
   st.wait -= ms;
-  if (st.wait <= 0) { st.wait = LIVE.AMBIENT_MS * (0.5 + rand()); liveFire(st, L, livePick(L, rand), rand, -1, 'spont'); }
+  if (st.wait <= 0) { st.wait = T.AMBIENT_MS * (0.5 + rand()); liveFire(st, L, livePick(L, rand, T), rand, -1, 'spont'); }
   return st;
 }
 /* Where an impulse is, `back` of the way behind it (its tail), on the curve
@@ -340,7 +357,7 @@ function sparkAt(L, st, s, back) {
 var BRAIN = { W: BRAIN_W, H: BRAIN_H, VIEW: BRAIN_VIEW, CEREBRUM: CEREBRUM, CEREBELLUM: CEREBELLUM, STEM: STEM, SULCI: SULCI, FOLIA: folia(), GYRI: gyri(), FINE: fine(), STEM_LINES: STEM_LINES, MAX: BRAIN_MAX,
   cerebrum: smoothPath(CEREBRUM), cerebellum: smoothPath(CEREBELLUM), stem: smoothPath(STEM) };
 
-var BrainMap = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire,
+var BrainMap = { BRAIN: BRAIN, brainLayout: brainLayout, LIVE: LIVE, liveTune: liveTune, axonCtrl: axonCtrl, brainNet: brainNet, liveInit: liveInit, liveFire: liveFire,
   livePick: livePick, liveStep: liveStep, sparkAt: sparkAt, smoothPath: smoothPath, inPoly: inPoly, edgeDist: edgeDist };
 root.BrainMap = BrainMap;
 if (typeof module !== 'undefined' && module.exports) module.exports = BrainMap;

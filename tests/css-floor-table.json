@@ -38,6 +38,7 @@
       "repeating-linear-gradient",
       "rgba",
       "rotate",
+      "rotatex",
       "rotatey",
       "saturate",
       "scale",

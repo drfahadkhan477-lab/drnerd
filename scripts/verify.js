@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 162 suites and roughly 8213 checks, and they
+ * WHY THIS EXISTS. There are 161 suites and roughly 8186 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -87,7 +87,6 @@ const SUITES = [
   ['store',        'the big stores live in a database, and nothing is ever in neither place'],
   ['quiznav',      'going back never re-grades a question or re-schedules a card'],
   ['quietquiz',    'answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to'],
-  ['homeprog',     'the progress card counts up in step with the bar it sits beside'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
   ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
   ['flags',        'a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block\'s flags join the list when it is handed in'],
@@ -530,7 +529,9 @@ const PENDING_RECORD = ['a11y', 'homepager', 'cssdocs-pure', 'backup-ids', 'floo
    must not be registered, so the next write forces it out of this list. */
 /* The passing Memorizer family run at 9bcb827 removed the retired Claude
    entries. Systole's active counts still come from its previous green run. */
-const RETIRED_RECORD = [];
+/* homeprog went with the progress bar it checked: the owner took the bar off Home, and the Brain page's gauge, which
+   carries the same two numbers, is held to its claims in verify-home. */
+const RETIRED_RECORD = ['homeprog'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -544,7 +545,6 @@ const RETIRED_RECORD = [];
 
      stage0       ok('launches without stalling', launchMs < 5000)
      physio       the cursor's advance over 600ms of wall clock, at 68 bpm
-     homeprog     the progress ring's rAF timestamps against performance.now()
      splash       fixed waits for the splash sequence to have finished
      splash-heart the same, for the heart's own animation
      heroart      twenty mount/destroy cycles against the 16-context cap
@@ -589,7 +589,7 @@ const RETIRED_RECORD = [];
    clear of other browser work, as the rendering budgets below already are. */
 /* inksave counts what the page writes against the page's own timers, a pause of 900 ms and a ceiling of 10 s, and a loaded machine can hold
    a suite past them between one stroke and the next. */
-const SERIAL = new Set(['stage0', 'physio', 'homeprog', 'splash', 'splash-heart',
+const SERIAL = new Set(['stage0', 'physio', 'splash', 'splash-heart',
                         'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs', 'backup', 'inksave',
                         'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
 
