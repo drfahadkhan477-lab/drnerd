@@ -337,7 +337,9 @@ head('the brain: every section a neuron, inside it, wired into one net, lit by p
   ok('the cortex is folded all over: gyri drawn inside the cerebrum, spread from front to back and top to bottom',
      G.length >= 40 && gOut.length === 0 && Math.max(...xs) - Math.min(...xs) > 600 && Math.max(...ys) - Math.min(...ys) > 300,
      G.length + ' gyri, ' + gOut.length + ' points outside ' + JSON.stringify(gOut.slice(0, 3)));
+  /* brain.js holds the folds now, so it is reloaded too: re-reading home.js alone would hand back the cached object. */
   delete require.cache[require.resolve('../memorizer/src/home.js')];
+  delete require.cache[require.resolve('../src/core/brain.js')];
   const again = require('../memorizer/src/home.js').BRAIN;
   ok('and the same folds every time', JSON.stringify(again.GYRI) === JSON.stringify(G) && JSON.stringify(again.FINE) === JSON.stringify(H.BRAIN.FINE));
   const fOut = [];

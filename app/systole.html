@@ -3133,6 +3133,8 @@ function quizFromSearch(){
 
 /* ══════════════ The daily pearl — see src/core/pearl.js ══════════════ */
 @@SLOT[src:src/core/pearl.js]@@
+/* ══════════════ The brain the Brain page draws — see src/core/brain.js (shared with Memorizer) ══════════════ */
+@@SLOT[src:src/core/brain.js]@@
 
 /* ═════════ Imported figures — see src/core/{refassets,zipread}.js ═════════ */
 @@SLOT[src:src/core/refassets.js]@@
@@ -6110,6 +6112,7 @@ function renderNow(){
   attachEvents();
   if(typeof mountHero==='function') mountHero();
   if(typeof mountHomePager==='function') mountHomePager();
+  if(typeof mountBrainLive==='function') mountBrainLive();
   if(typeof mountHeroHeart3d==='function') mountHeroHeart3d();
   if(typeof mountPhysio==='function') mountPhysio();
   if(typeof mountLab==='function') mountLab();
@@ -6547,6 +6550,21 @@ function pearlFigure(p){
     <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
 }
+/* A pearl whose note has no figure still has a picture beside it: its chapter's emblem, glowing in the chapter's colour,
+   with rings turning round it. It is decoration (aria-hidden), not a figure: #pearlFig stays the note's own, so a pearl
+   never wears a picture that is not about it. */
+function pearlChapter(p){
+  const c=String(p&&p.chapter||'').toLowerCase();
+  return CHAPTERS.find(ch=>c&&(c.includes(ch.toLowerCase())||c.includes(ch.toLowerCase().split(/[ &]/)[0])))||null;
+}
+function pearlEmblem(p){
+  if(!p||pearlFigure(p)) return '';
+  const ch=pearlChapter(p), col=(ch&&CH_COLORS[ch])||'#0EA5E9';
+  return `<div class="pearl-emblem" id="pearlEmblem" aria-hidden="true" style="--pe:${col}">
+    <span class="pe-ring r1"></span><span class="pe-ring r2"></span><span class="pe-ring r3"></span>
+    <span class="pe-orb">${ch?chIcon(ch):icon('heart-pulse')}</span>
+    <span class="pe-cap">${e(ch||p.chapter||'From your notes')}</span></div>`;
+}
 /* The measurements are what the question turns on, so they are marked. Applied
    AFTER escaping, and matching only digits and a unit word, so it can never
    reach into an entity the escaper produced — &amp; has no digit in it. */
@@ -6610,7 +6628,9 @@ function pearlNext(){
   const card=document.getElementById('pearlCard'), old=document.getElementById('pearlFig');
   if(old) old.remove();
   const html=pearlFigure(pearlCurrent);
+  const oldEm=document.getElementById('pearlEmblem'); if(oldEm) oldEm.remove();
   if(card&&html) card.insertAdjacentHTML('beforeend',html);
+  else if(card) card.insertAdjacentHTML('beforeend',pearlEmblem(pearlCurrent));
   if(card) card.classList.toggle('has-fig',!!html);
   if(card)card.classList.remove('is-recalling');
   pearlFit();
@@ -6863,7 +6883,7 @@ function buildHome(){
           <div class="pearl-source sr-only" id="pearlSource">${e(p.source||'Your reference notes')}</div>
 
         </div>
-        ${pearlFigure(p)}
+        ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
     <div class="home-progress" id="homeProgress" aria-label="Bank progress">
@@ -6906,7 +6926,7 @@ function buildHome(){
    time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
    the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
    was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
-let homePage=0, homeRaf=0, homeTween=0, homeSized=false;
+let homePage=0, homeRaf=0, homeTween=0, homeSized=false, homeLastGo=null;   /* homeLastGo: the last tab move, and whether it glided (the suite reads it) */
 function buildBrain(dueN,seenN,covered,masteryPct,today){
   const ret=avgRetention();
   const rows=CHAPTERS.map(ch=>{
@@ -6925,6 +6945,10 @@ function buildBrain(dueN,seenN,covered,masteryPct,today){
       <h2 class="page-title">What you remember</h2>
       <p class="page-sub">Mastery is FSRS's own estimate of what you would recall today, chapter by chapter.</p></header>
     <div class="brain-hero">
+      <div class="brain-stage">${buildBrainArt()}
+        <div class="brain-legend" aria-hidden="true"><span><i data-state="solid"></i>solid</span><span><i data-state="fading"></i>fading</span><span><i data-state="weak"></i>weak</span><span><i data-state="new"></i>not seen yet</span><span class="brain-livetag"><i></i>live</span></div>
+        <div class="brain-info" id="brainInfo" aria-live="polite">${brainInfoHtml()}</div>
+      </div>
       <div class="brain-gauge" role="img" aria-label="${masteryPct}% mastered, ${covered}% seen">
         <svg viewBox="0 0 132 132" aria-hidden="true">
           <circle class="bg-track" cx="66" cy="66" r="58"/>
@@ -6985,6 +7009,157 @@ function buildLabs(){
       </button>
     </div>`;
 }
+/* ═══════════ The brain on the Brain page ═══════════
+   Memorizer's brain (src/core/brain.js: the geometry, the lobes, the live impulses), drawn from the bank: each chapter is
+   a lobe, and its questions are split into up to BRAIN_PER neurons, each lit by what FSRS predicts of the questions in it
+   today: solid (85% or more), fading (60% or more), weak, or not yet seen. A connection is lit when both its neurons are,
+   impulses run what is known and die at the edge of what is not, and a tap fires a neuron and says what it holds. */
+const BRAIN_PER=16, BRAIN_STATE_LABEL={solid:'solid',fading:'fading',weak:'weak','new':'not seen yet'};
+let brainArtL=null, brainLiveRun=null, brainSel=-1;
+function qRecall(q){
+  const c=S.srs[q.id], t=todayISO();
+  if(c&&c.stability!==undefined) return FSRS.retrievability(c.stability, FSRS.daysBetween(c.last||t,t));
+  if(c) return Math.min(1,(c.reps||0)/3);
+  const p=S.practice[q.id]; return p?Math.min(0.45,(p.c||0)*0.22):null;
+}
+function brainUnits(){
+  return CHAPTERS.map(ch=>{
+    const qs=POOL.filter(q=>q.ch===ch), per=Math.max(1,Math.ceil(qs.length/BRAIN_PER)), sections=[];
+    for(let i=0,ci=0;i<qs.length;i+=per,ci++){
+      const part=qs.slice(i,i+per), vals=part.map(qRecall).filter(v=>v!=null);
+      const avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+      sections.push({ci, title:`${ch} · questions ${i+1}–${i+part.length}`, from:i, n:part.length,
+        state:avg==null?'new':avg>=0.85?'solid':avg>=0.6?'fading':'weak', recall:avg==null?null:Math.round(avg*100)});
+    }
+    return {docId:ch, name:ch, sections};
+  });
+}
+function brainLayoutNow(){
+  const units=brainUnits(), sig=JSON.stringify(units.map(u=>u.sections.map(x=>x.state+(x.recall==null?'':x.recall))));
+  if(!brainArtL||brainArtL.sig!==sig) brainArtL={sig, L:BrainMap.brainLayout(units)};
+  return brainArtL.L;
+}
+function brainHash(t){ let x=7; for(let i=0;i<t.length;i++) x=(x*31+t.charCodeAt(i))>>>0; return x; }
+/* A neuron's four branches, each forked at the tip of every other one (Memorizer's ui.js dendrites). */
+function brainDendrites(n){
+  const h0=brainHash(n.key); let d='';
+  for(let k=0;k<4;k++){
+    const a=(h0%628)/100+k*Math.PI/2+((h0>>(k+3))%60-30)/100, len=n.r*(1.5+((h0>>(k*2))%9)/10), bend=((h0>>k)%2?1:-1)*n.r*0.5;
+    const sx=n.x+Math.cos(a)*n.r*0.8, sy=n.y+Math.sin(a)*n.r*0.8, ex=n.x+Math.cos(a)*(n.r+len), ey=n.y+Math.sin(a)*(n.r+len);
+    const cx=(sx+ex)/2-Math.sin(a)*bend, cy=(sy+ey)/2+Math.cos(a)*bend;
+    d+='M'+sx.toFixed(1)+' '+sy.toFixed(1)+'Q'+cx.toFixed(1)+' '+cy.toFixed(1)+' '+ex.toFixed(1)+' '+ey.toFixed(1);
+    if(k%2===0){ const fa=a+0.6; d+='M'+ex.toFixed(1)+' '+ey.toFixed(1)+'L'+(ex+Math.cos(fa)*n.r*0.7).toFixed(1)+' '+(ey+Math.sin(fa)*n.r*0.7).toFixed(1); }
+  }
+  return d;
+}
+function brainAxon(a,b,i){ const c=BrainMap.axonCtrl(a,b,i); return 'M'+a.x+' '+a.y+'Q'+c.x+' '+c.y+' '+b.x+' '+b.y; }
+function buildBrainArt(){
+  if(typeof BrainMap==='undefined') return '';
+  const L=brainLayoutNow(), B=BrainMap.BRAIN, nodes=L.nodes;
+  if(!nodes.length) return '';
+  const lit=nodes.filter(x=>x.state!=='new').length;
+  const grad=(id,cls)=>`<radialGradient id="${id}"><stop offset="0" class="${cls} g0"/><stop offset=".45" class="${cls} g1"/><stop offset="1" class="${cls} g2"/></radialGradient>`;
+  const folds=(cls,dx)=>`<g class="${cls}" clip-path="url(#sbClip)"><g${dx?` transform="translate(${dx} ${dx})"`:''}>${B.GYRI.map(d=>`<path d="${d}"/>`).join('')}${B.SULCI.map(d=>`<path class="major" d="${d}"/>`).join('')}</g></g>`;
+  const defs=`<defs>
+    <radialGradient id="sbTissue" cx="42%" cy="36%" r="72%"><stop offset="0" class="bt-1"/><stop offset=".62" class="bt-2"/><stop offset="1" class="bt-3"/></radialGradient>
+    <linearGradient id="sbSheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="bs-1"/><stop offset=".5" class="bs-2"/></linearGradient>
+    ${grad('sbGlowSolid','gl-solid')}${grad('sbGlowFading','gl-fading')}${grad('sbGlowWeak','gl-weak')}${grad('sbGlowNew','gl-new')}${grad('sbGlowSpark','gl-spark')}
+    <linearGradient id="sbGlint" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="bgl-0"/><stop offset=".5" class="bgl-1"/><stop offset="1" class="bgl-0"/></linearGradient>
+    <clipPath id="sbClip"><path d="${B.cerebrum}"/></clipPath><clipPath id="sbCblClip"><path d="${B.cerebellum}"/></clipPath>
+    <radialGradient id="sbShade" cx="68%" cy="88%" r="75%"><stop offset="0" class="sh-0"/><stop offset="1" class="sh-1"/></radialGradient>
+    <radialGradient id="sbFloor" cx="50%" cy="50%" r="50%"><stop offset="0" class="fl-0"/><stop offset="1" class="fl-1"/></radialGradient>
+    <radialGradient id="sbSoma" cx="36%" cy="30%" r="70%"><stop offset="0" class="ss-0"/><stop offset=".55" class="ss-1"/><stop offset="1" class="ss-2"/></radialGradient></defs>`;
+  const glowOf=st=>'url(#sbGlow'+st.charAt(0).toUpperCase()+st.slice(1)+')';
+  const body=`<g class="brain-body" aria-hidden="true">
+    <ellipse class="brain-floor" cx="520" cy="652" rx="330" ry="24" fill="url(#sbFloor)"/>
+    <path class="brain-stem" d="${B.stem}"/><g class="brain-stem-lines">${B.STEM_LINES.map(d=>`<path d="${d}"/>`).join('')}</g>
+    <path class="brain-cbl" d="${B.cerebellum}"/><g class="brain-folia" clip-path="url(#sbCblClip)">${B.FOLIA.map(d=>`<path d="${d}"/>`).join('')}</g>
+    <path class="brain-cortex" d="${B.cerebrum}" fill="url(#sbTissue)"/>
+    ${folds('brain-grooves',0)}${folds('brain-gyri-lit',-2.2)}${folds('brain-sulci',0)}
+    <g class="brain-fine" clip-path="url(#sbClip)">${B.FINE.map(d=>`<path d="${d}"/>`).join('')}</g>
+    <path class="brain-shade" d="${B.cerebrum}" fill="url(#sbShade)"/><path class="brain-sheen" d="${B.cerebrum}" fill="url(#sbSheen)"/>
+    <g clip-path="url(#sbClip)"><g transform="skewX(-20)"><rect class="brain-glint" x="-420" y="0" width="260" height="720" fill="url(#sbGlint)"/></g></g>
+    <path class="brain-rim" d="${B.cerebrum}"/></g>`;
+  const lobes=`<g class="brain-lobes" clip-path="url(#sbClip)" aria-hidden="true">${L.units.map(u=>{ const c=CH_COLORS[u.name]||'#38BDF8';
+    return `<circle cx="${u.x}" cy="${u.y}" r="${Math.round(L.gap*(1.2+Math.sqrt(u.n)))}" fill="${c}" fill-opacity=".14"/>`; }).join('')}</g>`;
+  const axons=`<g class="brain-axons" aria-hidden="true">${L.edges.map((ed,i)=>`<path d="${brainAxon(nodes[ed.a],nodes[ed.b],i)}" data-fired="${ed.lit}" data-state="${ed.state}" data-kind="${ed.kind}" data-e="${i}"/>`).join('')}</g>`;
+  const signals=`<g class="brain-signals" aria-hidden="true">${L.edges.map((ed,i)=>ed.lit===2?`<path d="${brainAxon(nodes[ed.a],nodes[ed.b],i)}" data-state="${ed.state}" style="animation-delay:-${(brainHash(nodes[ed.a].key)%30)/10}s"/>`:'').join('')}</g>`;
+  const glow=`<g class="brain-glow" aria-hidden="true">${nodes.map(x=>x.state==='new'?'':`<circle cx="${x.x}" cy="${x.y}" r="${(x.r*2.6).toFixed(1)}" fill="${glowOf(x.state)}" style="animation-delay:-${(brainHash(x.key)%36)/10}s"/>`).join('')}</g>`;
+  const flashes=`<g class="brain-flashes" aria-hidden="true">${nodes.map((x,i)=>`<circle class="flash" data-i="${i}" cx="${x.x}" cy="${x.y}" r="${(x.r*3.4).toFixed(1)}" fill="${glowOf(x.state)}" style="opacity:0"/>`).join('')}</g>`;
+  const sparkR=Math.max(18,L.gap*0.8).toFixed(1);
+  const sparks=`<g class="brain-sparks" aria-hidden="true">${Array.from({length:BrainMap.LIVE.MAX_SPARKS},()=>`<g class="bspark" style="display:none"><circle class="tail t1" r="4.2"/><circle class="tail t2" r="3.5"/><circle class="tail t3" r="2.8"/><circle class="tail t4" r="2.1"/><g class="head"><circle class="halo" r="${sparkR}" fill="url(#sbGlowSpark)"/><circle class="core" r="5"/></g></g>`).join('')}</g>`;
+  const cells=`<g class="brain-neurons">${nodes.map((x,i)=>{ const label=`${x.title}, ${BRAIN_STATE_LABEL[x.state]}${x.recall!=null?`, recall ${x.recall}% today`:''}`;
+    return `<g class="neuron${i===brainSel?' sel':''}" data-i="${i}" data-state="${x.state}" role="button" tabindex="${i===(brainSel<0?0:brainSel)?0:-1}" aria-label="${e(label)}" aria-pressed="${i===brainSel}">
+      <circle class="nhit" cx="${x.x}" cy="${x.y}" r="${Math.max(x.r*1.9,L.gap*0.5).toFixed(1)}"/><path class="dendrite" d="${brainDendrites(x)}"/>
+      <circle class="soma" cx="${x.x}" cy="${x.y}" r="${x.r}"/><circle class="soma-shine" cx="${x.x}" cy="${x.y}" r="${x.r}" fill="url(#sbSoma)"/>
+      <circle class="nucleus" cx="${(x.x-x.r*0.25).toFixed(1)}" cy="${(x.y-x.r*0.25).toFixed(1)}" r="${(x.r*0.34).toFixed(1)}"/></g>`; }).join('')}</g>`;
+  return `<svg class="brain-svg" id="brainArt" viewBox="${B.VIEW}" role="group" aria-label="Your brain: ${lit} of ${nodes.length} parts of the bank lit. Arrow keys move between them; Enter practises that chapter."
+      onclick="brainTap(event)" onkeydown="brainKey(event)">${defs}${body}${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</svg>`;
+}
+function brainInfoHtml(){
+  const L=brainArtL&&brainArtL.L, x=L&&L.nodes[brainSel];
+  if(!x) return `<span class="brain-info-hint">${icon('zap','icon-sm')} Tap a neuron: it fires, and says what it holds.</span>`;
+  return `<span class="brain-info-k">This neuron</span> <b>${e(x.docId)}</b>
+    <span class="brain-info-m">${e(x.title.split(' · ')[1]||'')} · ${BRAIN_STATE_LABEL[x.state]}${x.recall!=null?` · recall ${x.recall}% today`:''}</span>
+    <button class="brain-go primary" onclick="startQuiz(${JSON.stringify(x.docId).replace(/"/g,'&quot;')})">${icon('play','icon-sm')} Practise this chapter</button>`;
+}
+function brainPick(i,tap){
+  const L=brainArtL&&brainArtL.L; if(!L||!L.nodes[i]) return;
+  brainSel=i;
+  if(tap&&brainLiveRun&&brainLiveRun.L===L) BrainMap.liveFire(brainLiveRun.st,L,i,Math.random,-1,'tap');
+  document.querySelectorAll('#brainArt .neuron').forEach(g=>{ const on=+g.dataset.i===i; g.classList.toggle('sel',on); g.setAttribute('aria-pressed',String(on)); });
+  const info=document.getElementById('brainInfo'); if(info) info.innerHTML=brainInfoHtml();
+}
+function brainTap(ev){ const g=ev.target.closest&&ev.target.closest('.neuron'); if(g) brainPick(+g.dataset.i,true); }
+function brainKey(ev){
+  const g=ev.target.closest&&ev.target.closest('.neuron'); if(!g) return;
+  const L=brainArtL.L, i=+g.dataset.i, k=ev.key;
+  if(k==='Enter'||k===' '){ ev.preventDefault(); brainPick(i,true); startQuiz(L.nodes[i].docId); return; }
+  const step=k==='ArrowRight'||k==='ArrowDown'?1:k==='ArrowLeft'||k==='ArrowUp'?-1:0; if(!step) return;
+  ev.preventDefault();
+  const j=(i+step+L.nodes.length)%L.nodes.length, nx=document.querySelector(`#brainArt .neuron[data-i="${j}"]`);
+  g.setAttribute('tabindex','-1'); if(nx){ nx.setAttribute('tabindex','0'); nx.focus(); }
+}
+/* THE BRAIN, LIVE (Memorizer's ui.js brainLive): impulses run the wiring, neurons flash where they land. At most about
+   thirty draws a second, only while the Brain page is the one showing and the app is in view, and not at all when the
+   device asks for reduced motion. brainLiveRun says what it is doing (verify-homepager reads its frames). */
+function mountBrainLive(){
+  const art=document.getElementById('brainArt');
+  if(!art||typeof BrainMap==='undefined'||!homeMotionOK()||!window.requestAnimationFrame){ brainLiveRun=null; return; }
+  const L=brainArtL.L, prev=brainLiveRun;
+  const run=brainLiveRun={L, st:prev&&prev.L===L?prev.st:BrainMap.liveInit(L), frames:prev&&prev.L===L?prev.frames:0, running:true};
+  const pool=[...art.querySelectorAll('.bspark')].map(g=>({g,tails:g.querySelectorAll('.tail'),head:g.querySelector('.head'),halo:g.querySelector('.halo')}));
+  const flashEls={}, hotEls={}; let shown={}, hot={}, last=0, drawn=0;
+  art.querySelectorAll('.flash').forEach(c=>{ flashEls[c.getAttribute('data-i')]=c; });
+  art.querySelectorAll('.brain-axons path').forEach(p=>{ hotEls[p.getAttribute('data-e')]=p; });
+  const glowOf=st=>'url(#sbGlow'+st.charAt(0).toUpperCase()+st.slice(1)+')';
+  const draw=()=>{
+    const st=run.st;
+    pool.forEach((p,k)=>{ const s=st.sparks[k];
+      if(!s){ if(p.on){ p.g.style.display='none'; p.on=false; } return; }
+      if(!p.on){ p.g.style.display=''; p.on=true; }
+      if(p.state!==s.state){ p.halo.setAttribute('fill',glowOf(s.state==='new'?'spark':s.state)); p.g.setAttribute('data-state',s.state); p.state=s.state; }
+      const at=BrainMap.sparkAt(L,st,s,0); p.head.setAttribute('transform','translate('+at.x.toFixed(1)+' '+at.y.toFixed(1)+')');
+      for(let t=0;t<p.tails.length;t++){ const b=BrainMap.sparkAt(L,st,s,0.045*(t+1)); p.tails[t].setAttribute('cx',b.x.toFixed(1)); p.tails[t].setAttribute('cy',b.y.toFixed(1)); }
+    });
+    Object.keys(st.flash).forEach(i=>{ const el=flashEls[i]; if(!el) return;
+      el.style.opacity=(st.flash[i]/BrainMap.LIVE.FLASH_MS*(L.nodes[i].state==='new'?0.5:1)).toFixed(2); shown[i]=true; });
+    Object.keys(shown).forEach(i=>{ if(!(i in st.flash)){ flashEls[i].style.opacity='0'; delete shown[i]; } });
+    const now={}; st.sparks.forEach(x=>{ now[x.e]=true; });
+    Object.keys(now).forEach(k=>{ if(!hot[k]&&hotEls[k]) hotEls[k].setAttribute('data-hot',''); });
+    Object.keys(hot).forEach(k=>{ if(!now[k]&&hotEls[k]) hotEls[k].removeAttribute('data-hot'); });
+    hot=now;
+  };
+  const frame=ts=>{
+    if(brainLiveRun!==run) return;
+    if(!art.isConnected||S.screen!=='home'){ run.running=false; return; }
+    if(homePage!==1||document.hidden){ last=ts; requestAnimationFrame(frame); return; }
+    const dt=last?Math.min(0.1,(ts-last)/1000):0;
+    if(ts-drawn>=30){ BrainMap.liveStep(run.st,L,dt,Math.random); draw(); drawn=ts; last=ts; run.frames++; }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
 function homeMotionOK(){ return !(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
 /* Where the scroller is, as a fraction of a page (0 to 2): the pill's place, each page's depth, and which page is the
    current one. Read in a frame, so a fast swipe costs one layout read per frame. */
@@ -7027,7 +7202,8 @@ function homeGo(i){
   i=Math.max(0,Math.min(2,i)); homePage=i; homeMark();
   const to=i*pg.clientWidth, from=pg.scrollLeft;
   if(homeTween){ cancelAnimationFrame(homeTween); homeTween=0; }
-  if(!homeMotionOK()||Math.abs(to-from)<1){ pg.scrollLeft=to; homePagerSync(); return; }
+  const glide=homeMotionOK()&&Math.abs(to-from)>=1; homeLastGo={to:i, glide};
+  if(!glide){ pg.scrollLeft=to; homePagerSync(); return; }
   /* Eased by hand rather than scrollTo's smooth behaviour, which an iPad before 15.4 does not have; the snap is lifted
      for the glide, or it would pull every intermediate position back to a page. */
   pg.style.scrollSnapType='none';

@@ -123,7 +123,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the tabs, by touch and by key');
   await page.locator('#homeTab2').click();
-  const glide = await page.evaluate(() => ({ moving: !!homeTween }));
+  /* Read from what homeGo chose, not from whether the glide is still running: a 420ms glide can be over by the time a
+     loaded runner reads it, and the check then failed on the fixed build. */
+  const glide = await page.evaluate(() => ({ moving: !!(homeLastGo && homeLastGo.to === 2 && homeLastGo.glide) }));
   await still('after the Labs tab');
   const s2 = await state();
   ok('the Labs tab glides there rather than jumping', glide.moving, JSON.stringify(glide));
@@ -154,6 +156,40 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a chapter bar is empty while Brain is off to the side', !before.w && before.data > 0, JSON.stringify(before));
   ok('and filled to the chapter\'s mastery once Brain is seen', after.w === after.data + '%', JSON.stringify(after));
   ok('the gauge is drawn to the bank\'s mastery', after.on === (+after.frac > 0) && parseFloat(after.ring) === +(+after.frac).toFixed(1), JSON.stringify(after));
+
+  head('the brain, drawn from the bank, and live');
+  /* Memorizer's brain (src/core/brain.js): a lobe per chapter, a neuron per slice of its questions, each lit by what FSRS
+     predicts of that slice today. Impulses run while Brain is the page showing, and stop when it is not. */
+  const br = await page.evaluate(() => {
+    const L = brainArtL && brainArtL.L, art = document.getElementById('brainArt');
+    const want = CHAPTERS.reduce((n, ch) => { const k = POOL.filter(q => q.ch === ch).length; return n + Math.ceil(k / Math.max(1, Math.ceil(k / BRAIN_PER))); }, 0);
+    /* every neuron's state against its own slice, worked out here again from the cards */
+    const ch0 = CHAPTERS[0], qs = POOL.filter(q => q.ch === ch0), per = Math.max(1, Math.ceil(qs.length / BRAIN_PER));
+    const first = qs.slice(0, per).map(qRecall).filter(v => v != null), avg = first.length ? first.reduce((a, b) => a + b, 0) / first.length : null;
+    const wantState = avg == null ? 'new' : avg >= 0.85 ? 'solid' : avg >= 0.6 ? 'fading' : 'weak';
+    const g = art && art.querySelector('.neuron[data-i="' + L.nodes.findIndex(x => x.docId === ch0 && x.ci === 0) + '"]');
+    return { drawn: art ? art.querySelectorAll('.neuron').length : 0, want, lobes: L ? L.units.length : 0, chapters: CHAPTERS.length,
+      wantState, shown: g && g.dataset.state, label: g && g.getAttribute('aria-label') };
+  });
+  ok('the brain has a lobe for every chapter and a neuron for every slice of its questions', br.drawn === br.want && br.lobes === br.chapters && br.drawn > 0,
+     `${br.drawn} neurons (want ${br.want}), ${br.lobes} lobes for ${br.chapters} chapters`);
+  ok('a neuron is lit by what is remembered of its slice', br.shown === br.wantState && br.wantState !== 'new' && /recall \d+% today/.test(br.label || ''), JSON.stringify(br));
+  const f0 = await page.evaluate(() => brainLiveRun ? brainLiveRun.frames : -1);
+  /* The claim is that the loop runs, not how fast: headless WebKit draws a few frames a second (3 to 13 in five seconds,
+     measured), where a device draws thirty. */
+  await settled(page, (f) => brainLiveRun && brainLiveRun.frames > f + 2 && brainLiveRun.st.fired > 0, { arg: f0, timeout: 5000, label: 'the brain to draw a few frames' }).catch(() => {});
+  const f1 = await page.evaluate(() => ({ frames: brainLiveRun ? brainLiveRun.frames : -1, fired: brainLiveRun ? brainLiveRun.st.fired : 0 }));
+  ok('while Brain is showing, the brain is live: impulses fire and it is redrawn', f1.frames > f0 + 2 && f1.fired > 0, `${f0} → ${f1.frames} frames, ${f1.fired} fired`);
+  await page.locator('#brainArt .neuron').nth(3).click();
+  const tap = await page.evaluate(() => ({ sel: brainSel, info: document.getElementById('brainInfo').textContent.replace(/\s+/g, ' ').trim(),
+    tapped: brainLiveRun && brainLiveRun.st.lastTap ? brainLiveRun.st.lastTap.i : null, pressed: document.querySelector('#brainArt .neuron[data-i="3"]').getAttribute('aria-pressed') }));
+  ok('a tap fires the neuron and says what it holds', tap.sel === 3 && tap.tapped === 3 && tap.pressed === 'true' && /This neuron .+ questions \d+–\d+/.test(tap.info), JSON.stringify(tap));
+  await page.evaluate(() => homeGo(0));
+  await still('Home, leaving Brain');
+  const h0 = await page.evaluate(() => brainLiveRun.frames);
+  await page.evaluate(() => new Promise(r => { let n = 0; const f = () => (++n < 20 ? requestAnimationFrame(f) : r()); requestAnimationFrame(f); }));
+  const h1 = await page.evaluate(() => brainLiveRun.frames);
+  ok('and it rests while another page is showing', h1 === h0, `${h0} → ${h1} frames over 20 animation frames on Home`);
 
   head('the page is kept');
   await page.evaluate(() => homeGo(2));
@@ -191,10 +227,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('reduced motion');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const jump = await page.evaluate(() => { homeGo(0); const p = document.getElementById('homePager'); return { f: p.scrollLeft / p.clientWidth, tween: !!homeTween }; });
+  const jump = await page.evaluate(() => { homeGo(0); const p = document.getElementById('homePager'); return { f: p.scrollLeft / p.clientWidth, tween: !!homeTween || !!(homeLastGo && homeLastGo.glide) }; });
   ok('with reduced motion a tab jumps to its page, no glide', Math.abs(jump.f) < 0.01 && !jump.tween, JSON.stringify(jump));
-  const still2 = await page.evaluate(() => getComputedStyle(document.querySelector('#homePage1 .home-page-in')).transform);
-  ok('and the pages are not scaled as they leave', still2 === 'none', still2);
+  /* Brain is a whole page away (--hp-d 1), where the scale would be .94 without the reduced-motion rule. */
+  const still2 = await page.evaluate(() => { const pg = document.getElementById('homePage1'); return pg.style.getPropertyValue('--hp-d') === '1.0000' ? getComputedStyle(pg.querySelector('.home-page-in')).transform : 'UNMEASURED: Brain is not a page away (--hp-d ' + pg.style.getPropertyValue('--hp-d') + ')'; });
+  /* WebKit reports an unscaled element as the identity matrix rather than 'none'. */
+  ok('and the pages are not scaled as they leave', still2 === 'none' || still2 === 'matrix(1, 0, 0, 1, 0, 0)', still2);
+  await page.evaluate(() => { homePage = 1; S.screen = 'home'; render(); });
+  await still('Brain with reduced motion');
+  const rm = await page.evaluate(() => ({ run: brainLiveRun, art: !!document.getElementById('brainArt') }));
+  ok('and the brain is drawn but not run', rm.art && rm.run === null, JSON.stringify({ art: rm.art, run: rm.run && rm.run.running }));
 
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));

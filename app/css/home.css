@@ -154,3 +154,142 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
   .lab-art-echo [class^="la-w"]{opacity:.8}
   .bg-seen,.bg-mast,.brain-bar i{transition:none}
 }
+
+/* ── Brain: Memorizer's brain (src/core/brain.js), drawn from the bank ──
+   Its rules are Memorizer's (memorizer/app.css), scoped to .brain-svg, in Memorizer's dark tones: the brain sits on the
+   Brain card's night-blue glass in every theme. */
+.brain-hero{--brain-t1:rgba(120,200,170,.22);--brain-t2:rgba(80,120,140,.14);--brain-t3:rgba(30,50,60,.40);--brain-sulcus:rgba(180,230,210,.18);
+  --brain-rim:rgba(170,230,210,.35);--brain-sheen:rgba(255,255,255,.08);--brain-axon:rgba(170,220,210,.16);--brain-dendrite:rgba(170,220,210,.38);
+  --brain-dormant:#1B2226;--brain-spark:#F2FFF9;--brain-glint:rgba(200,255,235,.30);--brain-n-solid:#5EF2B0;--brain-n-fading:#FFC857;--brain-n-weak:#FF6B7A;
+  display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-template-areas:"stage gauge" "stage side";align-items:center;column-gap:22px;row-gap:14px}
+.brain-stage{grid-area:stage;position:relative;z-index:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.brain-hero .brain-gauge{grid-area:gauge;margin:0 auto}
+.brain-hero .brain-side{grid-area:side}
+@media(max-width:760px){.brain-hero{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "gauge" "side"}}
+.brain-svg{display:block;width:100%;height:auto;max-height:420px;overflow:visible;-webkit-user-select:none;user-select:none;shape-rendering:geometricPrecision}
+.brain-svg .brain-stem{fill:var(--brain-t3);stroke:var(--brain-rim);stroke-width:2}
+.brain-svg .brain-cbl{fill:var(--brain-t2);stroke:var(--brain-rim);stroke-width:2}
+.brain-svg .brain-folia path,.brain-svg .brain-sulci path,.brain-svg .brain-grooves path,.brain-svg .brain-gyri-lit path,.brain-svg .brain-stem-lines path{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.brain-svg .brain-folia path{stroke:var(--brain-sulcus);stroke-width:1.8}
+.brain-svg .brain-stem-lines path{stroke:var(--brain-sulcus);stroke-width:1.6;opacity:.7}
+.brain-svg .brain-grooves path{stroke:var(--brain-t3);stroke-width:6}
+.brain-svg .brain-grooves path.major{stroke-width:9}
+.brain-svg .brain-gyri-lit path{stroke:var(--brain-rim);stroke-width:1.3;opacity:.5}
+.brain-svg .brain-gyri-lit path.major{stroke-width:2}
+.brain-svg .brain-sulci path{stroke:var(--brain-sulcus);stroke-width:1.5}
+.brain-svg .brain-sulci path.major{stroke-width:2.8}
+.brain-svg .brain-fine path{fill:none;stroke:var(--brain-sulcus);stroke-width:.9;stroke-linecap:round;opacity:.7}
+.brain-svg .brain-shade,.brain-svg .brain-sheen{pointer-events:none}
+.brain-svg .brain-sheen{opacity:.9}
+.brain-svg .sh-0{stop-color:var(--brain-t3);stop-opacity:.75}.brain-svg .sh-1{stop-color:var(--brain-t3);stop-opacity:0}
+.brain-svg .fl-0{stop-color:#000;stop-opacity:.28}.brain-svg .fl-1{stop-color:#000;stop-opacity:0}
+.brain-svg .brain-cortex{stroke:none;animation:brainBreathe 7s ease-in-out infinite}
+@keyframes brainBreathe{0%,100%{opacity:.88}50%{opacity:1}}
+.brain-svg .brain-rim{fill:none;stroke:var(--brain-rim);stroke-width:3}
+.brain-svg .bt-1{stop-color:var(--brain-t1)}.brain-svg .bt-2{stop-color:var(--brain-t2)}.brain-svg .bt-3{stop-color:var(--brain-t3)}
+.brain-svg .bs-1{stop-color:var(--brain-sheen)}.brain-svg .bs-2{stop-color:var(--brain-sheen);stop-opacity:0}
+.brain-svg .brain-axons path{fill:none;stroke:var(--brain-axon);stroke-width:1.6;stroke-linecap:round}
+.brain-svg .brain-axons path[data-fired="1"]{stroke-width:2;stroke-dasharray:2 6}
+.brain-svg .brain-axons path[data-fired="2"]{stroke-width:2.6}
+.brain-svg .brain-axons path[data-state="solid"]:not([data-fired="0"]){stroke:var(--brain-n-solid)}
+.brain-svg .brain-axons path[data-state="fading"]:not([data-fired="0"]){stroke:var(--brain-n-fading)}
+.brain-svg .brain-axons path[data-state="weak"]:not([data-fired="0"]){stroke:var(--brain-n-weak)}
+.brain-svg .brain-axons path[data-kind="bridge"]{stroke-width:3}
+.brain-svg .brain-axons path[data-hot]{stroke:var(--brain-spark);stroke-opacity:.9;stroke-width:4;stroke-dasharray:none}
+.brain-svg .brain-signals path{fill:none;stroke:var(--brain-spark);stroke-width:3.2;stroke-linecap:round;stroke-dasharray:3 26;opacity:.95;animation:brainFire 2.8s linear infinite}
+@keyframes brainFire{to{stroke-dashoffset:-58}}
+.brain-svg .gl-solid{stop-color:var(--brain-n-solid)}.brain-svg .gl-fading{stop-color:var(--brain-n-fading)}.brain-svg .gl-weak{stop-color:var(--brain-n-weak)}
+.brain-svg .gl-new{stop-color:var(--brain-dendrite)}.brain-svg .gl-spark{stop-color:var(--brain-spark)}
+.brain-svg .g0{stop-opacity:1}.brain-svg .g1{stop-opacity:.42}.brain-svg .g2{stop-opacity:0}
+.brain-svg .brain-glow circle{opacity:.6;animation:brainGlowBeat 3.6s ease-in-out infinite}
+@keyframes brainGlowBeat{0%,100%{opacity:.35}50%{opacity:.85}}
+.brain-svg .brain-flashes circle,.brain-svg .brain-sparks{pointer-events:none}
+.brain-svg .bspark .core{fill:var(--brain-spark);stroke:var(--brain-spark);stroke-opacity:.35;stroke-width:3}
+.brain-svg .bspark .tail{fill:var(--brain-spark)}
+.brain-svg .bspark .t1{opacity:.75}.brain-svg .bspark .t2{opacity:.55}.brain-svg .bspark .t3{opacity:.35}.brain-svg .bspark .t4{opacity:.18}
+.brain-svg .bspark[data-state="new"]{opacity:.5}
+.brain-svg .bgl-0{stop-color:var(--brain-glint);stop-opacity:0}.brain-svg .bgl-1{stop-color:var(--brain-glint);stop-opacity:1}
+.brain-svg .brain-glint{pointer-events:none;animation:brainGlint 9s ease-in-out infinite}
+@keyframes brainGlint{0%{transform:translateX(0)}40%,100%{transform:translateX(1800px)}}
+.brain-svg .neuron{cursor:pointer;outline:none;transform-box:fill-box;transform-origin:center;transition:transform .25s ease-out}
+.brain-svg .neuron .nhit{fill:transparent}
+.brain-svg .neuron .dendrite{fill:none;stroke:var(--brain-dendrite);stroke-width:1.6;stroke-linecap:round}
+.brain-svg .neuron[data-state="new"] .dendrite{opacity:.45;stroke-width:1.2}
+.brain-svg .neuron .soma{fill:var(--brain-dormant);stroke:var(--brain-dendrite);stroke-width:1.5}
+.brain-svg .neuron .nucleus{fill:var(--brain-dendrite);opacity:.55}
+.brain-svg .soma-shine{pointer-events:none}
+.brain-svg .ss-0{stop-color:#fff;stop-opacity:.55}.brain-svg .ss-1{stop-color:#fff;stop-opacity:.06}.brain-svg .ss-2{stop-color:#000;stop-opacity:.22}
+.brain-svg .neuron[data-state="solid"] .soma{fill:var(--brain-n-solid);stroke:var(--brain-n-solid)}
+.brain-svg .neuron[data-state="fading"] .soma{fill:var(--brain-n-fading);stroke:var(--brain-n-fading)}
+.brain-svg .neuron[data-state="weak"] .soma{fill:var(--brain-n-weak);stroke:var(--brain-n-weak)}
+.brain-svg .neuron[data-state="solid"] .dendrite{stroke:var(--brain-n-solid)}
+.brain-svg .neuron[data-state="fading"] .dendrite{stroke:var(--brain-n-fading)}
+.brain-svg .neuron[data-state="weak"] .dendrite{stroke:var(--brain-n-weak)}
+.brain-svg .neuron:not([data-state="new"]) .nucleus{fill:#fff;opacity:.85}
+.brain-svg .neuron.sel{transform:scale(1.3)}
+.brain-svg .neuron:focus-visible{transform:scale(1.3)}
+.brain-svg .neuron.sel .soma{stroke:#7DD3FC;stroke-width:4}
+.brain-svg .neuron:focus-visible .soma{stroke:#7DD3FC;stroke-width:4}
+@media(hover:hover){.brain-svg .neuron:hover{transform:scale(1.3)}}
+.brain-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:rgba(255,255,255,.82)}
+.brain-legend span{display:inline-flex;align-items:center;gap:6px}
+.brain-legend i{width:10px;height:10px;border-radius:50%;background:var(--brain-dormant);border:1.5px solid var(--brain-dendrite)}
+.brain-legend i[data-state="solid"]{background:var(--brain-n-solid);border-color:var(--brain-n-solid);box-shadow:0 0 8px var(--brain-n-solid)}
+.brain-legend i[data-state="fading"]{background:var(--brain-n-fading);border-color:var(--brain-n-fading);box-shadow:0 0 8px var(--brain-n-fading)}
+.brain-legend i[data-state="weak"]{background:var(--brain-n-weak);border-color:var(--brain-n-weak);box-shadow:0 0 8px var(--brain-n-weak)}
+.brain-livetag{margin-left:auto;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px}
+.brain-livetag i{background:#5EF2B0;border-color:#5EF2B0;animation:brainLiveDot 1.6s ease-in-out infinite}
+@keyframes brainLiveDot{0%,100%{box-shadow:0 0 0 0 rgba(94,242,176,.7)}50%{box-shadow:0 0 0 6px rgba(94,242,176,0)}}
+.brain-info{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-height:44px;padding:10px 14px;border-radius:14px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);font-size:13px;color:rgba(255,255,255,.88)}
+.brain-info b{font-size:15px;color:#fff}
+.brain-info-k{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7DD3FC}
+.brain-info-m{flex:1 1 100%;color:rgba(255,255,255,.8)}
+.brain-info-hint{display:inline-flex;align-items:center;gap:6px}
+@media(prefers-reduced-motion:reduce){
+  .brain-svg .brain-signals path,.brain-svg .brain-glint,.brain-svg .brain-cortex,.brain-svg .brain-glow circle,.brain-livetag i{animation:none}
+  .brain-svg .brain-glint{display:none}
+  .brain-svg .neuron{transition:none}
+}
+
+/* ── the pearl, larger: more of the row, a picture always, and a little life ──
+   In a tablet's landscape grid the pearl takes the larger share of the width. A note's figure drifts slowly under the
+   light (a Ken Burns move), so the card is never quite still; a pearl with no figure shows its chapter's emblem in the
+   chapter's colour, with rings turning round it. Both are still when the device asks for reduced motion. */
+@media (min-width:1024px) and (orientation:landscape){
+  #app[data-screen="home"] #homePage0 .home-wrap{grid-template-columns:minmax(330px,.78fr) minmax(500px,1.4fr)}
+}
+.pearl-card .pearl-fig img{animation:pearlDrift 16s ease-in-out infinite alternate;transform-origin:50% 40%}
+@keyframes pearlDrift{from{transform:scale(1) translate3d(0,0,0)}to{transform:scale(1.07) translate3d(-1.5%,-1%,0)}}
+.pearl-emblem{position:relative;z-index:1;flex:0 0 34%;max-width:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;padding:22px 16px;border-left:1px solid var(--border2);overflow:hidden;
+  background:radial-gradient(70% 60% at 50% 42%,rgba(255,255,255,.16),rgba(255,255,255,0) 70%);background-color:var(--card)}
+.pearl-emblem::before{content:'';position:absolute;top:18%;left:50%;width:220px;height:220px;margin-left:-110px;border-radius:50%;
+  background:radial-gradient(closest-side,var(--pe),rgba(255,255,255,0));opacity:.28;animation:peGlow 4.8s ease-in-out infinite}
+@keyframes peGlow{0%,100%{transform:scale(.92);opacity:.22}50%{transform:scale(1.06);opacity:.36}}
+.pe-ring{position:absolute;top:50%;left:50%;border-radius:50%;border:1.5px solid var(--pe);opacity:.35;pointer-events:none}
+.pe-ring.r1{width:120px;height:120px;margin:-82px 0 0 -60px;border-style:dashed;animation:peSpin 18s linear infinite}
+.pe-ring.r2{width:168px;height:168px;margin:-106px 0 0 -84px;opacity:.22;animation:peSpin 26s linear infinite reverse}
+.pe-ring.r3{width:216px;height:216px;margin:-130px 0 0 -108px;opacity:.12;border-style:dotted;animation:peSpin 40s linear infinite}
+@keyframes peSpin{to{transform:rotate(360deg)}}
+.pe-orb{position:relative;display:flex;align-items:center;justify-content:center;width:84px;height:84px;margin-top:-22px;border-radius:50%;color:#fff;
+  background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),rgba(255,255,255,0) 45%),var(--pe);
+  box-shadow:0 14px 34px -12px var(--pe),inset 0 1px 0 rgba(255,255,255,.4)}
+.pe-orb .icon{width:38px;height:38px}
+.pe-cap{position:relative;max-width:100%;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:700px){.pearl-emblem{flex:1 1 100%;max-width:none;min-height:180px;border-left:0;border-top:1px solid var(--border2)}}
+@media(prefers-reduced-motion:reduce){.pearl-card .pearl-fig img,.pearl-emblem::before,.pe-ring{animation:none}}
+
+/* ── the hero, refined: an aurora behind the heart, a halo that beats with it, glass for its numbers ──
+   Additions only: nothing here moves or sizes what the hero already lays out. */
+.hero-live::after{content:'';position:absolute;top:-30%;right:-10%;width:70%;height:140%;pointer-events:none;z-index:0;
+  background:radial-gradient(closest-side,rgba(45,212,191,.22),rgba(45,212,191,0)),radial-gradient(40% 50% at 30% 70%,rgba(129,140,248,.20),rgba(129,140,248,0));
+  animation:heroAurora 14s ease-in-out infinite alternate}
+@keyframes heroAurora{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-8%,6%,0) scale(1.1)}}
+.hero-heart-plate::before{content:'';position:absolute;top:50%;left:50%;width:120%;height:120%;margin:-60% 0 0 -60%;border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(248,113,113,.30),rgba(248,113,113,0));animation:heroHalo 1.05s ease-in-out infinite}
+@keyframes heroHalo{0%,100%{transform:scale(.94);opacity:.55}14%{transform:scale(1.04);opacity:.9}28%{transform:scale(.97);opacity:.65}}
+.hero-live .hl-item{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 18px -12px rgba(0,0,0,.5)}
+@media(prefers-reduced-motion:reduce){.hero-live::after,.hero-heart-plate::before{animation:none}}
