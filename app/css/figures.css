@@ -100,18 +100,18 @@ html[data-theme="dark"]{--glass:rgba(17,30,53,.74)}
 .msg{animation:riseIn .34s var(--glide) both}
 .chip{transition:transform .18s var(--spring),border-color .18s,color .18s,background .18s}
 .chip:active{transform:scale(.94)}
-@media (hover:hover){.chip:hover{border-color:var(--teal);color:var(--teal)}}
+@media (hover:hover){.chip:hover{border-color:var(--teal);color:var(--teal-ink)}}
 .ai-fab{transition:transform .26s var(--spring),box-shadow .26s var(--glide);
   animation:popIn .5s var(--spring) .3s both}
 .ai-fab:active{transform:scale(.94)}
 @media (hover:hover){.ai-fab:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(30,58,138,.44)}}
 .src-pill{transition:transform .18s var(--spring),border-color .18s,color .18s}
 .src-pill:active{transform:scale(.93)}
-@media (hover:hover){.src-pill:hover{border-color:var(--teal);color:var(--teal)}}
+@media (hover:hover){.src-pill:hover{border-color:var(--teal);color:var(--teal-ink)}}
 
 /* agent tool-run chips */
 .tool-run{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px}
-.tool-chip{font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--teal);
+.tool-chip{font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--teal-ink);
   background:linear-gradient(90deg,var(--green-bg) 25%,rgba(94,234,212,.28) 50%,var(--green-bg) 75%);
   background-size:360px 100%;animation:shimmer 1.5s linear infinite;
   border:1px solid var(--green-b);border-radius:99px;padding:3px 10px}
@@ -293,7 +293,7 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
 :root{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-b:#99F6E4;--due-glow:rgba(45,212,191,.14)}
 
 .due-card{background:var(--due-bg)!important;border-color:var(--due-b)!important;position:relative;overflow:hidden}
-.due-card .ch-name{color:var(--teal)}
+.due-card .ch-name{color:var(--teal-ink)}
 .due-card.has-due{box-shadow:0 0 0 1px var(--due-b),0 10px 30px var(--due-glow)}
 .due-card.has-due .ch-icon{animation:duePulse 1.9s ease-in-out infinite}
 @keyframes duePulse{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.1) rotate(-6deg)}}
@@ -334,7 +334,7 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
   padding:6px 14px 0;letter-spacing:.01em}
 .app-disclaim{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);
   margin:10px 0 0;max-width:60ch}
-.ai-powered b{color:var(--teal);font-weight:700}
+.ai-powered b{color:var(--teal-ink);font-weight:700}
 
 /* clearance so the last interactive control in a quiz is never trapped under
    the fixed annotation rail / AI launch button while scrolling */
@@ -352,6 +352,6 @@ body.rating-active .ai-fab{animation:none;opacity:0;pointer-events:none;transfor
 .prov-pick:active{transform:scale(.96)}
 .prov-pick.on{border-color:var(--teal);background:var(--green-bg)}
 .pp-name{font-weight:800;font-size:13px;color:var(--text)}
-.prov-pick.on .pp-name{color:var(--teal)}
+.prov-pick.on .pp-name{color:var(--teal-ink)}
 .pp-tag{font-size:11px;color:var(--muted)}
 

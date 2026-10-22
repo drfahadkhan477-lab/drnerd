@@ -486,7 +486,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       /* The panel's settings view carries a <select> — that is the element the
          guard has to survive. Asserted from the markup the app builds, so this
          still means something if the panel is later restyled. */
-      const settingsHasSelect = /<select id="aiModel">/.test(
+      const settingsHasSelect = /<select id="aiModel"[\s>]/.test(
         typeof aiSettingsMarkup === 'function' ? aiSettingsMarkup() : document.body.innerHTML) ||
         !!document.getElementById('aiModel');
 

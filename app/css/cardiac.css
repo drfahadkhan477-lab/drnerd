@@ -190,20 +190,20 @@
 @media(max-width:640px){.pearl-main{padding:22px 20px 22px}}
 .pearl-head{display:flex;align-items:center;gap:9px;margin-bottom:16px}
 .pearl-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
-  letter-spacing:.09em;text-transform:uppercase;color:var(--teal)}
+  letter-spacing:.09em;text-transform:uppercase;color:var(--teal-ink)}
 .pearl-cap{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pearl-next{margin-left:auto;flex:0 0 auto;background:transparent;border:0;padding:4px;
   cursor:pointer;color:var(--muted);display:flex;border-radius:8px;
   transition:color .18s var(--ease),background .18s var(--ease),transform .3s var(--spring)}
-@media (hover:hover){.pearl-next:hover{color:var(--teal);background:var(--card)}}
+@media (hover:hover){.pearl-next:hover{color:var(--teal-ink);background:var(--card)}}
 .pearl-next:active{transform:rotate(-90deg)}
 .pearl-body{margin:0;font-family:var(--font-display);font-size:23px;line-height:1.45;
   color:var(--text);text-wrap:pretty;letter-spacing:-.01em}
 @media(max-width:900px){.pearl-body{font-size:19px}}
 .pearl-open{margin-top:18px;background:transparent;border:0;padding:0;cursor:pointer;
   display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;
-  color:var(--teal);font-family:inherit}
+  color:var(--teal-ink);font-family:inherit}
 .pearl-open .icon{transition:transform .22s var(--spring)}
 @media (hover:hover){.pearl-open:hover .icon{transform:translateX(3px)}}
 /* Beside the sentence, not under it: a pearl and the diagram that explains it
@@ -272,7 +272,7 @@
 .pearl-n{flex:0 0 auto;width:22px;height:22px;margin-top:3px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
   font-family:var(--font-mono);font-size:11px;font-weight:700;
-  color:var(--teal);background:color-mix(in srgb, var(--teal) 12%, transparent);
+  color:var(--teal-ink);background:color-mix(in srgb, var(--teal) 12%, transparent);
   border:1px solid color-mix(in srgb, var(--teal) 30%, transparent)}
 @supports not (color:color-mix(in srgb,red,blue)){.pearl-n{background:var(--teal4);border:1px solid var(--teal3)}}
 .pearl-txt{flex:1;min-width:0;font-family:var(--font-display);font-size:16px;
@@ -281,7 +281,7 @@
    move rather than repeating inside it. */
 .pearl-lead{display:inline-block;margin-right:7px;font-style:normal;
   font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:.11em;
-  text-transform:uppercase;color:var(--teal);vertical-align:1px}
+  text-transform:uppercase;color:var(--teal-ink);vertical-align:1px}
 /* A threshold, a dose, a difference between two arms: what the question turns
    on, marked so it survives a glance. */
 .pearl-num{font-weight:650;color:var(--text);
@@ -314,7 +314,7 @@
 .pearl-step:first-child{border-left:3px solid var(--teal)}
 .pearl-n{display:none}
 .pearl-role{display:block;margin-bottom:5px;font-family:var(--font-mono);
-  font-size:var(--t-tiny);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--teal)}
+  font-size:var(--t-tiny);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--teal-ink)}
 .pearl-txt{font-family:inherit;font-size:16px;line-height:1.6}
 .pearl-step:first-child .pearl-txt{font-weight:550}
 .pearl-body{font-family:inherit;font-size:var(--t-lead);line-height:1.65}
@@ -345,7 +345,7 @@
 @supports not (color:color-mix(in srgb,red,blue)){.off-card{background:var(--white)}}
 .off-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
 .off-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
-  letter-spacing:.09em;text-transform:uppercase;color:var(--teal)}
+  letter-spacing:.09em;text-transform:uppercase;color:var(--teal-ink)}
 .off-val{font-family:var(--font-mono);font-size:11px;color:var(--muted);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .off-track{height:6px;border-radius:3px;overflow:hidden;
@@ -365,7 +365,7 @@
 @supports not (color:color-mix(in srgb,red,blue)){.off-btn:disabled{background:var(--teal3)}}
 /* Nothing left to fetch: the bar is the whole width and the prose stops
    asking for something that has already happened. */
-.off-card.all-here .off-note{color:var(--teal)}
+.off-card.all-here .off-note{color:var(--teal-ink)}
 .off-card.has-trouble .off-note{color:var(--amber-ink)}
 .off-card.has-trouble .off-fill{background:linear-gradient(90deg,var(--amber2),var(--amber))}
 @media(max-width:520px){
@@ -383,7 +383,7 @@
   animation:riseIn .5s var(--glide) .3s both}
 @supports not (color:color-mix(in srgb,red,blue)){.hello{border:1.5px solid var(--teal3);background:var(--teal4)}}
 .hello-ic{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:10px;
-  background:color-mix(in srgb, var(--teal) 18%, transparent);color:var(--teal)}
+  background:color-mix(in srgb, var(--teal) 18%, transparent);color:var(--teal-ink)}
 @supports not (color:color-mix(in srgb,red,blue)){.hello-ic{background:var(--teal3)}}
 .hello-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .hello-txt>b{font-size:13px;font-weight:700;color:var(--text)}
@@ -423,7 +423,7 @@
   box-shadow:0 14px 30px -14px rgba(10,22,40,.28)}}
 .door:active{transform:translateY(-1px) scale(.985)}
 .door-wide{grid-column:1/-1;padding:18px 20px}
-.door-ic{display:flex;flex:0 0 auto;color:var(--teal)}
+.door-ic{display:flex;flex:0 0 auto;color:var(--teal-ink)}
 .door-ic .icon{width:21px;height:21px}
 .door-txt{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 .door-txt b{font-size:13px;font-weight:650;letter-spacing:-.01em}
@@ -431,7 +431,7 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .door-go{margin-left:auto;color:var(--muted);display:flex;
   transition:transform .28s var(--spring),color .2s}
-@media (hover:hover){.door:hover .door-go{color:var(--teal);transform:translateX(4px)}}
+@media (hover:hover){.door:hover .door-go{color:var(--teal-ink);transform:translateX(4px)}}
 /* The study page: a back door, the layout switch it inherited, and a title
    that says what the page is — it is entered deliberately now, so it may as
    well introduce itself. */
@@ -445,7 +445,7 @@
   animation:riseIn .5s var(--glide) both;
   transition:color .2s,border-color .2s,transform .26s var(--spring)}
 @supports not (color:color-mix(in srgb,red,blue)){.study-back{background:var(--white)}}
-@media (hover:hover){.study-back:hover{color:var(--teal);border-color:var(--teal);transform:translateX(-2px)}}
+@media (hover:hover){.study-back:hover{color:var(--teal-ink);border-color:var(--teal);transform:translateX(-2px)}}
 .study-title{margin-bottom:var(--s4,16px);animation:riseIn .6s var(--glide) .04s both}
 .study-title h2{margin:0;font-size:33px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
 .study-title p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--muted);max-width:52ch}
@@ -609,7 +609,7 @@ html[data-palette="contrast"] .ref-card{background:var(--card);border-color:var(
 .pearl-actions{margin-top:12px;padding-top:10px;border-top:1px solid var(--border2)}
 .pearl-actions .pearl-open{margin-left:auto;font-size:var(--t-meta)}
 .pearl-prompt{display:grid;place-items:center;min-height:150px;margin:0;padding:12px;
-  border:0;background:transparent;color:var(--teal);font-family:var(--font-display);font-size:var(--t-hero)}
+  border:0;background:transparent;color:var(--teal-ink);font-family:var(--font-display);font-size:var(--t-hero)}
 .pearl-fig{padding:20px 16px;justify-content:center}
 .pearl-fig figcaption{font-size:11px;color:var(--muted)}
 .pearl-card::before{opacity:.08;animation:none}
@@ -726,10 +726,10 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
 .fc-streak{font-size:13px;font-weight:800;color:var(--amber-ink)}
 .fc-title{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:3px}
 .fc-sub{font-size:13px;color:var(--muted);line-height:1.5}
-.fc-cta{margin-top:10px;font-size:13px;font-weight:800;color:var(--teal)}
+.fc-cta{margin-top:10px;font-size:13px;font-weight:800;color:var(--teal-ink)}
 .review-card{border-color:var(--hero-edge)}
 .review-card.live{border-color:var(--teal)}
-.review-card.live .fc-badge{color:var(--teal);border-color:var(--teal);background:var(--green-bg)}
+.review-card.live .fc-badge{color:var(--teal-ink);border-color:var(--teal);background:var(--green-bg)}
 .fc-glow{position:absolute;top:-50%;right:-20%;bottom:-50%;left:-20%;z-index:0;pointer-events:none;opacity:0;
   background:radial-gradient(40% 60% at 20% 50%,var(--aura-1),transparent 70%)}
 .review-card.live .fc-glow{opacity:1;animation:glowSlide 5.5s ease-in-out infinite}
@@ -791,7 +791,7 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
 .ct-bar:has(i[data-w="0"]){background:repeating-linear-gradient(90deg,
   var(--border2) 0 5px,transparent 5px 10px)}
 .ct-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
-.ct-foot b{color:var(--accent);font-weight:800}
+.ct-foot b{color:var(--ch-ink,var(--teal-ink));font-weight:800}   /* its chapter's ink (chInk), set on the tile */
 
 /* ── feedback blip on the reveal header ── */
 .reveal-header{position:relative;overflow:hidden}
@@ -809,7 +809,7 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
   padding:14px 8px;text-align:center;animation:popIn .4s var(--spring) both}
 .stat-tile:nth-child(2){animation-delay:.04s}.stat-tile:nth-child(3){animation-delay:.08s}
 .stat-tile:nth-child(4){animation-delay:.12s}
-.st-v{font-size:23px;font-weight:800;letter-spacing:-.03em;color:var(--teal)}
+.st-v{font-size:23px;font-weight:800;letter-spacing:-.03em;color:var(--teal-ink)}
 .st-l{font-size:11px;color:var(--muted);margin-top:2px}
 .panel{background:var(--white);border:1.5px solid var(--border2);border-radius:18px;
   padding:16px;margin-bottom:12px}
@@ -870,7 +870,7 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
    you watch, so it earns the accent. */
 .physio-phase{margin-left:auto;font-family:var(--font-mono);font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;font-weight:700;
-  color:var(--teal);background:var(--teal4);border:1px solid var(--teal3);
+  color:var(--teal-ink);background:var(--teal4);border:1px solid var(--teal3);
   border-radius:999px;padding:3px 10px;white-space:nowrap;
   font-variant-numeric:tabular-nums}
 /* Taller than it was. The pressure traces are the point of the diagram and
@@ -922,7 +922,7 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
   .dist-bar{transition:none}
 }
 .lead-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:7px}
-.lead-id{font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--teal);letter-spacing:-.01em}
+.lead-id{font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--teal-ink);letter-spacing:-.01em}
 .lead-terr{font-size:13px;font-weight:650;color:var(--text)}
 .lead-art{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
 .lead-sees{font-size:13px;line-height:1.5;color:var(--text);margin-bottom:6px}

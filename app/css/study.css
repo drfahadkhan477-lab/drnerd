@@ -29,7 +29,7 @@
 @supports not (color:color-mix(in srgb,red,blue)){.plan-ready{background:var(--teal4);border:1px solid var(--teal3)}}
 .pace-pill{font-size:var(--t-tiny);font-weight:800;letter-spacing:.04em;border-radius:99px;padding:3px 10px;border:1px solid}
 .pace-pill.good{color:var(--green-ink);background:var(--green-bg);border-color:var(--green-b)}
-.pace-pill.ok{color:var(--teal);background:var(--teal4);border-color:var(--teal3)}
+.pace-pill.ok{color:var(--teal-ink);background:var(--teal4);border-color:var(--teal3)}
 .pace-pill.warn{color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-b)}
 .plan-card .plan-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px;padding:0}
 .plan-card .plan-chip{display:flex;align-items:center;justify-content:center;gap:6px;min-height:52px;padding:0 10px;border-radius:14px;
@@ -53,7 +53,7 @@
 .exam-tile.set{border-style:solid;border-color:color-mix(in srgb,var(--teal) 35%,var(--border));
   background:linear-gradient(135deg,color-mix(in srgb,var(--teal) 9%,transparent),transparent 70%)}
 @supports not (color:color-mix(in srgb,red,blue)){.exam-tile.set{border-color:var(--teal3);background:var(--teal4)}}
-.exam-ico{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:var(--teal);
+.exam-ico{flex:none;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:var(--teal-ink);
   background:color-mix(in srgb,var(--teal) 12%,transparent)}
 @supports not (color:color-mix(in srgb,red,blue)){.exam-ico{background:var(--teal4)}}
 .exam-ico .icon{width:22px;height:22px}
@@ -166,7 +166,7 @@ body.voice-on #app{padding-bottom:104px}
 .mock-pick span{font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
 .mock-pick.on{border-color:var(--teal);background:var(--teal4);background:color-mix(in srgb,var(--teal) 11%,var(--card))}
 @supports not (color:color-mix(in srgb,red,blue)){.mock-pick.on{background:var(--teal4)}}
-.mock-pick.on b{color:var(--teal)}
+.mock-pick.on b{color:var(--teal-ink)}
 @media(hover:hover){.mock-pick:hover{border-color:var(--teal);transform:translateY(-1px)}}
 .mock-chsel{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .mock-chsel select{flex:1;min-width:0;min-height:44px;padding:0 10px;border:1.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);
@@ -194,7 +194,7 @@ body.voice-on #app{padding-bottom:104px}
 .mock-clock-lab{font-size:var(--t-tiny);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .mock-mini{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:12px;border:1.5px solid var(--border);
   background:var(--card);color:var(--muted);font:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;white-space:nowrap}
-@media(hover:hover){.mock-mini:hover{border-color:var(--teal);color:var(--teal)}}
+@media(hover:hover){.mock-mini:hover{border-color:var(--teal);color:var(--teal-ink)}}
 .mock-subrow{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:var(--t-tiny);font-weight:700;color:var(--muted)}
 .mock-pace[data-status="behind"]{color:var(--amber-ink)}
 .mock-pace[data-status="ahead"]{color:var(--green-ink)}
@@ -231,7 +231,7 @@ body.voice-on #app{padding-bottom:104px}
 .mock-paused,.mock-gone{text-align:center}
 .mock-end h2,.mock-paused h2{margin:0 0 var(--s2);font-size:var(--t-h4);font-weight:800;letter-spacing:-.02em}
 .mock-paused p,.mock-gone p{color:var(--muted);font-size:var(--t-meta);line-height:1.5;margin:0 auto var(--s3);max-width:34ch}
-.mock-pause-ic{display:inline-grid;place-items:center;width:56px;height:56px;margin-bottom:var(--s3);border-radius:50%;color:var(--teal);background:var(--teal4);background:color-mix(in srgb,var(--teal) 12%,transparent)}
+.mock-pause-ic{display:inline-grid;place-items:center;width:56px;height:56px;margin-bottom:var(--s3);border-radius:50%;color:var(--teal-ink);background:var(--teal4);background:color-mix(in srgb,var(--teal) 12%,transparent)}
 @supports not (color:color-mix(in srgb,red,blue)){.mock-pause-ic{background:var(--teal4)}}
 .mock-pause-ic .icon{width:26px;height:26px}
 .mock-end-sub{font-size:var(--t-meta);font-weight:700;color:var(--muted);margin-bottom:var(--s4)}

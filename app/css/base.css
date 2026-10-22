@@ -42,6 +42,10 @@
   --border:#D1DCE8;--border2:#E8EEF4;--border3:#CBD5E1;
   --navy:#0F1E3D;--navy2:#1B3461;--navy3:#2C4A82;
   --accent:#0284C7;--accent-2:#0EA5E9;--teal:var(--accent);--teal2:var(--accent-2);--teal3:#BAE6FD;--teal4:#E0F2FE;
+  /* The accent as text. As text --accent read at 3.6-4.1:1 on Daylight's grounds and 3.7-4.4:1 on Midnight's, under the
+     4.5:1 text needs: text takes --teal-ink, a step darker here and a step lighter in the dark blocks below and in
+     tablet.css. A palette whose accent already reads sets it to its accent (themes.css). Fills keep --teal. */
+  --teal-ink:#0369A1;
   --text:#0F172A;--muted:#475569;--dim:#94A3B8;--faint:#CBD5E1;
   --success:#059669;--success-2:#10B981;--green:var(--success);--green2:var(--success-2);--green-bg:#ECFDF5;--green-b:#A7F3D0;
   --danger:#DC2626;--danger-2:#EF4444;--red:var(--danger);--red2:var(--danger-2);--red-bg:#FFF1F1;--red-b:#FECACA;
@@ -93,6 +97,9 @@
     --red-bg:#2D0A0A;--red-b:#7F1D1D;
     --amber-bg:#271B04;--amber-b:#78350F;
     --green-ink:#4ADE80;--red-ink:#F87171;--amber-ink:#FB923C;
+    /* Auto on a dark device takes Midnight's accent ink and tints (tablet.css sets them for Midnight chosen): it kept
+       Daylight's, so its chips were pale blue on the dark page. */
+    --teal-ink:#38BDF8;--teal3:#13406A;--teal4:#0B2540;
   }
 }
 
