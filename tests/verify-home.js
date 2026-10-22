@@ -427,7 +427,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
         return { appW: Math.round(app.getBoundingClientRect().width), vw: innerWidth,
                  over: document.documentElement.scrollHeight - innerHeight,
                  screen: app.dataset.screen,
-                 hero: R('.hero-live'), pearl: R('.pearl-card'), doors: R('.door-row') };
+                 hero: R('.hero-live'), pearl: R('.pearl-card'), doors: R('.door-row'), col: R('#homePage0 .home-page-in'),
+                 homeDoors: document.querySelectorAll(document.getElementById('homePage0') ? '#homePage0 .door' : '#app .door').length, brainDoors: document.querySelectorAll('#homePage1 .door').length };
       });
     };
 
@@ -441,8 +442,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        pro.pearl.x > pro.hero.x + pro.hero.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
     ok('and it runs taller than the letterbox it used to be',
        pro.pearl.h > 400, `${pro.pearl.h}px tall`);
-    ok('the doors span the full width underneath',
-       pro.doors.w / pro.vw > 0.85 && pro.doors.y > pro.hero.y, `${pro.doors.w} wide`);
+    /* The doors moved off Home: it is the hero, the pearl and the progress bar now, and the doors are on the Brain page,
+       a swipe away (verify-homepager). */
+    ok('no doors under the hero any more: they are on the Brain page',
+       pro.homeDoors === 0 && pro.brainDoors >= 5, `${pro.homeDoors} on Home, ${pro.brainDoors} on Brain`);
 
     const air = await at(1194, 834);
     ok('an 11-inch iPad in landscape fits too',
@@ -495,8 +498,9 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const port = await at(1024, 1366);
     ok('portrait still stacks, and still fits',
        port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
+    /* The pages run the full width now, and Home's column is the fixed measure (.home-page-in, 900px). */
     ok('and its column is a fixed measure, not the width of whatever pearl was picked',
-       port.appW === 960, `${port.appW}px`);
+       !!port.col && port.col.w === 900, port.col ? `${port.col.w}px` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem. */
