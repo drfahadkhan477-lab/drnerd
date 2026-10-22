@@ -1398,6 +1398,9 @@ self.addEventListener('fetch', e => {
    error handling — it is just never written down. */
 function keepable(req, res) {
   if (!res || !res.ok || res.type === 'opaque') return false;
+  // A followed Access redirect is HTML even when the requested shell is HTML.
+  // Keep Pages' same-origin canonical redirects, but never cache another origin.
+  if (res.url && new URL(res.url).origin !== new URL(req.url).origin) return false;
   const ct = (res.headers.get('content-type') || '').toLowerCase();
   const p = new URL(req.url).pathname;
   if (p.includes('/content/figures/')) return ct.indexOf('image/') === 0;
