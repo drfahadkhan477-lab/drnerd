@@ -595,6 +595,9 @@ jobs:
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
+        name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
+        run: node tests/verify-a11y.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (67 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
@@ -901,6 +904,9 @@ jobs:
       - if: ${{ !cancelled() }}
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
+      - if: ${{ !cancelled() }}
+        name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
+        run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (67 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html

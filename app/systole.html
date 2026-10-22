@@ -3850,7 +3850,7 @@ function setupHtml(){
   return `<div class="setup">
     <div class="setup-hero">
       <div class="setup-mark">${icon("heart-pulse","icon-xl")}</div>
-      <h4>One-time setup</h4>
+      <h2>One-time setup</h2>
       <p>This file runs entirely on your iPad with no server behind it, so the tutor talks to a provider using a key you own. Paste it once — you will not be asked again.</p>
     </div>
     <div class="prov-row">${PROVIDERS.map(([id,name,tag])=>
@@ -4526,8 +4526,9 @@ function md(t){
   s=s.replace(/!\[([^\]]*)\]\(refimg:\/\/([^)\s]+)\)/g,(m,cap,key)=>{
     const src=refImgSrc(key);
     if(!src) return '';
-    return `<figure class="ref-fig" onclick="openFigureFrom(this)" role="button" tabindex="0"
-      title="Open this figure full size"><img src="${src}" alt="${cap}" loading="lazy"><figcaption>${cap}</figcaption></figure>`;
+      /* The caption is the image's alt and is shown under it: the shown copy is hidden from a screen reader, which read it twice. */
+  return `<figure class="ref-fig" onclick="openFigureFrom(this)" role="button" tabindex="0"
+      title="Open this figure full size"><img src="${src}" alt="${cap}" loading="lazy"><figcaption aria-hidden="true">${cap}</figcaption></figure>`;
   });
   /* Headings before inline marks, so a ## line never becomes a paragraph. */
   s=s.replace(/^####\s+(.+)$/gm,'<h4>$1</h4>');
@@ -6095,7 +6096,7 @@ function renderNow(){
   /* Which screen is up, readable from CSS. The home screen is cards and wants
      the whole iPad; every other screen is prose and keeps its measure. */
   app.dataset.screen=S.screen;
-  app.innerHTML=buildScreen();
+  app.innerHTML=withScreenTitle(buildScreen());
   app.classList.toggle('again',again);
   document.body.classList.toggle('rating-active',
     S.screen==='quiz'&&S.answered&&S.mode==='due');
@@ -6148,6 +6149,16 @@ function mountScrollReveal(){
     card.classList.add('scroll-reveal');surfaceRevealObserver.observe(card);
     card.addEventListener('focusin',()=>card.classList.add('is-visible'),{once:true});
   }
+}
+/* Every screen has one level-one heading, so a screen reader's heading list starts with where you are. Home and the
+   Practice Lab draw their own; the rest had none, and get one that is read but not shown. Nothing is added to a screen that
+   drew nothing, so the crash screen's test for an empty #app still sees one. */
+const SCREEN_TITLES={study:'Study',quiz:'Quiz',results:'Results',refs:'Notes',notesearch:'Search your notes',echo:'Echo Studio',
+  memory:'Memory',search:'Search questions',annotations:'Annotations',mock:'Mock exam',mockreport:'Mock exam report',
+  stats:'Statistics',lab:'Rhythm Lab'};
+function withScreenTitle(html){
+  const t=SCREEN_TITLES[S.screen];
+  return !html||!t||/<h1[\s>]/i.test(html)?html:`<h1 class="sr-only">${e(t)}</h1>`+html;
 }
 function buildScreen(){
   return S.screen==='home'?buildHome():S.screen==='quiz'?buildQuiz()
@@ -6513,6 +6524,7 @@ function pearlNow(){
    under it: a pearl about the wavefront of necrosis and the diagram of the
    wavefront belong on one line, and a diagram stacked underneath reads as a
    second, unrelated thing. */
+/* As a note's figure: the caption is the image's alt, and the copy shown under it is hidden from a screen reader. */
 function pearlFigure(p){
   if(!p||!p.figKey) return '';
   const src=(typeof refImgSrc==='function')?refImgSrc(p.figKey):'';
@@ -6521,7 +6533,7 @@ function pearlFigure(p){
   return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();this.click()}"
     title="Enlarge figure"><img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
-    ${cap?`<figcaption>${e(cap)}</figcaption>`:''}</figure>`;
+    ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
 }
 /* The measurements are what the question turns on, so they are marked. Applied
    AFTER escaping, and matching only digits and a unit word, so it can never

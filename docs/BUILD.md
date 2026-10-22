@@ -33,7 +33,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 - **Playwright** — for the test suites only, and pinned:
 
   ```bash
-  npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, from the lockfile
+  npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, axe-core 4.10.2, from the lockfile
   npx playwright install chromium webkit     # the engines the full run uses
   npx playwright install firefox             # also, to reproduce CI's memorizer-browser job
   ```
@@ -57,6 +57,10 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 
   `ts-fsrs` regenerates `tests/fixtures/fsrs-oracle.json` and is used for
   nothing else; the fixture is committed, so `verify-oracle` runs without it.
+
+  `axe-core` is the accessibility rule engine `verify-a11y` puts into each
+  screen of the app it opens. It has no dependencies of its own, and nothing
+  the app ships loads it.
 
 - **Python 3 with Pillow and numpy** — for `verify-figreview` only, which
   drives the figure-review sheet the way `tools/figure-review.py` and

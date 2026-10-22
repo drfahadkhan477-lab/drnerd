@@ -5,7 +5,7 @@
    only the ECG paper, the two sides of the heart and the ink on an accent button are its own. */
 .plab{
   --plab-bg:var(--bg);--plab-card:var(--card);--plab-ink:var(--text);--plab-muted:var(--muted);--plab-line:var(--border);
-  --plab-accent:var(--accent);--plab-accent-ink:#fff;
+  --plab-accent:var(--teal-ink);--plab-accent-ink:#fff;   /* the accent's ink: white on the fill read 4.1:1 in Daylight */
   --plab-good:var(--green-ink);--plab-good-bg:var(--green-bg);--plab-bad:var(--red-ink);--plab-bad-bg:var(--red-bg);
   --plab-warn:var(--amber-ink);--plab-warn-bg:var(--amber-bg);
   --plab-trace:var(--text);--plab-grid:#f0d9d9;--plab-grid-major:#e6b9b9;--plab-right:#cfe0f5;--plab-left:#f6d6d0;
@@ -32,7 +32,8 @@ html[data-theme="dark"] .plab{
 
 .plab-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:6px 0 14px}
 .plab-topbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;min-height:44px}
-.plab-topbar .plab-title{font-weight:600;flex:1}
+/* A drill's title is its screen's level-one heading (the Lab's home has its own), sized as the bar's text. */
+.plab-topbar .plab-title{font-weight:600;flex:1;font-size:inherit;line-height:inherit;letter-spacing:normal;margin:0}
 .plab-back{flex:none;border:1px solid var(--plab-line);background:var(--plab-card);border-radius:999px;padding:8px 14px;min-height:44px}
 
 .plab-card{background:var(--plab-card);border:1px solid var(--plab-line);border-radius:var(--plab-radius);padding:16px;margin-bottom:var(--plab-gap)}

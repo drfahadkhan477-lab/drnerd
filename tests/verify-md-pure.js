@@ -349,7 +349,7 @@ head('and the blocks around them');
     ['a quotation', 'Said:\n> quoted\n\nAfter.', /^<p>Said:<\/p><blockquote><p>quoted<\/p><\/blockquote><p>After\.<\/p>$/],
     ['a rule', 'above\n---\nbelow', /^<p>above<\/p><hr><p>below<\/p>$/],
     ['a code fence', 'Run:\n```\nx = 1\n```\nAfter.', /^<p>Run:<\/p><pre><code>\nx = 1\n<\/code><\/pre><p>After\.<\/p>$/],
-    ['a figure', 'See:\n![a caption](refimg://k)\nAfter.', /^<p>See:<\/p><figure class="ref-fig"[^>]*><img [^>]*><figcaption>a caption<\/figcaption><\/figure><p>After\.<\/p>$/],
+    ['a figure', 'See:\n![a caption](refimg://k)\nAfter.', /^<p>See:<\/p><figure class="ref-fig"[^>]*><img [^>]*><figcaption aria-hidden="true">a caption<\/figcaption><\/figure><p>After\.<\/p>$/],
   ];
   for (const [what, input, shape] of around) {
     const out = md(input);

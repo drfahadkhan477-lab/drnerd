@@ -203,7 +203,7 @@ function banner() {
   return saveFailed ? '<div class="plab-banner" role="status">Progress cannot be saved in this window (a private window, or a page opened straight from Files). It will be lost when you close it. Open the installed app to keep it.</div>' : '';
 }
 function topbar(title, right) {
-  return `<div class="plab-topbar"><button class="plab-back" data-act="home">‹ Practice Lab</button><div class="plab-title">${esc(title)}</div><div class="plab-small plab-muted">${esc(right || '')}</div></div>`;
+  return `<div class="plab-topbar"><button class="plab-back" data-act="home">‹ Practice Lab</button><h1 class="plab-title">${esc(title)}</h1><div class="plab-small plab-muted">${esc(right || '')}</div></div>`;
 }
 
 function home() {

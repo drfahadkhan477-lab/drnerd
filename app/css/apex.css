@@ -254,7 +254,7 @@
 .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,60%,100%{opacity:.25}30%{opacity:1}}
 .setup{padding:16px;font-size:13px;line-height:1.6;color:var(--muted)}
-.setup h4{font-size:13px;color:var(--text);margin:0 0 8px}
+.setup h2{font-size:13px;font-weight:700;line-height:1.5;color:var(--text);margin:0 0 8px}
 .setup input{width:100%;border:1.5px solid var(--border);border-radius:10px;
   padding:9px 11px;font-family:var(--font-mono);font-size:13px;margin:8px 0;
   background:var(--white);color:var(--text)}
