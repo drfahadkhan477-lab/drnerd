@@ -115,6 +115,16 @@ const MEASURE = ({ ids, layout, paint, vars }) => ids.map(id => {
   return rec;
 });
 const FREEZE = '*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;caret-color:transparent!important}';
+/* A short animation still needs a frame to finish. Background pages can keep its backwards-fill start pose for
+   the whole comparison. Finish finite effects explicitly before each read, without waiting on perpetual motion. */
+const STILL = () => {
+  for (let pass = 0; pass < 4; pass++) {
+    const pending = document.getAnimations().filter(a => a.effect && Number.isFinite(a.effect.getTiming().iterations) && a.playState !== 'finished');
+    if (!pending.length) break;
+    pending.forEach(a => { try { a.finish(); } catch (_) {} });
+  }
+};
+const measure = async (page, options) => { await page.evaluate(STILL); return page.evaluate(MEASURE, options); };
 const SEED = () => { let a = 123456789; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
 /* every image loaded, or failed, and decoded: a figure that arrived late in one page is a difference of timing, not of CSS */
 const IMAGES = () => {
@@ -262,6 +272,7 @@ const palettes = css => {
         await X.page.evaluate(IMAGES);
         await quiet(X.page);
       }
+      await A.page.evaluate(STILL); await B.page.evaluate(STILL);
       const [n, f] = [await A.page.evaluate(SNAPSHOT, { props: SEEN }), await B.page.evaluate(SNAPSHOT, { props: SEEN })];
       visits++; elements += Object.keys(n).length;
       const tag = `${vpn} ${st.name}`;
@@ -325,14 +336,14 @@ const palettes = css => {
     const vars = Object.fromEntries(useful.map(x => [x.id, x.c.vars]));
     for (const p of pal) for (const k of ['N', 'F', 'C']) {
       await setPalette(pages[k], p);
-      if (still.length) (await pages[k].evaluate(MEASURE, { ids: still, layout: LAYOUT, paint: PAINT, vars })).forEach((r, i) => { res[p.name][k][still[i]] = r; });
+      if (still.length) (await measure(pages[k], { ids: still, layout: LAYOUT, paint: PAINT, vars })).forEach((r, i) => { res[p.name][k][still[i]] = r; });
     }
     for (const id of hovered) for (const k of ['N', 'F', 'C']) {
       let on = true;
       try { await pages[k].hover('[data-fx="' + id + '"]', { timeout: 5000 }); } catch (e) { on = false; }
       for (const p of pal) {
         await setPalette(pages[k], p);
-        res[p.name][k][id] = on ? (await pages[k].evaluate(MEASURE, { ids: [id], layout: LAYOUT, paint: PAINT, vars }))[0] : null;
+        res[p.name][k][id] = on ? (await measure(pages[k], { ids: [id], layout: LAYOUT, paint: PAINT, vars }))[0] : null;
       }
       await pages[k].mouse.move(0, 0);
       problems.hovered++;

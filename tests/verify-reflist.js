@@ -51,7 +51,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
   /* The ids of the cards on screen, in order, read from each card's own Edit button. */
   const drawnIds = () => page.evaluate(() => [...document.querySelectorAll('.ref-card .ref-acts .chip:first-child')]
-    .map(b => (/refEdit\('([^']+)'\)/.exec(b.getAttribute('onclick')) || [])[1]));
+    .map(b => b.dataset.refId));
   const pager = () => page.evaluate(() => { const p = document.getElementById('refPager'); return !p ? null : { button: p.querySelector('button').textContent.trim(), left: p.querySelector('span').textContent.trim() }; });
   const toLibrary = async id => {
     await page.evaluate(id => goRefs(id), id);

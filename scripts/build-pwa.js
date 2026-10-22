@@ -905,6 +905,13 @@ step('lift the base64 fonts out of the stylesheet', () => {
   if (found !== 4) throw new Error(`expected 4 inlined font faces, found ${found}`);
 });
 
+/* Keep documentation in source and the standalone build. It need not ride on every split-shell download. */
+step('ship stylesheet rules without whitespace-delimited documentation', () => {
+  const { stripCssDocs } = require('./css-docs.js');
+  html = html.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi,
+    (_, open, css, close) => open + stripCssDocs(css) + close);
+});
+
 /* PRELOADED, SO THE FIRST LAYOUT HAS THEM. Lifted out, the faces are only
    requested once the parser has read the 170 KB stylesheet and style finds
    text that uses them, and with font-display:swap the first layout does not
