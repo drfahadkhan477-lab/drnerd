@@ -102,9 +102,16 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
 
   const ids = await page.evaluate(() => CHAPTERS.slice(0, 4).map(ch => POOL.find(q => q.ch === ch && !q.bad).id));
   const [A, B, C, D] = ids;
+  /* A question with a figure, for the chips: the first turn of its thread carries the figure. */
+  const F = await page.evaluate(ids => (POOL.find(q => q.img && !q.bad && ids.indexOf(q.id) < 0) || {}).id || null, ids);
   const system = r => ((r && r.systemInstruction && r.systemInstruction.parts && r.systemInstruction.parts[0] && r.systemInstruction.parts[0].text) || '');
   const turns = r => ((r && r.contents) || []).map(c => ({ role: c.role, parts: c.parts || [] }));
   const lastUser = r => { const t = turns(r).filter(x => x.role === 'user'); const l = t[t.length - 1]; return l ? l.parts.map(p => p.text || '').join('') : ''; };
+  /* What the fellow's turn asks: its last text part. The first turn of a thread on a question with a figure carries the figure
+     first, after a rule about text inside images (src/core/vision.js withFigures), and the turn's own text after both; joined,
+     the prompt compared equal to nothing. Every chip failed so on the owner's bank, where the question open had a figure. */
+  const asks = r => { const t = turns(r).filter(x => x.role === 'user'); const l = t[t.length - 1]; const txt = l ? l.parts.filter(p => typeof p.text === 'string') : []; return txt.length ? txt[txt.length - 1].text : ''; };
+  const figured = r => turns(r).some(x => x.role === 'user' && x.parts.some(p => p.inlineData));
   const toolResult = r => { const t = turns(r).filter(x => x.role === 'user'); const l = t[t.length - 1]; const p = l && l.parts.filter(x => x.functionResponse)[0]; return p ? String(p.functionResponse.response.content) : null; };
   const showing = id => page.waitForFunction(id => { const q = QBYID[id], t = document.querySelector('.q-tag'); return S.screen === 'quiz' && !!t && t.textContent.indexOf('Question ' + q.n + ' · ' + q.ch) >= 0 && !!document.getElementById('qFlag'); }, id, { timeout: 8000 }).then(() => true, () => false);
   const reached = (screen, ms) => page.waitForFunction(s => S.screen === s, screen, { timeout: ms || 8000 }).then(() => true, () => false);
@@ -297,7 +304,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await asked(1);
     await idle();
     const opened = await page.evaluate(() => document.getElementById('shell').classList.contains('ai-open'));
-    ok('it opens the panel that was shut and sends the prompt about the choice', row.shut && opened && captured.length === 1 && lastUser(captured[0]) === prompts.why, lastUser(captured[0]).slice(0, 80));
+    ok('it opens the panel that was shut and sends the prompt about the choice', row.shut && opened && captured.length === 1 && asks(captured[0]) === prompts.why, asks(captured[0]).slice(0, 80));
     ok('and what it sends comes with what the fellow chose', has(system(captured[0]), 'WHAT THE FELLOW DID ON THIS ITEM'));
     const chips = () => page.evaluate(() => [...document.querySelectorAll('#aiChips [data-chip]')].map(c => c.textContent.trim()).filter(t => t !== 'Clear thread'));
     const answeredChips = await chips();
@@ -307,12 +314,17 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await openQuiz(B);
     const freshChips = await chips();
     ok('and not before: on a question not yet answered it is gone, the others stay', freshChips.indexOf('Why did I pick that?') < 0 && freshChips.indexOf('Explain my misses') >= 0 && freshChips.indexOf('Plan my week') >= 0, freshChips.join(' | '));
+    /* The chips are pressed on a question with a figure, as on the owner's bank: the figure rides with the thread, and the
+       prompt is still the chip's. */
+    await page.evaluate(() => { for (const k of Object.keys(CHATS)) delete CHATS[k]; });
+    const onFigure = !!F && await openQuiz(F);
     for (const [label, want] of [['Explain my misses', prompts.misses], ['Plan my week', prompts.plan]]) {
       captured.length = 0;
       await page.evaluate(label => { const b = [...document.querySelectorAll('#aiChips [data-chip]')].find(c => c.textContent.trim() === label); b.click(); }, label);
       await asked(1);
       await idle();
-      ok('the chip "' + label + '" sends its prompt', captured.length === 1 && lastUser(captured[0]) === want, lastUser(captured[0]).slice(0, 60));
+      ok('the chip "' + label + '" sends its prompt', onFigure && captured.length === 1 && figured(captured[0]) && asks(captured[0]) === want,
+        !onFigure ? 'no question with a figure was open' : !captured.length ? 'nothing was sent' : !figured(captured[0]) ? 'no figure rode with the thread, so this is not the case it guards' : asks(captured[0]).slice(0, 60));
     }
     /* With no key the panel shows its setup screen: that is the answer, and nothing is sent. */
     await fresh();
@@ -343,7 +355,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(() => { const b = [...document.querySelectorAll('.results-btns .btn')].find(x => /Explain my misses/.test(x.textContent)); b.click(); });
     await asked(1);
     await idle();
-    ok('and it opens Apex with the prompt about them', captured.length === 1 && lastUser(captured[0]) === prompts.misses, lastUser(captured[0]).slice(0, 60));
+    ok('and it opens Apex with the prompt about them', captured.length === 1 && asks(captured[0]) === prompts.misses, asks(captured[0]).slice(0, 60));
     /* A prompt asked while a reply is still on its way is not sent over it, and does not say it was. */
     await fresh();
     await openQuiz(A);

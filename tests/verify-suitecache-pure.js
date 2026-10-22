@@ -261,13 +261,19 @@ head('the environment, the clock, and the tools');
   NOW = new Date('2026-10-15T09:00:00');
   ok('the day', same(go(['verify-a']).execs, ['verify-a']));
   ok('and the run says the date changed', (() => { NOW = new Date('2026-10-16T09:00:00'); return /the date changed \(2026-10-15 → 2026-10-16\)/.test(go(['verify-a'], { plan: true }).text); })());
-  NOW = new Date('2026-10-14T12:00:00');
-  go(['verify-a']);
+  /* The plan names the newest pass's first difference, so the newest must differ from this run in the runner alone. A day no pass
+     was made on is measured, and its pass is the newest; a day with a pass kept from earlier is reused or not by what else is kept,
+     which on Windows left the pass of the 15th newest and the plan naming the date. */
+  NOW = new Date('2026-10-17T12:00:00');
+  const made = go(['verify-a']);
   OVERRIDE = { runner: 'another-version-of-the-code' };
-  ok('and the plan says that is why', /RUN\s+verify-a\s+the code of the result cache or the runner changed/.test(go(['verify-a'], { plan: true }).text));
+  const why = go(['verify-a'], { plan: true }).text;
+  ok('and the plan says that is why', same(made.execs, ['verify-a']) && /RUN\s+verify-a\s+the code of the result cache or the runner changed/.test(why),
+     made.execs.length ? (why.split('\n').filter(l => /verify-a/.test(l))[0] || '').trim() : 'the run before it measured nothing, so its pass is not the newest');
   const rn = go(['verify-a']);
   ok('a pass made by other code of the cache or the runner is measured again', same(rn.execs, ['verify-a']), rn.execs.join(','));
   OVERRIDE = {};
+  NOW = new Date('2026-10-14T12:00:00');
   go(['verify-a']);
   const other = go(['verify-a'], {}, { engine: 'webkit' });
   ok('another engine has its own passes: webkit measures what chromium already has', same(other.execs, ['verify-a']), other.execs.join(','));

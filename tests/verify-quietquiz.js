@@ -166,7 +166,11 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
       seen = record(); render(); render = real; out.refsRedrawn = seen.slice();
       openSearch(); await frames(() => S.screen === 'search' && document.getElementById('sQ')); out.searchArrives = RUNNING(); out.searchQuiet = await arrived();
       let word = null;
-      for (const q of ALL_Q) { for (const x of (q.s + ' ' + q.ex).split(/[^A-Za-z]+/)) { if (x.length >= 7 && search(x, { limit: 5 }).filter(h => h.meta.kind === 'q').length) { word = x; break; } } if (word) break; }
+      /* A word the search screen finds more than five questions for, which the reading below needs: the first long word with any
+         hit was taken before, and on the owner's bank that found two. Each word is asked once. */
+      const found = x => search(x, { limit: 400 }).filter(h => h.meta.kind === 'q' && QBYID[h.meta.id] && !QBYID[h.meta.id].bad).length;
+      const tried = new Set();
+      for (const q of ALL_Q) { for (const x of (q.s + ' ' + q.ex).split(/[^A-Za-z]+/)) { if (x.length < 7 || tried.has(x.toLowerCase())) continue; tried.add(x.toLowerCase()); if (found(x) > 5) { word = x; break; } } if (word) break; }
       seen = record(); searchInput(word); await wait(500); searchInput(word + ' ' + word); await wait(500); render = real;
       out.searchRedrawn = seen.slice(); out.hits = SQ.hits.length;
       return out;

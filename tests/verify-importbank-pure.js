@@ -293,9 +293,13 @@ head('where a licensed bank may be');
   const figs = inRepo(put('source/b2.csv'), { figures: path.join(repo, 'assets') });
   ok('and a figures folder in the repository outside source/ and content/', !figs.r && /the figures folder is in the repository at assets/.test(figs.why), figs.why || 'imported');
   const link = path.join(dir, 'link.csv');
-  fs.symlinkSync(put('tests/linked.csv'), link);
-  const linked = inRepo(link, { out: path.join(dir, 'out-linked') });
-  ok('a link from outside to a file in the repository is followed', !linked.r && /the file is in the repository at tests\/linked\.csv/.test(linked.why), linked.why || 'imported');
+  /* Windows makes a symbolic link only for an administrator or in Developer Mode (EPERM otherwise): the check is then not measured, and not counted. */
+  let made = true; try { fs.symlinkSync(put('tests/linked.csv'), link); } catch (_) { made = false; }
+  if (!made) console.log('  UNMEASURED  this file system makes no symbolic links here: a link from outside to a file in the repository');
+  else {
+    const linked = inRepo(link, { out: path.join(dir, 'out-linked') });
+    ok('a link from outside to a file in the repository is followed', !linked.r && /the file is in the repository at tests\/linked\.csv/.test(linked.why), linked.why || 'imported');
+  }
 }
 
 head('a refused import leaves the last bank as it was');
