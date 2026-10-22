@@ -639,7 +639,7 @@ html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;-
    the step colours under it, instead of a squeezed lower-case serif. */
 .pearl-concept{position:relative;font-family:inherit;font-weight:750;font-size:clamp(24px,2.4vw,32px);line-height:1.15;
   letter-spacing:-.02em;margin:0 0 16px;padding-bottom:12px}
-
+.pearl-concept::first-letter{text-transform:uppercase}
 .pearl-concept::after{content:'';position:absolute;left:0;bottom:0;width:64px;height:4px;border-radius:4px;
   background:linear-gradient(90deg,var(--teal-ink),var(--pk-violet),var(--pk-pink))}
 .pearl-steps{gap:10px}

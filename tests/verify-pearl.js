@@ -465,7 +465,27 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       inkIsEdge: steps.every(li => role(li) && getComputedStyle(role(li)).color === edge(li)),
       edges: steps.map(edge),
       labelsDiffer: new Set(want.map(s => s.label)).size,
-      first: getComputedStyle(document.getElementById('pearlConcept'), '::first-letter').textTransform,
+      /* A browser does not report ::first-letter through getComputedStyle (it answered 'none' with the capital on screen),
+         so the capital is measured: the heading's text is as wide as the word with its first letter raised, not as the
+         word as stored. Only a concept that starts in lower case can tell the two apart. */
+      first: (() => {
+        const h = document.getElementById('pearlConcept'), text = h.textContent;
+        if (!/^[a-z]/.test(text)) return 'UNMEASURED: the concept "' + text.slice(0, 1) + '…" does not start in lower case';
+        const r = document.createRange(); r.selectNodeContents(h);
+        /* The first letter is a box of its own, so the text is two rectangles on one line: measured from the first's left
+           to the last's right, and only when they share a line. */
+        const rects = [...r.getClientRects()];
+        if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
+        const cs = getComputedStyle(h), probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
+        document.body.appendChild(probe);
+        probe.textContent = text; const lower = probe.getBoundingClientRect().width;
+        probe.textContent = text[0].toUpperCase() + text.slice(1); const upper = probe.getBoundingClientRect().width;
+        probe.remove();
+        const w = Math.max(...rects.map(x => x.right)) - Math.min(...rects.map(x => x.left));
+        return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
+          : `heading ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
+      })(),
       capPx: cap ? parseFloat(getComputedStyle(cap).fontSize) : 0,
     };
   });
