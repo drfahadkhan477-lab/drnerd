@@ -442,6 +442,70 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>goHome());
   await settled(page,()=>S.screen==='home'&&!!document.querySelector('.hero-h1'),{label:'home screen'});
 
+  head('each step says what it is, in a colour of its own');
+  /* A ladder of steps in one grey read as a paragraph to wade through. Each step now wears the relationship
+     Pearl.lesson names for it, in words and in a colour; the label's ink is its step's edge, and steps of different
+     kinds are drawn apart. */
+  await page.evaluate(() => {
+    const all = pearlAll();
+    pearlCurrent = all.find(p => p.figKey && refImgSrc(p.figKey) && new Set(Pearl.lesson(p.text).map(s => s.label)).size >= 2) ||
+      all.find(p => new Set(Pearl.lesson(p.text).map(s => s.label)).size >= 2) || all[0];
+    S.screen = 'home'; render();
+  });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'a pearl with steps on the home screen' });
+  const kinds = await page.evaluate(() => {
+    const want = Pearl.lesson(pearlCurrent.text);
+    const steps = [...document.querySelectorAll('#pearlCard .pearl-step')];
+    const role = li => li.querySelector('.pearl-role');
+    const edge = li => getComputedStyle(li).borderLeftColor;
+    const cap = document.querySelector('#pearlFig figcaption');
+    return {
+      want: want.map(s => s.label), shown: steps.map(li => role(li) ? role(li).textContent.trim() : ''),
+      kinds: steps.map(li => li.dataset.kind || ''),
+      inkIsEdge: steps.every(li => role(li) && getComputedStyle(role(li)).color === edge(li)),
+      edges: steps.map(edge),
+      labelsDiffer: new Set(want.map(s => s.label)).size,
+      first: getComputedStyle(document.getElementById('pearlConcept'), '::first-letter').textTransform,
+      capPx: cap ? parseFloat(getComputedStyle(cap).fontSize) : 0,
+    };
+  });
+  ok('every step is labelled with the relationship Pearl.lesson names for it', kinds.shown.length >= 2 && kinds.shown.join('|') === kinds.want.join('|'),
+     kinds.shown.join(' · ') + ' / wanted ' + kinds.want.join(' · '));
+  ok('and carries its kind for the colour', kinds.kinds.every(k => /^(core|detail|contrast|caveat|why|condition)$/.test(k)), kinds.kinds.join(' · '));
+  ok('each label is drawn in its own step\'s edge colour', kinds.inkIsEdge, kinds.edges.join(' · '));
+  ok('steps of different kinds are drawn in different colours', new Set(kinds.edges).size === kinds.labelsDiffer && kinds.labelsDiffer >= 2,
+     `${new Set(kinds.edges).size} colours for ${kinds.labelsDiffer} kinds`);
+  ok('the concept is set with a capital', kinds.first === 'uppercase', kinds.first);
+  ok('the figure\'s caption is at a reading size', kinds.capPx >= 13, kinds.capPx + 'px');
+
+  /* Landscape on a tablet gives the card a fixed height, and the steps scroll inside it: a line cut at the edge read as
+     the end of the pearl. While more is below, the card says so; at the end it does not. */
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.evaluate(() => {
+    pearlCurrent = pearlAll().slice().sort((a, b) => Pearl.lesson(b.text).length - Pearl.lesson(a.text).length || b.text.length - a.text.length)[0];
+    S.screen = 'home'; render();
+  });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl in landscape' });
+  await settled(page, () => !document.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity),
+    { label: 'the steps to arrive' });
+  const more = await page.evaluate(() => {
+    const wrap = document.getElementById('pearlBody'), card = document.getElementById('pearlCard');
+    const cue = () => getComputedStyle(card.querySelector('.pearl-morecue')).display !== 'none';
+    return { over: wrap.scrollHeight - wrap.clientHeight, cue: cue(), cls: card.classList.contains('pearl-more') };
+  });
+  if (more.over > 4) {
+    ok('while the steps run past the card, it says there is more', more.cls && more.cue, `${more.over}px below the fold`);
+    await page.evaluate(() => { const w = document.getElementById('pearlBody'); w.scrollTop = w.scrollHeight; });
+    await settled(page, () => !document.getElementById('pearlCard').classList.contains('pearl-more'), { timeout: 3000, label: 'the cue to clear at the end' })
+      .catch(() => {});
+    const end = await page.evaluate(() => getComputedStyle(document.querySelector('#pearlCard .pearl-morecue')).display);
+    ok('and at the end it no longer does', end === 'none', end);
+  } else {
+    ok('while the steps run past the card, it says there is more', false, `UNMEASURED: the longest pearl fits (${more.over}px over), so nothing ran past`);
+    ok('and at the end it no longer does', false, 'UNMEASURED: nothing ran past the card');
+  }
+  await page.setViewportSize({ width: 1100, height: 1100 });
+
   head('an empty library is not an error');
   const empty = await page.evaluate(() => {
     const keep = REF.slice();

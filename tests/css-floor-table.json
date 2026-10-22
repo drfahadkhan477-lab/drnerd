@@ -1,6 +1,6 @@
 {
   "floor": "13.4",
-  "source": "@mdn/browser-compat-data 8.1.6, support.safari_ios",
+  "source": "@mdn/browser-compat-data 8.1.7, support.safari_ios",
   "ok": {
     "atrule": [
       "@font-face",
@@ -205,6 +205,7 @@
       "::-webkit-scrollbar",
       "::after",
       "::before",
+      "::first-letter",
       "::marker",
       "::placeholder",
       ":active",
@@ -591,9 +592,20 @@
       "anchor-size": "26",
       "stretch": "27"
     },
+    "justify-content": {
+      "end": "15.4",
+      "left": "15.4",
+      "right": "15.4",
+      "safe": "17.6",
+      "start": "15.4",
+      "unsafe": "17.6"
+    },
     "left": {
       "anchor": "26",
       "anchor-size": "26"
+    },
+    "letter-spacing": {
+      "percentages": "17.4"
     },
     "list-style": {
       "symbols": null
@@ -648,7 +660,11 @@
       "none": "16"
     },
     "place-items": {
-      "anchor-center": "26"
+      "anchor-center": "26",
+      "end": "15.6",
+      "self-end": "15.6",
+      "self-start": "15.6",
+      "start": "15.6"
     },
     "right": {
       "anchor": "26",

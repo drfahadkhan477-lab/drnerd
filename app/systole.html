@@ -6341,8 +6341,16 @@ function mountPearlCurrent(){
   state.raf=requestAnimationFrame(paint);
   pearlTrace=state;
 }
+/* In a landscape grid the steps can run past the card and scroll inside it, and a line cut at the edge read as the end
+   of the pearl. While there is more below, the card says so: the column's foot fades and a cue points down. */
+function pearlFit(){
+  const wrap=document.getElementById('pearlBody'), card=document.getElementById('pearlCard');
+  if(!wrap||!card) return;
+  card.classList.toggle('pearl-more',!wrap.hidden&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
+}
 function mountHero(){
   mountPearlCurrent();
+  pearlFit();
   if(heroMon){ heroMon.destroy(); heroMon=null; }
   if(heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
   const cv=document.getElementById('heroECG');
@@ -6532,7 +6540,8 @@ function pearlFigure(p){
   const cap=(p.figCap||'').trim();
   return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();this.click()}"
-    title="Enlarge figure"><img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
+    title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')} Figure <i>${icon('expand','icon-sm')} Tap to enlarge</i></span>
+    <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
 }
 /* The measurements are what the question turns on, so they are marked. Applied
@@ -6545,13 +6554,20 @@ function pearlMark(escaped){
 /* One sentence, broken where it already bends. A single step means the
    sentence had no joint worth cutting — it is then set as prose rather than as
    a ladder of one, which would be a numbered list with nothing to order. */
+/* Each step wears the relationship Pearl.lesson names for it, in a colour of its own, so the shape of the argument (the
+   idea, the detail under it, the contrast, the caveat) is seen before a word is read. The label is text, not only colour. */
+const PEARL_KINDS={'Core idea':['core',icon('target','icon-sm')],'Detail':['detail',icon('book','icon-sm')],
+  'Contrast':['contrast',icon('repeat','icon-sm')],'Caveat':['caveat',icon('alert','icon-sm')],
+  'Why it matters':['why',icon('zap','icon-sm')],'Condition':['condition',icon('flag','icon-sm')]};
 function pearlLadder(p){
   let steps=[];
   try{ steps=(typeof Pearl!=='undefined')?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
   if(steps.length<2) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
-  return `<ol class="pearl-steps pearl-in">${steps.map((s,i)=>
-    `<li class="pearl-step" style="--i:${i}"><span class="pearl-n">${i+1}</span>
-      <span class="pearl-txt">${s.lead?`<em class="pearl-lead">${e(s.lead)}</em>`:''}${pearlMark(e(s.text))}</span></li>`).join('')}</ol>`;
+  return `<ol class="pearl-steps pearl-in">${steps.map((s,i)=>{
+    const k=PEARL_KINDS[s.label]||PEARL_KINDS.Detail;
+    return `<li class="pearl-step" data-kind="${k[0]}" style="--i:${i}"><span class="pearl-n">${i+1}</span>
+      <span class="pearl-txt"><span class="pearl-role">${k[1]}${e(s.label||'Detail')}</span>
+      ${s.lead?`<em class="pearl-lead">${e(s.lead)}</em> `:''}${pearlMark(e(s.text))}</span></li>`; }).join('')}</ol>`;
 }
 function pearlRecall(){
   const card=document.getElementById('pearlCard'); if(!card)return;
@@ -6562,6 +6578,7 @@ function pearlRecall(){
   const button=document.getElementById('pearlRecall');
   button.textContent=hide?'Reveal':'Recall';
   button.setAttribute('aria-expanded',String(!hide));
+  pearlFit();
 }
 function pearlOpen(){ if(pearlCurrent)goRefs(pearlCurrent.id); }
 function pearlNext(){
@@ -6593,6 +6610,7 @@ function pearlNext(){
   if(card&&html) card.insertAdjacentHTML('beforeend',html);
   if(card) card.classList.toggle('has-fig',!!html);
   if(card)card.classList.remove('is-recalling');
+  pearlFit();
 }
 /* ═══════════ Putting the whole bank on the device ═══════════
    Only meaningful in the split build — see the header of offline-patch.js. */
@@ -6817,12 +6835,13 @@ function buildHome(){
         <div class="pearl-main">
           <div class="pearl-head">
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
-            <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
+            <span class="pearl-cap" id="pearlCap">${e(p.chapter||'From your notes')}</span>
             <button class="pearl-next" onclick="pearlNext()"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
           <h2 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h2>
-          <div class="pearl-bodywrap" id="pearlBody">${pearlLadder(p)}</div>
+          <div class="pearl-bodywrap" id="pearlBody" onscroll="pearlFit()">${pearlLadder(p)}</div>
+          <span class="pearl-morecue" aria-hidden="true">${icon('chevron-down','icon-sm')} More</span>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
           <p class="pearl-prompt" id="pearlPrompt" hidden aria-label="Recall this concept">?</p>
           <div class="pearl-actions">
