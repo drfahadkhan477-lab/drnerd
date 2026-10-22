@@ -289,7 +289,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        up after a bounded wait so a genuine mismatch still fails. */
     const cardWait = document.querySelector('.pearl-card');
     for (let i = 0; i < 40; i++) {
-      if (cardWait && Math.abs(cv.getBoundingClientRect().width - cardWait.clientWidth) < 1) break;
+      /* and its foot the prose column's: the card measures that when it changes size (a figure arriving late grows the
+         band under the prose), a frame after. */
+      const pm = cardWait && cardWait.querySelector('.pearl-main');
+      if (cardWait && Math.abs(cv.getBoundingClientRect().width - cardWait.clientWidth) < 1 &&
+          pm && Math.abs(cv.getBoundingClientRect().bottom - pm.getBoundingClientRect().bottom) <= 1) break;
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
     const r = cv.getBoundingClientRect();
