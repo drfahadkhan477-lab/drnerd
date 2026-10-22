@@ -477,7 +477,8 @@ function loadSeen(k,d){
 }
 function saveJSON(k,v){
   if(!Store.set(k,v)) warnStorage();
-  else if(k in SEEN){ try{ SEEN[k]=localStorage.getItem(k); }catch(_){} }
+  /* Only the bytes this save wrote are seen. Another window may have replaced them before a read-back. */
+  else if(k in SEEN){ try{ SEEN[k]=JSON.stringify(v); }catch(_){} }
 }
 let storageWarned=false;
 function warnStorage(){
@@ -2858,8 +2859,8 @@ function refCard(r){
       <div class="ref-top">
         <div class="ref-title">${e(r.title||'Untitled note')}</div>
         <div class="ref-acts">
-          <button class="chip" onclick="refEdit('${r.id}')">Edit</button>
-          <button class="chip" onclick="refRemove('${r.id}')">Delete</button>
+          <button class="chip" data-ref-id="${e(r.id)}" onclick="refEdit(this.dataset.refId)">Edit</button>
+          <button class="chip" data-ref-id="${e(r.id)}" onclick="refRemove(this.dataset.refId)">Delete</button>
         </div>
       </div>
       ${r.source?`<div class="ref-src">${icon('folder','icon-sm')} ${e(r.source)}</div>`:''}
@@ -2986,7 +2987,7 @@ function buildMemory(){
       <div class="ref-card">
         <div class="ref-top">
           <div class="ref-title" style="font-weight:500">${e(m.text)}</div>
-          <div class="ref-acts"><button class="chip" onclick="memForget('${m.id}')">Delete</button></div>
+          <div class="ref-acts"><button class="chip" data-memory-id="${e(m.id)}" onclick="memForget(this.dataset.memoryId)">Delete</button></div>
         </div>
         <div class="ref-src">kept ${e(new Date(m.created||0).toLocaleDateString())}</div>
       </div>`).join('');
@@ -4844,7 +4845,9 @@ function takeShared(k,text){
 }
 function onProgressStorage(e){
   if(e.storageArea!==localStorage||(e.key!==KEY&&e.key!==REF_KEY)) return;
-  takeShared(e.key,e.newValue);
+  /* A queued event can describe a record older than this window's own save or catch-up. Read what is there now. */
+  let text; try{ text=localStorage.getItem(e.key); }catch(_){ return; }
+  takeShared(e.key,text);
 }
 function catchUpShared(){
   for(const k of [KEY,REF_KEY]){ let text=null; try{ text=localStorage.getItem(k); }catch(_){ return; } takeShared(k,text); }

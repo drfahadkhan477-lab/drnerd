@@ -423,6 +423,59 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await C.close();
   }
 
+  head('delayed notifications do not roll back a newer record');
+  {
+    /* Hold the browser's actual notifications, as if this window had been suspended. It catches up when seen, writes
+       its own change, and only then hears the older notifications. Their payloads describe history, not storage now. */
+    await B.evaluate(() => {
+      window.__heldShared = [];
+      window.removeEventListener('storage', onProgressStorage);
+      window.__holdShared = e => { if (e.storageArea === localStorage && (e.key === KEY || e.key === REF_KEY)) window.__heldShared.push(e); };
+      window.addEventListener('storage', window.__holdShared);
+    });
+    await A.evaluate(() => { S.flagged.add('zq-before-wake'); save(); refAdd('Zq before wake', 'An invented note before the other window wakes.', '', ''); });
+    const queued = await until(B, () => __heldShared.some(e => e.key === KEY) && __heldShared.some(e => e.key === REF_KEY));
+    await B.evaluate(() => {
+      catchUpShared();
+      S.flagged.add('zq-after-wake'); save();
+      refAdd('Zq after wake', 'An invented note after catching up.', '', '');
+      window.__heldShared.forEach(e => onProgressStorage(e));
+      window.removeEventListener('storage', window.__holdShared);
+      window.addEventListener('storage', onProgressStorage);
+    });
+    const state = await B.evaluate(() => ({ flag: S.flagged.has('zq-after-wake'), note: REF.some(r => r.title === 'Zq after wake'),
+      diskFlag: JSON.parse(localStorage.getItem(KEY)).flagged.includes('zq-after-wake'),
+      diskNote: JSON.parse(localStorage.getItem(REF_KEY)).some(r => r.title === 'Zq after wake') }));
+    ok('an older native progress notification cannot undo this window\'s newer saved flag', queued && state.diskFlag && state.flag);
+    ok('an older native reference notification cannot undo this window\'s newer saved note', queued && state.diskNote && state.note);
+  }
+
+  head('a save only marks the bytes it wrote as seen');
+  {
+    /* Another process can write after setItem returns and before saveJSON reads storage again. Interleave that write
+       at the storage boundary, as the launch test above interleaves a write at its read boundary. The next catch-up
+       must take it: a successful save knows its own bytes, not every byte already on disk by the time it checks. */
+    const state = await B.evaluate(() => {
+      const set = Storage.prototype.setItem;
+      let interleaved = false;
+      Storage.prototype.setItem = function(k, text) {
+        const out = set.call(this, k, text);
+        if(this === localStorage && k === REF_KEY && !interleaved) {
+          interleaved = true;
+          set.call(this, k, JSON.stringify(JSON.parse(text).concat({id:'zq-between-save-and-read', title:'Zq interleaved', tags:'', body:'An invented intervening note.', ts:Date.now()})));
+        }
+        return out;
+      };
+      try {
+        refAdd('Zq own save', 'An invented note from this window.', '', '');
+        catchUpShared();
+        return {interleaved, disk:JSON.parse(localStorage.getItem(REF_KEY)).some(r => r.id === 'zq-between-save-and-read'),
+          taken:REF.some(r => r.id === 'zq-between-save-and-read'), own:REF.some(r => r.title === 'Zq own save')};
+      } finally { Storage.prototype.setItem = set; }
+    });
+    ok('a reference written between this window\'s save and its read-back is still taken when seen', state.interleaved && state.disk && state.taken && state.own);
+  }
+
   head('nothing throws');
   ok('no page errors in either window', errors.length === 0, errors.slice(0, 3).join(' | '));
 

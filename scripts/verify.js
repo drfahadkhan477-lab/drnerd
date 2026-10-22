@@ -102,6 +102,7 @@ const SUITES = [
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
   ['content',      'a question broken in a way the fellow cannot see is never shipped silently'],
   ['backup',       'a restored backup appears now, not only after the next launch'],
+  ['backup-ids',   'restored reference and memory ids stay data when their Edit and Delete buttons are pressed'],
   ['windows',      'a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
   ['ink',          'green, red and amber text a reader can read in every theme, the colours that fill left as they are'],
@@ -514,7 +515,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
+const PENDING_RECORD = ['backup-ids', 'floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
