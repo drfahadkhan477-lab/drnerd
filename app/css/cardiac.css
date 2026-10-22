@@ -791,7 +791,7 @@ html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress
 .ct-bar:has(i[data-w="0"]){background:repeating-linear-gradient(90deg,
   var(--border2) 0 5px,transparent 5px 10px)}
 .ct-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
-.ct-foot b{color:var(--teal-ink);font-weight:800}
+.ct-foot b{color:var(--ch-ink,var(--teal-ink));font-weight:800}   /* its chapter's ink (chInk), set on the tile */
 
 /* ── feedback blip on the reveal header ── */
 .reveal-header{position:relative;overflow:hidden}

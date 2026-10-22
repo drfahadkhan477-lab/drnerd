@@ -97,7 +97,8 @@
     --red-bg:#2D0A0A;--red-b:#7F1D1D;
     --amber-bg:#271B04;--amber-b:#78350F;
     --green-ink:#4ADE80;--red-ink:#F87171;--amber-ink:#FB923C;
-    /* Midnight's own accent ink and tints: it kept Daylight's, so its chips were pale blue on the dark page. */
+    /* Auto on a dark device takes Midnight's accent ink and tints (tablet.css sets them for Midnight chosen): it kept
+       Daylight's, so its chips were pale blue on the dark page. */
     --teal-ink:#38BDF8;--teal3:#13406A;--teal4:#0B2540;
   }
 }

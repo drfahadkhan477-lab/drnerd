@@ -4653,9 +4653,10 @@ const CH_SHORT={"Arrhythmias":"Rhythm","Congenital Heart Disease":"Congenital",
   "Systemic Hypertension & Hypotension":"BP","Valvular Disease":"Valves","Vascular Disease":"Vascular"};
 const CH_COLORS={"Arrhythmias":"#6366F1","Congenital Heart Disease":"#EC4899","Coronary Artery Disease":"#EF4444","Heart Failure & Cardiomyopathies":"#3B82F6","Miscellaneous Topics":"#8B5CF6","Pericardial Disease":"#F59E0B","Pulmonary Circulation Disorders":"#10B981","Systemic Disorders":"#F97316","Systemic Hypertension & Hypotension":"#0891B2","Valvular Disease":"#7C3AED","Vascular Disease":"#14B8A6"};
 /* A chapter's colour as text: its badge's name sits on the colour at a tint, and the colour itself read at 3.2-3.8:1 there.
-   The ink is the colour taken 45% of the way to the theme's text, dark or light, so the hue still says which chapter. */
+   The ink is the colour taken 45% of the way to the theme's text, dark or light, so the hue still says which chapter. A
+   chapter with no colour of its own (a bank's own chapters) is given 'var(--teal)' by its caller, and takes the accent ink. */
 function chInk(hex){
-  const m=/^#([0-9a-f]{6})$/i.exec(hex||''); if(!m) return hex;
+  const m=/^#([0-9a-f]{6})$/i.exec(hex||''); if(!m) return 'var(--teal-ink)';
   const to=themeIsDark()?[255,255,255]:[15,23,42], n=parseInt(m[1],16), c=[n>>16&255,n>>8&255,n&255];
   return '#'+c.map((v,k)=>Math.round(v+(to[k]-v)*0.45).toString(16).padStart(2,'0')).join('');
 }
@@ -7019,7 +7020,7 @@ function buildStudy(){
     const m=masteryFor(ch);
     const col=CH_COLORS[ch]||'#5EEAD4';
     return `<button class="ch-tile" onclick="startQuiz(${JSON.stringify(ch).replace(/"/g,'&quot;')})"
-        style="--accent:${col}">
+        style="--accent:${col};--ch-ink:${chInk(col)}">
       <span class="ct-ico">${chIcon(ch)}</span>
       <span class="ct-name">${e(ch)}</span>
       <span class="ct-meta">${cnt} Q${fig?` · ${fig} figures`:''}</span>

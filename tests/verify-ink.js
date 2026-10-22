@@ -17,12 +17,14 @@
  *     chapter's figure and Retry Missed. The mock report writes its score and chapter figures through the same semText,
  *     and is not opened here;
  *   · the correct option's letter badge is still white on the deep green;
- *   · the accent as text takes --teal-ink, the same way: no rule or inline style writes text in --teal, --teal2 or
- *     --accent, and in each of those twelve states the ink clears 4.5:1 on the page, a card, the raised surface, the
+ *   · the accent as text takes --teal-ink, the same way: no rule or inline style is written color:var(--teal),
+ *     var(--teal2) or var(--accent) (the scan reads that form; the chapter icons' color:var(--accent,var(--teal)) is a
+ *     graphic's colour, held to 3:1, and is not read), and in each of those twelve states the ink clears 4.5:1 on the page, a card, the raised surface, the
  *     accent's tint (--teal4) and the green tint some of it sits on;
  *   · real accent and chapter text, in every state: a chapter's badge on the quiz and its label in search results, a
- *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, and the
- *     Echo screen's selected tab (text on the ink rather than in it);
+ *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, a chapter
+ *     tile's percentage (in its own chapter's ink, not the accent's), and the Echo screen's selected tab (text on the ink
+ *     rather than in it, with no glass sheen under it); a chapter with no colour of its own takes the accent ink;
  *   · every <select> on those screens has a name a screen reader can say (two had none);
  *   · nothing throws.
  */
@@ -101,7 +103,7 @@ const TOOLS = () => {
       for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
     }
     const accentInline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
-    ok('no stylesheet or inline style sets color: to --teal, --teal2 or --accent; accent text takes --teal-ink', accent.length === 0 && accentInline.length === 0,
+    ok('no stylesheet or inline style is written color:var(--teal), var(--teal2) or var(--accent); accent text takes --teal-ink', accent.length === 0 && accentInline.length === 0,
       accent.concat(accentInline.map(l => 'systole.html:' + l)).slice(0, 6).join('; ') || 'none');
   }
 
@@ -213,6 +215,7 @@ const TOOLS = () => {
         [['the source picked', '.prov-pick.on .pp-name']]],
       ['the rhythm lab', () => { goLab(); }, null, [['the phase chip', '#physioPhase']]],
       ['the Echo screen', () => { goEcho(); }, null, [['the selected tab', '.echo-tab.on']]],
+      ['Study', () => { goStudy(); }, null, [['a chapter tile\'s percentage', '.ch-tile .ct-foot b']]],
     ];
     const per = {}, names = [];
     for (const [id, scheme, label] of STATES) {
@@ -228,6 +231,18 @@ const TOOLS = () => {
       ok(`${k} clears 4.5:1 in every theme`, bad.length === 0,
         bad.length ? bad.slice(0, 4).map(([l, r]) => l + ' ' + (r.missing ? 'missing' : r.ratio)).join(', ') : 'lowest ' + Math.min(...per[k].map(([, r]) => r.ratio)));
     }
+    await theme('daylight', 'light');
+    await at(() => { goStudy(); });
+    const tile = await page.evaluate(() => { const T = window.__ink, b = document.querySelector('.ch-tile .ct-foot b'); if (!b) return null;
+      const t = b.closest('.ch-tile'), ink = T.colour(getComputedStyle(t).getPropertyValue('--ch-ink').trim() || 'transparent'), c = T.parse(getComputedStyle(b).color);
+      return { own: T.same(c, ink), accent: T.same(c, T.token('--teal-ink')), ink: getComputedStyle(t).getPropertyValue('--ch-ink').trim() }; });
+    ok('a chapter tile\'s percentage is in its own chapter\'s ink, not the accent\'s', !!tile && tile.own && !tile.accent, JSON.stringify(tile));
+    ok('a chapter with no colour of its own (a bank\'s own chapters) takes the accent ink', await page.evaluate(() => chInk('var(--teal)') === 'var(--teal-ink)' && /^#[0-9a-f]{6}$/.test(chInk('#6366F1'))));
+    await at(() => { goEcho(); });
+    const sheen = await page.evaluate(() => { const on = document.querySelector('.echo-tab.on'), off = document.querySelector('.echo-tab:not(.on)');
+      return { on: on ? getComputedStyle(on, '::after').backgroundImage : null, off: off ? getComputedStyle(off, '::after').backgroundImage : null }; });
+    ok('the selected Echo tab has no glass sheen under its text, where the others have one', !!sheen.on && sheen.on === 'none' && !!sheen.off && /gradient/.test(sheen.off),
+      JSON.stringify({ on: sheen.on && sheen.on.slice(0, 40), off: sheen.off && sheen.off.slice(0, 40) }));
     await at(() => { openSearch(); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); });
     const unnamed = await page.evaluate(() => { const s = [...document.querySelectorAll('select')];
       return { n: s.length, bare: s.filter(x => !x.labels.length && !(x.getAttribute('aria-label') || '').trim() && !x.getAttribute('aria-labelledby')).map(x => '#' + x.id) }; });
