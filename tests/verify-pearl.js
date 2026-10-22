@@ -574,7 +574,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
      the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => { S.screen = 'home'; render(); });
+  /* What sets the width of that line is the widest thing in it that cannot wrap: the head, with its chapter chip. A
+     pearl from a chapter with a short name fitted either way, so the pearl is given the bank's longest chapter name. */
+  await page.evaluate(() => { pearlCurrent = Object.assign({}, pearlCurrent, { chapter: CHAPTERS.slice().sort((a, b) => b.length - a.length)[0] });
+    S.screen = 'home'; render(); });
   await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl on a phone' });
   const phone = await page.evaluate(() => { const c = document.getElementById('pearlCard').getBoundingClientRect();
     return [...document.getElementById('pearlCard').children].filter(e => e.getBoundingClientRect().width)
