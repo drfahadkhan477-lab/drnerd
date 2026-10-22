@@ -5,7 +5,8 @@
    only the ECG paper, the two sides of the heart and the ink on an accent button are its own. */
 .plab{
   --plab-bg:var(--bg);--plab-card:var(--card);--plab-ink:var(--text);--plab-muted:var(--muted);--plab-line:var(--border);
-  --plab-accent:var(--teal-ink);--plab-accent-ink:#fff;   /* the accent's ink: white on the fill read 4.1:1 in Daylight */
+  --plab-accent:var(--accent);--plab-accent-ink:#fff;
+  --plab-fill:var(--teal-ink);   /* an accent button's fill, the accent's text ink: white on Daylight's accent read 4.1:1 */
   --plab-good:var(--green-ink);--plab-good-bg:var(--green-bg);--plab-bad:var(--red-ink);--plab-bad-bg:var(--red-bg);
   --plab-warn:var(--amber-ink);--plab-warn-bg:var(--amber-bg);
   --plab-trace:var(--text);--plab-grid:#f0d9d9;--plab-grid-major:#e6b9b9;--plab-right:#cfe0f5;--plab-left:#f6d6d0;
@@ -52,7 +53,7 @@ canvas.plab-view{width:100%;display:block;border:1px solid var(--plab-line);bord
 .plab-cursor.plab-on{opacity:0.8}
 .plab-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
 .plab-btn{border:1px solid var(--plab-line);background:var(--plab-card);border-radius:12px;padding:10px 16px;min-height:48px;font-weight:600}
-.plab-btn.plab-primary,.plab-btn[aria-pressed="true"]{background:var(--plab-accent);color:var(--plab-accent-ink);border-color:var(--plab-accent)}
+.plab-btn.plab-primary,.plab-btn[aria-pressed="true"]{background:var(--plab-fill);color:var(--plab-accent-ink);border-color:var(--plab-fill)}
 .plab-btn:disabled{opacity:0.5;cursor:default}
 
 .plab-options{display:grid;gap:10px;margin:14px 0}
