@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -114,6 +114,8 @@
 <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2"/><path d="M7 7l1 13h8l1-13"/></symbol>
 
 <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4.5h10v6a5 5 0 0 1-10 0Z"/><path d="M7 6H4.5v1.5A3 3 0 0 0 7 10.5M17 6h2.5v1.5A3 3 0 0 0 17 10.5"/><path d="M12 15.5V18M8.5 20.5h7"/></symbol>
+
+<symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5.2C12 3.9 10.9 3 9.6 3 8.2 3 7.2 4 7.1 5.2 5.5 5.5 4.4 6.9 4.7 8.5 3.5 9.3 3.1 10.9 3.7 12.1 3.1 13.4 3.3 15 4.4 15.9 4.3 17.6 5.5 19 7.2 19.1 7.8 20.3 8.9 21 10.2 21 11.3 21 12 20.2 12 19.1Z"/><path d="M12 5.2C12 3.9 13.1 3 14.4 3 15.8 3 16.8 4 16.9 5.2 18.5 5.5 19.6 6.9 19.3 8.5 20.5 9.3 20.9 10.9 20.3 12.1 20.9 13.4 20.7 15 19.6 15.9 19.7 17.6 18.5 19 16.8 19.1 16.2 20.3 15.1 21 13.8 21 12.7 21 12 20.2 12 19.1Z"/><path d="M12 5.2v13.9M8.2 9c1.1 0 1.9.8 1.9 1.9M15.8 9c-1.1 0-1.9.8-1.9 1.9M8.3 15.2c1 0 1.8-.6 1.8-1.6M15.7 15.2c-1 0-1.8-.6-1.8-1.6"/></symbol>
 
 <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
 
@@ -6107,6 +6109,7 @@ function renderNow(){
   } else if(!q){ figCache={id:null,node:null}; }
   attachEvents();
   if(typeof mountHero==='function') mountHero();
+  if(typeof mountHomePager==='function') mountHomePager();
   if(typeof mountHeroHeart3d==='function') mountHeroHeart3d();
   if(typeof mountPhysio==='function') mountPhysio();
   if(typeof mountLab==='function') mountLab();
@@ -6802,7 +6805,16 @@ function buildHome(){
   const masteryFrac=TOTAL_Q?CHAPTERS.reduce((s,ch)=>s+masteryFor(ch)*POOL.filter(q=>q.ch===ch).length,0)/TOTAL_Q:0;
   const masteryPct=Math.round(masteryFrac*100);
 
-  return `<div class="home-wrap anim-fade" data-home="${S.homeLayout}">
+  return `<div class="home-pages" id="homePages">
+    <div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">
+      <span class="home-tab-pill" aria-hidden="true"></span>
+      <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" onclick="homeGo(0)">${icon('home','icon-sm')}<span>Home</span></button>
+      <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" onclick="homeGo(1)">${icon('brain','icon-sm')}<span>Brain</span></button>
+      <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" onclick="homeGo(2)">${icon('activity','icon-sm')}<span>Labs</span></button>
+    </div>
+    <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
+    <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
+    <div class="home-wrap anim-fade" data-home="${S.homeLayout}">
     <div class="hero-live">
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
@@ -6871,24 +6883,6 @@ function buildHome(){
       </div>
     </div>
 
-    <div class="door-row">
-      <button class="door door-wide" onclick="goStudy()">
-        <span class="door-ic">${icon("book")}</span>
-        <span class="door-txt"><b>Chapters</b><i>${S.mock?'A mock block is open · resume it here':`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
-        <span class="door-go">${icon('arrow-right','icon-sm')}</span>
-      </button>
-      <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
-      <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
-      <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
-      <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
-      <button class="door" onclick="goPractice()"><span class="door-ic">${icon("heart-pulse")}</span><span class="door-txt"><b>Practice Lab</b><i>sounds, tracings, strips</i></span></button>
-      <button class="door door-wide" onclick="goLab()">
-        <span class="door-ic">${icon("activity")}</span>
-        <span class="door-txt"><b>Rhythm Lab</b><i>every trace, drawn live</i></span>
-        <span class="door-go">${icon('arrow-right','icon-sm')}</span>
-      </button>
-
-    </div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">
@@ -6899,7 +6893,166 @@ function buildHome(){
         <button class="hello-x" onclick="dismissHello()">Got it</button>
       </div>
     </div>`:''}
+    </div></div></section>
+    <section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>
+    <section class="home-page home-labs" id="homePage2" role="tabpanel" aria-labelledby="homeTab2"><div class="home-page-in">${buildLabs()}</div></section>
+    </div>
   </div>`;
+}
+
+/* ═══════════ The home screen's three pages ═══════════
+   Home (the hero, the pearl, the progress bar), Brain (what is remembered, chapter by chapter, and the study doors)
+   and Labs (the Rhythm Lab, Echo and the Practice Lab), side by side in one horizontal scroller that snaps a page at a
+   time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
+   the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
+   was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
+let homePage=0, homeRaf=0, homeTween=0, homeSized=false;
+function buildBrain(dueN,seenN,covered,masteryPct,today){
+  const ret=avgRetention();
+  const rows=CHAPTERS.map(ch=>{
+    const qs=POOL.filter(q=>q.ch===ch), m=Math.round(masteryFor(ch)*100), col=CH_COLORS[ch]||'var(--teal)';
+    const seen=qs.filter(q=>S.srs[q.id]||S.practice[q.id]).length, due=qs.filter(q=>{ const c=S.srs[q.id]; return c&&c.due<=todayISO(); }).length;
+    return `<button class="brain-ch" style="--c:${col};--ci:${chInk(col)}" onclick="startQuiz(${JSON.stringify(ch).replace(/"/g,'&quot;')})"
+        aria-label="${e(ch)}: ${m} percent mastered, ${seen} of ${qs.length} seen${due?`, ${due} due`:''}">
+      <span class="brain-ch-ic" aria-hidden="true">${chIcon(ch)}</span>
+      <span class="brain-ch-main"><b>${e(ch)}</b>
+        <span class="brain-bar" aria-hidden="true"><i data-w="${m}"></i></span>
+        <span class="brain-ch-meta">${seen} of ${qs.length} seen${due?` · <em>${due} due</em>`:''}</span></span>
+      <span class="brain-ch-pct" aria-hidden="true">${m}%</span>
+    </button>`;
+  }).join('');
+  return `<header class="page-head"><span class="page-eyebrow">${icon('brain','icon-sm')} Your brain</span>
+      <h2 class="page-title">What you remember</h2>
+      <p class="page-sub">Mastery is FSRS's own estimate of what you would recall today, chapter by chapter.</p></header>
+    <div class="brain-hero">
+      <div class="brain-gauge" role="img" aria-label="${masteryPct}% mastered, ${covered}% seen">
+        <svg viewBox="0 0 132 132" aria-hidden="true">
+          <circle class="bg-track" cx="66" cy="66" r="58"/>
+          <circle class="bg-seen" cx="66" cy="66" r="58" pathLength="100" stroke-dasharray="0 100" data-frac="${covered}" transform="rotate(-90 66 66)"/>
+          <circle class="bg-track" cx="66" cy="66" r="44"/>
+          <circle class="bg-mast" cx="66" cy="66" r="44" pathLength="100" stroke-dasharray="0 100" data-frac="${masteryPct}" transform="rotate(-90 66 66)"/>
+        </svg>
+        <div class="brain-mid">${icon('brain')}<b>${masteryPct}%</b><span>mastered</span></div>
+      </div>
+      <div class="brain-side">
+        <div class="brain-stats">
+          <span class="brain-stat bs-seen"><b>${covered}%</b><i>seen · ${seenN} of ${TOTAL_Q}</i></span>
+          <span class="brain-stat bs-due"><b>${dueN}</b><i>due for review</i></span>
+          <span class="brain-stat bs-today"><b>${today.a}</b><i>answered today${today.a?` · ${today.c} right`:''}</i></span>
+          <span class="brain-stat bs-ret"><b>${ret==null?'—':ret+'%'}</b><i>recall, cards scheduled</i></span>
+        </div>
+        ${dueN?`<div class="brain-actions"><button class="brain-go primary" onclick="startQuiz(null,'due')">${icon('repeat','icon-sm')} Review ${dueN} due</button></div>`:''}
+      </div>
+    </div>
+    <h3 class="page-h3">Chapters</h3>
+    <div class="brain-chs">${rows}</div>
+    <h3 class="page-h3">Study tools</h3>
+    <div class="door-row brain-doors">
+      <button class="door door-wide" onclick="goStudy()">
+        <span class="door-ic">${icon("book")}</span>
+        <span class="door-txt"><b>Chapters</b><i>${S.mock?'A mock block is open · resume it here':`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
+        <span class="door-go">${icon('arrow-right','icon-sm')}</span>
+      </button>
+      <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
+      <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
+      <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
+      <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
+      <button class="door" onclick="goAnnotations()"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
+    </div>`;
+}
+function buildLabs(){
+  return `<header class="page-head"><span class="page-eyebrow">${icon('activity','icon-sm')} Labs</span>
+      <h2 class="page-title">Hear it, see it, read it</h2>
+      <p class="page-sub">Traces drawn live, echo views to explore, and sounds and strips to practise on.</p></header>
+    <div class="labs-grid">
+      <button class="lab-card lab-rhythm" onclick="goLab()">
+        <svg class="lab-art" viewBox="0 0 240 60" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M0 34h46l6-3 6 3h14l5 6 6-36 6 44 5-14h16l8-6 9 6h40l6-3 6 3h14l5 6 6-36 6 44 5-14h14"/></svg>
+        <span class="lab-ic" aria-hidden="true">${icon('activity')}</span>
+        <span class="lab-txt"><b>Rhythm Lab</b><i>Every trace, drawn live</i></span>
+        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
+      </button>
+      <button class="lab-card lab-echo" onclick="goEcho()">
+        <svg class="lab-art lab-art-echo" viewBox="0 0 240 120" aria-hidden="true"><path d="M120 6 30 114M120 6l90 108"/><path class="la-w1" d="M66 70a70 70 0 0 1 108 0"/><path class="la-w2" d="M48 92a96 96 0 0 1 144 0"/><path class="la-w3" d="M84 48a44 44 0 0 1 72 0"/></svg>
+        <span class="lab-ic" aria-hidden="true">${icon('waveform')}</span>
+        <span class="lab-txt"><b>Echo Studio</b><i>Views, findings and the arithmetic</i></span>
+        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
+      </button>
+      <button class="lab-card lab-practice" onclick="goPractice()">
+        <span class="lab-art lab-art-beat" aria-hidden="true">${icon('heart-solid')}</span>
+        <span class="lab-ic" aria-hidden="true">${icon('heart-pulse')}</span>
+        <span class="lab-txt"><b>Practice Lab</b><i>Sounds, tracings, strips</i></span>
+        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
+      </button>
+    </div>`;
+}
+function homeMotionOK(){ return !(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+/* Where the scroller is, as a fraction of a page (0 to 2): the pill's place, each page's depth, and which page is the
+   current one. Read in a frame, so a fast swipe costs one layout read per frame. */
+function homePagerScroll(){ if(!homeRaf) homeRaf=requestAnimationFrame(()=>{ homeRaf=0; homePagerSync(); }); }
+function homePagerSync(){
+  const pg=document.getElementById('homePager'), root=document.getElementById('homePages');
+  if(!pg||!root) return;
+  const w=pg.clientWidth||1, f=Math.max(0,Math.min(2,pg.scrollLeft/w));
+  root.style.setProperty('--hp-f',f.toFixed(4));
+  pg.querySelectorAll('.home-page').forEach((el,i)=>el.style.setProperty('--hp-d',Math.min(1,Math.abs(f-i)).toFixed(4)));
+  const i=Math.round(f);
+  if(i!==homePage||!root.dataset.page){ homePage=i; homeMark(); }
+}
+/* The current page is the tab that is selected and the panel a screen reader reads; the others are inert until a swipe
+   or a tab brings them in, so Tab never walks into a page that is off the screen. */
+function homeMark(){
+  const root=document.getElementById('homePages'); if(!root) return;
+  root.dataset.page=String(homePage);
+  for(let i=0;i<3;i++){
+    const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
+    if(tab){ tab.setAttribute('aria-selected',String(i===homePage)); tab.tabIndex=i===homePage?0:-1; }
+    if(page){ if(i===homePage){ page.removeAttribute('aria-hidden'); page.inert=false; page.removeAttribute('inert'); }
+      else { page.setAttribute('aria-hidden','true'); page.inert=true; page.setAttribute('inert',''); } }
+  }
+  if(homePage===1) homeFillBrain();
+}
+/* The gauge and the chapter bars fill when the Brain page is first seen, not while it is off to the side. */
+function homeFillBrain(){
+  const page=document.getElementById('homePage1'); if(!page||page.dataset.filled) return;
+  page.dataset.filled='1';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    /* A round cap on a zero-length arc is a dot, so an empty ring is not drawn at all. */
+    page.querySelectorAll('circle[data-frac]').forEach(c=>{ const f=+c.dataset.frac||0;
+      c.style.strokeDasharray=f.toFixed(1)+' 100'; c.classList.toggle('is-on',f>0); });
+    page.querySelectorAll('.brain-bar i[data-w]').forEach(b=>{ b.style.width=(b.dataset.w||'0')+'%'; });
+  }));
+}
+function homeGo(i){
+  const pg=document.getElementById('homePager'); if(!pg) return;
+  i=Math.max(0,Math.min(2,i)); homePage=i; homeMark();
+  const to=i*pg.clientWidth, from=pg.scrollLeft;
+  if(homeTween){ cancelAnimationFrame(homeTween); homeTween=0; }
+  if(!homeMotionOK()||Math.abs(to-from)<1){ pg.scrollLeft=to; homePagerSync(); return; }
+  /* Eased by hand rather than scrollTo's smooth behaviour, which an iPad before 15.4 does not have; the snap is lifted
+     for the glide, or it would pull every intermediate position back to a page. */
+  pg.style.scrollSnapType='none';
+  const t0=performance.now(), dur=420;
+  const step=now=>{
+    const k=Math.min(1,Math.max(0,(now-t0)/dur)), ease=1-Math.pow(1-k,3);
+    pg.scrollLeft=from+(to-from)*ease;
+    if(k<1) homeTween=requestAnimationFrame(step); else { homeTween=0; pg.style.scrollSnapType=''; homePagerSync(); }
+  };
+  homeTween=requestAnimationFrame(step);
+}
+function homeTabKey(ev){
+  const k=ev.key, n=k==='ArrowRight'?homePage+1:k==='ArrowLeft'?homePage-1:k==='Home'?0:k==='End'?2:null;
+  if(n==null) return;
+  ev.preventDefault(); homeGo(n);
+  const tab=document.getElementById('homeTab'+homePage); if(tab) tab.focus();
+}
+/* After every render of the home screen: back to the page that was showing, without a glide, and kept there if the
+   iPad turns (the page width changes and the scroller would otherwise land between two pages). */
+function mountHomePager(){
+  const pg=document.getElementById('homePager'); if(!pg) return;
+  pg.scrollLeft=homePage*pg.clientWidth;
+  homePagerSync(); homeMark();
+  if(!homeSized){ homeSized=true;
+    window.addEventListener('resize',()=>{ const p=document.getElementById('homePager'); if(p){ p.scrollLeft=homePage*p.clientWidth; homePagerSync(); } }); }
 }
 
 /* ── the page the material moved to ──────────────────────────────────────────
