@@ -217,6 +217,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the connective that opens a step is lifted into its label',
      lad.joints[1].lead === 'then' && lad.joints[2].lead === 'so',
      JSON.stringify(lad.joints.map(s => s.lead)));
+  /* The lead is drawn in the step's line, before its text: "so It is…" on the owner's iPad. The lead takes the capital
+     (as drawn), and the text after it keeps the case the sentence gave it. */
+  const leadDrawn = await page.evaluate(() => { const li = document.createElement('em'); li.className = 'pearl-lead'; li.textContent = 'so';
+    const c = document.getElementById('pearlCard') || document.body; c.appendChild(li); const tt = getComputedStyle(li).textTransform; li.remove(); return tt; });
+  ok('a step after its lead reads on from it: the lead capitalised, the text not',
+     /^the first six months/.test(lad.joints[2].text) && leadDrawn === 'capitalize', `${leadDrawn} · ${lad.joints[2].lead} ${lad.joints[2].text.slice(0, 30)}`);
   /* The single most likely way this goes wrong: an em-dash PAIR is a
      parenthesis, and cutting inside it leaves a fragment and an aside. */
   ok('a pair of em-dashes is a parenthesis, not a joint', lad.paired === 1, String(lad.paired));
@@ -565,6 +571,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { over: w.scrollHeight - w.clientHeight, fade: c.classList.contains('pearl-more'), btn: getComputedStyle(b).display, stacked: getComputedStyle(c).flexDirection }; });
   ok('in portrait the pearl is stacked, the steps across the whole card', port.stacked === 'column', port.stacked);
   ok('and where every step fits, no step is faded and nothing offers more', port.over <= 4 && !port.fade && port.btn === 'none', JSON.stringify(port));
+  /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
+     the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => { S.screen = 'home'; render(); });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl on a phone' });
+  const phone = await page.evaluate(() => { const c = document.getElementById('pearlCard').getBoundingClientRect();
+    return [...document.getElementById('pearlCard').children].filter(e => e.getBoundingClientRect().width)
+      .map(e => ({ el: e.className.split(' ')[0], over: Math.round(e.getBoundingClientRect().right - c.right) })); });
+  ok('on a phone every part of the pearl stays inside its card', phone.length > 1 && phone.every(p => p.over <= 1), JSON.stringify(phone));
   await page.setViewportSize({ width: 1100, height: 1100 });
 
   head('a pearl always has a picture beside it');

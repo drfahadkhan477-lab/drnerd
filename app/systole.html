@@ -6102,6 +6102,8 @@ function renderNow(){
   app.dataset.screen=S.screen;
   app.innerHTML=withScreenTitle(buildScreen());
   app.classList.toggle('again',again);
+  /* The Apex button is outside #app; on Home it shares the foot of the screen with the pages' tab bar (home.css). */
+  document.body.classList.toggle('on-home',S.screen==='home');
   document.body.classList.toggle('rating-active',
     S.screen==='quiz'&&S.answered&&S.mode==='due');
   const zone=app.querySelector('.fig-zone');
@@ -6838,12 +6840,6 @@ function buildHome(){
   const masteryPct=Math.round(masteryFrac*100);
 
   return `<div class="home-pages" id="homePages">
-    <div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">
-      <span class="home-tab-pill" aria-hidden="true"></span>
-      <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" onclick="homeGo(0)">${icon('home','icon-sm')}<span>Home</span></button>
-      <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" onclick="homeGo(1)">${icon('brain','icon-sm')}<span>Brain</span></button>
-      <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" onclick="homeGo(2)">${icon('activity','icon-sm')}<span>Labs</span></button>
-    </div>
     <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
     <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
     <div class="home-wrap anim-fade" data-home="${S.homeLayout}">
@@ -6911,6 +6907,12 @@ function buildHome(){
     </div></div></section>
     <section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>
     <section class="home-page home-labs" id="homePage2" role="tabpanel" aria-labelledby="homeTab2"><div class="home-page-in">${buildLabs(dueN)}</div></section>
+    </div>
+    <div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">
+      <span class="home-tab-pill" aria-hidden="true"></span>
+      <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" onclick="homeGo(0)">${icon('home','icon-sm')}<span>Home</span></button>
+      <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" onclick="homeGo(1)">${icon('brain','icon-sm')}<span>Brain</span></button>
+      <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" onclick="homeGo(2)">${icon('activity','icon-sm')}<span>Labs</span></button>
     </div>
   </div>`;
 }

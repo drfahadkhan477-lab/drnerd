@@ -91,10 +91,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
   head('one screen tall');
+  /* The tab bar is at the foot of the screen, under the pages (the owner asked, 22 October 2026), 12px off the bottom
+     edge (no home indicator here), and the Apex button keeps clear of it: beside it on an iPad, above it on a phone. */
   const fits = async (label) => {
-    const g = await page.evaluate(() => ({ doc: document.documentElement.scrollHeight, vh: innerHeight,
-      pagerBottom: document.getElementById('homePager').getBoundingClientRect().bottom }));
-    ok(`${label}: the screen does not scroll, the pages do`, g.doc <= g.vh + 1 && Math.abs(g.pagerBottom - g.vh) <= 1, JSON.stringify(g));
+    const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect();
+      const tabs = r(document.querySelector('.home-tabs')), pager = r(document.getElementById('homePager')), fab = r(document.getElementById('aiFab'));
+      return { doc: document.documentElement.scrollHeight, vh: innerHeight, pagerBottom: Math.round(pager.bottom),
+        tabsTop: Math.round(tabs.top), tabsBottom: Math.round(tabs.bottom),
+        fabClear: fab.width > 0 && (fab.right <= tabs.left || fab.left >= tabs.right || fab.bottom <= tabs.top) }; });
+    ok(`${label}: the screen does not scroll, the pages do`, g.doc <= g.vh + 1, JSON.stringify(g));
+    ok(`${label}: the tab bar is at the foot of the screen, under the pages`, g.pagerBottom <= g.tabsTop && Math.abs(g.vh - 12 - g.tabsBottom) <= 1, JSON.stringify(g));
+    ok(`${label}: and the Apex button is clear of it`, g.fabClear, JSON.stringify(g));
   };
   await fits('landscape');
 
@@ -257,6 +264,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const turned = await state();
   ok('turned to portrait, Brain is still the page', Math.abs(turned.f - 1) < 0.01 && turned.sel.join() === '1', JSON.stringify(turned));
   await fits('portrait');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settled(page, () => document.getElementById('homePager').clientWidth === 390, { label: 'the pager to take a phone\'s width' });
+  await still('on a phone');
+  await fits('a phone');
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await settled(page, () => document.getElementById('homePager').clientWidth === 820, { label: 'the pager back at the portrait width' });
+  await still('back in portrait');
 
   head('reduced motion');
   await page.emulateMedia({ reducedMotion: 'reduce' });

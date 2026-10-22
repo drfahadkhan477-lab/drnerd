@@ -13,9 +13,12 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
 @media(min-width:768px){.home-pages{--hp-pad:24px}}
 @media (min-width:1024px) and (orientation:landscape){.home-pages{--hp-pad:clamp(20px,3vw,44px)}}
 
-/* ── the tab bar: glass, with a pill that slides ── */
+/* ── the tab bar: glass, with a pill that slides ──
+   At the foot of the screen, under the pages, where a thumb rests on an iPad held in two hands and where the system's
+   own tab bars sit; it keeps clear of the home indicator. The Apex button shares that strip: beside the bar where the
+   screen is wide enough for both, lifted above it where it is not. */
 .home-tabs{position:relative;flex:none;display:flex;align-self:center;width:calc(100% - 32px);max-width:420px;
-  margin:12px 0 10px;padding:4px;border-radius:999px;border:1px solid var(--border2);
+  margin:8px 0 max(12px,var(--sab));padding:4px;border-radius:999px;border:1px solid var(--border2);
   background:linear-gradient(145deg,var(--gl-shine),transparent 60%);background-color:var(--card);
   box-shadow:inset 0 1px 0 var(--gl-rim),0 12px 30px -18px rgba(3,12,24,.5);
   backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4)}
@@ -36,10 +39,22 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
   scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
 .home-pager::-webkit-scrollbar{display:none}
 .home-page{flex:0 0 100%;width:100%;min-width:0;box-sizing:border-box;scroll-snap-align:start;
-  overflow-x:hidden;overflow-y:auto;padding:4px var(--hp-pad) calc(var(--sab) + 96px)}
+  overflow-x:hidden;overflow-y:auto;padding:16px var(--hp-pad) 24px}
 .home-page-in{max-width:900px;margin:0 auto;transform-origin:50% 20%;
   transform:scale(calc(1 - var(--hp-d,0) * .06));opacity:calc(1 - var(--hp-d,0) * .45)}
 @media(prefers-reduced-motion:reduce){.home-page-in{transform:none;opacity:1}.home-tab-pill{will-change:auto}}
+/* The bar is 420px at most and centred; the Apex button (about 100px, 14px from the edge) fits beside it from 700px.
+   Narrower, the button stands on the bar's row, and the pages keep their last lines out from under it. */
+/* The page's own padding is the only space above the hero: the hero's margin and the wrap's padding (the screen's
+   before the pages) each added theirs, and the hero began 48px under the bar. The wrap's foot room was for the Apex
+   button, which no longer stands over the page. */
+#homePage0 .home-wrap{padding-top:0;padding-bottom:0}
+#homePage0 .hero-live{margin-top:0}
+body.on-home .ai-fab{bottom:max(14px,var(--sab))}
+@media(max-width:699px){
+  body.on-home .ai-fab{bottom:calc(max(12px,var(--sab)) + 70px)}
+  .home-page{padding-bottom:72px}
+}
 /* Landscape on a tablet: the first page is the one-screen grid of tablet.css (the hero, and the pearl beside it),
    now sized by its page rather than by the viewport, since the tab bar takes a strip off the top. */
 @media (min-width:1024px) and (orientation:landscape){
@@ -295,7 +310,9 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
    them the figure is a band as wide as the card, the picture beside its caption (one above the other on a phone); a
    pearl with no figure ends in a band with its chapter's emblem. The rule of step colours runs along the top. */
 @media (max-width:1023px),(orientation:portrait){
-  .pearl-card{flex-direction:column}
+  /* nowrap: a phone's rule (cardiac.css) wraps the row, and a column that wraps sizes each line to its widest text, so
+     on a phone the steps ran off the card's right edge. */
+  .pearl-card{flex-direction:column;flex-wrap:nowrap}
   .pearl-card .pearl-rule{flex:0 0 4px;background:linear-gradient(90deg,var(--teal-ink),var(--pk-violet) 45%,var(--pk-pink) 75%,var(--amber-ink))}
   .pearl-card .pearl-fig{flex:none;max-width:none;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);
     grid-template-areas:"label label" "img cap";column-gap:20px;row-gap:4px;align-items:center;
@@ -328,3 +345,17 @@ html[data-theme="dark"] .home-pages{--hp-b:#A78BFA;--hp-on:#0B1220}
   background:radial-gradient(closest-side,rgba(248,113,113,.30),rgba(248,113,113,0));animation:heroHalo 1.05s ease-in-out infinite}
 @keyframes heroHalo{0%,100%{transform:scale(.94);opacity:.55}14%{transform:scale(1.04);opacity:.9}28%{transform:scale(.97);opacity:.65}}
 @media(prefers-reduced-motion:reduce){.hero-live::after,.hero-heart-plate::before{animation:none}}
+/* ── the heart keeps off the hero's numbers ──
+   It is drawn in the hero's top right corner, over the text column's end. In a tablet's landscape grid the hero is a
+   narrow, tall card, and the heart sat on the "today" figure with half the card empty under it: there it moves to the
+   middle of that space, larger, its orbit with it. On a phone it is smaller, and the figures wrap short of it. */
+@media (min-width:1024px) and (orientation:landscape){
+  #app[data-screen="home"] .hero-heart-plate,#app[data-screen="home"] .hero-heart-3d{
+    top:clamp(190px,36%,320px);right:0;left:0;margin:0 auto;width:clamp(210px,22vw,290px);height:clamp(228px,24vw,314px)}
+  #app[data-screen="home"] .hero-orbit{top:calc(clamp(190px,36%,320px) - 26px);right:0;left:0;margin:0 auto;width:clamp(270px,28vw,360px);height:clamp(280px,29vw,370px)}
+}
+@media(max-width:520px){
+  .hero-heart-plate,.hero-heart-3d{width:128px;height:148px;top:52px}
+  .hero-orbit{width:190px;height:214px;top:36px}
+  .hero-line{max-width:calc(100% - 116px)}
+}

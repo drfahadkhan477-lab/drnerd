@@ -661,7 +661,7 @@ html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;-
 .pearl-card .pearl-step[data-kind="core"] .pearl-txt{font-size:var(--t-lead);font-weight:550;line-height:1.55}
 /* The connective the step was cut at, back in its sentence where it reads as English, in the step's ink. */
 .pearl-card .pearl-lead{display:inline;margin:0;font-family:inherit;font-size:inherit;font-style:normal;font-weight:700;
-  letter-spacing:normal;text-transform:none;color:var(--k);vertical-align:baseline}
+  letter-spacing:normal;text-transform:capitalize;color:var(--k);vertical-align:baseline}
 .pearl-card .pearl-step .pearl-num{color:var(--k);background:var(--card);box-shadow:inset 0 0 0 1px var(--k-b)}
 /* A pearl with no joint is one statement: set as the core idea's callout. */
 .pearl-card .pearl-body{padding:14px 16px;border:1px solid var(--teal3);border-left:4px solid var(--teal-ink);

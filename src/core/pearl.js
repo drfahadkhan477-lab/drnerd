@@ -181,6 +181,9 @@ function isPearl(raw) {
   const s = clean(String(raw || '')).trim();
   if (s.length < MIN || s.length > MAX) return false;
   if (LEADS.test(s)) return false;                   // the FIRST sentence may not
+  /* A figure's caption, a table's title or an extraction stub is not a statement about a patient: "Caption: FIG. 67.7
+     Five-year cumulative incidence…" passed every test below and was shown as a pearl titled "Caption:". */
+  if (NOT_PROSE.test(s)) return false;
   const parts = sentences(s);
   if (parts.length > MAX_RUN + 1) return false;      // +1: cleaning can split a lead-in
   if (!parts.every(usable)) return false;
@@ -214,6 +217,11 @@ function runs(sents) {
    What actually makes a board pearl is a DECISION or a DISCRIMINATION: a
    threshold you act on, a rule with an exception, one thing told from another.
    That is what the weights below reward. */
+const NOT_PROSE = /^(?:caption\b|(?:fig(?:ure)?|table|box|panel)\.?\s*[\dA-Z]|extracted text\b|source:|page \d)/i;
+/* A pearl has to SAY something to act on or tell apart: a threshold with its unit, an instruction, a contrast or a
+   cause. Notes carry many true sentences that are descriptions ("Primary causes of death are as reported on the…"),
+   and a score built from length and digits let them through. */
+const CLAIM = /\b(should|must|never|always|only|first-line|contraindicat\w*|indicated|recommended|reduce[sd]?|increase[sd]?|lower(?:s|ed)?|raise[sd]?|improve[sd]?|worsen\w*|predict\w*|associated with|caused? by|due to|leads? to|results? in|more likely|less likely|most common|hallmark|diagnos\w+|treat\w*|unlike|whereas|rather than|versus|in contrast)\b/i;
 const ENUM = /\b(include|includes|including|such as|for example|comprise|consist)\b/i;
 const ACT  = /\b(should|must|never|always|only|first-line|contraindicat\w*|indicated|requires?|avoid|before|within|at least|no longer|instead of|failure to)\b/i;
 const DISC = /\b(distinguish\w*|differentiat\w*|unlike|whereas|rather than|versus|vs\.?|in contrast|but not|as opposed to|mistak\w+|misread)\b/i;
@@ -255,7 +263,13 @@ function clean(raw) {
        removal cannot see those, so anything still standing goes here — these
        are markup characters, and none of them belongs in clinical prose. */
     .replace(/[*_`]/g, '')
+    /* What the PDF left in the notes: a word broken across a line ("Fol- low-up"), and the book's page number
+       "(p. 927)", which tells a reader nothing on a card. A hyphen before "and", "or" or "to" is the writer's
+       ("short- and long-term") and stays. */
+    .replace(/\b([A-Za-z]{2,})- (?!(?:and|or|to|nor)\b)([a-z]{2,})/g, '$1$2')
+    .replace(/\s*\((?:pp?\.|page)\s*\d+(?:\s*[-–]\s*\d+)?\)/gi, '')
     .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:])/g, '$1')
     .trim();
 }
 
@@ -284,6 +298,7 @@ function bestRun(body) {
    their meaning for the Memorizer. */
 function teaching(raw) {
   const t = clean(raw);
+  if (!CLAIM.test(t) && !UNIT.test(t)) return false;
   const opening = t.split(',')[0].split(/\s+/).slice(0, 6).join(' ');
   if (/\b(similarly|likewise|also|another|the latter|the former|utili[sz]ing|as with|as noted)\b/i.test(opening)) return false;
   return !/\b(?:HR|OR|RR|CI)\s*[:=,]?\s*\(?\d|\b[Pp]\s*[=<>≤≥]\s*0?\.\d|\b(?:hazard|odds|risk) ratios?\b|\bconfidence intervals?\b|\bpatient-years?\b/.test(t);
@@ -417,8 +432,13 @@ function passageContext(body, run, title) {
   const subject = /\*\*([^*]+)\*\*/.exec(run);
   const bold = subject && clean(subject[1]);
   const frame = /^(?:In|For|With)\s+([^,;:.]{3,90})[,;]/i.exec(clean(run));
-  const concept = (bold && /[a-z]/i.test(bold) && bold.length <= 90 ? bold : '')
-    || (frame && frame[1]) || heading || String(title || '').split('—').pop().trim() || 'From your notes';
+  /* A title has to name a topic. A bold run that is a label ("Caption:"), a grade ("Class IIb", "LOE B") or a number,
+     and a heading the extraction wrote ("Extracted text (7)", "Page 12"), name nothing; the next candidate is taken. */
+  const topic = t => !!t && /[a-z]{3}/i.test(t) && t.length <= 90 && !/:\s*$/.test(t) &&
+    !/^(?:class\s+(?:i{1,3}|iv)[ab]?|loe\b|level of evidence|grade\b|caption|figure|fig\.|table|extracted text|page\b|text\b|notes?\b|summary\b|key points?\b)/i.test(t) &&
+    !/^[\d\s.,%()–-]+$/.test(t);
+  const pick = [bold, frame && frame[1], heading, String(title || '').split('—').pop().trim()].find(topic);
+  const concept = pick || 'From your notes';
   return { concept, span, headings };
 }
 function matchingFigure(body, run, context) {
@@ -680,8 +700,10 @@ function steps(text) {
     }
     /* A step opens a line of its own, so it is given a capital — except where
        the first word is cased the way the notes cased it: a gene, a trial name,
-       a drug whose lower-case initial is the term. */
-    if (body && /^[a-z]/.test(body) && !/^[a-z]+[A-Z0-9]/.test(body)) {
+       a drug whose lower-case initial is the term. A step with a lead is drawn
+       after it, in the same line ("So the first six months…"), and the lead
+       takes the capital: the owner's iPad read "so It is…". */
+    if (!lead && body && /^[a-z]/.test(body) && !/^[a-z]+[A-Z0-9]/.test(body)) {
       body = body.charAt(0).toUpperCase() + body.slice(1);
     }
     /* No step ends in a full stop. Only the last one would have had one, and a

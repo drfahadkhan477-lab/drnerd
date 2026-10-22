@@ -253,5 +253,23 @@ ok('the page carries the slot exactly once',
 ok('and pearlAll() hands it to harvest()',
    /Pearl\.harvest\(REF,\s*typeof REF_PEARLS==='object'\?REF_PEARLS:null\)/.test(app));
 
+/* WHAT THE OWNER'S iPAD SHOWED AS PEARLS (22 October 2026): a figure's caption titled "Caption:", a bolded grade
+   ("Class IIb") as the title, an extraction heading ("Extracted text (7)") as the title, a descriptive sentence with
+   nothing to act on, and the PDF's leftovers, a word broken across a line and the book's page number. Invented notes
+   of the same shapes; no licensed text. */
+{
+  const one = body => P.harvest([{ id: 'x', title: 'Chapter — Section', body }])[0] || null;
+  const cap = one('Caption: Five-year incidence of the invented outcome is 12% in invented recipients and should prompt yearly screening.');
+  ok('a figure caption is never a pearl', cap === null, cap ? cap.text.slice(0, 60) : 'none');
+  const desc = one('**Invented registry** Primary causes of the invented outcome are as reported on the invented forms of 2012, kept by the invented network for the follow-up of recipients over that whole period.');
+  ok('a sentence that only describes, with nothing to act on or tell apart, is not a pearl', desc === null, desc ? desc.text.slice(0, 60) : 'none');
+  const grade = one('**Class IIb** Invented broad testing yields far more uncertain results (15%) than actionable ones, so it should be done in a specialist clinic.');
+  ok('a bolded grade is not the title; the note names the topic', !!grade && grade.concept !== 'Class IIb' && grade.concept === 'Section', grade ? grade.concept : 'no pearl');
+  const ext = one('## Extracted text (7)\n\nInvented therapy should be continued for 6 weeks, followed by long-term suppression in invented infections.');
+  ok('an extraction heading is not the title either', !!ext && !/extracted text/i.test(ext.concept), ext ? ext.concept : 'no pearl');
+  const tidy = P.clean('The invented fol- low-up visit should occur within 6 weeks (p. 927). Short- and long-term care differ.');
+  ok('a word broken across a line is joined, a page number dropped, and a writer\'s own hyphen kept',
+     tidy === 'The invented follow-up visit should occur within 6 weeks. Short- and long-term care differ.', tidy);
+}
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
