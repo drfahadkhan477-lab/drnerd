@@ -124,7 +124,10 @@ const STILL = () => {
     pending.forEach(a => { try { a.finish(); } catch (_) {} });
   }
 };
-const measure = async (page, options) => { await page.evaluate(STILL); return page.evaluate(MEASURE, options); };
+/* Finish and read in one browser task. The rhythm label can start another
+   entrance between two evaluate calls, even when the first finished all effects. */
+const readStill = (page, read, options) => page.evaluate(`(() => { (${STILL})(); return (${read})(${JSON.stringify(options)}); })()`);
+const measure = (page, options) => readStill(page, MEASURE, options);
 const SEED = () => { let a = 123456789; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
 /* every image loaded, or failed, and decoded: a figure that arrived late in one page is a difference of timing, not of CSS */
 const IMAGES = () => {
@@ -272,8 +275,7 @@ const palettes = css => {
         await X.page.evaluate(IMAGES);
         await quiet(X.page);
       }
-      await A.page.evaluate(STILL); await B.page.evaluate(STILL);
-      const [n, f] = [await A.page.evaluate(SNAPSHOT, { props: SEEN }), await B.page.evaluate(SNAPSHOT, { props: SEEN })];
+      const [n, f] = [await readStill(A.page, SNAPSHOT, { props: SEEN }), await readStill(B.page, SNAPSHOT, { props: SEEN })];
       visits++; elements += Object.keys(n).length;
       const tag = `${vpn} ${st.name}`;
       for (const k of Object.keys(n)) {
