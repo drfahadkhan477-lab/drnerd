@@ -1329,7 +1329,11 @@ function kindOf(user) {
      !!pv && pv.kind === 'figure' && /^data:image\/png/.test(pv.src) && pv.w > 0 && pv.cap.indexOf(pdf.CAPTION.replace(/\.$/, '')) === 0 && /p\.1$/.test(pv.cap) && pv.withVisual, JSON.stringify(pv));
   await page.locator('#pearl-visual .pearl-fig').click();
   await page.locator('.lightbox img').waitFor(T).catch(() => {});
-  await page.waitForFunction(() => { const i = document.querySelector('.lightbox img'); return i && i.naturalWidth > 0; }, null, T).catch(() => {});
+  /* Drawn, and its load handler run: the image decodes (naturalWidth) a task before its load event, and until that
+     handler takes the held width off, it is shown at the width held for it in PDF points. WebKit on CI read it there,
+     216 px of a 540 px drawing (22 October 2026). Where the handler never takes it off, this wait runs out and the
+     check below fails, as it should. */
+  await page.waitForFunction(() => { const i = document.querySelector('.lightbox img'); return i && i.naturalWidth > 0 && !i.hasAttribute('width'); }, null, T).catch(() => {});
   /* Full size: the drawing at its own size, made smaller only to fit the
      lightbox (max-width and max-height 100%) — not held at the figure's
      size in PDF points, 1x of a 2.5x drawing, as it once was. */
