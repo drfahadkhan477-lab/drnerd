@@ -6363,9 +6363,13 @@ function pearlFit(){
      the canvas stops where the prose column does (--pc-foot, the band's height; 0 side by side). */
   const main=card.querySelector('.pearl-main');
   if(main) card.style.setProperty('--pc-foot',Math.max(0,card.clientHeight-main.offsetTop-main.offsetHeight)+'px');
-  const all=card.classList.contains('pearl-all'), over=!wrap.hidden&&wrap.scrollHeight-wrap.clientHeight>4;
-  card.classList.toggle('pearl-more',!all&&over&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
+  /* Measured as if the button were not there: it takes its own height from the column, so a pearl that fits without it
+     runs past the card with it, and once shown (while the steps rise in, everything runs past) it would stay for good,
+     offering a sliver. */
   const btn=document.getElementById('pearlMore');
+  const room=btn&&!btn.hidden?btn.offsetHeight+(parseFloat(getComputedStyle(btn).marginTop)||0):0;
+  const all=card.classList.contains('pearl-all'), over=!wrap.hidden&&wrap.scrollHeight-wrap.clientHeight-room>4;
+  card.classList.toggle('pearl-more',!all&&over&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
   if(btn){
     btn.hidden=wrap.hidden||!(all||over);
     btn.setAttribute('aria-expanded',String(all));
