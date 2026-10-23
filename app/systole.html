@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/photoswipe.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -2657,178 +2657,202 @@ function closePeek(){
   const p=document.getElementById('peek');
   if(p){p.className='';p.innerHTML='';}
   document.body.classList.remove('peek-locked');
-  figZ=null;
+  /* An open figure goes at once, not after its closing animation: whatever
+     called this is about to draw something else. */
+  if(figPs){ const v=figPs; figPs=null;
+    /* PhotoSwipe's destroy() on a viewer not yet closing is close(), which
+       takes it down a frame or more later, and is ignored altogether while it
+       is still opening: a figure closed mid-entrance stayed over the app, its
+       slide catching every tap meant for the page. Marked as being destroyed,
+       it is taken down now. */
+    if(v.destroy){ v.isDestroying=true; v.destroy(); } }
   if(peekKeyHandler){ document.removeEventListener('keydown',peekKeyHandler); peekKeyHandler=null; }
 }
 /* ═══════ a figure, full size ═══════
    Six-point legend type inside a 340px panel is not a figure, it is a
-   thumbnail of one. This opens the same image at its natural size with the
-   caption under it, and closes four ways — the button, the backdrop, Escape,
-   and the browser's own back gesture — because the bug that prompted it was an
-   image with no way out. */
-@@SLOT[src:src/core/figzoom.js]@@
+   thumbnail of one. The figure opens in PhotoSwipe (app/vendor/photoswipe,
+   MIT): it grows out of the picture that was tapped, pinches and pans with
+   momentum, takes a double tap, swipes to the card's other figures and swipes
+   down to close. Ours on top of it: a zoom row with its readout, + − 0 on the
+   keyboard, the caption and its source, and a tap on the picture that
+   magnifies rather than closes. It closes five ways: the button, a tap off
+   the picture, Escape, a swipe down, and the browser's own back gesture.
+   The bug that prompted the first viewer was an image with no way out. */
 let peekKeyHandler=null;
-let figZ=null;
-/* Pointer events, so one path serves finger, Pencil, trackpad and mouse. */
-function mountFigZoom(scroll){
-  const img=scroll.querySelector("img"); if(!img) return null;
-  /* A finger never holds still to the pixel, so latching "moved" on any
-     nonzero delta swallowed every real tap while zoomed — yet passed each
-     synthetic one, which moves exactly 0px. Measured from where the finger
-     LANDED, not summed along the path, so a slow wobble cannot creep past. */
-  const TAP_SLOP=8;
-  const z={st:FigZoom.fit(), pts:new Map(), moved:false, pinchAt:0, dx0:0, dy0:0};
-  const box=()=>scroll.getBoundingClientRect();
-  const content=()=>({w:img.offsetWidth, h:img.offsetHeight});
-  function apply(){
-    const b=box(), c=content();
-    z.st=FigZoom.constrain(z.st,b.width,b.height,c.w,c.h);
-    img.style.transform="translate("+z.st.tx+"px,"+z.st.ty+"px) scale("+z.st.scale+")";
-    scroll.classList.toggle("zoomed",!FigZoom.isFitted(z.st));
-    const pc=scroll.parentNode.querySelector(".figv-pct");
-    if(pc) pc.textContent=Math.round(z.st.scale*100)+"%";
-  }
-  const local=(x,y)=>{ const b=box(); return [x-b.left,y-b.top]; };
-  function zoomAt(f,x,y){ const p=local(x,y); z.st=FigZoom.zoomAbout(z.st,f,p[0],p[1]); apply(); }
-  /* Viewport centre, for buttons and keys — no pointer to anchor on. */
-  function zoomCentre(f){ const b=box(); z.st=FigZoom.zoomAbout(z.st,f,b.width/2,b.height/2); apply(); }
-  function reset(){ z.st=FigZoom.fit(); apply(); }
-
-  scroll.addEventListener("pointerdown",function(ev){
-    z.pts.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
-    z.moved=false; z.dx0=ev.clientX; z.dy0=ev.clientY;
-    if(z.pts.size===1&&!FigZoom.isFitted(z.st)){ try{ scroll.setPointerCapture(ev.pointerId); }catch(_){} }
+/* The open viewer, or null. */
+let figPs=null;
+/* The single file carries PhotoSwipe here. The split build lifts it into
+   vendor/ and leaves PSW_SRC naming the file (scripts/build-pwa.js), and
+   figLib() loads it the first time a figure opens: the shell's transfer
+   budget does not pay for a viewer most launches never open. */
+@@SLOT[app:app/vendor/photoswipe/photoswipe.umd.min.js]@@
+let figLibP=null;
+function figLib(){
+  if(window.PhotoSwipe) return Promise.resolve(window.PhotoSwipe);
+  if(figLibP) return figLibP;
+  if(!window.PSW_SRC) return Promise.reject(new Error('no figure viewer in this build'));
+  /* Its stylesheet comes with it (PSW_CSS); a viewer drawn without it would be a
+     page of unstyled buttons over the app. */
+  const add=(el,ok)=>new Promise((res,rej)=>{ el.onload=()=>ok()?res():rej(new Error('the figure viewer did not start'));
+    el.onerror=()=>{ el.remove(); rej(new Error('the figure viewer could not be loaded')); }; document.head.appendChild(el); });
+  const sheet=document.querySelector('link[data-psw]');
+  const css=sheet||!window.PSW_CSS?Promise.resolve():(()=>{ const l=document.createElement('link'); l.rel='stylesheet';
+    l.href=window.PSW_CSS; l.setAttribute('data-psw',''); return add(l,()=>true); })();
+  const js=(()=>{ const s=document.createElement('script'); s.src=window.PSW_SRC; return add(s,()=>!!window.PhotoSwipe); })();
+  /* A failed load is not remembered: the next tap tries again. */
+  figLibP=Promise.all([js,css]).then(()=>window.PhotoSwipe,err=>{ figLibP=null; throw err; });
+  return figLibP;
+}
+/* PhotoSwipe lays a slide out from its size before the picture arrives, so
+   each one is measured first: from the picture already on the page when it
+   is the same file, or by loading it. A picture that will not load still
+   opens, at a placeholder size, and PhotoSwipe says it could not be loaded:
+   the overlay is never an empty black box with no way to tell a slow network
+   from a missing file. */
+function figMeasure(it){
+  const known=it.element&&it.element.tagName==='IMG'?it.element:it.element&&it.element.querySelector('img');
+  if(known&&known.complete&&known.naturalWidth&&(known.currentSrc||known.src)===it.src)
+    return Promise.resolve(Object.assign({},it,{width:known.naturalWidth,height:known.naturalHeight}));
+  return new Promise(res=>{
+    const im=new Image(); let done=0;
+    const fin=ok=>{ if(done++) return; res(Object.assign({},it,ok&&im.naturalWidth
+      ?{width:im.naturalWidth,height:im.naturalHeight}:{width:1200,height:900,broken:true})); };
+    im.onload=()=>fin(true); im.onerror=()=>fin(false);
+    setTimeout(()=>fin(im.complete&&im.naturalWidth>0),8000);
+    im.src=it.src;
   });
-  scroll.addEventListener("pointermove",function(ev){
-    if(!z.pts.has(ev.pointerId)) return;
-    const prev=z.pts.get(ev.pointerId);
-    z.pts.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
-    if(z.pts.size===2){
-      const p=[...z.pts.values()];
-      const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
-      if(z.pinchAt){
-        z.moved=true;
-        ev.preventDefault();
-        zoomAt(d/z.pinchAt,(p[0].x+p[1].x)/2,(p[0].y+p[1].y)/2);
-      }
-      z.pinchAt=d;
-      return;
-    }
-    if(z.pts.size===1&&!FigZoom.isFitted(z.st)){
-      const dx=ev.clientX-prev.x, dy=ev.clientY-prev.y;
-      /* Only the LATCH waits; panning follows from pixel one. */
-      if(Math.hypot(ev.clientX-z.dx0,ev.clientY-z.dy0)>TAP_SLOP) z.moved=true;
-      ev.preventDefault();
-      z.st=FigZoom.panBy(z.st,dx,dy); apply();
-    }
-  });
-  const release=function(ev){
-    z.pts.delete(ev.pointerId);
-    if(z.pts.size<2) z.pinchAt=0;
-    try{ scroll.releasePointerCapture(ev.pointerId); }catch(_){}
-  };
-  scroll.addEventListener("pointerup",release);
-  scroll.addEventListener("pointercancel",release);
-
-  /* Trackpad and mouse. ctrl+wheel is what a pinch on a trackpad sends. */
-  scroll.addEventListener("wheel",function(ev){
-    ev.preventDefault();
-    zoomAt(Math.exp(-ev.deltaY*(ev.ctrlKey?0.01:0.002)),ev.clientX,ev.clientY);
-  },{passive:false});
-
-  return {apply:apply, reset:reset, zoomCentre:zoomCentre, zoomAt:zoomAt,
-          state:function(){return z.st;}, moved:function(){return z.moved;},
-          tapped:function(x,y){
-            /* A SINGLE tap: what this viewer already did and said it did.
-               Double-tap was written first and the test refused it. What
-               changes is the toggle is anchored on the point tapped, so
-               magnifying a lead brings THAT lead closer. */
-            /* To NATURAL size, not a round number: 1:1 is why this viewer
-               exists, and verify-chatfigs asserts the magnified width
-               equals the source width. A 2.5x constant was refused. */
-            const c=content();
-            const nat=c.w>0?FigZoom.clamp(img.naturalWidth/c.w,1,FigZoom.MAX):2;
-            const p=local(x,y); z.st=FigZoom.toggle(z.st,p[0],p[1],nat); apply(); return true;
-          }};
+}
+/* The readout and the + − buttons speak in "times the fitted size", as the
+   old viewer did: fitted is 100%, one press of + is 140%. */
+const FIG_STEP=1.4;
+function figZoomBy(ps,k){
+  const s=ps&&ps.currSlide; if(!s||!s.isZoomable()) return;
+  const lv=Math.min(s.zoomLevels.max,Math.max(s.zoomLevels.initial,s.currZoomLevel*k));
+  s.zoomTo(lv,{x:ps.viewportSize.x/2,y:ps.viewportSize.y/2},220);
+}
+function figFit(ps){ const s=ps&&ps.currSlide; if(s) s.zoomTo(s.zoomLevels.initial,undefined,220); }
+function figPct(ps){
+  const s=ps&&ps.currSlide;
+  return s&&s.zoomLevels.initial?Math.round(s.currZoomLevel/s.zoomLevels.initial*100):100;
 }
 function openFigure(src,caption,source){
-  if(!src) return;
-  const wrap=document.getElementById('peek')||(()=>{
-    const d=document.createElement('div'); d.id='peek'; document.body.appendChild(d); return d;})();
-  wrap.className='peek-open fig-open';
-  wrap.innerHTML=`<div class="figv" role="dialog" aria-modal="true" aria-label="${e(caption||'Figure')}">
-      <button class="figv-x" onclick="closePeek()" aria-label="Close figure">${icon('x')}</button>
-      <div class="figv-scroll"><img src="${src}" alt="${e(caption||'Figure')}"></div>
-      <div class="figv-ctl" role="group" aria-label="Zoom">
-        <button class="figv-btn" type="button" aria-label="Zoom out" onclick="figZ&&figZ.zoomCentre(1/1.4)">−</button>
-        <span class="figv-pct" aria-live="off">100%</span>
-        <button class="figv-btn" type="button" aria-label="Zoom in" onclick="figZ&&figZ.zoomCentre(1.4)">+</button>
-        <button class="figv-btn figv-fit" type="button" aria-label="Fit to screen" onclick="figZ&&figZ.reset()">Fit</button>
-      </div>
-      <div class="figv-hint">tap to magnify · pinch or scroll to zoom · drag to pan · tap outside to close</div>
-      ${caption?`<figcaption class="figv-cap">${e(caption)}${source?`<span>${e(source)}</span>`:''}</figcaption>`:''}
-    </div>`;
-  /* Everything except the picture, its caption and the button dismisses.
-     Checking ev.target===wrap is the obvious way and it is wrong here: .figv
-     is stretched over the whole overlay, so the backdrop is never the target
-     and the tap-outside gesture silently does nothing — which is the same
-     "there is no way out of this image" bug in a new place. */
-  wrap.onclick=ev=>{
-    const t=ev.target;
-    /* The picture itself toggles magnification rather than dismissing. Fitted
-       to the width it is already about 1:1 in device pixels on a retina
-       screen, which is sharp — but a Braunwald legend is six-point type, and
-       sharp is not the same as legible. Tapping goes to natural size and lets
-       the container scroll, which is the only way to actually read one. */
-    /* A pan ends on the image, so without this the drag that moved the figure
-       would also be read as the tap that dismisses it. The old check could not
-       have this problem because nothing dragged. */
-    if(figZ&&figZ.moved()) return;
-    if(t.tagName==='IMG'&&t.closest('.figv-scroll')){
-      if(figZ) figZ.tapped(ev.clientX,ev.clientY);
-      return;
-    }
-    if(t.closest&&t.closest('.figv-ctl')) return;
-    if(t.closest&&t.closest('.figv-cap,.figv-x')) return;
-    closePeek();
-  };
-  peekKeyHandler=ev=>{
-    if(ev.key==='Escape'){ closePeek(); return; }
-    if(!figZ) return;
-    /* The pairs a browser already trains people to expect for zoom. */
-    if(ev.key==='+'||ev.key==='='){ ev.preventDefault(); figZ.zoomCentre(1.4); }
-    else if(ev.key==='-'||ev.key==='_'){ ev.preventDefault(); figZ.zoomCentre(1/1.4); }
-    else if(ev.key==='0'){ ev.preventDefault(); figZ.reset(); }
-  };
-  /* Only for a figure: peekQuestion's dialog has no image. */
-  const fs_=wrap.querySelector('.figv-scroll');
-  figZ = fs_ ? mountFigZoom(fs_) : null;
-  if(figZ){ const im=fs_.querySelector('img');
-    /* error as well as load: a figure that fails still has to appear, as the
-       browser's own broken-image mark, or the overlay is an empty black box
-       with no way to tell a slow network from a missing file. */
-    if(im&&!im.complete){
-      im.classList.add('fig-loading');
-      const reveal=()=>im.classList.remove('fig-loading');
-      im.addEventListener('load',reveal,{once:true});
-      im.addEventListener('error',reveal,{once:true});
-    }
-    if(im&&!im.complete) im.addEventListener('load',figZ.apply,{once:true}); else figZ.apply(); }
-  document.addEventListener('keydown',peekKeyHandler);
-  /* The page beneath must not scroll under the overlay: a drag that moves the
-     page while the picture stays still is exactly what "stuck" feels like. */
-  document.body.classList.add('peek-locked');
+  if(!src) return Promise.resolve(null);
+  return openFigures([{src,caption,source}],0);
 }
-/* Anything with a figure in it can hand the viewer an element. */
-function openFigureFrom(el){
-  if(!el) return;
+const FIG_ERR='This figure could not be loaded. It may not be on this device yet.';
+function openFigures(list,index){
+  closePeek();
+  const items=(list||[]).filter(it=>it&&it.src);
+  if(!items.length) return Promise.resolve(null);
+  const at=Math.max(0,Math.min(items.length-1,index||0));
+  const ticket={};
+  figPs=ticket;   /* a second open before this one is ready replaces it */
+  return Promise.all([figLib(),Promise.all(items.map(figMeasure))]).then(([PhotoSwipe,data])=>{
+    if(figPs!==ticket) return null;
+    const ps=new PhotoSwipe({
+      /* A figure that would not load is shown as the message, not handed to
+         the library to find out again: WebKit's decode() of a missing image
+         resolves, so the library calls it loaded and draws an empty box. */
+      dataSource:data.map(d=>d.broken
+        ?{html:'<div class="pswp__error-msg-container figv-err"><div class="pswp__error-msg">'+FIG_ERR+'</div></div>',
+          caption:d.caption||'',source:d.source||'',broken:true}
+        :{src:d.src,width:d.width,height:d.height,alt:d.caption||'Figure',
+          caption:d.caption||'',source:d.source||'',element:d.element||null}),
+      index:at,
+      bgOpacity:.94, spacing:.08, loop:false, padding:{top:56,bottom:96,left:12,right:12},
+      initialZoomLevel:'fit',
+      /* A tap: to the picture's own pixels when fitting shrank it (a
+         Braunwald legend is six-point type, and sharp is not legible), or to
+         twice the fit when it was already whole at its own size. */
+      secondaryZoomLevel:z=>Math.max(1,z.fit*2),
+      maxZoomLevel:z=>Math.max(3,z.fit*6),
+      imageClickAction:'zoom', bgClickAction:'close', doubleTapAction:'zoom',
+      /* On a touch screen a tap anywhere comes here. On the picture it
+         magnifies, as a click does; anywhere else it closes. */
+      tapAction:function(pt,ev){
+        const t=ev&&ev.target;
+        if(t&&t.classList&&t.classList.contains('pswp__img')){ if(this.currSlide) this.currSlide.toggleZoom(pt); }
+        else this.close();
+      },
+      zoom:false, closeTitle:'Close figure', arrowPrevTitle:'Previous figure', arrowNextTitle:'Next figure',
+      indexIndicatorSep:' of ',
+      errorMsg:FIG_ERR,
+      mainClass:'figv-ps', returnFocus:true,
+      showHideAnimationType:data[at].element&&!data[at].broken?'zoom':'fade'
+    });
+    ps.on('uiRegister',()=>{
+      const btn=(name,order,label,html,act)=>ps.ui.registerElement({name,order,isButton:true,appendTo:'bar',
+        title:label,ariaLabel:label,html,onClick:()=>act(ps)});
+      btn('figv-out',8,'Zoom out','<span class="figv-glyph" aria-hidden="true">−</span>',p=>figZoomBy(p,1/FIG_STEP));
+      ps.ui.registerElement({name:'figv-pct',order:9,isButton:false,appendTo:'bar',html:'100%',
+        onInit:(el,p)=>{ el.setAttribute('aria-live','off');
+          const show=()=>{ el.textContent=figPct(p)+'%'; p.element.classList.toggle('figv-zoomed',figPct(p)>100); };
+          /* zoomPanUpdate comes at the end of a zoom's transition; the level
+             itself is set as the zoom begins, so the readout follows from there. */
+          p.on('zoomPanUpdate',show); p.on('change',show); p.on('beforeZoomTo',()=>requestAnimationFrame(show)); }});
+      btn('figv-in',10,'Zoom in','<span class="figv-glyph" aria-hidden="true">+</span>',p=>figZoomBy(p,FIG_STEP));
+      btn('figv-fit',11,'Fit to screen','<span class="figv-glyph figv-fitword" aria-hidden="true">Fit</span>',figFit);
+      ps.ui.registerElement({name:'figv-cap',order:12,isButton:false,appendTo:'root',tagName:'figcaption',
+        onInit:(el,p)=>{
+          const show=()=>{ const d=p.currSlide&&p.currSlide.data||{};
+            el.hidden=!d.caption;
+            el.innerHTML=d.caption?e(d.caption)+(d.source?`<span>${e(d.source)}</span>`:''):'';
+            p.element.setAttribute('aria-label',d.caption||'Figure'); };
+          p.on('change',show); }});
+      ps.ui.registerElement({name:'figv-hint',order:13,isButton:false,appendTo:'root',
+        html:'tap to magnify · pinch or scroll to zoom · swipe for the next · swipe down or tap outside to close'});
+    });
+    /* The pairs a browser already trains people to expect for zoom. */
+    ps.on('keydown',ev=>{
+      const k=ev.originalEvent&&ev.originalEvent.key;
+      if(k==='+'||k==='='){ ev.preventDefault(); figZoomBy(ps,FIG_STEP); }
+      else if(k==='-'||k==='_'){ ev.preventDefault(); figZoomBy(ps,1/FIG_STEP); }
+      else if(k==='0'){ ev.preventDefault(); figFit(ps); }
+    });
+    ps.on('bindEvents',()=>{ ps.element.setAttribute('aria-modal','true'); });
+    ps.on('destroy',()=>{ if(figPs===ps) figPs=null; document.body.classList.remove('peek-locked'); });
+    figPs=ps;
+    /* The page beneath must not scroll under the overlay: a drag that moves the
+       page while the picture stays still is exactly what "stuck" feels like. */
+    document.body.classList.add('peek-locked');
+    ps.init();
+    return ps;
+  },err=>{
+    if(figPs===ticket) figPs=null;
+    if(typeof toast==='function') toast(err&&err.message?err.message:'The figure could not be opened');
+    return null;
+  });
+}
+/* Anything with a figure in it can hand the viewer an element. The other
+   figures beside it (a reply's strip, a note's figures, a message's inline
+   ones) come too, so a swipe goes to the next. */
+const FIG_GROUP='.fig-list,.msg,.ref-body,.ref-view,.pearl-card,.feed-card,#aiBody,#app';
+function figFromEl(el){
   const img=el.tagName==='IMG'?el:el.querySelector('img');
-  if(!img) return;
+  if(!img) return null;
   const cap=el.querySelector('figcaption');
   const src=cap&&cap.querySelector('span');
-  openFigure(img.currentSrc||img.src,
-    (cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
-    src?src.textContent:'');
+  return {src:img.currentSrc||img.src,element:img,
+    caption:(cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
+    source:src?src.textContent:''};
+}
+function openFigureFrom(el){
+  if(!el) return Promise.resolve(null);
+  const scope=el.closest&&el.closest(FIG_GROUP);
+  const els=scope?[...scope.querySelectorAll('figure[onclick="openFigureFrom(this)"]')]:[];
+  if(els.indexOf(el)<0) return openFigures([figFromEl(el)].filter(Boolean),0);
+  const items=els.map(figFromEl), at=els.indexOf(el);
+  return openFigures(items.filter(Boolean),items.slice(0,at).filter(Boolean).length);
+}
+/* A question's figures, full size: the expand button on each figure card. */
+function openQuestionFigures(qid,i,ev){
+  if(ev){ ev.stopPropagation(); ev.preventDefault(); }
+  const q=QBYID[qid]; const src=q&&IMGS[q.id];
+  if(!src||!src.length) return Promise.resolve(null);
+  const cards=document.querySelectorAll('.fig-card');
+  return openFigures(src.map((u,j)=>({src:u,caption:figLabel(q,j,src.length),
+    source:'Question '+(S.screen==='mock'&&S.mock?S.mock.i+1:q.n),
+    element:cards[j]&&cards[j].querySelector('.fig-img')})),i);
 }
 /* A deck nobody dealt from a chapter: a search's hits, one question jumped to, a deck Apex built. It starts
    clean, as startQuiz's do: the deck before's answers stayed in S.answers, and restoreQuizState() replayed
@@ -5986,13 +6010,18 @@ function buildFigures(q){
   const n=src.length;
   return src.map((u,i)=>{
     const on=S.zoomed===i;
-    return `<div class="fig-card${on?' zoomed':''}" data-fig="${i}" role="button" tabindex="0"
+    /* The full-screen button sits beside the card, not in it: the card is itself a button, and a control
+       inside a control is one a screen reader cannot reach (axe: nested-interactive). */
+    return `<div class="fig-slot"><div class="fig-card${on?' zoomed':''}" data-fig="${i}" role="button" tabindex="0"
         aria-label="${e(figLabel(q,i,n))} — tap to ${on?'shrink':'enlarge'}">
       <img class="fig-img" src="${u}" alt="${e(figLabel(q,i,n))} for question ${S.screen==='mock'&&S.mock?S.mock.i+1:q.n}"
         decoding="async" loading="eager"
         style="transform:${on?'scale(1.8) translateY(10%)':'scale(1)'};transform-origin:center top">
       <div class="fig-label"><span>\uD83D\uDCCA ${e(figLabel(q,i,n))}</span>
         <span class="fig-zoom-hint">${on?'Tap to shrink':'Tap to enlarge'}</span></div>
+    </div>
+      <button class="fig-full" type="button" aria-label="Open ${e(figLabel(q,i,n))} full screen"
+        onclick="openQuestionFigures('${e(q.id)}',${i},event)">${icon('expand','icon-sm')}</button>
     </div>`;
   }).join('');
 }
@@ -7825,16 +7854,15 @@ async function stFiguresFit(){
   const step=Math.max(1,Math.floor(urls.length/ST_SAMPLE));
   let seen=0,missed=0,worst=0,worstAt='';
   for(let i=0;i<urls.length&&seen<ST_SAMPLE;i+=step){
-    try{ closePeek(); openFigure(urls[i],'Self-test',''); }catch(_){ missed++; continue; }
-    /* Wait for the element, then for the decode, separately. Polling frames
-       for both together reported the first figure as unreachable on a
-       perfectly healthy device — the first open also builds the overlay and
-       mounts the zoom controller, so it is always the slow one. A self-test
-       that cries wolf on its own timing is the failure mode this whole step
-       exists to avoid. */
-    let img=null;
-    for(let t=0;t<120;t++){ await stFrame();
-      img=document.querySelector('.figv-scroll img'); if(img) break; }
+    let ps=null;
+    try{ closePeek(); ps=await openFigure(urls[i],'Self-test',''); }catch(_){}
+    if(!ps||!ps.currSlide||ps.currSlide.data.broken){ missed++; continue; }
+    /* Measured at rest: after the opening animation, which scales the figure
+       out of nothing, and once the picture itself has loaded. A rectangle read
+       mid-animation reported a 12px overflow on a figure that fits exactly. */
+    await new Promise(res=>{ if(ps.opener&&ps.opener.isOpen) return res();
+      ps.on('openingAnimationEnd',res); setTimeout(res,3000); });
+    const content=ps.currSlide.content, img=content&&content.element;
     if(img&&!(img.complete&&img.naturalWidth)){
       await new Promise(res=>{ let done=0; const fin=()=>{ if(!done++) res(); };
         img.addEventListener('load',fin,{once:true});
@@ -7844,18 +7872,11 @@ async function stFiguresFit(){
     }
     if(!img||!img.naturalWidth){ missed++; continue; }
     await stFrame();
-    /* LAYOUT SIZE, NOT THE PAINTED RECTANGLE. getBoundingClientRect() includes
-       every transform above the element, and the viewer has two: its own
-       entrance animation, and the zoom. Opening two dozen figures back to back
-       restarts the entrance each time, so a rect measured two frames in is
-       mid-animation — which reported a 12px overflow on a figure that fits
-       exactly. offsetHeight against clientHeight is the question actually
-       being asked: does the fitted image fit the frame it was laid out in. */
-    const box=document.querySelector('.figv-scroll');
-    if(box){
-      const over=Math.max(0,img.offsetHeight-box.clientHeight,img.offsetWidth-box.clientWidth);
-      if(over>worst){ worst=Math.round(over); worstAt=img.naturalWidth+'x'+img.naturalHeight; }
-    }
+    /* Fitted, the whole picture is inside the viewer: none of its edges past
+       the overlay's. */
+    const r=img.getBoundingClientRect(), box=ps.element.getBoundingClientRect();
+    const over=Math.max(0,box.left-r.left,r.right-box.right,box.top-r.top,r.bottom-box.bottom);
+    if(over>worst){ worst=Math.round(over); worstAt=img.naturalWidth+'x'+img.naturalHeight; }
     seen++;
   }
   try{ closePeek(); }catch(_){}

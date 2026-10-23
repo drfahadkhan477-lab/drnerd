@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 161 suites and roughly 8186 checks, and they
+ * WHY THIS EXISTS. There are 159 suites and roughly 8156 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -116,16 +116,15 @@ const SUITES = [
   ['zip',          'an imported archive cannot spend more memory than the device has'],
   ['calib-pure',   'the calibration arithmetic says nothing rather than something wrong'],
   ['calibrate',    'confidence is an option not a gate, and a tagged miss updates one row'],
-  ['figzoom-pure', 'the point under your fingers does not move, over any number of pinches'],
   /* Written because docs/BUILD.md admitted the hole rather than closing it:
      the figure fade's error path was proven once in a scratch harness that was
      then thrown away. Hidden-by-default is the obvious way to write that
      feature and it makes every failure invisible. */
-  ['figfade-pure',  'a figure that fails to load still appears, rather than being silently blank'],
   /* Written because two patch headers quoted luminances and contrast ratios to
      justify every colour they picked, and nothing checked a single one of them
      — the rule in AGENTS.md that says guard a number or do not write it. */
   ['palette-pure',  'the contrast figures quoted in the palette patches are the figures those palettes produce'],
+  ['vendor-pure',   'the figure viewer\'s library is the one recorded, whole, and its licence ships with it'],
   /* Written because heroRhythm.js says in its own header that it is shaped
      this way — no DOM, no timers — so its rules can be called from a test
      without a browser, and then nobody wrote that test. The only suite that
@@ -155,7 +154,7 @@ const SUITES = [
      steps in: ref-images skipped its own injection when the corpus cited no
      figures, and assets anchors on what it skipped. */
   ['refimg-pure',    'a reference corpus with no figures in it still builds, and still renders imported ones'],
-  ['figzoom',      'a figure can be examined, and still has four ways out'],
+  ['figzoom',      'a figure can be examined, swiped to its neighbours, and still has every way out'],
   ['lazyink',      'a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host'],
   ['inkpaint',     'a move of the pen paints the segments it added and not every stroke on the canvas again, and the picture is the one a full repaint draws'],
   ['inksave',      'the ink is written to the database when the pen has been still and not at every pen-up, at once when the page is hidden or exported and asked for at once when it is closed, and an eraser sweep or a run of undos is one write'],
@@ -517,7 +516,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['a11y', 'homepager', 'cssdocs-pure', 'backup-ids', 'floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave'];
+const PENDING_RECORD = ['a11y', 'homepager', 'cssdocs-pure', 'backup-ids', 'floor-css-pure', 'floor', 'apexask', 'readsize', 'ink', 'apexctx-pure', 'apexsignals-pure', 'reflist', 'quietquiz', 'taps', 'indexwarm-pure', 'searchwarm', 'lazyink', 'loops', 'swlifetime-pure', 'hover-pure', 'inkpaint', 'windows', 'inksave', 'vendor-pure'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
@@ -531,7 +530,7 @@ const PENDING_RECORD = ['a11y', 'homepager', 'cssdocs-pure', 'backup-ids', 'floo
    entries. Systole's active counts still come from its previous green run. */
 /* homeprog went with the progress bar it checked: the owner took the bar off Home, and the Brain page's gauge, which
    carries the same two numbers, is held to its claims in verify-home. */
-const RETIRED_RECORD = ['homeprog'];
+const RETIRED_RECORD = ['homeprog', 'figzoom-pure', 'figfade-pure'];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

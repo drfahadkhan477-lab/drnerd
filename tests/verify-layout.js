@@ -326,19 +326,24 @@ const sse = text => [
       let url = null;
       try { for (const id in IMGS) { const l = IMGS[id]; if (l && l.length && typeof l[0] === 'string') { url = l[0]; break; } } } catch (_) {}
       if (!url) return null;
-      closePeek(); openFigure(url, 'Layout check', 'Bank');
-      let img = null;
-      for (let t = 0; t < 60 && !img; t++) { await wait(25); img = document.querySelector('.figv-scroll img'); }
-      if (img && !(img.complete && img.naturalWidth)) {
+      closePeek();
+      const ps = await openFigure(url, 'Layout check', 'Bank');
+      if (!ps || !ps.currSlide) return null;
+      /* At rest: after the opening animation, which grows the figure out of
+         nothing, and once the picture has loaded. */
+      await new Promise(r => { if (ps.opener && ps.opener.isOpen) return r(); ps.on('openingAnimationEnd', r); setTimeout(r, 4000); });
+      const img = ps.currSlide.content.element;
+      if (img && img.tagName === 'IMG' && !(img.complete && img.naturalWidth)) {
         await new Promise(r => { let d = 0; const f = () => { if (!d++) r(); };
           img.addEventListener('load', f, { once: true }); setTimeout(f, 4000); });
       }
       await wait(80);
-      const box = document.querySelector('.figv-scroll');
-      const out = img && box
-        ? { over: Math.max(0, img.offsetHeight - box.clientHeight, img.offsetWidth - box.clientWidth),
-            nat: img.naturalWidth + 'x' + img.naturalHeight }
-        : null;
+      let out = null;
+      if (img && img.naturalWidth) {
+        const i = img.getBoundingClientRect(), b = ps.element.getBoundingClientRect();
+        out = { over: Math.max(0, b.left - i.left, i.right - b.right, b.top - i.top, i.bottom - b.bottom),
+                nat: img.naturalWidth + 'x' + img.naturalHeight };
+      }
       closePeek();
       return out;
     });

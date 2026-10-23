@@ -45,8 +45,8 @@ const ORIGIN = 'https://app.test';
 const open = 'const SW = `', at = SRC.indexOf(open), end = SRC.indexOf('\n`;', at);
 if (at < 0 || end < 0) throw new Error('build-pwa.js no longer defines the worker as const SW = `...`');
 const template = new Function('contentVersion', 'path', 'DIST', 'contentManifest', 'shellDigest',
-  'BUILD_ID', 'COMMIT', 'NO_CONTENT', 'fontAssets', 'echoAssets', 'return `' + SRC.slice(at + open.length, end) + '\n`;');
-const SW = template(() => '0123456789abcdef', path, '/dist', {}, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'abc123def456', false, [], []);
+  'BUILD_ID', 'COMMIT', 'NO_CONTENT', 'fontAssets', 'echoAssets', 'psw', 'return `' + SRC.slice(at + open.length, end) + '\n`;');
+const SW = template(() => '0123456789abcdef', path, '/dist', {}, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'abc123def456', false, [], [], { name: 'vendor/photoswipe-0123456789ab.js', css: 'vendor/photoswipe-ba9876543210.css' });
 
 const invalidState = message => Object.assign(new Error(message), { name: 'InvalidStateError' });
 

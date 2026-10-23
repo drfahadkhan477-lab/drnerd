@@ -452,7 +452,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   if(figureAvailable){
     await page.locator('#pearlFig').focus();
     await page.keyboard.press('Enter');
-    ok('the replacement figure opens from the keyboard', await page.locator('#peek .figv[role="dialog"]').count() === 1);
+    ok('the replacement figure opens from the keyboard',
+       await page.waitForFunction(() => !!document.querySelector('.pswp[role="dialog"]'), null, { timeout: 3000 }).then(() => true, () => false));
     await page.evaluate(()=>closePeek());
   }else ok('the replacement figure opens from the keyboard',false,'fixture supplied no resolvable replacement figure');
   const sourceTitle=await page.evaluate(()=>pearlCurrent.title);

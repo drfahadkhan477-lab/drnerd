@@ -49,6 +49,7 @@
       "translate3d",
       "translatex",
       "translatey",
+      "translatez",
       "url",
       "var"
     ],
@@ -67,6 +68,7 @@
       "-webkit-overflow-scrolling",
       "-webkit-tap-highlight-color",
       "-webkit-text-fill-color",
+      "-webkit-touch-callout",
       "align-content",
       "align-items",
       "align-self",
@@ -137,6 +139,7 @@
       "list-style",
       "margin",
       "margin-bottom",
+      "margin-inline-start",
       "margin-left",
       "margin-right",
       "margin-top",
@@ -183,6 +186,7 @@
       "text-decoration-color",
       "text-overflow",
       "text-rendering",
+      "text-shadow",
       "text-transform",
       "top",
       "touch-action",
@@ -240,6 +244,10 @@
     ]
   },
   "prefixed": {
+    "property -webkit-appearance": {
+      "since": "15.4",
+      "prefixedSince": "1"
+    },
     "property -webkit-backdrop-filter": {
       "since": "18",
       "prefixedSince": "9"
@@ -430,10 +438,20 @@
       "sim": "align-content-start",
       "note": "flex-start is written before it, which a grid reads as start."
     },
+    "value contain: layout": {
+      "since": "15.4",
+      "class": "progressive",
+      "note": "PhotoSwipe's .pswp (app/css/photoswipe.css): containment is a rendering hint there, and without it an older Safari lays the viewer out the same and does more work to paint it."
+    },
     "value contain: size": {
       "since": "15.4",
       "class": "accepted",
       "note": "As property contain."
+    },
+    "value contain: style": {
+      "since": "15.4",
+      "class": "progressive",
+      "note": "As value contain: layout."
     },
     "value overflow-wrap: anywhere": {
       "since": "15.4",
@@ -615,6 +633,9 @@
       "anchor-size": "26"
     },
     "margin-bottom": {
+      "anchor-size": "26"
+    },
+    "margin-inline-start": {
       "anchor-size": "26"
     },
     "margin-left": {

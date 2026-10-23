@@ -1,16 +1,24 @@
 #!/usr/bin/env node
 /*
- * The figure viewer's gestures, in a real browser.
+ * The figure viewer, in a real browser.
  *
- *   NODE_PATH=$(npm root -g) node tests/verify-figzoom.js <patched.html>
+ *   node tests/verify-figzoom.js <build.html | http://…/>
  *
- * The arithmetic is checked separately and exhaustively in
- * verify-figzoom-pure.js. What can only be checked here is the wiring: that a
- * pinch reaches the handler at all, that a drag pans instead of dismissing,
- * and — above everything — that the four ways out of a figure still work.
- * The viewer this extends exists because of a bug described in its own source
- * as "there is no way out of this image", and adding dragging to something you
- * dismiss by tapping outside it is exactly how that comes back.
+ * The viewer is PhotoSwipe (app/vendor/photoswipe), dressed and wired by
+ * openFigures() in app/systole.html. PhotoSwipe's own arithmetic is its
+ * authors' to test; what can only be checked here is the wiring and what this
+ * app promises on top of it: the zoom row and its readout, the keys, a tap on
+ * the picture that magnifies rather than closes, the figures beside it a swipe
+ * away, a figure that fails to load still saying so, and — above everything —
+ * that every way out of a figure still works. The first viewer exists because
+ * of a bug described in its own source as "there is no way out of this image",
+ * and adding gestures to something you dismiss by tapping outside it is
+ * exactly how that comes back.
+ *
+ * Gestures go through Playwright's mouse, keyboard and touchscreen, so they
+ * reach PhotoSwipe's own listeners as a person's would. Two-finger pinches are
+ * pointer events dispatched on its scroll layer, which is what a pinch is to
+ * it: Playwright has no second finger.
  */
 'use strict';
 const path = require('path');
@@ -19,7 +27,7 @@ const { booted, watchTransitions, resized } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
-if (!target) { console.error('usage: node tests/verify-figzoom.js <patched.html>'); process.exit(1); }
+if (!target) { console.error('usage: node tests/verify-figzoom.js <build.html>'); process.exit(1); }
 const URL = /^https?:\/\//.test(target) ? target : 'file://' + path.resolve(target);
 
 let passed = 0, failed = 0;
@@ -40,286 +48,337 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   page.on('close', () => events.push('the page closed'));
   page.on('requestfailed', r => {
     const why = (r.failure() || {}).errorText || '';
-    if (why) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
+    /* The broken figure below is asked for on purpose. */
+    if (why && !/no-such-figure/.test(r.url())) events.push(`request failed: ${String(r.url()).slice(-50)} — ${why}`);
   });
-  /* A crash and a close are different diagnoses; Playwright reports both
-     as "Target page, context or browser has been closed" on the next call,
-     so only the event says which. See tests/_deathnote.js. */
   onDeath(() => ({ section, checks: passed + failed, errors,
                    events: events.length ? events.join(', ') : 'none' }));
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  /* The missing figure below is asked for on purpose; Chromium's message for it
+     names no URL, so its source location says whose it is. */
+  page.on('console', m => { if (m.type() === 'error' && !/no-such-figure/.test(m.text() + ' ' + ((m.location() || {}).url || ''))) errors.push(m.text()); });
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
 
-  /* A 1x1 data URI: this suite is about gestures, not about any figure from
-     the licensed bank, and a fixed size makes the geometry predictable. */
-  /* Guarded, not dereferenced. On a build without this step every check here
-     should report a failure; a bare `figZ` throws a ReferenceError on the
-     first one and takes the rest of the suite with it — the discipline
-     verify-pearl states for its canvas, and the third time this session a
-     suite needed it. */
-  /* Defined on the loaded page, not via addInitScript — that only applies to
-     subsequent navigations, so registering it after goto() leaves it undefined
-     and every guarded call throws the very error it exists to prevent. */
-  await page.evaluate(() => { window.__fz = () => (typeof figZ === 'undefined' ? null : figZ); });
-  const openFig = async () => page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    closePeek();
-    if (typeof openFigure !== 'function') return;
-    openFigure('data:image/svg+xml,' + encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%23888"/></svg>'
-    ), 'Test figure', 'Source');
-    for (let i = 0; i < 40 && !document.querySelector('.figv-scroll img'); i++) await wait(25);
-    await wait(80);
+  /* Defined on the loaded page. Guarded, not dereferenced: on a build without
+     the viewer every check here reports a failure instead of the first one
+     throwing and taking the rest of the suite with it. */
+  await page.evaluate(() => {
+    window.__svg = (w, h, extra) => 'data:image/svg+xml,' + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="#888"/>${extra || ''}</svg>`);
+    window.__ps = () => (typeof figPs === 'undefined' || !figPs || !figPs.currSlide ? null : figPs);
+    /* At rest: opened, its opening animation over, its picture loaded. A
+       rectangle read mid-animation is a figure that is still growing. */
+    window.__rest = async ps => {
+      if (!ps || !ps.on) return null;
+      await new Promise(r => { if (ps.opener && ps.opener.isOpen) return r(); ps.on('openingAnimationEnd', r); setTimeout(r, 4000); });
+      const img = ps.currSlide && ps.currSlide.content && ps.currSlide.content.element;
+      if (img && img.tagName === 'IMG' && !(img.complete && img.naturalWidth))
+        await new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); setTimeout(r, 4000); });
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return ps;
+    };
   });
+  const openFig = (w = 400, h = 300) => page.evaluate(async ([w, h]) => {
+    if (typeof openFigure !== 'function') return false;
+    return !!await __rest(await openFigure(__svg(w, h), 'Test figure', 'Source'));
+  }, [w, h]);
+  const state = () => page.evaluate(() => {
+    const ps = __ps(); if (!ps) return null;
+    const s = ps.currSlide;
+    return { cur: s.currZoomLevel, initial: s.zoomLevels.initial, secondary: s.zoomLevels.secondary,
+      pct: (document.querySelector('.pswp__figv-pct') || {}).textContent,
+      zoomedCls: ps.element.classList.contains('figv-zoomed'), pan: { x: s.pan.x, y: s.pan.y } };
+  });
+  const isOpen = () => page.evaluate(() => !!document.querySelector('.pswp'));
+  /* Closed is the overlay gone from the page. PhotoSwipe removes it when its
+     closing animation ends, which from a zoomed picture takes longer than from
+     a fitted one, so this waits up to three seconds for that and no longer. */
+  const closes = () => page.waitForFunction(() => !document.querySelector('.pswp'), null, { timeout: 3000 }).then(() => true, () => false);
+  const settle = (ms = 420) => page.waitForTimeout(ms);   // PhotoSwipe's zoom transition is 333ms; ours 220ms
+  const close = () => page.evaluate(() => { if (typeof closePeek === 'function') closePeek(); });
 
-  head('the viewer opens with a zoom surface and its controls');
-  await openFig();
-  const opened = await page.evaluate(() => ({
-    img: !!document.querySelector('.figv-scroll img'),
-    ctl: document.querySelectorAll('.figv-ctl .figv-btn').length,
-    pct: (document.querySelector('.figv-pct') || {}).textContent,
-    mounted: !!__fz(),
-    touchAction: getComputedStyle(document.querySelector('.figv-scroll')).touchAction,
-  }));
-  ok('the figure is on screen', opened.img === true);
-  ok('with zoom out, in and fit', opened.ctl === 3, `${opened.ctl} buttons`);
+  head('the viewer opens as a dialog, with its zoom row and caption');
+  const o0 = await openFig();
+  const opened = await page.evaluate(() => {
+    const root = document.querySelector('.pswp');
+    const img = __ps() && __ps().currSlide.content.element;
+    const btn = n => !!document.querySelector('.pswp__button--' + n);
+    return { root: !!root, role: root && root.getAttribute('role'), modal: root && root.getAttribute('aria-modal'),
+      label: root && root.getAttribute('aria-label'), img: !!img && img.naturalWidth > 0,
+      buttons: ['figv-out', 'figv-in', 'figv-fit', 'close'].filter(btn),
+      pct: (document.querySelector('.pswp__figv-pct') || {}).textContent,
+      cap: (document.querySelector('.pswp__figv-cap') || {}).textContent || '',
+      touch: root ? getComputedStyle(root).touchAction : '',
+      locked: document.body.classList.contains('peek-locked') };
+  });
+  ok('the figure opens, its picture drawn', o0 && opened.root && opened.img, JSON.stringify({ o0, root: opened.root, img: opened.img }));
+  ok('as a modal dialog named by its caption', opened.role === 'dialog' && opened.modal === 'true' && opened.label === 'Test figure',
+     `${opened.role} / ${opened.modal} / ${opened.label}`);
+  ok('with zoom out, zoom in, Fit and Close', opened.buttons.length === 4, opened.buttons.join(', '));
   ok('starting fitted at 100%', opened.pct === '100%', String(opened.pct));
-  ok('the zoom controller is mounted', opened.mounted === true);
+  ok('the caption and its source are under it', /Test figure/.test(opened.cap) && /Source/.test(opened.cap), opened.cap);
   /* Without touch-action:none the browser claims a pinch for page zoom and
-     pointermove never fires — the figure sits still while the page scales. */
-  ok('and the surface yields its gestures to the handler',
-     opened.touchAction === 'none', String(opened.touchAction));
+     the figure sits still while the page scales. */
+  ok('the surface keeps the browser off its gestures', opened.touch === 'none', String(opened.touch));
+  ok('and the page beneath is held still', opened.locked === true);
 
-  head('the controls zoom, and Fit returns');
-  const viaButtons = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    if (!__fz() || document.querySelectorAll('.figv-btn').length < 3)
-      return { zoomed: { s: 0, pct: '', cls: false }, back: 0, fitted: 0, cls: false };
-    document.querySelectorAll('.figv-btn')[1].click(); await wait(40);   // +
-    const zoomed = { s: __fz().state().scale, pct: document.querySelector('.figv-pct').textContent,
-                     cls: document.querySelector('.figv-scroll').classList.contains('zoomed') };
-    document.querySelectorAll('.figv-btn')[0].click(); await wait(40);   // −
-    const back = __fz().state().scale;
-    document.querySelectorAll('.figv-btn')[2].click(); await wait(40);   // Fit
-    return { zoomed, back, fitted: __fz().state().scale, cls: document.querySelector('.figv-scroll').classList.contains('zoomed') };
-  });
-  ok('zoom in magnifies', viaButtons.zoomed.s > 1, String(viaButtons.zoomed.s));
-  ok('and the readout follows', viaButtons.zoomed.pct === '140%', viaButtons.zoomed.pct);
-  ok('the surface reports itself zoomed, for the grab cursor', viaButtons.zoomed.cls === true);
-  ok('zoom out reverses it', Math.abs(viaButtons.back - 1) < 1e-6, String(viaButtons.back));
-  ok('Fit returns to fitted', viaButtons.fitted === 1 && viaButtons.cls === false, JSON.stringify(viaButtons.fitted));
+  head('the zoom row zooms, and Fit returns');
+  await page.click('.pswp__button--figv-in'); await settle();
+  const zin = await state();
+  await page.click('.pswp__button--figv-out'); await settle();
+  const zout = await state();
+  await page.click('.pswp__button--figv-in'); await page.click('.pswp__button--figv-in'); await settle();
+  await page.click('.pswp__button--figv-fit'); await settle();
+  const zfit = await state();
+  ok('+ magnifies 1.4 times', !!zin && Math.abs(zin.cur / zin.initial - 1.4) < 0.01, zin && (zin.cur / zin.initial).toFixed(3));
+  ok('and the readout follows', !!zin && zin.pct === '140%', zin && zin.pct);
+  ok('the viewer marks itself zoomed, for the grab cursor', !!zin && zin.zoomedCls === true);
+  ok('− reverses it', !!zout && Math.abs(zout.cur - zout.initial) < 1e-6 && zout.pct === '100%', zout && `${zout.cur} / ${zout.pct}`);
+  ok('Fit returns to fitted from anywhere', !!zfit && Math.abs(zfit.cur - zfit.initial) < 1e-6 && !zfit.zoomedCls, zfit && String(zfit.cur));
 
   head('the keyboard reaches the zoom');
-  await openFig();
-  const keys = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    if (!__fz()) return { inn: 0, out: 0, zero: 0, open: false };
-    const fire = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
-    fire('+'); await wait(30); const inn = __fz().state().scale;
-    fire('-'); await wait(30); const out = __fz().state().scale;
-    fire('+'); fire('+'); await wait(30);
-    fire('0'); await wait(30); const zero = __fz().state().scale;
-    return { inn, out, zero, open: !!document.querySelector('.figv-scroll') };
-  });
-  ok('+ magnifies', keys.inn > 1, String(keys.inn));
-  ok('− reverses', Math.abs(keys.out - 1) < 1e-6, String(keys.out));
-  ok('0 returns to fitted', keys.zero === 1, String(keys.zero));
-  ok('and none of them closed the viewer', keys.open === true);
+  await page.keyboard.press('+'); await settle();
+  const k1 = await state();
+  await page.keyboard.press('-'); await settle();
+  const k2 = await state();
+  await page.keyboard.press('='); await page.keyboard.press('='); await settle();
+  await page.keyboard.press('0'); await settle();
+  const k3 = await state();
+  ok('+ magnifies', !!k1 && k1.cur > k1.initial * 1.3, k1 && (k1.cur / k1.initial).toFixed(3));
+  ok('− reverses', !!k2 && Math.abs(k2.cur - k2.initial) < 1e-6, k2 && String(k2.cur / k2.initial));
+  ok('0 returns to fitted', !!k3 && Math.abs(k3.cur - k3.initial) < 1e-6, k3 && String(k3.cur / k3.initial));
+  ok('and none of them closed the viewer', await isOpen());
 
-  head('a pinch zooms about the fingers');
-  await openFig();
+  head('a pinch zooms, and is not a dismissal');
   const pinch = await page.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const sc = document.querySelector('.figv-scroll');
-    if (!sc || !__fz()) return { after: 0, open: false };
-    const b = sc.getBoundingClientRect();
-    const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-    const pd = (id, x, y, t) => sc.dispatchEvent(new PointerEvent(t, { pointerId: id, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-    pd(1, cx - 40, cy, 'pointerdown'); pd(2, cx + 40, cy, 'pointerdown');
-    pd(1, cx - 40, cy, 'pointermove'); pd(2, cx + 40, cy, 'pointermove');   // establishes the baseline
-    await wait(20);
-    pd(1, cx - 120, cy, 'pointermove'); pd(2, cx + 120, cy, 'pointermove'); // spread
-    await wait(40);
-    const after = __fz().state().scale;
-    pd(1, cx - 120, cy, 'pointerup'); pd(2, cx + 120, cy, 'pointerup');
-    return { after, open: !!document.querySelector('.figv-scroll') };
+    const ps = __ps(), el = document.querySelector('.pswp__scroll-wrap');
+    if (!ps || !el) return null;
+    const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const pe = (t, id, x) => el.dispatchEvent(new PointerEvent(t, { pointerId: id, pointerType: 'touch', isPrimary: id === 1,
+      clientX: x, clientY: cy, bubbles: true, cancelable: true, buttons: t === 'pointerup' ? 0 : 1 }));
+    /* PhotoSwipe applies a pinch in its animation frame, not in the pointer
+       handler, so the fingers move a frame at a time: spaced by a timer, a
+       busy WebKit ran all eight moves before one frame and saw no pinch. */
+    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    const before = ps.currSlide.currZoomLevel, ready = !!(ps.opener && ps.opener.isOpen);
+    pe('pointerdown', 1, cx - 40); pe('pointerdown', 2, cx + 40);
+    for (let k = 1; k <= 8; k++) { pe('pointermove', 1, cx - 40 - k * 15); pe('pointermove', 2, cx + 40 + k * 15); await frame(); await frame(); }
+    const during = ps.currSlide.currZoomLevel;
+    pe('pointerup', 1, cx - 160); pe('pointerup', 2, cx + 160);
+    await wait(500);
+    return { ready, before, during, after: ps.currSlide.currZoomLevel, initial: ps.currSlide.zoomLevels.initial };
   });
-  ok('spreading two pointers magnifies', pinch.after > 1.5, String(pinch.after));
-  ok('and the viewer is still open — a pinch is not a dismissal', pinch.open === true);
+  ok('spreading two fingers magnifies', !!pinch && pinch.after > pinch.initial * 1.5, JSON.stringify(pinch));
+  ok('and the viewer is still open', await isOpen());
+
+  head('a trackpad pinch (ctrl + wheel) zooms too');
+  await page.click('.pswp__button--figv-fit'); await settle();
+  await page.mouse.move(450, 500);
+  await page.keyboard.down('Control'); await page.mouse.wheel(0, -300); await page.keyboard.up('Control');
+  await settle();
+  const wheel = await state();
+  ok('it magnifies about the pointer', !!wheel && wheel.cur > wheel.initial * 1.1, wheel && (wheel.cur / wheel.initial).toFixed(3));
 
   head('a drag pans, and does not dismiss');
-  /* The gesture this feature adds is the one most likely to break the
-     tap-outside exit, because a pan ends with the pointer on the image. */
-  const drag = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    const sc = document.querySelector('.figv-scroll');
-    if (!sc || !__fz()) return { moved: false, open: false };
-    const b = sc.getBoundingClientRect();
-    const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-    __fz().zoomCentre(3); await wait(30);
-    const before = { ...__fz().state() };
-    const pd = (x, y, t) => sc.dispatchEvent(new PointerEvent(t, { pointerId: 9, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-    pd(cx, cy, 'pointerdown');
-    pd(cx - 30, cy - 20, 'pointermove');
-    pd(cx - 60, cy - 40, 'pointermove');
-    await wait(30);
-    const after = { ...__fz().state() };
-    pd(cx - 60, cy - 40, 'pointerup');
-    /* The click the browser sends after a drag lands on the image. */
-    document.querySelector('.figv-scroll img').click();
-    await wait(60);
-    return { moved: after.tx !== before.tx || after.ty !== before.ty,
-             open: !!document.querySelector('.figv-scroll') };
-  });
-  ok('dragging moves the figure', drag.moved === true);
-  ok('and the drag is not mistaken for the tap that closes it', drag.open === true);
+  /* The gesture most likely to break the tap-outside exit: a pan ends with the
+     pointer on the picture, and its mouseup is followed by a click. */
+  await page.click('.pswp__button--figv-in'); await page.click('.pswp__button--figv-in'); await page.click('.pswp__button--figv-in'); await settle();
+  const p0 = await state();
+  await page.mouse.move(450, 500); await page.mouse.down();
+  for (let k = 1; k <= 10; k++) await page.mouse.move(450 - k * 8, 500 - k * 5);
+  await page.mouse.up(); await settle();
+  const p1 = await state();
+  ok('dragging moves the figure', !!p0 && !!p1 && (p1.pan.x !== p0.pan.x || p1.pan.y !== p0.pan.y), p0 && p1 ? `${JSON.stringify(p0.pan)} → ${JSON.stringify(p1.pan)}` : '—');
+  ok('and the drag is not mistaken for a tap that closes it', await isOpen());
+  ok('nor for the click that zooms: the zoom is left where it was', !!p0 && !!p1 && Math.abs(p1.cur - p0.cur) < 1e-6, p1 && String(p1.cur));
 
-  head('a tap survives the wobble every real finger has');
-  /* THE BUG THIS CHECKS FOR SHIPPED. Any nonzero pointermove latched "moved",
-     and moved suppresses the tap so a drag cannot dismiss the viewer. A finger
-     never holds still to the pixel, so once zoomed, tap-to-fit failed roughly
-     whenever a human did it — while passing every synthetic test, because
-     dispatched pointers move exactly 0px unless told otherwise. The fix is a
-     slop threshold: movement under it is still a tap. */
-  await openFig();
-  const slop = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    const sc = document.querySelector('.figv-scroll');
-    if (!sc || !__fz()) return { skipped: true };
-    const b = sc.getBoundingClientRect();
-    const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-    const pd = (x, y, t) => sc.dispatchEvent(new PointerEvent(t, { pointerId: 5, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-    const tapWithWobble = async (px) => {
-      pd(cx, cy, 'pointerdown');
-      pd(cx + px, cy, 'pointermove');
-      pd(cx + px, cy, 'pointerup');
-      sc.querySelector('img').click();
-      await wait(40);
-      return __fz().state().scale;
-    };
-    __fz().zoomCentre(3); await wait(30);
-    const afterWobble = await tapWithWobble(1);        // a hand, not a robot
-    __fz().reset(); __fz().zoomCentre(3); await wait(30);
-    const afterThree = await tapWithWobble(3);
-    __fz().reset(); __fz().zoomCentre(3); await wait(30);
-    const afterRealDrag = await tapWithWobble(60);     // unambiguously a pan
-    return { skipped: false, afterWobble, afterThree, afterRealDrag,
-             open: !!document.querySelector('.figv-scroll') };
-  });
-  ok('a 1px wobble is still a tap, and returns to fitted',
-     slop.afterWobble === 1, `scale ${slop.afterWobble}`);
-  ok('and so is 3px', slop.afterThree === 1, `scale ${slop.afterThree}`);
-  /* The threshold must not be so generous that a real drag starts dismissing
-     things — that is the bug the `moved` latch exists to prevent. */
-  ok('but a 60px drag is a pan, not a tap — the zoom is left where it was',
-     slop.afterRealDrag === 3, `scale ${slop.afterRealDrag}`);
-  ok('and the viewer stayed open throughout', slop.open === true);
+  head('a tap on the picture magnifies; a tap off it closes');
+  /* A viewer of its own: the gestures above leave PhotoSwipe's pointer state
+     however a synthetic pinch leaves it, and a tap is judged against that. */
+  await close(); await openFig();
+  /* A mouse click on the picture: PhotoSwipe's imageClickAction. */
+  const imgBox = async () => page.evaluate(() => { const r = __ps().currSlide.content.element.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  let c = await imgBox();
+  await page.mouse.click(c.x, c.y); await settle(700);
+  const t1 = await state();
+  ok('a click on the picture magnifies it', !!t1 && t1.cur > t1.initial * 1.5, t1 && (t1.cur / t1.initial).toFixed(3));
+  await page.mouse.click(c.x, c.y); await settle(700);
+  const t2 = await state();
+  ok('and a second click returns it to fitted', !!t2 && Math.abs(t2.cur - t2.initial) < 1e-6, t2 && String(t2.cur / t2.initial));
+  /* A finger on a touch screen: tapAction, which is ours. */
+  c = await imgBox();
+  await page.touchscreen.tap(c.x, c.y); await settle(900);
+  const t3 = await state();
+  ok('a finger\'s tap on the picture magnifies it, as on an iPad', !!t3 && t3.cur > t3.initial * 1.5, t3 && (t3.cur / t3.initial).toFixed(3));
+  ok('and does not close the viewer', await isOpen());
+  await page.touchscreen.tap(20, 600);
+  ok('a finger\'s tap off the picture closes it', await closes());
 
   head('every way out of a figure still works');
   const exits = {};
+  await openFig(); await page.keyboard.press('Escape');
+  exits.escape = await closes();
+  await openFig(); await page.click('.pswp__button--close');
+  exits.button = await closes();
+  await openFig(); await page.mouse.click(20, 600);
+  exits.backdrop = await closes();
+  /* At once: closePeek is the app drawing something else. */
   await openFig();
-  exits.escape = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await wait(60); return !document.querySelector('.figv-scroll');
-  });
-  await openFig();
-  exits.button = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    document.querySelector('.figv-x').click(); await wait(60);
-    return !document.querySelector('.figv-scroll');
-  });
-  await openFig();
-  exits.backdrop = await page.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    document.querySelector('.figv').click(); await wait(60);
-    return !document.querySelector('.figv-scroll');
-  });
+  exits.closePeek = await page.evaluate(() => { closePeek(); return !document.querySelector('.pswp'); });
   ok('Escape closes', exits.escape === true);
-  ok('the button closes', exits.button === true);
-  ok('and tapping outside the picture closes', exits.backdrop === true);
-  const cleared = await page.evaluate(() => __fz() === null);
-  ok('closing releases the controller, so the next figure opens fitted', cleared === true);
+  ok('the Close button closes', exits.button === true);
+  ok('a click outside the picture closes', exits.backdrop === true);
+  ok('and so does the app moving on (closePeek), at once', exits.closePeek === true);
+  /* The app moving on while a figure is still growing in: PhotoSwipe ignores a
+     close until its opening animation ends, and a viewer left over the app
+     caught every tap meant for the page (verify-pearl's next click died on it). */
+  const midOpen = await page.evaluate(async () => {
+    const ps = await openFigure(__svg(400, 300), 'Mid-entrance', 'Source');
+    const opening = !!ps && !(ps.opener && ps.opener.isOpen);
+    closePeek();
+    await new Promise(r => setTimeout(r, 50));
+    return { opening, left: !!document.querySelector('.pswp'), locked: document.body.classList.contains('peek-locked') };
+  });
+  ok('a figure closed while it is still opening goes at once', midOpen.opening && !midOpen.left && !midOpen.locked, JSON.stringify(midOpen));
+  const cleared = await page.evaluate(() => typeof figPs !== 'undefined' && figPs === null && !document.body.classList.contains('peek-locked'));
+  ok('closing lets go of the viewer and the page', cleared === true);
+
+  head('a figure\'s neighbours are a swipe away');
+  const gal = await page.evaluate(async () => {
+    if (typeof openFigures !== 'function') return null;
+    const ps = await __rest(await openFigures([
+      { src: __svg(400, 300), caption: 'First', source: 'S' },
+      { src: __svg(300, 400), caption: 'Second', source: 'S' },
+      { src: __svg(500, 200), caption: 'Third', source: 'S' }], 1));
+    return ps ? { n: ps.getNumItems(), at: ps.currIndex, counter: (document.querySelector('.pswp__counter') || {}).textContent,
+      cap: document.querySelector('.pswp__figv-cap').textContent } : null;
+  });
+  ok('three figures open as one gallery, at the one asked for', !!gal && gal.n === 3 && gal.at === 1, JSON.stringify(gal));
+  ok('which says where it is', !!gal && /2 of 3/.test(gal.counter || ''), gal && gal.counter);
+  ok('and shows that figure\'s caption', !!gal && /^Second/.test(gal.cap), gal && gal.cap);
+  await page.keyboard.press('ArrowRight'); await settle(700);
+  const g2 = await page.evaluate(() => ({ at: __ps() && __ps().currIndex, cap: (document.querySelector('.pswp__figv-cap') || {}).textContent }));
+  ok('the arrow key goes to the next, and its caption follows', g2.at === 2 && /^Third/.test(g2.cap || ''), JSON.stringify(g2));
+  /* PhotoSwipe draws its arrows only where there is a mouse; on a touch screen,
+     as this page is, a swipe does it (below). The button is still wired. */
+  await page.evaluate(() => document.querySelector('.pswp__button--arrow--prev').click()); await settle(700);
+  ok('the previous-figure button goes back', await page.evaluate(() => __ps() && __ps().currIndex === 1));
+  /* A swipe, as a finger does it: one pointer, sideways. */
+  const swiped = await page.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const ps = __ps(), el = document.querySelector('.pswp__scroll-wrap');
+    const b = el.getBoundingClientRect(), y = b.top + b.height / 2;
+    const pe = (t, x) => el.dispatchEvent(new PointerEvent(t, { pointerId: 7, pointerType: 'touch', isPrimary: true,
+      clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: t === 'pointerup' ? 0 : 1 }));
+    pe('pointerdown', b.left + b.width * 0.8);
+    for (let k = 1; k <= 10; k++) { pe('pointermove', b.left + b.width * (0.8 - k * 0.06)); await wait(16); }
+    pe('pointerup', b.left + b.width * 0.2);
+    await wait(700);
+    return ps.currIndex;
+  });
+  ok('a swipe goes to the next figure', swiped === 2, String(swiped));
+  await close();
+
+  head('a figure from a card brings the card\'s other figures');
+  const fromEl = await page.evaluate(async () => {
+    if (typeof openFigureFrom !== 'function') return null;
+    const box = document.createElement('div'); box.className = 'fig-list';
+    box.innerHTML = [1, 2, 3].map(i => `<figure class="ai-fig" onclick="openFigureFrom(this)"><img src="${__svg(300 + i * 50, 200)}" alt="Fig ${i}"><figcaption>Figure ${i}<span>Note ${i}</span></figcaption></figure>`).join('');
+    document.body.appendChild(box);
+    const ps = await __rest(await openFigureFrom(box.children[2]));
+    const out = ps ? { n: ps.getNumItems(), at: ps.currIndex, cap: document.querySelector('.pswp__figv-cap').textContent } : null;
+    closePeek(); box.remove();
+    return out;
+  });
+  ok('tapping the third of three opens all three, at the third', !!fromEl && fromEl.n === 3 && fromEl.at === 2, JSON.stringify(fromEl));
+  ok('with its own caption and the note it came from', !!fromEl && /Figure 3/.test(fromEl.cap) && /Note 3/.test(fromEl.cap), fromEl && fromEl.cap);
+
+  head('a figure that will not load still opens, and says so');
+  const broken = await page.evaluate(async () => {
+    const ps = await __rest(await openFigure('no-such-figure.webp', 'A missing figure', 'Nowhere'));
+    await new Promise(r => setTimeout(r, 600));
+    const msg = document.querySelector('.pswp__error-msg');
+    return { open: !!document.querySelector('.pswp'), msg: msg ? msg.textContent : '', shown: !!msg && msg.getBoundingClientRect().height > 0,
+      cap: (document.querySelector('.pswp__figv-cap') || {}).textContent || '' };
+  });
+  ok('the viewer opens over a figure that fails', broken.open === true);
+  ok('and says it could not be loaded, rather than showing an empty box', broken.shown && /could not be loaded/.test(broken.msg), broken.msg);
+  ok('its caption still says what it was', /A missing figure/.test(broken.cap), broken.cap);
+  await page.keyboard.press('Escape');
+  ok('and it closes like any other', await closes());
 
   head('the question dialog is left alone');
-  /* openPeek shows a related question and has no image. It must not acquire a
-     zoom controller just because it shares the overlay. */
+  /* peekQuestion shows a related question and has no image: it must not open
+     the figure viewer just because it shares closePeek. */
   const peek = await page.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     closePeek();
-    /* typeof, not truthiness: an undeclared identifier throws a
-       ReferenceError before any check can read it. And peekQuestion takes an
-       ID, not the question — passing the object makes it return early and the
-       check then fails for a reason that has nothing to do with this step. */
-    if (typeof peekQuestion !== 'function') return { opened: null, controller: __fz() };
+    if (typeof peekQuestion !== 'function') return { opened: null, viewer: null };
     peekQuestion(POOL[0].id);
     await wait(80);
-    return { opened: !!document.querySelector('.peek-card'), controller: __fz() };
+    return { opened: !!document.querySelector('.peek-card'), viewer: !!document.querySelector('.pswp') };
   });
   ok('it still opens', peek.opened === true);
-  ok('and has no zoom controller attached', peek.controller === null, String(peek.controller));
+  ok('and the figure viewer does not', peek.viewer === false, String(peek.viewer));
+  await close();
 
-  head('a TALL figure is whole at Fit — the state that promises it');
+  head('a question\'s figures open full screen from the card');
+  const qf = await page.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const q = POOL.find(x => x.img && IMGS[x.id] && IMGS[x.id].length > 1) || POOL.find(x => x.img && IMGS[x.id] && IMGS[x.id].length);
+    if (!q) return { none: true };
+    startAdhocQuiz([q], q.ch);
+    for (let t = 0; t < 80 && !document.querySelector('.fig-slot .fig-full'); t++) await wait(25);
+    const btns = document.querySelectorAll('.fig-slot .fig-full');
+    return { none: false, n: IMGS[q.id].length, btns: btns.length, label: btns[0] && btns[0].getAttribute('aria-label') };
+  });
+  ok('each figure card has a full-screen button, named', !qf.none && qf.btns === qf.n && /full screen/.test(qf.label || ''), JSON.stringify(qf));
+  /* No button to tap is three failures, not a suite that dies reaching for it. */
+  if (!qf.none && !qf.btns) {
+    ok('it opens the question\'s figures, at the one tapped', false, 'no button to tap');
+    ok('and does not also zoom the card in place', false, 'no button to tap');
+    ok('Escape gives the question back', false, 'no button to tap');
+  } else if (!qf.none) {
+    const last = qf.n - 1;
+    await page.locator('.fig-slot .fig-full').nth(last).click();
+    const qOpen = await page.evaluate(async () => {
+      const ps = await __rest(__ps());
+      return ps ? { n: ps.getNumItems(), at: ps.currIndex, zoomed: S.zoomed } : null;
+    });
+    ok('it opens the question\'s figures, at the one tapped', !!qOpen && qOpen.n === qf.n && qOpen.at === last, JSON.stringify(qOpen));
+    ok('and does not also zoom the card in place', !!qOpen && qOpen.zoomed === -1, qOpen && String(qOpen.zoomed));
+    await page.keyboard.press('Escape');
+    ok('Escape gives the question back', await closes() && await page.evaluate(() => S.screen === 'quiz'));
+  }
+
+  head('a TALL figure is whole at Fit');
   {
-    /* The bug this defends against shipped and was found on an iPad, not here:
-       max-width:100% fits the WIDTH and says nothing about the height, so a
-       book-page crop overflowed. Every figure in the suite until now was wider
-       than it was tall, which is why nothing noticed. */
-    await page.evaluate(async () => {
-      const wait = ms => new Promise(r => setTimeout(r, ms));
-      closePeek();
-      openFigure('data:image/svg+xml,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="2000">' +
-        '<rect width="300" height="2000" fill="%23888"/>' +
-        '<rect y="0" width="300" height="40" fill="%23f00"/>' +
-        '<rect y="1960" width="300" height="40" fill="%2300f"/></svg>'
-      ), 'A tall figure', 'Source');
-      for (let i = 0; i < 40 && !document.querySelector('.figv-scroll img'); i++) await wait(25);
-      await wait(120);
-    });
-    const tall = await page.evaluate(() => {
-      const img = document.querySelector('.figv-scroll img');
-      const box = document.querySelector('.figv-scroll');
-      if (!img || !box) return null;
-      const i = img.getBoundingClientRect(), b = box.getBoundingClientRect();
-      return {
-        fitted: !!(__fz() && __fz().state && __fz().state().scale === 1),
-        pct: (document.querySelector('.figv-pct') || {}).textContent,
-        overflowTop: b.top - i.top, overflowBottom: i.bottom - b.bottom,
-        imgH: Math.round(i.height), boxH: Math.round(b.height),
-        imgW: Math.round(i.width), boxW: Math.round(b.width),
-      };
-    });
-    ok('the tall figure opened', tall !== null);
-    ok('and the controller really is at scale 1, not merely reporting it',
-       !!tall && tall.fitted === true);
-    /* Both ends, because flex centring splits the overflow: the old failure
-       showed a band from the middle, not a top-anchored crop. */
-    ok('its top edge is not clipped', !!tall && tall.overflowTop <= 1, tall ? `${Math.round(tall.overflowTop)}px above the frame` : '—');
-    ok('nor its bottom edge', !!tall && tall.overflowBottom <= 1, tall ? `${Math.round(tall.overflowBottom)}px below the frame` : '—');
-    ok('so the whole height sits inside the viewer',
-       !!tall && tall.imgH <= tall.boxH + 1, tall ? `${tall.imgH}px in ${tall.boxH}px` : '—');
-    ok('and it is still reported as 100%, because fitted is what it now is',
-       !!tall && tall.pct === '100%', tall ? String(tall.pct) : '—');
-    ok('the aspect ratio is intact — contained, not squashed',
-       !!tall && Math.abs(tall.imgW / tall.imgH - 300 / 2000) < 0.02,
-       tall ? `${tall.imgW}x${tall.imgH}` : '—');
-
-    /* A wide figure must not have been shrunk by the same rule: max-height
-       only ever caps, and the common case was already correct. */
-    await openFig();
-    const wide = await page.evaluate(() => {
-      const i = document.querySelector('.figv-scroll img').getBoundingClientRect();
-      const b = document.querySelector('.figv-scroll').getBoundingClientRect();
-      return { w: Math.round(i.width), h: Math.round(i.height), bw: Math.round(b.width), bh: Math.round(b.height) };
-    });
-    ok('a wide figure is unchanged by the fix', wide.w <= wide.bw + 1 && wide.h <= wide.bh + 1,
-       `${wide.w}x${wide.h} in ${wide.bw}x${wide.bh}`);
-    ok('and keeps its own aspect ratio too',
-       Math.abs(wide.w / wide.h - 400 / 300) < 0.02, `${wide.w}x${wide.h}`);
+    /* The bug this defends against shipped and was found on an iPad: fitting
+       the WIDTH says nothing about the height, so a book-page crop overflowed.
+       Every figure in the suite until then was wider than it was tall. */
+    const fit = (w, h, extra) => page.evaluate(async ([w, h, extra]) => {
+      const ps = await __rest(await openFigure(__svg(w, h, extra), 'A figure', 'Source'));
+      if (!ps) return null;
+      const i = ps.currSlide.content.element.getBoundingClientRect(), b = ps.element.getBoundingClientRect();
+      return { pct: (document.querySelector('.pswp__figv-pct') || {}).textContent,
+        fitted: Math.abs(ps.currSlide.currZoomLevel - ps.currSlide.zoomLevels.initial) < 1e-6,
+        overflowTop: b.top - i.top, overflowBottom: i.bottom - b.bottom, overflowSide: Math.max(b.left - i.left, i.right - b.right),
+        imgW: Math.round(i.width), imgH: Math.round(i.height) };
+    }, [w, h, extra || '']);
+    const tall = await fit(300, 2000, '<rect y="0" width="300" height="40" fill="#f00"/><rect y="1960" width="300" height="40" fill="#00f"/>');
+    ok('the tall figure opened, fitted', !!tall && tall.fitted === true);
+    ok('its top edge is inside the viewer', !!tall && tall.overflowTop <= 1, tall ? `${Math.round(tall.overflowTop)}px above` : '—');
+    ok('and its bottom edge', !!tall && tall.overflowBottom <= 1, tall ? `${Math.round(tall.overflowBottom)}px below` : '—');
+    ok('reported as 100%, because fitted is what it is', !!tall && tall.pct === '100%', tall ? String(tall.pct) : '—');
+    ok('its aspect ratio intact, contained and not squashed', !!tall && Math.abs(tall.imgW / tall.imgH - 300 / 2000) < 0.02, tall ? `${tall.imgW}x${tall.imgH}` : '—');
+    await close();
+    const wide = await fit(2400, 300);
+    ok('a wide figure fits its width too', !!wide && wide.overflowSide <= 1, wide ? `${Math.round(wide.overflowSide)}px past a side` : '—');
+    ok('and keeps its own aspect ratio', !!wide && Math.abs(wide.imgW / wide.imgH - 8) < 0.1, wide ? `${wide.imgW}x${wide.imgH}` : '—');
+    await close();
   }
 
   head('the real bank fits, at the frames real devices produce');
@@ -424,22 +483,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       ['iPhone portrait', 430, 932],
     ];
     const worstOf = async list => page.evaluate(async urls => {
-      const wait = ms => new Promise(r => setTimeout(r, ms));
       let worst = 0, at = '', seen = 0;
       for (const u of urls) {
-        closePeek(); openFigure(u, 'Real figure', 'Bank');
-        let img = null;
-        for (let t = 0; t < 60 && !img; t++) { await wait(25); img = document.querySelector('.figv-scroll img'); }
-        if (img && !(img.complete && img.naturalWidth)) {
-          await new Promise(r => { let d = 0; const f = () => { if (!d++) r(); };
-            img.addEventListener('load', f, { once: true }); setTimeout(f, 4000); });
-        }
-        await wait(40);
-        const box = document.querySelector('.figv-scroll');
-        if (!img || !img.naturalWidth || !box) continue;
-        /* Layout size, not getBoundingClientRect: the viewer animates in, and
-           a rect measured mid-entrance reports an overflow that is not there. */
-        const over = Math.max(0, img.offsetHeight - box.clientHeight, img.offsetWidth - box.clientWidth);
+        closePeek();
+        const ps = await __rest(await openFigure(u, 'Real figure', 'Bank'));
+        const img = ps && ps.currSlide && ps.currSlide.content.element;
+        if (!img || img.tagName !== 'IMG' || !img.naturalWidth) continue;
+        /* At rest (after the opening animation): every edge of the picture
+           inside the viewer's own box. */
+        const i = img.getBoundingClientRect(), b = ps.element.getBoundingClientRect();
+        const over = Math.max(0, b.left - i.left, i.right - b.right, b.top - i.top, i.bottom - b.bottom);
         if (over > worst) { worst = Math.round(over); at = img.naturalWidth + 'x' + img.naturalHeight; }
         seen++;
       }

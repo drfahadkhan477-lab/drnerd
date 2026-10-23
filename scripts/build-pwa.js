@@ -842,6 +842,35 @@ step('move the heart\'s baked mesh out of the app code', () => {
   if (heartMesh) appCode = heartMesh.code;
 });
 
+/* ── 3.74. the figure viewer's library ──────────────────────────────────
+   PhotoSwipe (app/vendor/photoswipe) is 54 KB of minified code, 19 KB of it
+   gzipped, and the shell was at 278 of its 280 KB when it came. It is needed
+   the first time a figure opens and not before, so it leaves app.js for a file
+   of its own, named by its content, which the service worker precaches with the
+   shell: the viewer works offline from the first launch, and the shell's budget
+   does not pay for it. What stays in app.js names the file (PSW_SRC), and
+   figLib() loads it on demand. Lifted before the comment stripping below, so
+   the library reaches the device byte for byte, its MIT notice included. */
+let psw = null;
+step('lift the figure viewer\'s library out of the app code', () => {
+  const lib = fs.readFileSync(path.join(ROOT, 'app', 'vendor', 'photoswipe', 'photoswipe.umd.min.js'), 'utf8');
+  const at = appCode.indexOf(lib);
+  if (at < 0 || appCode.indexOf(lib, at + 1) >= 0) throw new Error('PhotoSwipe is not in the app code exactly once');
+  const name = 'photoswipe-' + crypto.createHash('sha256').update(lib).digest('hex').slice(0, 12) + '.js';
+  psw = { name: 'vendor/' + name, bytes: Buffer.from(lib, 'utf8') };
+  /* Its stylesheet too: 2 KB of the shell's gzipped budget for rules nothing
+     uses until a figure opens. It leaves the page's style block whole, before
+     the stylesheet step below rewrites that block, and figLib() links it back
+     with the script. */
+  const css = fs.readFileSync(path.join(ROOT, 'app', 'css', 'photoswipe.css'), 'utf8');
+  const cat = html.indexOf(css);
+  if (cat < 0 || html.indexOf(css, cat + 1) >= 0) throw new Error('PhotoSwipe\'s stylesheet is not in the page exactly once');
+  psw.css = 'vendor/photoswipe-' + crypto.createHash('sha256').update(css).digest('hex').slice(0, 12) + '.css';
+  psw.cssBytes = Buffer.from(css, 'utf8');
+  html = html.slice(0, cat) + html.slice(cat + css.length);
+  appCode = appCode.slice(0, at) + `window.PSW_SRC=${JSON.stringify(psw.name)};window.PSW_CSS=${JSON.stringify(psw.css)};` + appCode.slice(at + lib.length);
+});
+
 /* ── 3.75. the comments in src/'s modules ────────────────────────────────
    The shell budget below was set on the reasoning that comments are close to
    free once compressed. Measured, they are half of what src/ gzips to — 76 of
@@ -1088,6 +1117,12 @@ step('every answer key matches the single-file build', () => {
 });
 
 
+fs.mkdirSync(path.join(DIST, 'vendor'), { recursive: true });
+fs.writeFileSync(path.join(DIST, psw.name), psw.bytes);
+fs.writeFileSync(path.join(DIST, psw.css), psw.cssBytes);
+/* PhotoSwipe's MIT licence travels with the copy of it that ships. */
+fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'photoswipe', 'LICENSE'), path.join(DIST, 'vendor', 'photoswipe-LICENSE.txt'));
+
 const echoDir = path.join(DIST, 'echo');
 fs.mkdirSync(echoDir, { recursive: true });
 for (const [name, bytes] of echoAssets) fs.writeFileSync(path.join(echoDir, name), bytes);
@@ -1260,7 +1295,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.
