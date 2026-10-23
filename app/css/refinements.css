@@ -6,7 +6,7 @@
   background:radial-gradient(120% 90% at 0% 0%,var(--teal4),transparent 60%)}
 html[data-theme="dark"] .q-card::before{opacity:.22}
 .q-card>*{position:relative;z-index:1}
-.q-card>.ink-canvas,.q-card>.note-layer{position:absolute;z-index:6}
+.q-card>.ink-canvas,.q-card>.ink-live,.q-card>.note-layer{position:absolute;z-index:6}
 .q-tag{padding:3px 0}
 .q-tag-dot{width:7px;height:7px;box-shadow:0 0 0 3px currentColor;opacity:.9}
 

@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /*
- * The figure viewer's library is the one recorded, whole, and its licence travels with it.
+ * The vendored libraries, the figure viewer's and the pen's, are the ones recorded, whole, and their licences travel with them.
  *
  *   node tests/verify-vendor-pure.js
+ *
+ * The figure viewer's first; the pen's (perfect-freehand 1.2.3, docs/vendor/perfect-freehand/README.md) is held to the same rules
+ * in its own section at the end, and its file carries no notice at all, so for it the licence file is the notice.
  *
  * No browser, no build. app/vendor/photoswipe/photoswipe.umd.min.js is someone else's code, committed: PhotoSwipe 5.4.4
  * (docs/vendor/photoswipe/README.md says where it came from). A file nobody reads line by line is a file that can change
@@ -64,6 +67,30 @@ ok('before either comment strip runs, so its banner reaches the device', lift > 
    `lift @${lift}, src strip @${srcStrip}, app strip @${appStrip}`);
 ok('and precaches it with the shell, so the viewer works offline from the first launch',
    /const PRECACHE\s*=\s*\[[^\]]*\$\{JSON\.stringify\(psw\.name\)\}/.test(pwa));
+
+head('the pen\'s library is the one recorded, and its licence goes with it');
+{
+  /* perfect-freehand (docs/vendor/perfect-freehand/README.md). Its file carries no notice, so the licence file is the notice, and
+     the split build has to ship it. The app slots the file inside a function that gives it an `exports`; the split build lifts that
+     block whole, so the block is what is looked for. */
+  const PF = 'app/vendor/perfect-freehand/index.js';
+  const pf = read(PF);
+  const pfReadme = read('docs/vendor/perfect-freehand/README.md');
+  const pfLicence = read('docs/vendor/perfect-freehand/LICENSE');
+  const pfSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, PF))).digest('hex');
+  const pfRecorded = (new RegExp('`' + PF.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '`[^\\n]*`([0-9a-f]{64})`').exec(pfReadme) || [])[1];
+  ok('the README records a sha256 for perfect-freehand, and the file is that file', !!pfRecorded && pfSha === pfRecorded,
+     `${pfSha.slice(0, 16)}… vs ${(pfRecorded || 'none').slice(0, 16)}`);
+  ok('it is version 1.2.3, as the README says, and exports getStroke', /perfect-freehand@1\.2\.3/.test(pfReadme) && /exports\.getStroke=/.test(pf));
+  ok('its licence is the MIT licence, naming its author', /MIT License/.test(pfLicence) && /Permission is hereby granted/.test(pfLicence) && /Stephen Ruiz/.test(pfLicence));
+  ok('the split build copies that licence beside it',
+     /copyFileSync\(path\.join\(ROOT, 'docs', 'vendor', 'perfect-freehand', 'LICENSE'\), path\.join\(DIST, 'vendor', 'perfect-freehand-LICENSE\.txt'\)\)/.test(pwa));
+  const pfSlot = '(function(){var exports={};\n@@SLOT[app:' + PF + ']@@\n;window.PerfectFreehand=exports;})();';
+  ok('app/systole.html slots it exactly once, in the wrapper the split build lifts', shell.split(pfSlot).length === 2, `${shell.split(pfSlot).length - 1} wrapped slot(s)`);
+  const pfLift = at("lift the pen\\'s library out of the app code");
+  ok('build-pwa lifts it before either comment strip, and precaches it', pfLift > 0 && srcStrip > pfLift && appStrip > pfLift &&
+     /const PRECACHE\s*=\s*\[[^\]]*\$\{JSON\.stringify\(psw\.pf\)\}/.test(pwa), `lift @${pfLift}, src strip @${srcStrip}, app strip @${appStrip}`);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

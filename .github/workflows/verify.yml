@@ -237,7 +237,7 @@ jobs:
         run: node tests/verify-calib-pure.js
       - name: the palette patches' quoted contrast figures are real (19 checks)
         run: node tests/verify-palette-pure.js
-      - name: the figure viewer's library is the one recorded, whole, and its licence ships with it (10 checks)
+      - name: the vendored libraries (figure viewer, pen) are the ones recorded, whole, and their licences ship with them (16 checks)
         run: node tests/verify-vendor-pure.js
       - name: the home strip's rotation never repeats and excludes vfib (32 checks)
         run: node tests/verify-herorhythm-pure.js

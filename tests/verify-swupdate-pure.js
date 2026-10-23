@@ -317,7 +317,7 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
       const x = spawnSync(process.execPath, [S('extract-content.js'), html, dc], { encoding: 'utf8' });
       if (x.status !== 0) throw new Error(`extract-content refused build ${k} (exit ${x.status})`);
       const manifest = JSON.parse(fs.readFileSync(path.join(dc, 'manifest.json'), 'utf8'));
-      const sw = template(contentVersion, path, dist, manifest, shellDigest[k], '0123456789abcdef', 'abc123def456', false, [], [], { name: 'vendor/photoswipe-0123456789ab.js', css: 'vendor/photoswipe-ba9876543210.css' });
+      const sw = template(contentVersion, path, dist, manifest, shellDigest[k], '0123456789abcdef', 'abc123def456', false, [], [], { name: 'vendor/photoswipe-0123456789ab.js', css: 'vendor/photoswipe-ba9876543210.css', pf: 'vendor/perfect-freehand-0a1b2c3d4e5f.js' });
       const figs = fs.readdirSync(path.join(dc, 'figures')).sort();
       b[k] = { sw, manifest, figs, names: (await deploy(sw, [])).names,
                bank: fs.readFileSync(path.join(dc, 'questions.json')),

@@ -871,6 +871,25 @@ step('lift the figure viewer\'s library out of the app code', () => {
   appCode = appCode.slice(0, at) + `window.PSW_SRC=${JSON.stringify(psw.name)};window.PSW_CSS=${JSON.stringify(psw.css)};` + appCode.slice(at + lib.length);
 });
 
+/* ── 3.745. the pen's library ───────────────────────────────────────────
+   perfect-freehand (app/vendor/perfect-freehand) is 2 KB gzipped, and the shell
+   was at 279 of its 280 KB when it came. It is needed when ink is first put on
+   a canvas, so it goes the way the figure viewer's library went: the block that
+   carries it, the function that gives it an `exports` and all, leaves app.js
+   for vendor/, precached with the shell; what stays names the file (PF_SRC) and
+   inkLib() loads it when the first canvas is made. It has no notice of its own
+   to keep, so its licence ships beside it (below). Lifted before the comment
+   stripping, so the file the app loads holds the library byte for byte. */
+step('lift the pen\'s library out of the app code', () => {
+  const lib = fs.readFileSync(path.join(ROOT, 'app', 'vendor', 'perfect-freehand', 'index.js'), 'utf8');
+  const block = '(function(){var exports={};\n' + lib + '\n;window.PerfectFreehand=exports;})();';
+  const at = appCode.indexOf(block);
+  if (at < 0 || appCode.indexOf(block, at + 1) >= 0) throw new Error('perfect-freehand is not in the app code exactly once, in its wrapper');
+  psw.pf = 'vendor/perfect-freehand-' + crypto.createHash('sha256').update(block).digest('hex').slice(0, 12) + '.js';
+  psw.pfBytes = Buffer.from(block, 'utf8');
+  appCode = appCode.slice(0, at) + `window.PF_SRC=${JSON.stringify(psw.pf)};` + appCode.slice(at + block.length);
+});
+
 /* ── 3.75. the comments in src/'s modules ────────────────────────────────
    The shell budget below was set on the reasoning that comments are close to
    free once compressed. Measured, they are half of what src/ gzips to — 76 of
@@ -1122,6 +1141,9 @@ fs.writeFileSync(path.join(DIST, psw.name), psw.bytes);
 fs.writeFileSync(path.join(DIST, psw.css), psw.cssBytes);
 /* PhotoSwipe's MIT licence travels with the copy of it that ships. */
 fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'photoswipe', 'LICENSE'), path.join(DIST, 'vendor', 'photoswipe-LICENSE.txt'));
+fs.writeFileSync(path.join(DIST, psw.pf), psw.pfBytes);
+/* perfect-freehand's too: it carries no notice in the file, so the licence is the notice. */
+fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'perfect-freehand', 'LICENSE'), path.join(DIST, 'vendor', 'perfect-freehand-LICENSE.txt'));
 
 const echoDir = path.join(DIST, 'echo');
 fs.mkdirSync(echoDir, { recursive: true });
@@ -1295,7 +1317,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.
