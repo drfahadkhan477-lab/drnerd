@@ -6788,7 +6788,7 @@ function pearlFigure(p){
     <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
 }
-/* A pearl whose note has no figure still has a picture beside it: its chapter's emblem, glowing in the chapter's colour,
+/* A pearl whose note has no figure still has a picture beside it: its chapter's emblem, glowing in the theme's accent,
    with rings turning round it. It is decoration (aria-hidden), not a figure: #pearlFig stays the note's own, so a pearl
    never wears a picture that is not about it. */
 function pearlChapter(p){
@@ -6797,8 +6797,8 @@ function pearlChapter(p){
 }
 function pearlEmblem(p){
   if(!p||pearlFigure(p)) return '';
-  const ch=pearlChapter(p), col=(ch&&CH_COLORS[ch])||'#0EA5E9';
-  return `<div class="pearl-emblem" id="pearlEmblem" aria-hidden="true" style="--pe:${col}">
+  const ch=pearlChapter(p);
+  return `<div class="pearl-emblem" id="pearlEmblem" aria-hidden="true" style="--pe:var(--teal)">
     <span class="pe-ring r1"></span><span class="pe-ring r2"></span><span class="pe-ring r3"></span>
     <span class="pe-orb">${ch?chIcon(ch):icon('heart-pulse')}</span>
     <span class="pe-cap">${e(ch||p.chapter||'From your notes')}</span></div>`;

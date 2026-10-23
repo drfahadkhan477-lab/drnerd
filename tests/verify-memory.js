@@ -363,8 +363,8 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
      kept a note; either guard alone turns both checks below red. A single
      file is never hosted, since file: has no server, so given one this serves
      the same build from disk on 127.0.0.1, a fresh origin each run; given a
-     URL, the page is served already. Only the build is served, every other
-     path is a 404, and /api/apex/gemini/ never reaches this server: the route
+     URL, the page is served already. The build and its sign-in probe manifest
+     are served, and /api/apex/gemini/ never reaches this server: the route
      above answers it. A server of its own, not route.fulfill, which hands the
      browser the whole body in one message: the real build is 92 MB, and the
      page closed under it (the owner's full run died here, 45 checks in, while
@@ -374,6 +374,12 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   if (!/^https?:\/\//.test(target)) {
     const built = path.resolve(target);
     hostServer = http.createServer((req, res) => {
+      // Match a signed-in deployment: the new cache-bypassing session probe
+      // needs the same manifest endpoint as the PWA. It is not a relay call.
+      if (req.url.split('?')[0] === '/manifest.webmanifest') {
+        res.writeHead(200, { 'content-type': 'application/manifest+json' });
+        res.end(JSON.stringify({ name: 'Systole', start_url: './' })); return;
+      }
       // Chromium may ask for its default icon on this fresh HTTP origin.
       // This fixture serves only the app; give the optional icon an empty response.
       if (req.url.split('?')[0] === '/favicon.ico') { res.writeHead(204); res.end(); return; }
