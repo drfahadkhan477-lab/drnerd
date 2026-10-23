@@ -534,7 +534,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
         const r=await send('https://example.invalid/gemini', {method:'POST',body:'same request',signal:ctl.signal},
           onRetry ? () => ctl.abort() : undefined);
         results[name]={calls,status:r.status,body:await r.text(),same:bodies.every(b=>b==='same request')};
-      } catch(e) { results[name]={calls,error:e.name}; }
+      } catch(e) { results[name]={calls,error:e.name,message:e.message}; }
     }
     try {
       await trial('recover',[()=>response(503,'overloaded','0'),()=>new Response('answer')]);
@@ -544,7 +544,14 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
       await trial('rate',[()=>response(429,'requests per minute','0'),()=>new Response('answer')]);
       await trial('long',[()=>response(503,'busy','120')]);
       await trial('cancel',[()=>response(503,'busy','0')],true);
-      await trial('partial',[()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('partial'));c.error(new Error('stream lost'));}}))]);
+      const brokenBody=()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('partial'));c.error(new Error('stream lost'));}}));
+      // WebKit and Chromium expose different native errors for this stream.
+      // Measure the fixture directly, then require unchanged propagation and
+      // exactly one fetch through the helper. An accepted error-name list
+      // would miss a helper that substituted its own error.
+      try { await brokenBody().text(); }
+      catch(e) { results.bodyError={error:e.name,message:e.message}; }
+      await trial('partial',[brokenBody]);
     } finally { window.fetch=saved; }
     return results;
   });
@@ -555,7 +562,9 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a short rate limit with Retry-After recovers', retryCases.rate.calls===2 && retryCases.rate.status===200);
   ok('a long retry delay is returned to the caller rather than shortened', retryCases.long.calls===1 && retryCases.long.status===503);
   ok('Stop during backoff aborts without a second request', retryCases.cancel.calls===1 && retryCases.cancel.error==='AbortError');
-  ok('a failed response body is never replayed', retryCases.partial.calls===1 && retryCases.partial.error==='TypeError', JSON.stringify(retryCases.partial));
+  ok('a failed response body is never replayed', retryCases.partial.calls===1
+     && !!retryCases.bodyError?.error && retryCases.partial.error===retryCases.bodyError.error
+     && retryCases.partial.message===retryCases.bodyError.message, JSON.stringify(retryCases.partial));
 
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
