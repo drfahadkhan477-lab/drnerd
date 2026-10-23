@@ -349,9 +349,10 @@ head('Memorizer CI exercises every engine without weakening the iPad gate');
   // package version and immutable digest, plus an actual shared-engine render
   // and a failing exit when the browser is missing or its page does not render.
   ok('CI uses pinned dependencies, a matching immutable browser image and a rendering probe',
-     /\bnpm ci\b/.test(job)
+     /^\s*run:\s*npm ci\s*$/m.test(job)
      && image.startsWith('mcr.microsoft.com/playwright:v' + version + '-noble@sha256:')
      && /^[a-f0-9]{64}$/.test(image.split('@sha256:')[1] || '')
+     && /^\s*options:[^\n]*--user\s+1001\b/m.test(job)
      && /require\('\.\/tests\/_engine'\)/.test(probe) && /await launch\(\)/.test(probe)
      && /await page\.setContent\(/.test(probe)
      && /if \(await page\.title\(\) !== 'Browser ready'\) throw/.test(probe)

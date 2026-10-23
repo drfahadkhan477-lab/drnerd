@@ -468,7 +468,9 @@ jobs:
     # Browser/system packages are already present, avoiding the runner's slow APT mirror.
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
-      options: --ipc=host
+      # GitHub's mounted Home belongs to UID 1001. Firefox refuses a root
+      # process using someone else's Home; keep the process and directory owner aligned.
+      options: --user 1001 --ipc=host
     timeout-minutes: 45
     strategy:
       fail-fast: false

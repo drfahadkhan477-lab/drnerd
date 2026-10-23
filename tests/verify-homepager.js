@@ -253,9 +253,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       const pearl=document.getElementById('pearlCurrent')?.getContext('2d');
       const ecg=document.getElementById('heroECG')?.getContext('2d');
       const heart=document.getElementById('heroHeart3d')?.getContext('webgl2');
-      const watch=(ctx,method,key)=>{ if(!ctx) return; const fn=ctx[method];
+      const countPaint=(ctx,method,key)=>{ if(!ctx) return; const fn=ctx[method];
         ctx[method]=function(...args){counts[key]++;return fn.apply(this,args);}; undo.push(()=>{ctx[method]=fn;}); };
-      watch(pearl,'clearRect','pearl'); watch(ecg,'stroke','ecg'); watch(heart,'clear','heart');
+      countPaint(pearl,'clearRect','pearl'); countPaint(ecg,'stroke','ecg'); countPaint(heart,'clear','heart');
       try { await new Promise(r=>{let n=0;const f=()=>++n<20?requestAnimationFrame(f):r();requestAnimationFrame(f);}); }
       finally { undo.forEach(f=>f()); }
       return {...counts,hasPearl:!!pearl,hasECG:!!ecg,hasHeart:!!heart};
