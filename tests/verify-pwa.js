@@ -615,6 +615,13 @@ async function heapAfterBoot(page, url) {
       const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
       return images.length === 2 && images.every(i => i.naturalWidth > 100 && /\/echo\/echo-/.test(i.src));
     }));
+    /* The Lab's modules leave app.js for vendor/ (build-pwa, 3.746) and load when the Lab is first drawn. First drawn
+       here, after the outage: the file must come from the precache, and the Lab must draw from it. */
+    await page.evaluate(() => goPractice());
+    const labDrawn = await settled(page, () => typeof LabUI !== 'undefined' && !!document.querySelector('#plabRoot .plab-card'),
+      { timeout: 30000 }).then(() => true, () => false);
+    ok('the Lab, out of app.js, draws on its first visit offline', labDrawn === true && await page.evaluate(() =>
+      typeof window.LAB_SRC === 'string' && !!document.querySelector('script[src="' + window.LAB_SRC + '"]')));
     transport.resume();
     await ctx.close();
     transport.close();

@@ -891,6 +891,28 @@ step('lift the pen\'s library out of the app code', () => {
   appCode = appCode.slice(0, at) + `window.PF_SRC=${JSON.stringify(psw.pf)};` + appCode.slice(at + block.length);
 });
 
+/* ── 3.746. the Practice Lab ────────────────────────────────────────────
+   The Lab's eight modules (src/lab/*.js) are about 40 KB of the shell gzipped,
+   and nothing reads them until the Lab screen opens: mountPractice() is their one
+   caller. The licensed build stood at 288 KB against the 280 KB budget with them
+   in. They leave app.js as one file, in the order the page slots them, precached
+   with the shell, so the Lab still opens offline from the first launch; what
+   stays names the file (LAB_SRC), and mountPractice() loads it the first time
+   the Lab is drawn. Physio, RhythmsExtra and FSRS, which the modules read as they
+   load, stay in app.js and run first. */
+const LAB_FILES = ['heartsounds', 'tracings', 'strips', 'heartmap', 'drill', 'progress', 'items', 'ui'];
+step('lift the Practice Lab out of the app code', () => {
+  const block = LAB_FILES.map(f => fs.readFileSync(path.join(ROOT, 'src', 'lab', f + '.js'), 'utf8')).join('\n');
+  const at = appCode.indexOf(block);
+  if (at < 0 || appCode.indexOf(block, at + 1) >= 0) throw new Error('the Lab\'s modules are not in the app code exactly once, in the page\'s order');
+  psw.lab = 'vendor/lab-' + crypto.createHash('sha256').update(block).digest('hex').slice(0, 12) + '.js';
+  /* Without their comments, as the modules that stay are shipped (step 3.75), and still a script that compiles. */
+  const lean = require('./strip-comments.js').strip(block);
+  new (require('vm').Script)(lean, { filename: psw.lab });
+  psw.labBytes = Buffer.from(lean, 'utf8');
+  appCode = appCode.slice(0, at) + `window.LAB_SRC=${JSON.stringify(psw.lab)};` + appCode.slice(at + block.length);
+});
+
 /* ── 3.75. the comments in src/'s modules ────────────────────────────────
    The shell budget below was set on the reasoning that comments are close to
    free once compressed. Measured, they are half of what src/ gzips to — 76 of
@@ -905,7 +927,8 @@ step('ship src/\'s modules without their comments', () => {
     e.isDirectory() ? (e.name === 'worker' ? [] : listSrc(path.join(dir, e.name)))
                     : /\.js$/.test(e.name) ? [path.join(dir, e.name)] : []);
   const mods = listSrc(path.join(ROOT, 'src')).sort()
-    .map(f => [path.relative(ROOT, f).split(path.sep).join('/'), fs.readFileSync(f, 'utf8')]);
+    .map(f => [path.relative(ROOT, f).split(path.sep).join('/'), fs.readFileSync(f, 'utf8')])
+    .filter(([name]) => !(psw.labBytes && name.startsWith('src/lab/')));  // lifted to vendor/ (3.746), stripped there
   strippedModules = stripEmbedded(appCode, mods);
   appCode = strippedModules.code;
   console.log(`  comments out of ${strippedModules.stripped.length} src/ modules` +
@@ -1143,6 +1166,7 @@ fs.writeFileSync(path.join(DIST, psw.css), psw.cssBytes);
 /* PhotoSwipe's MIT licence travels with the copy of it that ships. */
 fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'photoswipe', 'LICENSE'), path.join(DIST, 'vendor', 'photoswipe-LICENSE.txt'));
 fs.writeFileSync(path.join(DIST, psw.pf), psw.pfBytes);
+fs.writeFileSync(path.join(DIST, psw.lab), psw.labBytes);
 /* perfect-freehand's too: it carries no notice in the file, so the licence is the notice. */
 fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'perfect-freehand', 'LICENSE'), path.join(DIST, 'vendor', 'perfect-freehand-LICENSE.txt'));
 
@@ -1318,7 +1342,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(psw.lab)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.

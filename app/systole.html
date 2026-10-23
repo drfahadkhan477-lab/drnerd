@@ -2496,8 +2496,18 @@ function goLab(){ S.screen='lab'; render(); toTop(); }
    keys. Every draw of this screen hands it the element again, and every draw of another lets it go, which stops a heart
    sound that is playing. */
 function buildPractice(){ return `<div class="home-wrap anim-fade"><div class="plab" id="plabRoot"></div></div>`; }
+/* The split build lifts the Lab's modules into vendor/ and leaves LAB_SRC naming the file (scripts/build-pwa.js);
+   the first draw of this screen loads it and draws again when it is there. A failed load is not remembered. */
+let labLibP=null;
 function mountPractice(){
-  if(typeof LabUI==='undefined') return;
+  if(typeof LabUI==='undefined'){
+    if(S.screen==='practice'&&window.LAB_SRC&&!labLibP){
+      const s=document.createElement('script'); s.src=window.LAB_SRC;
+      labLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); labLibP=null; res(); }; });
+      document.head.appendChild(s);
+    }
+    return;
+  }
   if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'));
   else LabUI.unmount();
 }
