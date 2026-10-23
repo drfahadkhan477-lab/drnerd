@@ -28,7 +28,7 @@
  *   - the iPad's check refuses a bank block it could not show safely;
  *   - the command line takes a folder, and exits 2 on a refused one.
  *
- * The split build runs from a copy of scripts/ and src/ in this suite's own
+ * The split build runs from a copy of scripts/, src/ and the vendored library in this suite's own
  * folder, so the repository's content/ and dist/ are never written.
  *
  * Every question here is invented placeholder text.
@@ -250,6 +250,11 @@ const copyFolder = (to, edit) => {
       const root = path.join(dir, 'split-' + name);
       fs.cpSync(path.join(ROOT, 'scripts'), path.join(root, 'scripts'), { recursive: true });
       fs.cpSync(path.join(ROOT, 'src'), path.join(root, 'src'), { recursive: true });
+      /* the figure viewer's library and stylesheet, which the split build lifts out of the shell, and its licence */
+      fs.cpSync(path.join(ROOT, 'app', 'vendor'), path.join(root, 'app', 'vendor'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'app', 'css'));
+      fs.copyFileSync(path.join(ROOT, 'app', 'css', 'photoswipe.css'), path.join(root, 'app', 'css', 'photoswipe.css'));
+      fs.cpSync(path.join(ROOT, 'docs', 'vendor'), path.join(root, 'docs', 'vendor'), { recursive: true });
       fs.mkdirSync(path.join(root, 'build'));
       const file = path.join(root, 'build', 'systole.html');
       fs.writeFileSync(file, html);

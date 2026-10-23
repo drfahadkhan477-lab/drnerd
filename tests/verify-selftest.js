@@ -121,17 +121,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('IT CAN FAIL — the check this whole file exists for');
   {
-    /* Removes exactly the declaration chain step 68 added. If the self-test
-       still reports green here, it is decoration. */
+    /* A viewer that draws the picture past its own edges at Fit: the shape of
+       the bug the figure check was written for (a tall figure clipped on an
+       iPad). If the self-test still reports green here, it is decoration. */
     const broken = await page.evaluate(async () => {
       const s = document.createElement('style');
       s.id = 'st-break';
-      s.textContent = '.figv-scroll img{max-height:none !important}';
+      s.textContent = '.figv-ps .pswp__img{transform:scale(2) !important}';
       document.head.appendChild(s);
       return await runSelfTest();
     });
     const fig = broken.find(r => r.name === 'every figure fits the viewer at Fit');
-    ok('with max-height removed, the figure check FAILS', !!fig && fig.ok === false,
+    ok('with the picture drawn past the viewer, the figure check FAILS', !!fig && fig.ok === false,
        fig ? fig.detail : '—');
     ok('and it names how far the figure escaped the frame',
        !!fig && /worst overflow \d+px/.test(fig.detail) && !/overflow 0px/.test(fig.detail),
@@ -185,7 +186,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         hash: location.hash,
         /* The figure check opens the viewer two dozen times. Leaving one open
            over the app would be a worse bug than any it reports. */
-        peek: !!document.querySelector('.figv-scroll'),
+        peek: !!document.querySelector('.pswp'),
         locked: document.body.classList.contains('peek-locked'),
         screen: S.screen,
       };

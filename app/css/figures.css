@@ -131,55 +131,57 @@ html[data-theme="dark"]{--glass:rgba(17,30,53,.74)}
 .key-msg.bad{color:var(--red-ink)}
 
 /* ── the figure viewer ───────────────────────────────────────────────────
+   PhotoSwipe (app/css/photoswipe.css) draws it; this is Systole's dress for it.
    Dark ground, because a diagram printed on white reads best against one, and
-   because it makes plain that the app is in a different mode now. */
-#peek.fig-open{background:rgba(6,14,28,.88);padding:0;align-items:stretch}
-.figv{position:relative;flex:1;display:flex;flex-direction:column;min-width:0;
-  padding:calc(var(--sat,0px) + 12px) 12px calc(var(--sab,0px) + 12px)}
-.figv-scroll{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;
+   because it makes plain that the app is in a different mode now. Above the app
+   and its question dialog (#peek, 120), under the self-test, which opens
+   figures while it checks them. */
+.figv-ps{--pswp-bg:#060E1C;--pswp-root-z-index:300;--pswp-icon-color:#fff;--pswp-icon-color-secondary:rgba(6,14,28,.6)}
+/* A figure is a page of print: it keeps its white paper under it, and a figure
+   with transparent parts is not drawn on the dark ground. */
+.figv-ps .pswp__img{background:#fff;border-radius:6px}
+.figv-ps .pswp__top-bar{padding-top:var(--sat,0px);align-items:center;gap:4px}
+.figv-ps .pswp__counter{font-size:var(--t-meta);font-variant-numeric:tabular-nums;opacity:.8}
+/* The zoom row: − 100% + Fit, as the old viewer had, in the top bar. */
+.figv-ps .pswp__button--figv-out,.figv-ps .pswp__button--figv-in,.figv-ps .pswp__button--figv-fit{
+  width:auto;min-width:44px;height:44px;margin-top:6px;padding:0 10px;opacity:1;
   display:flex;align-items:center;justify-content:center}
-/* Natural size when it fits, scaled down when it does not, and scrollable
-   either way — a wide algorithm should be pannable, not squeezed to nothing. */
-.figv-ctl{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px}
-.figv-btn{min-width:40px;height:34px;padding:0 12px;border-radius:17px;border:0;cursor:pointer;
-  background:rgba(255,255,255,.12);color:#fff;font-size:var(--t-body);line-height:1;
+.figv-glyph{display:flex;align-items:center;justify-content:center;min-width:34px;height:34px;padding:0 10px;
+  border-radius:17px;background:rgba(255,255,255,.14);color:#fff;font-size:var(--t-body);line-height:1;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-.figv-fit{font-size:var(--t-meta)}
-.figv-pct{min-width:4.2em;text-align:center;color:rgba(255,255,255,.75);font-size:var(--t-tiny);
+.figv-fitword{font-size:var(--t-meta)}
+.pswp__figv-pct{min-width:4.2em;text-align:center;color:rgba(255,255,255,.78);font-size:var(--t-tiny);
   font-variant-numeric:tabular-nums}
-/* touch-action:none is what lets a pinch reach the handler at all: without it
-   the browser claims it for page zoom and the figure sits still. */
-.figv-scroll{touch-action:none;overflow:hidden}
-.figv-scroll.zoomed{cursor:grab}
-.figv-scroll.zoomed:active{cursor:grabbing}
-/* A figure often opens before its full-resolution decode finishes; without
-   this it just snaps into view mid-paint. Opacity only — never touches
-   layout, so it cannot fight figzoom.js's transform.
-
-   THE DEFAULT IS VISIBLE, AND THAT IS THE WHOLE DESIGN. Writing this the
-   obvious way round — img{opacity:0} plus a .loaded class the script adds —
-   makes every failure invisible: a figure whose script never ran, whose
-   decode errored, whose 404 the offline cache handed back, is not a broken
-   image icon but nothing at all, on a screen whose only content is that
-   figure. So the hidden state is a class, added only by the one code path
-   that has already committed to removing it on BOTH the load and the error
-   event. Anything that path does not touch is simply shown. */
-.figv-scroll img{transition:opacity .18s var(--ease)}
-.figv-scroll img.fig-loading{opacity:0}
-@media(prefers-reduced-motion:reduce){
-  .figv-scroll img{transition:none}.figv-scroll img.fig-loading{opacity:1}
-}
-/* max-height is the half that was missing. Without it "fitted" meant "as wide
-   as the viewport" and a tall figure overflowed into a clipped middle band
-   with no scroll and no pan — see scripts/figfit-patch.js. Neither max- rule
-   enlarges anything, so a small diagram still sits at its natural size. */
-.figv-scroll img{transform-origin:0 0;will-change:transform;display:block;
-  max-width:100%;max-height:100%;width:auto;height:auto;margin:auto;
-  border-radius:10px;background:#fff;cursor:zoom-in}
-/* Natural size, and the container scrolls to it. This is what makes a legend
-   readable rather than merely crisp. */
-.figv-scroll.zoomed img{margin:0 auto}
-/* Above the figure viewer's own layer, because the figure check opens it. */
+/* Zoomed, the picture is something to drag. */
+.figv-ps.figv-zoomed .pswp__img{cursor:grab}
+.figv-ps.figv-zoomed .pswp__img:active{cursor:grabbing}
+/* The caption and its source under the picture; the hint under the caption. */
+.pswp__figv-cap{position:absolute;left:12px;right:12px;bottom:calc(var(--sab,0px) + 30px);z-index:10;
+  max-width:860px;margin:0 auto;padding:10px 12px;border-radius:12px;
+  background:rgba(255,255,255,.1);color:#fff;font-size:13px;line-height:1.5;
+  max-height:22vh;overflow-y:auto;pointer-events:auto;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.pswp__figv-cap span{display:block;margin-top:5px;font-size:11px;opacity:.7}
+.pswp__figv-hint{position:absolute;left:0;right:0;bottom:calc(var(--sab,0px) + 8px);z-index:10;
+  text-align:center;color:rgba(255,255,255,.55);font-size:11px;letter-spacing:.02em;pointer-events:none}
+/* Off while zoomed or with the controls hidden, like the rest of PhotoSwipe's UI. */
+.pswp--ui-visible .pswp__figv-cap,.pswp--ui-visible .pswp__figv-hint{opacity:1}
+.pswp__figv-cap,.pswp__figv-hint{opacity:0;transition:opacity .25s var(--ease)}
+.figv-ps.figv-zoomed .pswp__figv-cap{opacity:0;pointer-events:none}
+.figv-ps .pswp__error-msg{font-size:var(--t-body);color:#fff}
+.figv-ps .figv-err{height:100%;padding:0 24px;text-align:center}
+/* A question's figure goes full screen from this button; the card itself still
+   zooms in place, where the pencil's ink is. The button is the card's neighbour in
+   .fig-slot, laid over its corner, because the card is a button too. */
+.fig-slot{position:relative}
+.fig-full{position:absolute;top:8px;right:8px;z-index:3;width:44px;height:44px;border:0;border-radius:22px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  background:rgba(10,22,40,.62);color:#fff;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.fig-full .icon{width:18px;height:18px}
+@media (hover:hover){.fig-full:hover{background:rgba(10,22,40,.82)}}
+.fig-full:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
+/* Above the figure viewer (300), because the figure check opens it. */
 #selftest{position:fixed;top:0;right:0;bottom:0;left:0;z-index:400;background:rgba(6,14,28,.92);
   display:flex;align-items:center;justify-content:center;padding:16px;
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -209,18 +211,6 @@ html[data-theme="dark"]{--glass:rgba(17,30,53,.74)}
 .st-run{min-height:40px;padding:0 16px;border:0;border-radius:20px;cursor:pointer;
   background:rgba(255,255,255,.14);color:#fff;font-size:var(--t-meta);font-weight:600}
 .st-run[disabled]{opacity:.5}
-.figv-hint{flex:0 0 auto;margin-top:8px;text-align:center;color:rgba(255,255,255,.55);
-  font-size:11px;letter-spacing:.02em}
-.figv-cap{flex:0 0 auto;margin-top:10px;padding:10px 12px;border-radius:12px;
-  background:rgba(255,255,255,.08);color:#fff;font-size:13px;line-height:1.5;
-  max-height:34vh;overflow-y:auto}
-.figv-cap span{display:block;margin-top:5px;font-size:11px;opacity:.7}
-/* Always the same corner, always on top of the picture. */
-.figv-x{position:absolute;top:calc(var(--sat,0px) + 16px);right:16px;z-index:2;
-  width:40px;height:40px;border-radius:20px;border:0;cursor:pointer;
-  background:rgba(10,22,40,.72);color:#fff;display:flex;align-items:center;
-  justify-content:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-.figv-x .icon{width:20px;height:20px}
 /* The page underneath does not move while the viewer is open. A drag that
    scrolls the page while the picture stays still is what "stuck" feels like. */
 body.peek-locked{overflow:hidden}

@@ -255,48 +255,56 @@ const sse = text => [
     await new Promise(r => setTimeout(r, 500));
     const fig = document.querySelector('.msg.bot figure.ref-fig');
     if (!fig) return { none: true };
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    /* At rest: the viewer opened and its opening animation over. */
+    const rest = async () => {
+      for (let t = 0; t < 120 && !(typeof figPs !== 'undefined' && figPs && figPs.currSlide); t++) await wait(25);
+      const ps = figPs;
+      if (!ps || !ps.currSlide) return null;
+      await new Promise(r => { if (ps.opener && ps.opener.isOpen) return r(); ps.on('openingAnimationEnd', r); setTimeout(r, 4000); });
+      await wait(60);
+      return ps;
+    };
+    const gone = async () => { for (let t = 0; t < 120 && document.querySelector('.pswp'); t++) await wait(25); return !document.querySelector('.pswp'); };
     fig.click();
-    await new Promise(r => setTimeout(r, 300));
-    const w = document.getElementById('peek');
-    const img = w.querySelector('.figv-scroll img');
+    const ps = await rest();
+    const img = ps && ps.currSlide.content.element;
     const out = {
-      opened: /fig-open/.test(w.className),
+      opened: !!ps && !!document.querySelector('.pswp'),
       locked: document.body.classList.contains('peek-locked'),
-      hasClose: !!w.querySelector('.figv-x'),
+      hasClose: !!document.querySelector('.pswp__button--close'),
       fitW: img ? Math.round(img.getBoundingClientRect().width) : 0,
       natural: img ? img.naturalWidth : 0,
+      viewW: innerWidth,
     };
-    /* Tapping the picture magnifies rather than dismisses — you cannot read a
-       legend you dismissed. */
-    img.click();
-    await new Promise(r => setTimeout(r, 350));
-    out.stillOpen = /fig-open/.test(document.getElementById('peek').className);
-    out.zoomW = Math.round(img.getBoundingClientRect().width);
-    out.pannable = img.closest('.figv-scroll').scrollWidth > img.closest('.figv-scroll').clientWidth;
-    /* Escape. */
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    await new Promise(r => setTimeout(r, 200));
-    out.afterEsc = document.getElementById('peek').className;
-    out.unlocked = !document.body.classList.contains('peek-locked');
-    /* Backdrop. The obvious ev.target===wrap test is wrong here: .figv is
-       stretched over the whole overlay, so the backdrop is never the target
-       and tap-to-dismiss silently does nothing. */
-    fig.click();
-    await new Promise(r => setTimeout(r, 250));
-    document.querySelector('.figv').click();
-    await new Promise(r => setTimeout(r, 200));
-    out.afterBackdrop = document.getElementById('peek').className;
+    if (img) { const r = img.getBoundingClientRect(); out.at = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
     return out;
   });
-  ok('tapping a figure opens it full size', !view.none && view.opened && view.hasClose);
+  /* PhotoSwipe reads a click from the pointer, so these are the mouse's, at the
+     picture and off it, as a person's would be. */
+  if (view.at) {
+    await page.mouse.click(view.at.x, view.at.y);
+    await page.waitForTimeout(700);
+    Object.assign(view, await page.evaluate(() => ({ stillOpen: !!document.querySelector('.pswp'),
+      zoomW: figPs && figPs.currSlide ? Math.round(figPs.currSlide.content.element.getBoundingClientRect().width) : 0 })));
+    await page.keyboard.press('Escape');
+    view.afterEsc = await page.waitForFunction(() => !document.querySelector('.pswp'), null, { timeout: 3000 }).then(() => true, () => false);
+    view.unlocked = await page.evaluate(() => !document.body.classList.contains('peek-locked'));
+    await page.evaluate(() => document.querySelector('.msg.bot figure.ref-fig').click());
+    await page.waitForFunction(() => typeof figPs !== 'undefined' && figPs && figPs.opener && figPs.opener.isOpen, null, { timeout: 4000 }).catch(() => {});
+    await page.mouse.click(4, Math.round(view.at.y));
+    view.afterBackdrop = await page.waitForFunction(() => !document.querySelector('.pswp'), null, { timeout: 3000 }).then(() => true, () => false);
+  }
+  ok('tapping a figure opens it full size', !view.none && view.opened && view.hasClose && view.locked, JSON.stringify({ opened: view.opened, close: view.hasClose, locked: view.locked }));
   ok('and it is bigger there than it was in the panel',
      view.fitW > 0 && view.natural > view.fitW, `${view.fitW}px shown, ${view.natural}px source`);
+  /* To its own pixels at least, and wider than the screen, so it pans. */
   ok('tapping the picture magnifies instead of dismissing',
-     view.stillOpen && view.zoomW === view.natural && view.pannable,
-     `${view.zoomW}px, pannable ${view.pannable}`);
+     view.stillOpen && view.zoomW >= view.natural - 1 && view.zoomW > view.viewW,
+     `${view.zoomW}px of a ${view.natural}px figure on a ${view.viewW}px screen`);
   ok('Escape closes it and gives the page back',
-     view.afterEsc === '' && view.unlocked, JSON.stringify(view.afterEsc));
-  ok('and so does a tap outside the picture', view.afterBackdrop === '', JSON.stringify(view.afterBackdrop));
+     view.afterEsc === true && view.unlocked, JSON.stringify({ closed: view.afterEsc, unlocked: view.unlocked }));
+  ok('and so does a tap outside the picture', view.afterBackdrop === true, JSON.stringify(view.afterBackdrop));
   /* The same figure from the keyboard. The checks above open it with fig.click(), which is not what a keyboard does: Enter
      and Space on a focused figure are key presses, and they have to reach a handler. The figures in a reply are drawn after
      the render pass that bound the page's key handlers, and had none. */
@@ -304,7 +312,7 @@ const sse = text => [
   for (const key of ['Enter', 'Space']) {
     await page.evaluate(() => { closePeek(); document.querySelector('.msg.bot figure.ref-fig').focus(); });
     await page.keyboard.press(key);
-    keyed[key] = await page.waitForFunction(() => /fig-open/.test(document.getElementById('peek').className), null, { timeout: 1500 }).then(() => true, () => false);
+    keyed[key] = await page.waitForFunction(() => !!document.querySelector('.pswp'), null, { timeout: 3000 }).then(() => true, () => false);
   }
   await page.evaluate(() => closePeek());
   ok('Enter on a focused figure in a reply opens it, as a tap does', keyed.Enter === true, JSON.stringify(keyed));

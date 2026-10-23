@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 8186 checks in
-# `node scripts/verify.js` plus 143 more under `--pwa`, this workflow runs 8103.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 8156 checks in
+# `node scripts/verify.js` plus 143 more under `--pwa`, this workflow runs 8073.
 # The other 226 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 100 suites that are pure Node with no Playwright and no
+#   logic        the 99 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -67,8 +67,7 @@
 #                    crossings), verify-leads-pure (Einthoven and Goldberger,
 #                    exact to floating point), verify-calib-pure (which says
 #                    nothing rather than something wrong on sparse data),
-#                    verify-figzoom-pure (zoom-about-a-point, where drift is
-#                    invisible by eye), verify-rhythms-pure (an arrhythmia in
+#                    verify-rhythms-pure (an arrhythmia in
 #                    the picker that nothing knows how to draw)
 #                  the untrusted input — verify-worker (the Cloudflare Worker,
 #                    driven directly as a request handler), verify-zip (an
@@ -94,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 8103 real checks, up
+#                Across every job but split-build, 8073 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -236,12 +235,10 @@ jobs:
         run: node tests/verify-zip.js
       - name: the calibration arithmetic (31 checks)
         run: node tests/verify-calib-pure.js
-      - name: the figure viewer's zoom arithmetic (16 checks)
-        run: node tests/verify-figzoom-pure.js
-      - name: a figure that fails to load must still appear (14 checks)
-        run: node tests/verify-figfade-pure.js
       - name: the palette patches' quoted contrast figures are real (19 checks)
         run: node tests/verify-palette-pure.js
+      - name: the figure viewer's library is the one recorded, whole, and its licence ships with it (10 checks)
+        run: node tests/verify-vendor-pure.js
       - name: the home strip's rotation never repeats and excludes vfib (32 checks)
         run: node tests/verify-herorhythm-pure.js
       - name: a corpus with no figures in it still builds (8 checks)
