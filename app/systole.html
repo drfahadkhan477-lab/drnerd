@@ -2965,10 +2965,18 @@ let refEditing=null, refViewing=null;
 const REF_PAGE=24;
 let refShown=REF_PAGE, refPageWatch=null;
 function refCard(r){
+  // An imported excerpt may start at ####. Attach it to the card's h2 title
+  // before opening nested sections; its stored Markdown is never rewritten.
+  let hasSection=false;
+  const body=md(r.body).replace(/<h([34])>([\s\S]*?)<\/h\1>/g,(_,level,text)=>{
+    if(level==='3') hasSection=true;
+    const tag=level==='4'&&hasSection?'h4':'h3';
+    return `<${tag}>${text}</${tag}>`;
+  });
   return `
     <div class="ref-card">
       <div class="ref-top">
-        <div class="ref-title">${e(r.title||'Untitled note')}</div>
+        <h2 class="ref-title">${e(r.title||'Untitled note')}</h2>
         <div class="ref-acts">
           <button class="chip" data-ref-id="${e(r.id)}" onclick="refEdit(this.dataset.refId)">Edit</button>
           <button class="chip" data-ref-id="${e(r.id)}" onclick="refRemove(this.dataset.refId)">Delete</button>
@@ -2980,7 +2988,7 @@ function refCard(r){
         const rest=T.length-8;
         return `<div class="ref-tags">${shown}${rest>0?`<span class="ref-more" title="${T.slice(8).join(', ')}">+${rest} more</span>`:''}</div>`;
       })():''}
-      <div class="ref-body" tabindex="0" role="group" aria-label="Note content">${md(r.body)}</div>
+      <div class="ref-body" tabindex="0" role="group" aria-label="Note content">${body}</div>
     </div>`;
 }
 const refsNewestFirst=()=>REF.slice().sort((a,b)=>b.ts-a.ts);
@@ -4733,7 +4741,9 @@ function md(t){
     const rows=block.trim().split('\n');
     const cut=r=>r.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
     const head=cut(rows[0]), body=rows.slice(2).map(cut);
-    return `<div class="tw"><table><thead><tr>${head.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`+
+    // Empty Markdown header cells still need a name for screen-reader table
+    // navigation. Keep the visual corner empty and label its column number.
+    return `<div class="tw"><table><thead><tr>${head.map((c,i)=>`<th scope="col">${c||`<span class="sr-only">Column ${i+1}</span>`}</th>`).join('')}</tr></thead>`+
       `<tbody>${body.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   });
   /* One <blockquote> per run of quoted lines, rather than one per line. */

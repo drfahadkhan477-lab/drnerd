@@ -53,7 +53,12 @@ const SCREENS = [
     let w = null;
     for (const q of POOL) { for (const x of (q.s + ' ' + q.ex).split(/[^A-Za-z]+/)) if (x.length >= 7 && search(x, { limit: 5 }).some(h => h.meta.kind === 'q')) { w = x; break; } if (w) break; }
     searchGo(w || ''); }, 'search'],
-  ['the notes', () => { goRefs(); }, null, 'refs'],
+  ['the notes', () => {
+    // Imported excerpts can begin in the middle of an outline. Keep the real
+    // library on screen too, and make this case independent of its contents.
+    refAdd('Accessible outline fixture', '#### Deep first\n\nText.\n\n### Section\n\n#### Detail\n\n| | Value |\n|---|---|\n| Item | 1 |', 'accessibility');
+    goRefs();
+  }, null, 'refs'],
   ['note search', () => { goNoteSearch(); }, null, 'notesearch'],
   ['Memory', () => { goMemory(); }, null, 'memory'],
   ['statistics', () => { goStats(); }, null, 'stats'],
