@@ -273,10 +273,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const b = el.getBoundingClientRect(), y = b.top + b.height / 2;
     const pe = (t, x) => el.dispatchEvent(new PointerEvent(t, { pointerId: 7, pointerType: 'touch', isPrimary: true,
       clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: t === 'pointerup' ? 0 : 1 }));
+    /* A frame a move, as the pinch above: PhotoSwipe moves the slide in its animation frame, and moves spaced by a timer were
+       all handled before one frame on a busy CI runner, which saw no swipe. Then up to three seconds for the slide to land. */
+    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
     pe('pointerdown', b.left + b.width * 0.8);
-    for (let k = 1; k <= 10; k++) { pe('pointermove', b.left + b.width * (0.8 - k * 0.06)); await wait(16); }
+    for (let k = 1; k <= 10; k++) { pe('pointermove', b.left + b.width * (0.8 - k * 0.06)); await frame(); await frame(); }
     pe('pointerup', b.left + b.width * 0.2);
-    await wait(700);
+    for (let t = 0; t < 60 && ps.currIndex !== 2; t++) await wait(50);
     return ps.currIndex;
   });
   ok('a swipe goes to the next figure', swiped === 2, String(swiped));
