@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 159 suites and roughly 8156 checks, and they
+ * WHY THIS EXISTS. There are 159 suites and roughly 8159 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -530,7 +530,7 @@ const PENDING_RECORD = ['a11y', 'homepager', 'cssdocs-pure', 'backup-ids', 'floo
    entries. Systole's active counts still come from its previous green run. */
 /* homeprog went with the progress bar it checked: the owner took the bar off Home, and the Brain page's gauge, which
    carries the same two numbers, is held to its claims in verify-home. */
-const RETIRED_RECORD = ['homeprog', 'figzoom-pure', 'figfade-pure'];
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on

@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 8156 checks in
-# `node scripts/verify.js` plus 143 more under `--pwa`, this workflow runs 8073.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 8159 checks in
+# `node scripts/verify.js` plus 143 more under `--pwa`, this workflow runs 8076.
 # The other 226 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 8073 real checks, up
+#                Across every job but split-build, 8076 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -387,7 +387,7 @@ jobs:
         run: node tests/verify-memorizer-coach-pure.js
       - name: Memorizer — Daylight by day, Clinical at night, Paper, Neuron, Ice, Butter, Mint Night, Graphite and Cyber Grape, and Systole's Contrast, readable at every contrast and brightness, on glass and aurora as well as solid, each drawing the brain in its own colours (53 checks)
         run: node tests/verify-memorizer-appearance-pure.js
-      - name: Memorizer — the home screen's progress, streak, brain and its live impulses, pearl, the pearl's figure or table, and weak spots say true things (133 checks)
+      - name: Memorizer — the home screen's progress, streak, brain and its live impulses, pearl, the pearl's figure or table, and weak spots say true things (136 checks)
         run: node tests/verify-memorizer-home-pure.js
       - name: Memorizer — a whole textbook, its parts in order and its chapters found three ways (52 checks)
         run: node tests/verify-memorizer-book-pure.js
