@@ -862,9 +862,10 @@ step('lift the figure viewer\'s library out of the app code', () => {
      uses until a figure opens. It leaves the page's style block whole, before
      the stylesheet step below rewrites that block, and figLib() links it back
      with the script. */
-  const css = fs.readFileSync(path.join(ROOT, 'app', 'css', 'photoswipe.css'), 'utf8');
+  /* With Systole's own dress for the viewer (app/css/figviewer.css), slotted straight after it: neither is drawn until a figure opens. */
+  const css = fs.readFileSync(path.join(ROOT, 'app', 'css', 'photoswipe.css'), 'utf8') + fs.readFileSync(path.join(ROOT, 'app', 'css', 'figviewer.css'), 'utf8');
   const cat = html.indexOf(css);
-  if (cat < 0 || html.indexOf(css, cat + 1) >= 0) throw new Error('PhotoSwipe\'s stylesheet is not in the page exactly once');
+  if (cat < 0 || html.indexOf(css, cat + 1) >= 0) throw new Error('PhotoSwipe\'s stylesheet and the viewer\'s are not in the page together exactly once');
   psw.css = 'vendor/photoswipe-' + crypto.createHash('sha256').update(css).digest('hex').slice(0, 12) + '.css';
   psw.cssBytes = Buffer.from(css, 'utf8');
   html = html.slice(0, cat) + html.slice(cat + css.length);

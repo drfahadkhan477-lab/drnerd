@@ -254,6 +254,7 @@ const copyFolder = (to, edit) => {
       fs.cpSync(path.join(ROOT, 'app', 'vendor'), path.join(root, 'app', 'vendor'), { recursive: true });
       fs.mkdirSync(path.join(root, 'app', 'css'));
       fs.copyFileSync(path.join(ROOT, 'app', 'css', 'photoswipe.css'), path.join(root, 'app', 'css', 'photoswipe.css'));
+      fs.copyFileSync(path.join(ROOT, 'app', 'css', 'figviewer.css'), path.join(root, 'app', 'css', 'figviewer.css'));
       fs.cpSync(path.join(ROOT, 'docs', 'vendor'), path.join(root, 'docs', 'vendor'), { recursive: true });
       fs.mkdirSync(path.join(root, 'build'));
       const file = path.join(root, 'build', 'systole.html');

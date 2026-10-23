@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/photoswipe.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/photoswipe.css]@@@@SLOT[app:app/css/figviewer.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -3678,9 +3678,10 @@ function signinLapsed(){
 }
 function showSigninBar(){
   if(document.getElementById('signinBar')) return;
-  const bar=document.createElement('div'); bar.id='signinBar'; bar.className='signin-bar'; bar.setAttribute('role','alert');
-  bar.innerHTML='<span>Your sign-in has expired, so figures and new content cannot load.</span>'+
-    '<button type="button" class="signin-go">Sign in again</button>';
+  /* Styled in place, as toast() is: a stylesheet rule would weigh on the shell's budget for a bar most launches never show. */
+  const bar=document.createElement('div'); bar.id='signinBar'; bar.setAttribute('role','alert');
+  bar.style.cssText='position:fixed;left:12px;right:12px;top:12px;z-index:400;padding:12px 16px;border-radius:14px;background:#7C2D12;color:#fff';
+  bar.innerHTML='Your sign-in has expired, so figures cannot load. <button type="button" class="signin-go" style="min-height:44px">Sign in again</button>';
   bar.querySelector('button').onclick=()=>{ location.href=location.pathname+'?signin='+Date.now(); };
   document.body.appendChild(bar);
 }
