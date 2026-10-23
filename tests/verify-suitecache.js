@@ -90,6 +90,10 @@ const url = f => pathToFileURL(path.join(FIX, f)).href;
   try {
     const page = await browser.newPage();
     page.on('request', r => requested.push(r.url()));
+    // Exercise an HTTPS request without depending on DNS for a deliberately invalid host.
+    await page.route('https://example.invalid/x.png', route => route.fulfill({
+      contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
+    }));
     await page.goto(url('index.html'), { waitUntil: 'load' });
     await page.waitForFunction(() => window.__classic === true && document.readyState === 'complete', undefined, { timeout: 30000 });
     const state = await page.evaluate(() => ({ title: document.title, classic: window.__classic === true, module: window.__module === true,
@@ -98,8 +102,14 @@ const url = f => pathToFileURL(path.join(FIX, f)).href;
 
     /* Then the page asks for two things the cache must not record. The browser's own
        request log is the proof that it asked. */
-    await page.evaluate(([a, b]) => Promise.all([a, b].map(u => new Promise(res => { const i = new Image(); i.onload = i.onerror = () => res(); i.src = u; }))),
-      [pathToFileURL(outside).href, 'https://example.invalid/x.png']);
+    // WebKit blocks a file subresource outside the document's directory before
+    // emitting a request. A top-level navigation makes the exclusion measurable.
+    const outsidePage = await browser.newPage();
+    outsidePage.on('request', r => requested.push(r.url()));
+    await outsidePage.goto(pathToFileURL(outside).href, { waitUntil: 'load' });
+    await outsidePage.close();
+    await page.evaluate(u => new Promise(res => { const i = new Image(); i.onload = i.onerror = () => res(); i.src = u; }),
+      'https://example.invalid/x.png');
     const seen = asked();
     const traced = SC.TRACED_ENGINES.includes(engine);
     const kinds = [

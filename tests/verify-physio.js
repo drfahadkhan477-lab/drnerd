@@ -230,7 +230,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      not a weaker claim: the suite supplies the frame clock, physio's own loop
      still decides what to do with it, and a panel that had stopped animating
      would still report nothing moving. The threshold below is untouched. */
+  await page.locator('#physioCanvas').scrollIntoViewIfNeeded();
   const ownClock = await page.evaluate(async () => {
+    // The first tick establishes its timestamp and intentionally advances by zero.
+    // Start the measurement after that frame, with the diagram in view.
+    await new Promise(resolve => requestAnimationFrame(resolve));
     const t0 = physio.time();
     const started = performance.now();
     let frames = 0;
@@ -483,11 +487,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('the note follows the live phase on the Wiggers view');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(200);
-  const notes = [];
-  for (let i = 0; i < 4; i++) {
-    notes.push(await page.evaluate(() => document.getElementById('physioNote').textContent));
-    await page.waitForTimeout(220);
-  }
+  // Read every painted frame in the same observation window. Four protocol
+  // round trips can repeatedly land in the same phase on a slow WebKit host.
+  const notes = await page.evaluate(() => new Promise(resolve => {
+    const seen = new Set(), end = performance.now() + 880;
+    const read = () => {
+      seen.add(document.getElementById('physioNote').textContent);
+      if (performance.now() >= end) resolve([...seen]);
+      else requestAnimationFrame(read);
+    };
+    read();
+  }));
   ok('the phase note is live text, not a static caption', new Set(notes).size > 1, notes.map(n => n.slice(0, 18)).join(' | '));
 
   head('scrubbing pauses the live clock and reads back a chosen instant');

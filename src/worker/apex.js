@@ -514,6 +514,8 @@ export async function handleApex(request, env, fetchImpl, verifyAccess) {
   const out = new Headers();
   const ct = upstream.headers.get('content-type');
   if (ct) out.set('content-type', ct);
+  const retryAfter = upstream.headers.get('retry-after');
+  if (retryAfter) out.set('retry-after', retryAfter);
   out.set('cache-control', 'no-store');
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }

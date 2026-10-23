@@ -2984,7 +2984,7 @@ function refCard(r){
         const rest=T.length-8;
         return `<div class="ref-tags">${shown}${rest>0?`<span class="ref-more" title="${T.slice(8).join(', ')}">+${rest} more</span>`:''}</div>`;
       })():''}
-      <div class="ref-body">${md(r.body)}</div>
+      <div class="ref-body" tabindex="0" role="group" aria-label="Note content">${md(r.body)}</div>
     </div>`;
 }
 const refsNewestFirst=()=>REF.slice().sort((a,b)=>b.ts-a.ts);
@@ -4122,8 +4122,42 @@ function networkErrorMsg(err,name){
       <li>If you're on Wi-Fi, try cellular for one test — narrows it to a network-level block.</li>
     </ul></details>`;
 }
+function geminiPause(ms,signal){
+  return new Promise((resolve,reject)=>{
+    const abort=()=>{ clearTimeout(timer); if(signal) signal.removeEventListener('abort',abort); reject(new DOMException('Stopped','AbortError')); };
+    const timer=setTimeout(()=>{ if(signal) signal.removeEventListener('abort',abort); resolve(); },ms);
+    if(signal){ signal.addEventListener('abort',abort,{once:true}); if(signal.aborted) abort(); }
+  });
+}
+/* Retry only HTTP refusals before a stream starts. Never replay a partial answer
+   or a network failure whose server-side outcome is unknown. */
+async function geminiFetch(url,init={},onRetry){
+  for(let attempt=0;;attempt++){
+    if(init.signal&&init.signal.aborted) throw new DOMException('Stopped','AbortError');
+    const r=await fetch(url,init);
+    if(attempt>=2||![429,500,502,503,504].includes(r.status)) return r;
+    let j=null; try{ j=await r.clone().json(); }catch(_){}
+    const detail=JSON.stringify(j||{});
+    if(/per.?day|daily|billing|GEMINI_API_KEY|ACCESS_AUD|ACCESS_TEAM_DOMAIN/i.test(detail)) return r;
+    const h=r.headers.get('retry-after');
+    let delay=null;
+    if(h!==null){ const n=Number(h); delay=Number.isFinite(n)?Math.max(0,n*1000):Math.max(0,Date.parse(h)-Date.now()); }
+    if(delay===null){
+      const info=j&&j.error&&Array.isArray(j.error.details)&&j.error.details.find(x=>x&&/RetryInfo$/.test(x['@type']||''));
+      const m=info&&String(info.retryDelay||'').match(/^(\d+(?:\.\d+)?)s$/);
+      if(m) delay=Number(m[1])*1000;
+    }
+    // A quota without a retry time may require a plan change, not another request.
+    if(r.status===429&&delay===null) return r;
+    if(delay!==null&&(!Number.isFinite(delay)||delay>8000)) return r;
+    if(delay===null) delay=1000*Math.pow(2,attempt)+Math.floor(Math.random()*250);
+    if(r.body) await r.body.cancel().catch(()=>{});
+    if(onRetry) onRetry(attempt+1);
+    await geminiPause(delay,init.signal);
+  }
+}
 function validateKey(p,k,model){
-  return fetch(gemUrl('generate',model,k),{method:'POST',
+  return geminiFetch(gemUrl('generate',model,k),{method:'POST',
     headers:gemHeaders(k,true),
     body:JSON.stringify({generationConfig:{maxOutputTokens:1},
       contents:[{role:'user',parts:[{text:'hi'}]}]})});
@@ -4453,7 +4487,7 @@ async function oneShot(prompt,maxTokens){
      condition buildAI opens the panel on. */
   if(!k && !(p==='gemini' && apexHosted())) return '';
   try{
-    const r=await fetch(gemUrl('generate',model,k),{method:'POST',
+    const r=await geminiFetch(gemUrl('generate',model,k),{method:'POST',
       headers:gemHeaders(k,true),
       body:JSON.stringify({generationConfig:{maxOutputTokens:maxTokens},
         contents:[{role:'user',parts:[{text:prompt}]}]})});
@@ -4541,7 +4575,7 @@ async function oneTurnGemini(q,wire,extra){
   const contents=toGeminiContents(Vision.withImages(
     Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
     refImagesForHits(lastHits), AI.provider));
-  const r=await fetch(gemUrl('stream',model,cur().key),{
+  const r=await geminiFetch(gemUrl('stream',model,cur().key),{
     method:'POST', signal:aiAbort.signal,
     headers:gemHeaders(cur().key,true),
     body:JSON.stringify({
@@ -4549,6 +4583,9 @@ async function oneTurnGemini(q,wire,extra){
       tools:[{functionDeclarations:toGeminiTools(TOOLS)}],
       generationConfig:{maxOutputTokens:2000},
       contents})
+  },attempt=>{
+    const live=document.getElementById('aiLive');
+    if(live) live.textContent='Gemini is busy. Retrying ('+attempt+'/2)…';
   });
   if(apexSessionLapsed(r)) throw new Error(APEX_LAPSED);
   if(!r.ok) throw new Error(await apiError(r,'gemini'));
@@ -4639,9 +4676,7 @@ async function apiError(r,provider){
   if(r.status===401) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
   if(r.status===403&&provider==='gemini') return 'Your API key was rejected. Tap the settings icon to re-enter it.';
   if(r.status===400&&provider==='gemini'&&/api key not valid/i.test(d)) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
-  /* Gemini's free tier is a DAILY quota, not a per-minute one — "wait a few
-     seconds" is actively wrong advice for it. */
-  if(r.status===429&&provider==='gemini'&&/quota/i.test(d)) return "Gemini's free daily quota is used up for today — try again tomorrow, or switch provider in settings.";
+  if(r.status===429&&provider==='gemini'&&/quota/i.test(d)) return "Gemini's quota limit was reached. Check your plan and quota in Google AI Studio, or choose another available model in Apex settings. The reset time depends on the limit.";
   if(r.status===429) return 'Rate limited — wait a few seconds and try again.';
   if(r.status===400&&/credit|balance/i.test(d)) return `Your ${name} account is out of credit.`;
   /* Pointing at the model menu is useless when every name in it is stale —
@@ -4649,7 +4684,7 @@ async function apiError(r,provider){
      Connect is what rebuilds the menu from the live list. */
   if(r.status===404&&provider==='gemini') return 'Google does not offer that model to your key. Open settings and press <b>Connect</b> again — the app will ask Google for the current list and pick one that works.';
   if(r.status===404) return `That model is not available on ${name} right now — pick a different one in settings.`;
-  if(r.status>=500) return `${name} had a server error. Try again shortly.`;
+  if(r.status>=500) return `${name} is temporarily unavailable. Try again shortly, or choose another available model in Apex settings.`;
   return `API error ${r.status}. ${e(d)}`;
 }
 const TOOL_LABEL={search_question_bank:'searching your bank',get_performance:'reading your scores',
@@ -6419,9 +6454,13 @@ function mountPearlCurrent(){
 
   const still=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches);
   const SPAN=4200;            // ms of rhythm across the card's width
-  const state={raf:0}; let t0=0;
+  const state={raf:0, pause(){ if(this.raf) cancelAnimationFrame(this.raf); this.raf=0; },
+    resume(){ if(!this.raf) this.raf=requestAnimationFrame(paint); }};
+  let t0=0, geometry=null;
 
   function paint(now){
+    state.raf=0;
+    if(!cv.isConnected||S.screen!=='home'||homePage!==0||document.hidden) return;
     const r=cv.getBoundingClientRect();
     if(!r.width||!r.height){ state.raf=requestAnimationFrame(paint); return; }
     const dpr=Math.min(window.devicePixelRatio||1,3);
@@ -6438,12 +6477,15 @@ function mountPearlCurrent(){
        brightness dropped the text contrast to 2.1:1 on the darker palettes. */
     const baseline=r.height*0.87;
     const amp=Math.min(r.height*0.13,34);
-    const st={};
-    const pts=new Array(N+1);
-    for(let i=0;i<=N;i++){
-      const x=i/N*r.width;
-      pts[i]=[x, baseline-rhythmMV('sinus', i/N*SPAN, st)*amp];
+    if(!geometry||geometry.w!==r.width||geometry.h!==r.height){
+      const st={}, points=new Array(N+1);
+      for(let i=0;i<=N;i++){
+        const x=i/N*r.width;
+        points[i]=[x, baseline-rhythmMV('sinus', i/N*SPAN, st)*amp];
+      }
+      geometry={w:r.width,h:r.height,points};
     }
+    const pts=geometry.points;
 
     const css=getComputedStyle(document.documentElement);
     const accent=(css.getPropertyValue('--teal')||'#0284C7').trim();
@@ -7372,7 +7414,19 @@ function homeMark(){
       else { page.setAttribute('aria-hidden','true'); page.inert=true; page.setAttribute('inert',''); } }
   }
   if(homePage===1) homeFillBrain();
+  syncHomeMotion();
 }
+/* The other Home pages remain mounted for swiping, but their hidden canvases
+   must not consume the frame budget of the page the reader is using. */
+function syncHomeMotion(){
+  const on=S.screen==='home'&&homePage===0&&!document.hidden;
+  if(heroMon) on?heroMon.start():heroMon.stop();
+  if(heroHeart3d) on?heroHeart3d.start():heroHeart3d.stop();
+  if(pearlTrace) on?pearlTrace.resume():pearlTrace.pause();
+  if(!on&&heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
+  else if(on&&heroMon&&!heroRotateTimer) heroRotateTimer=startHeroRotation();
+}
+document.addEventListener('visibilitychange',syncHomeMotion);
 /* The gauge and the chapter bars fill when the Brain page is first seen, not while it is off to the side. */
 function homeFillBrain(){
   const page=document.getElementById('homePage1'); if(!page||page.dataset.filled) return;

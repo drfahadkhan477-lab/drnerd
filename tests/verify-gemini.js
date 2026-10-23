@@ -505,7 +505,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
       method: 'POST', headers: { 'x-goog-api-key': 'bad' }, body: '{}' });
     return apiError(r, 'gemini');
   });
-  ok('a quota 429 says "tomorrow", not "wait a few seconds"', /tomorrow/i.test(quotaMsg), quotaMsg);
+  ok('an unspecified quota does not invent a daily reset', /quota/i.test(quotaMsg) && !/tomorrow|daily/i.test(quotaMsg), quotaMsg);
 
   await page.route('**/generativelanguage.googleapis.com/**', route => {
     route.fulfill({ status: 404, headers: { 'content-type': 'application/json' },
@@ -519,6 +519,43 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   /* The old text sent you to a menu in which every name was equally dead. */
   ok('a retired model points at Connect, not at the model menu',
      /Connect/.test(goneMsg) && !/pick a different one in settings/i.test(goneMsg), goneMsg);
+
+  head('transient overload recovery without replaying a stream');
+  const retryCases = await page.evaluate(async () => {
+    const saved = window.fetch, results = {};
+    const send = typeof geminiFetch === 'function' ? geminiFetch : (...args) => fetch(...args);
+    const response = (status, message, retry) => new Response(JSON.stringify({error:{message}}), {
+      status, headers:{'content-type':'application/json', ...(retry == null ? {} : {'retry-after':retry})}
+    });
+    async function trial(name, replies, onRetry) {
+      let calls=0; const bodies=[]; const ctl=new AbortController();
+      window.fetch=async (url,init) => { bodies.push(init.body); return replies[Math.min(calls++,replies.length-1)](); };
+      try {
+        const r=await send('https://example.invalid/gemini', {method:'POST',body:'same request',signal:ctl.signal},
+          onRetry ? () => ctl.abort() : undefined);
+        results[name]={calls,status:r.status,body:await r.text(),same:bodies.every(b=>b==='same request')};
+      } catch(e) { results[name]={calls,error:e.name}; }
+    }
+    try {
+      await trial('recover',[()=>response(503,'overloaded','0'),()=>new Response('answer')]);
+      await trial('bounded',[()=>response(503,'still overloaded','0')]);
+      await trial('auth',[()=>response(403,'key rejected')]);
+      await trial('daily',[()=>response(429,'GenerateRequestsPerDay quota exhausted','0')]);
+      await trial('rate',[()=>response(429,'requests per minute','0'),()=>new Response('answer')]);
+      await trial('long',[()=>response(503,'busy','120')]);
+      await trial('cancel',[()=>response(503,'busy','0')],true);
+      await trial('partial',[()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('partial'));c.error(new Error('stream lost'));}}))]);
+    } finally { window.fetch=saved; }
+    return results;
+  });
+  ok('an overload recovers before streaming, with the identical request body', retryCases.recover.calls===2 && retryCases.recover.body==='answer' && retryCases.recover.same);
+  ok('persistent overload is bounded to three attempts and preserves the final error', retryCases.bounded.calls===3 && retryCases.bounded.status===503 && /still overloaded/.test(retryCases.bounded.body));
+  ok('a rejected key is never retried', retryCases.auth.calls===1 && retryCases.auth.status===403);
+  ok('an exhausted daily quota is never retried, even with Retry-After', retryCases.daily.calls===1 && retryCases.daily.status===429);
+  ok('a short rate limit with Retry-After recovers', retryCases.rate.calls===2 && retryCases.rate.status===200);
+  ok('a long retry delay is returned to the caller rather than shortened', retryCases.long.calls===1 && retryCases.long.status===503);
+  ok('Stop during backoff aborts without a second request', retryCases.cancel.calls===1 && retryCases.cancel.error==='AbortError');
+  ok('a failed response body is never replayed', retryCases.partial.calls===1 && retryCases.partial.error==='TypeError', JSON.stringify(retryCases.partial));
 
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));

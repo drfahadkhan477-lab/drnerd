@@ -139,6 +139,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      loaded runner reads it, and the check then failed on the fixed build. */
   const glide = await page.evaluate(() => ({ moving: !!(homeLastGo && homeLastGo.to === 2 && homeLastGo.glide) }));
   await still('after the Labs tab');
+  const hiddenHero = await page.evaluate(async () => {
+    const cv=document.getElementById('pearlCurrent'), ctx=cv.getContext('2d'), clear=ctx.clearRect;
+    let paints=0; ctx.clearRect=function(...a){paints++;return clear.apply(this,a);};
+    const before=heroMon.t;
+    await new Promise(resolve=>{let n=0;const tick=()=>++n<20?requestAnimationFrame(tick):resolve();requestAnimationFrame(tick);});
+    ctx.clearRect=clear;
+    return {paints,advance:heroMon.t-before};
+  });
+  ok('offscreen Home does not repaint its pearl or advance its ECG', hiddenHero.paints===0 && hiddenHero.advance===0, JSON.stringify(hiddenHero));
   const s2 = await state();
   ok('the Labs tab glides there rather than jumping', glide.moving, JSON.stringify(glide));
   ok('and lands on Labs', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2', JSON.stringify(s2));
@@ -226,6 +235,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a tap fires the neuron and says what it holds', tap.sel === 3 && tap.tapped === 3 && tap.pressed === 'true' && /This neuron .+ questions \d+–\d+/.test(tap.info), JSON.stringify(tap));
   await page.evaluate(() => homeGo(0));
   await still('Home, leaving Brain');
+  const stableTrace = await page.evaluate(async () => {
+    const cv=document.getElementById('pearlCurrent'), ctx=cv.getContext('2d'), clear=ctx.clearRect;
+    const wave=rhythmMV; let calls=0, paints=0;
+    heroMon.stop();
+    rhythmMV=(...a)=>{calls++;return wave(...a);};
+    ctx.clearRect=function(...a){paints++;return clear.apply(this,a);};
+    await new Promise(resolve=>{let n=0;const tick=()=>++n<20?requestAnimationFrame(tick):resolve();requestAnimationFrame(tick);});
+    rhythmMV=wave;ctx.clearRect=clear;heroMon.start();
+    return {calls,paints};
+  });
+  ok('the visible pearl keeps animating without recalculating its unchanged waveform', stableTrace.paints>2 && stableTrace.calls===0, JSON.stringify(stableTrace));
   const h0 = await page.evaluate(() => brainLiveRun.frames);
   await page.evaluate(() => new Promise(r => { let n = 0; const f = () => (++n < 20 ? requestAnimationFrame(f) : r()); requestAnimationFrame(f); }));
   const h1 = await page.evaluate(() => brainLiveRun.frames);

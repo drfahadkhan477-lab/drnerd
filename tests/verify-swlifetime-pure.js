@@ -190,6 +190,15 @@ const JS = 'text/javascript', IMG = 'image/webp', HTML = 'text/html; charset=utf
     ok('and the event is over', ev.refused.length === 0 && ev.pending === 0, `${ev.refused.length} refused, ${ev.pending} outstanding`);
   }
 
+  head('sign-in renewal reaches Access instead of the offline cache');
+  {
+    const w = worker({ shell: { '/': ['cached application shell', HTML] } });
+    const ev = w.get('/?signin=1');
+    await settle();
+    ok('the sign-in navigation is left to the browser network without touching the cached shell',
+       ev.answer === null && w.calls.length === 0 && w.st.writes.length === 0 && w.st.read(w.names.SHELL, '/') === 'cached application shell');
+  }
+
   head('an HTML refresh follows an authentication redirect to another origin');
   {
     for (const p of ['/', '/index.html']) {

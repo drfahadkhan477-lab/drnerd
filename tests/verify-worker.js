@@ -521,9 +521,10 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
   head('failures are reported, not swallowed');
   {
     const f = stub({ status: 429, body: '{"error":{"message":"quota"}}',
-                     headers: new Map([['content-type', 'application/json']]) });
+                     headers: new Map([['content-type', 'application/json'], ['retry-after', '2']]) });
     const r = await handleApex(post('/api/apex/gemini/stream?model=gemini-3-flash-preview'), ENV, f);
     ok('an upstream status is preserved, so the app can explain it', r.status === 429, String(r.status));
+    ok('the upstream Retry-After reaches the client unchanged', r.headers.get('retry-after') === '2');
     /* apiError() in the app reads .error.message; a thrown fetch must still
        produce that shape rather than an empty 502. */
     const env2 = { ...ENV, ASSETS: { fetch: () => ({ status: 200 }) } };
