@@ -276,7 +276,9 @@ Recovery is usually complete within weeks.
     await page.route('**/generativelanguage.googleapis.com/**', route =>
       route.fulfill({ status: 500, headers: { 'content-type': 'application/json' }, body: '{"error":{"message":"upstream exploded"}}' }));
     await page.evaluate(() => fire('this one fails'));
-    await page.waitForTimeout(1500);
+    // The request has bounded backoff now. Completion is the precondition;
+    // the assertions below still decide whether the error was kept correctly.
+    await page.waitForFunction(() => !aiBusy);
     /* Read the message the app actually stored rather than guessing at its
        wording — asserting on a string apiError() never produces would pass on
        the broken build too, which is worth nothing. */
@@ -296,7 +298,7 @@ Recovery is usually complete within weeks.
       route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: SSE });
     });
     await page.evaluate(() => fire('and this one works'));
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => !aiBusy);
     const after = captured.find(Boolean);
     const text = JSON.stringify((after && after.contents) || []);
     ok('but it is never sent back as an assistant turn',

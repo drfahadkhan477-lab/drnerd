@@ -337,10 +337,8 @@ body.on-home .ai-fab{bottom:max(14px,var(--sab))}
 
 /* ── the hero, refined: an aurora behind the heart, a halo that beats with it, glass for its numbers ──
    Additions only: nothing here moves or sizes what the hero already lays out. */
-.hero-live::after{content:'';position:absolute;top:-30%;right:-10%;width:70%;height:140%;pointer-events:none;z-index:0;
-  background:radial-gradient(closest-side,rgba(45,212,191,.22),rgba(45,212,191,0)),radial-gradient(40% 50% at 30% 70%,rgba(129,140,248,.20),rgba(129,140,248,0));
-  animation:heroAurora 14s ease-in-out infinite alternate}
-@keyframes heroAurora{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-8%,6%,0) scale(1.1)}}
+/* cardiac.css owns the hero's aurora and heartbeat layers. Keep the halo
+   separate so this later sheet cannot replace the heartbeat with a drift. */
 .hero-heart-plate::before{content:'';position:absolute;top:50%;left:50%;width:120%;height:120%;margin:-60% 0 0 -60%;border-radius:50%;pointer-events:none;
   background:radial-gradient(closest-side,rgba(248,113,113,.30),rgba(248,113,113,0));animation:heroHalo 1.05s ease-in-out infinite}
 @keyframes heroHalo{0%,100%{transform:scale(.94);opacity:.55}14%{transform:scale(1.04);opacity:.9}28%{transform:scale(.97);opacity:.65}}

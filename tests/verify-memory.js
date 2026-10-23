@@ -374,6 +374,9 @@ const SUMMARY = 'Sits the boards in October 2026.\n- Confuses constriction with 
   if (!/^https?:\/\//.test(target)) {
     const built = path.resolve(target);
     hostServer = http.createServer((req, res) => {
+      // Chromium may ask for its default icon on this fresh HTTP origin.
+      // This fixture serves only the app; give the optional icon an empty response.
+      if (req.url.split('?')[0] === '/favicon.ico') { res.writeHead(204); res.end(); return; }
       if (req.url.split('?')[0] !== '/systole.html') { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       fs.createReadStream(built).pipe(res);

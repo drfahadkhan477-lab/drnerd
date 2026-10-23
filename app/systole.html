@@ -532,12 +532,8 @@ function flushInk(){ if(inkDirtyAt) saveInkNow(); }
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){
     flushLog(); flushInk();
-    /* rAF-driven canvases need nothing — the browser suspends them. This
-       interval does not suspend, so it is the only thing worth stopping. */
-    if(heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
-  } else if(S.screen==='home'&&!heroRotateTimer&&heroMon){
-    heroRotateTimer=startHeroRotation();
   }
+  syncHomeMotion();
 });
 window.addEventListener('pagehide',()=>{ flushLog(); flushInk(); });
 /* grade is null for an ordinary practice answer, 0-5 for a real self-rating. */
@@ -6460,7 +6456,7 @@ function mountPearlCurrent(){
 
   function paint(now){
     state.raf=0;
-    if(!cv.isConnected||S.screen!=='home'||homePage!==0||document.hidden) return;
+    if(!cv.isConnected||S.screen!=='home'||homePage!==0||document.visibilityState==='hidden') return;
     const r=cv.getBoundingClientRect();
     if(!r.width||!r.height){ state.raf=requestAnimationFrame(paint); return; }
     const dpr=Math.min(window.devicePixelRatio||1,3);
@@ -7419,14 +7415,13 @@ function homeMark(){
 /* The other Home pages remain mounted for swiping, but their hidden canvases
    must not consume the frame budget of the page the reader is using. */
 function syncHomeMotion(){
-  const on=S.screen==='home'&&homePage===0&&!document.hidden;
+  const on=S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden';
   if(heroMon) on?heroMon.start():heroMon.stop();
   if(heroHeart3d) on?heroHeart3d.start():heroHeart3d.stop();
   if(pearlTrace) on?pearlTrace.resume():pearlTrace.pause();
   if(!on&&heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
   else if(on&&heroMon&&!heroRotateTimer) heroRotateTimer=startHeroRotation();
 }
-document.addEventListener('visibilitychange',syncHomeMotion);
 /* The gauge and the chapter bars fill when the Brain page is first seen, not while it is off to the side. */
 function homeFillBrain(){
   const page=document.getElementById('homePage1'); if(!page||page.dataset.filled) return;
