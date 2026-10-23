@@ -340,8 +340,22 @@ head('Memorizer CI exercises every engine without weakening the iPad gate');
   ok('an engine failure cannot cancel the other engine runs', /fail-fast:\s*false\b/.test(job));
   ok('the matrix engine reaches the test helper',
      /SYSTOLE_ENGINE:\s*\$\{\{\s*matrix\.engine\s*\}\}/.test(job));
-  ok('CI installs the selected browser using the pinned repository dependencies',
-     /\bnpm ci\b/.test(job) && /npx playwright install --with-deps \$\{\{\s*matrix\.engine\s*\}\}/.test(job));
+  const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).devDependencies.playwright;
+  const image = (job.match(/^\s*image:\s*(\S+)/m) || [])[1] || '';
+  const at = job.indexOf('- name: verify the preinstalled pinned browser can render');
+  const end = job.indexOf('- name: prepare the pinned public reader libraries', at);
+  const probe = at >= 0 && end > at ? blankComments(job.slice(at, end)) : '';
+  // An installed image is not proof a browser can run. Keep the matching
+  // package version and immutable digest, plus an actual shared-engine render
+  // and a failing exit when the browser is missing or its page does not render.
+  ok('CI uses pinned dependencies, a matching immutable browser image and a rendering probe',
+     /\bnpm ci\b/.test(job)
+     && image.startsWith('mcr.microsoft.com/playwright:v' + version + '-noble@sha256:')
+     && /^[a-f0-9]{64}$/.test(image.split('@sha256:')[1] || '')
+     && /require\('\.\/tests\/_engine'\)/.test(probe) && /await launch\(\)/.test(probe)
+     && /await page\.setContent\(/.test(probe)
+     && /if \(await page\.title\(\) !== 'Browser ready'\) throw/.test(probe)
+     && /process\.exit\(1\)/.test(probe));
   const suites = job.split(/\n      - /).filter(step => /run:\s*node tests\/verify-/.test(step));
   ok('every browser suite still runs after an earlier suite fails',
      suites.length > 0 && suites.every(step => /if:\s*\$\{\{\s*!cancelled\(\)\s*\}\}/.test(step)));
