@@ -95,7 +95,6 @@
 .chip.mini{padding:4px 11px;font-size:11px}
 .lead-card{padding:var(--s3) var(--s4) var(--s4)}
 .twelve-hint{padding:var(--s2) var(--s4) 0}
-.home-progress{margin:calc(var(--s1) * -1) var(--s0) var(--s5)}
 .section-label{margin:var(--s6) 0 var(--s3)}
 
 /* ── live hero ── */
@@ -257,7 +256,7 @@
 /* Behind the words, edge to edge, and never in the way of a tap. The prose
    columns are lifted above it rather than the trace being pushed down, so a
    long pearl scrolling inside its column still passes over the current. */
-.pearl-current{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;
+.pearl-current{position:absolute;top:0;right:0;left:0;width:100%;height:calc(100% - var(--pc-foot,0px));
   z-index:0;pointer-events:none;opacity:.8}
 .pearl-main,.pearl-rule,.pearl-fig{position:relative;z-index:1}
 .pearl-head,.pearl-steps,.pearl-body,.pearl-open{position:relative;z-index:1}
@@ -333,6 +332,7 @@
 .pearl-fig figcaption{padding:12px 0 0;font-size:var(--t-meta);line-height:1.55;color:var(--text)}
 .pearl-card [hidden]{display:none!important}
 .pearl-card button:focus-visible,.pearl-fig:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.pearl-morecue .icon{transition:none}}
 @media(max-width:640px){.pearl-concept{font-size:var(--t-h4)}.pearl-txt{font-size:var(--t-body)}}
 @media(prefers-reduced-motion:reduce){.pearl-card,.pearl-in{animation:none}}
 /* The same glass as the doors, because it sits in their row and is the same
@@ -528,12 +528,12 @@ body{background-image:
   backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);
   border-bottom:1px solid rgba(255,255,255,.14);box-shadow:0 4px 24px rgba(3,12,24,.15)}
 @supports not (color:color-mix(in srgb,red,blue)){#navbar{background:var(--navy)}}
-.door,.home-progress,.ch-tile,.feed-card,.ref-card{
+.door,.ch-tile,.feed-card,.ref-card{
   background:var(--card);
   background:linear-gradient(145deg,var(--gl-shine),transparent 42%),color-mix(in srgb,var(--card) 88%,transparent);
   backdrop-filter:blur(20px) saturate(1.35);-webkit-backdrop-filter:blur(20px) saturate(1.35);
   border-color:var(--border2);box-shadow:inset 0 1px 0 var(--gl-rim),inset 0 -1px 0 var(--gl-edge),0 12px 32px -24px rgba(3,12,24,.28)}
-@supports not (color:color-mix(in srgb,red,blue)){.door,.home-progress,.ch-tile,.feed-card,.ref-card{background:linear-gradient(145deg,var(--gl-shine),transparent 42%),var(--card)}}
+@supports not (color:color-mix(in srgb,red,blue)){.door,.ch-tile,.feed-card,.ref-card{background:linear-gradient(145deg,var(--gl-shine),transparent 42%),var(--card)}}
 /* A note is a long reading surface on a flat ground, and the library can hold a thousand of them. There is nothing behind
    one to refract, and a blur per card was a compositing layer per card. */
 .ref-card{backdrop-filter:none;-webkit-backdrop-filter:none}
@@ -588,7 +588,7 @@ body{background-image:
 }
 html[data-palette="contrast"] body{background-image:none}
 html[data-palette="contrast"] #navbar{background:var(--navy)}
-html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress,
+html[data-palette="contrast"] .door,
 html[data-palette="contrast"] .ch-tile,html[data-palette="contrast"] .feed-card,
 html[data-palette="contrast"] .ref-card{background:var(--card);border-color:var(--border)}
 @media(prefers-reduced-motion:reduce){
@@ -616,6 +616,99 @@ html[data-palette="contrast"] .ref-card{background:var(--card);border-color:var(
 .pearl-card::after{opacity:.24;animation:none}
 .pearl-current{opacity:.28}
 .pearl-rule{flex-basis:2px}
+
+/* ── the pearl, colour-coded ─────────────────────────────────────────────
+   A grey stack of sentences of one weight read as a paragraph to wade through. Each step now wears the relationship
+   Pearl.lesson names for it (the core idea, a detail, a contrast, a caveat, why it matters, a condition), as a label in
+   words and in a colour of its own, so the shape of the argument is seen before it is read. Teal, amber, red and green
+   are the theme's own inks and tints, which every theme defines; violet and pink are this card's, with dark values under
+   the selectors the theme's own dark tokens use (tablet.css, base.css). No color-mix: every value here is a token. */
+.pearl-card{--pk-violet:#6D28D9;--pk-violet-bg:#F5F3FF;--pk-violet-b:#DDD6FE;
+  --pk-pink:#A21CAF;--pk-pink-bg:#FDF4FF;--pk-pink-b:#F5D0FE;--pk-on:#fff}
+html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;--pk-violet-b:#4C3A8A;
+  --pk-pink:#F0ABFC;--pk-pink-bg:#2A0F2E;--pk-pink-b:#6B2A72;--pk-on:#0B1220}
+@media(prefers-color-scheme:dark){html:not([data-theme="light"]) .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;
+  --pk-violet-b:#4C3A8A;--pk-pink:#F0ABFC;--pk-pink-bg:#2A0F2E;--pk-pink-b:#6B2A72;--pk-on:#0B1220}}
+.pearl-rule{flex-basis:4px;background:linear-gradient(180deg,var(--teal-ink),var(--pk-violet) 45%,var(--pk-pink) 75%,var(--amber-ink))}
+.pearl-head{gap:8px;margin-bottom:12px}
+.pearl-tag{padding:5px 11px 5px 9px;border-radius:999px;color:var(--pk-on);font-size:var(--t-tiny);letter-spacing:.1em;
+  background:linear-gradient(135deg,var(--teal-ink),var(--pk-violet))}
+.pearl-cap{min-width:0;max-width:55%;padding:4px 10px;border:1px solid var(--border2);border-radius:999px;
+  background:var(--card);color:var(--muted);font-size:var(--t-tiny);font-weight:600}
+/* The concept is the card's title: the bank's own word, often lower case, set as a heading with a capital and a rule of
+   the step colours under it, instead of a squeezed lower-case serif. */
+.pearl-concept{position:relative;font-family:inherit;font-weight:750;font-size:clamp(24px,2.4vw,32px);line-height:1.15;
+  letter-spacing:-.02em;margin:0 0 16px;padding-bottom:12px}
+.pearl-concept::first-letter{text-transform:uppercase}
+.pearl-concept::after{content:'';position:absolute;left:0;bottom:0;width:64px;height:4px;border-radius:4px;
+  background:linear-gradient(90deg,var(--teal-ink),var(--pk-violet),var(--pk-pink))}
+.pearl-steps{gap:10px}
+.pearl-step{--k:var(--teal-ink);--k-bg:var(--teal4);--k-b:var(--teal3)}
+.pearl-step[data-kind="detail"]{--k:var(--pk-violet);--k-bg:var(--pk-violet-bg);--k-b:var(--pk-violet-b)}
+.pearl-step[data-kind="contrast"]{--k:var(--amber-ink);--k-bg:var(--amber-bg);--k-b:var(--amber-b)}
+.pearl-step[data-kind="caveat"]{--k:var(--red-ink);--k-bg:var(--red-bg);--k-b:var(--red-b)}
+.pearl-step[data-kind="why"]{--k:var(--green-ink);--k-bg:var(--green-bg);--k-b:var(--green-b)}
+.pearl-step[data-kind="condition"]{--k:var(--pk-pink);--k-bg:var(--pk-pink-bg);--k-b:var(--pk-pink-b)}
+.pearl-card .pearl-step{display:flex;gap:12px;align-items:flex-start;padding:12px 14px 13px 12px;
+  border:1px solid var(--k-b);border-left:4px solid var(--k);border-radius:14px;background:var(--k-bg)}
+/* The number is back: the order is the argument. Filled with the step's ink, so 1-2-3 reads in colour down the edge. */
+.pearl-card .pearl-n{display:flex;width:26px;height:26px;margin-top:1px;border:0;border-radius:50%;
+  font-size:var(--t-tiny);color:var(--pk-on);background:var(--k)}
+.pearl-card .pearl-role{display:flex;align-items:center;gap:5px;width:max-content;max-width:100%;margin:0 0 6px;
+  padding:3px 10px 3px 8px;border:1px solid var(--k-b);border-radius:999px;background:var(--card);
+  font-family:inherit;font-size:var(--t-tiny);font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--k)}
+.pearl-card .pearl-txt{font-family:inherit;font-size:var(--t-body);line-height:1.6;color:var(--text)}
+.pearl-card .pearl-step[data-kind="core"] .pearl-txt{font-size:var(--t-lead);font-weight:550;line-height:1.55}
+/* The connective the step was cut at, back in its sentence where it reads as English, in the step's ink. */
+.pearl-card .pearl-lead{display:inline;margin:0;font-family:inherit;font-size:inherit;font-style:normal;font-weight:700;
+  letter-spacing:normal;text-transform:capitalize;color:var(--k);vertical-align:baseline}
+.pearl-card .pearl-step .pearl-num{color:var(--k);background:var(--card);box-shadow:inset 0 0 0 1px var(--k-b)}
+/* A pearl with no joint is one statement: set as the core idea's callout. */
+.pearl-card .pearl-body{padding:14px 16px;border:1px solid var(--teal3);border-left:4px solid var(--teal-ink);
+  border-radius:14px;background:var(--teal4);font-family:inherit;font-weight:550}
+.pearl-recall{color:var(--teal-ink);background:var(--teal4);border-color:var(--teal3)}
+/* While the steps run past the card (a landscape grid gives them a fixed height), the column's foot fades and a button
+   under it opens the whole pearl, where a line cut at the edge read as the end of it; opened, it folds it back. It is
+   there only while there is more than the card shows (pearlFit), so it never offers what is already on the screen. */
+.pearl-morecue{display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;align-self:center;
+  min-height:44px;margin-top:6px;padding:6px 16px;border:1px solid var(--teal3);border-radius:999px;cursor:pointer;
+  background:var(--teal4);color:var(--teal-ink);font-family:inherit;font-size:var(--t-tiny);font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase}
+.pearl-morecue .icon{transition:transform .25s var(--spring,ease)}
+.pearl-card.pearl-all .pearl-morecue .icon{transform:rotate(180deg)}
+.pearl-morecue:active{transform:scale(.97)}
+.pearl-card.pearl-more .pearl-bodywrap{-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent);
+  mask-image:linear-gradient(180deg,#000 80%,transparent)}
+.pearl-card.pearl-all .pearl-bodywrap{overflow:visible}
+/* The figure: on a white mat, since reference diagrams are drawn on white and a dark theme put them in a dark well;
+   larger; named, with how to enlarge it; and a caption in the text colour at a reading size. */
+.pearl-card .pearl-fig{padding:18px 16px;justify-content:center}
+@media(min-width:701px){.pearl-card .pearl-fig{flex-basis:40%;max-width:340px;justify-content:flex-start}}
+/* Landscape on a tablet gives the card a fixed height beside the hero (tablet.css), and a ladder of full cards showed
+   one step before the cue. There the label opens its step's line instead of standing above it, the boxes and the title
+   are tighter, and the figure's column narrower, so two or three steps are in view at once. */
+@media (min-width:1024px) and (orientation:landscape){
+  #app[data-screen="home"] .pearl-main{padding:18px 20px 16px}
+  #app[data-screen="home"] .pearl-head{margin-bottom:8px}
+  #app[data-screen="home"] .pearl-concept{font-size:var(--t-h4);margin-bottom:12px;padding-bottom:9px}
+  #app[data-screen="home"] .pearl-steps{gap:8px}
+  #app[data-screen="home"] .pearl-card .pearl-step{gap:9px;padding:9px 12px 10px 10px;border-radius:12px}
+  #app[data-screen="home"] .pearl-card .pearl-n{width:22px;height:22px;font-size:var(--t-tiny)}
+  #app[data-screen="home"] .pearl-card .pearl-role{display:inline-flex;vertical-align:1px;margin:0 7px 0 0;
+    padding:1px 8px 1px 6px;font-size:var(--t-tiny)}
+  #app[data-screen="home"] .pearl-card .pearl-txt{font-size:var(--t-body);line-height:1.55}
+  #app[data-screen="home"] .pearl-card .pearl-step[data-kind="core"] .pearl-txt{font-size:var(--t-body)}
+  #app[data-screen="home"] .pearl-card .pearl-fig{flex-basis:34%;max-width:260px;padding:16px 12px}
+  #app[data-screen="home"] .pearl-fig-label i{display:none}
+  #app[data-screen="home"] .pearl-actions{margin-top:8px;padding-top:6px}
+}
+.pearl-fig-label{display:flex;align-items:center;gap:6px;align-self:stretch;margin:0 0 12px;font-size:11px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--teal-ink)}
+.pearl-fig-label i{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-style:normal;font-weight:600;
+  letter-spacing:.02em;text-transform:none;color:var(--muted)}
+.pearl-card .pearl-fig img{max-height:340px;padding:8px;border-radius:12px;background:var(--white);
+  box-shadow:0 0 0 1px var(--border2),0 10px 24px -14px rgba(3,12,24,.45)}
+.pearl-card .pearl-fig figcaption{align-self:stretch;padding:12px 2px 0;font-size:13px;line-height:1.5;color:var(--text);text-align:left}
 .hero-live{min-height:320px;}
 .hero-h1{font-size:clamp(44px,4.5vw,64px);margin-bottom:10px}
 .hero-description{font-size:13px;color:rgba(255,255,255,.7);margin-bottom:16px}
@@ -638,10 +731,9 @@ html[data-palette="contrast"] .ref-card{background:var(--card);border-color:var(
 .door-ic{padding:7px}
 .door-txt b{font-size:var(--t-meta)}
 .door-row{gap:10px}
-.home-progress{border-radius:22px}
 .icon-btn{border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 4px 12px rgba(0,0,0,.1);
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-.door,.home-progress{
+.door{
   background:linear-gradient(145deg,var(--gl-shine),transparent 52%),
     linear-gradient(160deg,color-mix(in srgb,var(--card) 94%,transparent),color-mix(in srgb,var(--card) 76%,transparent));
   /* Gradient-only shorthand resets the base colour to transparent. Keep a
@@ -650,14 +742,14 @@ html[data-palette="contrast"] .ref-card{background:var(--card);border-color:var(
   background-color:color-mix(in srgb,var(--card) 86%,transparent);
   box-shadow:inset 0 1px 0 var(--gl-rim),inset 1px 0 0 var(--gl-shine),
     inset 0 -1px 0 var(--gl-edge),0 16px 34px -22px rgba(3,12,24,.25)}
-@supports not (color:color-mix(in srgb,red,blue)){.door,.home-progress{background:linear-gradient(145deg,var(--gl-shine),transparent 52%);background-color:var(--card)}}
+@supports not (color:color-mix(in srgb,red,blue)){.door{background:linear-gradient(145deg,var(--gl-shine),transparent 52%);background-color:var(--card)}}
 .door-ic{border:1px solid color-mix(in srgb,var(--teal) 12%,transparent);
   background:linear-gradient(145deg,color-mix(in srgb,var(--teal) 15%,transparent),color-mix(in srgb,var(--teal2) 5%,transparent));
   box-shadow:inset 0 1px 0 var(--gl-rim),0 4px 12px -8px var(--teal)}
 @supports not (color:color-mix(in srgb,red,blue)){.door-ic{border:1px solid var(--teal3);background:var(--teal4)}}
 @media(hover:hover){.door:hover{border-color:color-mix(in srgb,var(--teal) 55%,var(--border));
   box-shadow:inset 0 1px 0 var(--gl-rim),0 18px 40px -22px rgba(3,12,24,.4)}@supports not (color:color-mix(in srgb,red,blue)){.door:hover{border-color:var(--teal)}}}
-html[data-palette="contrast"] .door,html[data-palette="contrast"] .home-progress{background:var(--card)}
+html[data-palette="contrast"] .door{background:var(--card)}
 @media(min-width:1024px) and (orientation:landscape){
   .hero-live{min-height:310px;padding-top:18px}
   .hero-h1{font-size:clamp(44px,4vw,58px)}

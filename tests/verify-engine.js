@@ -462,6 +462,9 @@ head('the tools the suites need are pinned, and named before they are missed');
      version that produced the fixture has to be recorded somewhere a person can
      find, and the fixture names it too. */
   ok('ts-fsrs is a devDependency, pinned', /^\d+\.\d+\.\d+$/.test(dev['ts-fsrs'] || ''), dev['ts-fsrs'] || 'absent');
+  /* axe-core is the rule engine verify-a11y runs in each screen. Pinned for the same reason as the browser: a rule set that
+     moves under the suite makes a green run mean nothing in particular. */
+  ok('axe-core is a devDependency, pinned', /^\d+\.\d+\.\d+$/.test(dev['axe-core'] || ''), dev['axe-core'] || 'absent');
   const fx = JSON.parse(fs.readFileSync(path.join(TESTS, 'fixtures', 'fsrs-oracle.json'), 'utf8'));
   ok('and it is the version the committed oracle was generated with',
      fx.generator && fx.generator.version === dev['ts-fsrs'],
@@ -489,7 +492,7 @@ head('the tools the suites need are pinned, and named before they are missed');
      not read from package.json, because the defect is that file growing. Every
      dependency field is read: a tool moved to "dependencies" is not out of
      reach of this. */
-  const NAMED = ['playwright', 'ts-fsrs'];
+  const NAMED = ['playwright', 'ts-fsrs', 'axe-core'];
   const declared = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
     .flatMap(k => Object.keys(pkg[k] || {}).map(n => (k === 'devDependencies' ? n : `${n} (${k})`)));
   const strays = declared.filter(n => !NAMED.includes(n));

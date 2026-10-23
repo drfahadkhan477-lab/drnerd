@@ -29,7 +29,7 @@
 const path = require('path');
 const { launch, engineName, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, quiet } = require('./_render.js');
+const { booted, quiet, settled } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-lab.js <build.html>'); process.exit(1); }
@@ -116,11 +116,13 @@ const pixels = () => {
     p.__opened = await toLab(p);
     return p;
   };
-  /* Into the Lab the way a fellow goes: the door on Systole's home screen. */
+  /* Into the Lab the way a fellow goes: the Labs page of Systole's home screen (its tab), and the Practice Lab card. */
   const toLab = async p => {
     await p.evaluate(() => { if (S.screen !== 'home') goHome(); });
     await quiet(p);
-    const opened = await p.locator('button.door', { hasText: 'Practice Lab' }).click({ timeout: 8000 })
+    await p.locator('#homeTab2').click({ timeout: 8000 }).catch(() => {});
+    await settled(p, () => typeof homePage !== 'undefined' && homePage === 2 && !homeTween, { timeout: 8000, label: 'the Labs page' }).catch(() => {});
+    const opened = await p.locator('#homePage2 button.lab-card', { hasText: 'Practice Lab' }).click({ timeout: 8000 })
       .then(() => p.locator('#plabRoot .plab-tiles').waitFor({ timeout: 8000 })).then(() => true, () => false);
     await quiet(p);
     return opened;
@@ -133,7 +135,7 @@ const pixels = () => {
   head('it is part of Systole');
   {
     const st0 = await state(p);
-    ok('the Practice Lab door on Systole\'s home screen opens it: Systole\'s practice screen, with the Lab drawn in it, on its home', p.__opened && (await p.evaluate(() => S.screen)) === 'practice' && st0.mounted && st0.screen === 'home' && /Practice Lab/.test(await p.evaluate(() => (document.querySelector('#plabRoot h1') || {}).textContent || '')), JSON.stringify(st0));
+    ok('the Practice Lab card on the Labs page of Systole\'s home screen opens it: Systole\'s practice screen, with the Lab drawn in it, on its home', p.__opened && (await p.evaluate(() => S.screen)) === 'practice' && st0.mounted && st0.screen === 'home' && /Practice Lab/.test(await p.evaluate(() => (document.querySelector('#plabRoot h1') || {}).textContent || '')), JSON.stringify(st0));
     ok('its modules are in Systole\'s page, beside the ones they read', await p.evaluate(() => ['HeartSounds', 'Tracings', 'Strips', 'HeartMap', 'Drill', 'LabProgress', 'LabItems', 'LabUI', 'Physio', 'RhythmsExtra', 'FSRS'].every(n => !!window[n]) && typeof buildPractice === 'function'));
     const cls = await p.evaluate(() => { const all = Array.from(document.querySelectorAll('#plabRoot [class]')).flatMap(el => Array.from(el.classList)); return { n: all.length, foreign: all.filter(c => !/^plab-/.test(c)) }; });
     ok('every class in it is its own, plab-: none of Systole\'s (.btn, .chip, .card) is on it', cls.n >= 20 && cls.foreign.length === 0, cls.foreign.slice(0, 6).join(', ') || cls.n + ' classes, all plab-');

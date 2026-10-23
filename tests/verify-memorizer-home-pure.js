@@ -337,7 +337,9 @@ head('the brain: every section a neuron, inside it, wired into one net, lit by p
   ok('the cortex is folded all over: gyri drawn inside the cerebrum, spread from front to back and top to bottom',
      G.length >= 40 && gOut.length === 0 && Math.max(...xs) - Math.min(...xs) > 600 && Math.max(...ys) - Math.min(...ys) > 300,
      G.length + ' gyri, ' + gOut.length + ' points outside ' + JSON.stringify(gOut.slice(0, 3)));
+  /* brain.js holds the folds now, so it is reloaded too: re-reading home.js alone would hand back the cached object. */
   delete require.cache[require.resolve('../memorizer/src/home.js')];
+  delete require.cache[require.resolve('../src/core/brain.js')];
   const again = require('../memorizer/src/home.js').BRAIN;
   ok('and the same folds every time', JSON.stringify(again.GYRI) === JSON.stringify(G) && JSON.stringify(again.FINE) === JSON.stringify(H.BRAIN.FINE));
   const fOut = [];
@@ -437,6 +439,26 @@ head('the brain, live: impulses run the wiring, and die at the edge of what is k
   L.nodes.forEach((_, i) => H.liveFire(flood, L, i, () => 0, -1, 'tap'));
   H.liveStep(flood, L, 0.01, () => 0);
   ok('every neuron fired at once, still no more than ' + H.LIVE.MAX_SPARKS + ' impulses', flood.sparks.length === H.LIVE.MAX_SPARKS, String(flood.sparks.length));
+  /* An app may run the same physiology at rates of its own (Systole's brain does, so a bank not opened yet is not
+     still): liveInit(L, tune). Without one, nothing changes for Memorizer. */
+  const BM = require(path.join(ROOT, 'src', 'core', 'brain.js'));
+  const plain = BM.liveInit(L);
+  ok('without a tuning, a brain runs on LIVE, as Memorizer\'s always has', plain.live === BM.LIVE);
+  const hot = BM.liveInit(L, { PASS: { 'new': 1 }, MAX_SPARKS: 3 });
+  ok('with one, the numbers it names are its own, the rest LIVE\'s, and LIVE is untouched',
+     hot.live.PASS['new'] === 1 && hot.live.PASS.solid === BM.LIVE.PASS.solid && hot.live.MAX_SPARKS === 3 && hot.live.SPEED === BM.LIVE.SPEED &&
+     BM.LIVE.PASS['new'] !== 1 && BM.LIVE.MAX_SPARKS !== 3, JSON.stringify({ pass: hot.live.PASS, max: hot.live.MAX_SPARKS }));
+  /* And the brain does what its numbers say: a neuron with unseen neighbours, fired on its own at an even chance, passes
+     nothing on at LIVE's rate (0.15) and passes on to them at a tuned 1, never more than the tuned cap at once. */
+  const src = L.nodes.findIndex((_, i) => BM.brainNet(L).adj[i].filter(x => L.nodes[x.j].state === 'new').length >= 2);
+  if (src < 0) ok('a neuron with unseen neighbours to fire (precondition)', false, 'UNMEASURED: no neuron has two unseen neighbours');
+  else {
+    const toNew = st => st.sparks.filter(s => L.nodes[s.b].state === 'new').length;
+    const a = BM.liveInit(L); a.wait = 1e9; BM.liveFire(a, L, src, () => 0.5, -1, 'spont');
+    const b = BM.liveInit(L, { PASS: { 'new': 1 }, MAX_SPARKS: 3 }); b.wait = 1e9; BM.liveFire(b, L, src, () => 0.5, -1, 'spont');
+    ok('fired on its own, a neuron passes nothing to the unseen at LIVE\'s rate, and passes on at a tuned one, within its cap',
+       toNew(a) === 0 && toNew(b) >= 1 && b.sparks.length <= 3, `LIVE ${toNew(a)}, tuned ${toNew(b)} (of ${b.sparks.length})`);
+  }
 }
 
 head('the numbers in a pearl are marked');

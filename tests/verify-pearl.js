@@ -217,6 +217,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the connective that opens a step is lifted into its label',
      lad.joints[1].lead === 'then' && lad.joints[2].lead === 'so',
      JSON.stringify(lad.joints.map(s => s.lead)));
+  /* The lead is drawn in the step's line, before its text: "so It is…" on the owner's iPad. The lead takes the capital
+     (as drawn), and the text after it keeps the case the sentence gave it. */
+  const leadDrawn = await page.evaluate(() => { const li = document.createElement('em'); li.className = 'pearl-lead'; li.textContent = 'so';
+    const c = document.getElementById('pearlCard') || document.body; c.appendChild(li); const tt = getComputedStyle(li).textTransform; li.remove(); return tt; });
+  ok('a step after its lead reads on from it: the lead capitalised, the text not',
+     /^the first six months/.test(lad.joints[2].text) && leadDrawn === 'capitalize', `${leadDrawn} · ${lad.joints[2].lead} ${lad.joints[2].text.slice(0, 30)}`);
   /* The single most likely way this goes wrong: an em-dash PAIR is a
      parenthesis, and cutting inside it leaves a fragment and an aside. */
   ok('a pair of em-dashes is a parenthesis, not a joint', lad.paired === 1, String(lad.paired));
@@ -289,7 +295,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        up after a bounded wait so a genuine mismatch still fails. */
     const cardWait = document.querySelector('.pearl-card');
     for (let i = 0; i < 40; i++) {
-      if (cardWait && Math.abs(cv.getBoundingClientRect().width - cardWait.clientWidth) < 1) break;
+      /* and its foot the prose column's: the card measures that when it changes size (a figure arriving late grows the
+         band under the prose), a frame after. */
+      const pm = cardWait && cardWait.querySelector('.pearl-main');
+      if (cardWait && Math.abs(cv.getBoundingClientRect().width - cardWait.clientWidth) < 1 &&
+          pm && Math.abs(cv.getBoundingClientRect().bottom - pm.getBoundingClientRect().bottom) <= 1) break;
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
     const r = cv.getBoundingClientRect();
@@ -309,7 +319,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     }
     return {
       mounted: !!pearlTrace,
-      lit, topOfInk: lowest, bottomOfInk: highest,
+      lit, topOfInk: lowest, bottomOfInk: highest, cssH: r.height,
+      proseFoot: Math.round(r.bottom - cardEl.querySelector('.pearl-main').getBoundingClientRect().bottom),
+      band: !!(cardEl.querySelector('.pearl-fig') || cardEl.querySelector('.pearl-emblem')) && getComputedStyle(cardEl).flexDirection === 'column',
       /* Against the card's CONTENT box, not its border box. The card has a
          1px border either side, so a canvas that fills it perfectly measures
          exactly 2px narrower than the border box — and the old `< 2` fudge
@@ -328,7 +340,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      should report four failures, not throw on the second line and take the
      rest of the suite with it. */
   const T = trace || { mounted: false, fullWidth: false, backing: 0, dpr: 1, behind: false,
-                       topOfInk: 0, bottomOfInk: 0, lit: 0 };
+                       topOfInk: 0, bottomOfInk: 0, lit: 0, cssH: 0, proseFoot: NaN, band: false };
   ok('the pearl carries a current, and it is running', T.mounted === true);
   ok('it spans the whole card, where the loop was a corner',
      T.fullWidth, `${T.backing.toFixed(1)}× backing`);
@@ -339,11 +351,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      the body of the prose, the contrast check further down is the only thing
      standing between the fellow and an unreadable pearl — so it is held here
      as well, structurally, rather than relying on one number. */
+  /* Stacked, the figure (or the emblem) is a band under the prose with a ground of its own, and a trace along the foot
+     of the whole card ran under it, out of sight. It ends where the prose column ends. */
+  ok('the trace ends where the prose does, never under the figure\'s band', Math.abs(T.proseFoot) <= 1,
+     `${T.proseFoot}px from the prose column's foot${T.band ? ', a band under it' : ', side by side'}`);
   ok('the trace runs along the foot of the card, not through the prose',
      T.topOfInk > 0.55, `ink from ${(T.topOfInk * 100).toFixed(0)}% down`);
+  /* In CSS pixels, the unit the trace is drawn in: its height is capped at 34px so it stays clear of the prose. This was
+     a fraction of the canvas, which measured the column as much as the trace: stacked in portrait, the prose column is
+     taller, and the same 34px waveform read as 4.9% of it. A flat line is a stroke, two or three pixels; a waveform
+     spans its QRS. */
+  const inkPx = (T.bottomOfInk - T.topOfInk) * T.cssH;
   ok('and it is a real waveform, not a flat line',
-     T.bottomOfInk - T.topOfInk > 0.05 && T.lit > 500,
-     `${T.lit} lit px across ${((T.bottomOfInk - T.topOfInk) * 100).toFixed(0)}% of height`);
+     inkPx >= 20 && T.lit > 500,
+     `${T.lit} lit px, the ink spanning ${inkPx.toFixed(0)}px (${((T.bottomOfInk - T.topOfInk) * 100).toFixed(0)}% of ${Math.round(T.cssH)}px)`);
 
   const marks = await page.evaluate(() => {
     const all = pearlAll();
@@ -441,6 +462,150 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('open note displays the selected source rather than the entire shelf',opened.count === 1 && opened.title === sourceTitle);
   await page.evaluate(()=>goHome());
   await settled(page,()=>S.screen==='home'&&!!document.querySelector('.hero-h1'),{label:'home screen'});
+
+  head('each step says what it is, in a colour of its own');
+  /* A ladder of steps in one grey read as a paragraph to wade through. Each step now wears the relationship
+     Pearl.lesson names for it, in words and in a colour; the label's ink is its step's edge, and steps of different
+     kinds are drawn apart. */
+  await page.evaluate(() => {
+    const all = pearlAll();
+    pearlCurrent = all.find(p => p.figKey && refImgSrc(p.figKey) && new Set(Pearl.lesson(p.text).map(s => s.label)).size >= 2) ||
+      all.find(p => new Set(Pearl.lesson(p.text).map(s => s.label)).size >= 2) || all[0];
+    S.screen = 'home'; render();
+  });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'a pearl with steps on the home screen' });
+  const kinds = await page.evaluate(() => {
+    const want = Pearl.lesson(pearlCurrent.text);
+    const steps = [...document.querySelectorAll('#pearlCard .pearl-step')];
+    const role = li => li.querySelector('.pearl-role');
+    const edge = li => getComputedStyle(li).borderLeftColor;
+    const cap = document.querySelector('#pearlFig figcaption');
+    return {
+      want: want.map(s => s.label), shown: steps.map(li => role(li) ? role(li).textContent.trim() : ''),
+      kinds: steps.map(li => li.dataset.kind || ''),
+      inkIsEdge: steps.every(li => role(li) && getComputedStyle(role(li)).color === edge(li)),
+      edges: steps.map(edge),
+      labelsDiffer: new Set(want.map(s => s.label)).size,
+      /* A browser does not report ::first-letter through getComputedStyle (it answered 'none' with the capital on screen),
+         so the capital is measured: the heading's text is as wide as the word with its first letter raised, not as the
+         word as stored. Only a concept that starts in lower case can tell the two apart. */
+      first: (() => {
+        const h = document.getElementById('pearlConcept'), text = h.textContent;
+        if (!/^[a-z]/.test(text)) return 'UNMEASURED: the concept "' + text.slice(0, 1) + '…" does not start in lower case';
+        const r = document.createRange(); r.selectNodeContents(h);
+        /* The first letter is a box of its own, so the text is two rectangles on one line: measured from the first's left
+           to the last's right, and only when they share a line. */
+        const rects = [...r.getClientRects()];
+        if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
+        const cs = getComputedStyle(h), probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
+        document.body.appendChild(probe);
+        probe.textContent = text; const lower = probe.getBoundingClientRect().width;
+        probe.textContent = text[0].toUpperCase() + text.slice(1); const upper = probe.getBoundingClientRect().width;
+        probe.remove();
+        const w = Math.max(...rects.map(x => x.right)) - Math.min(...rects.map(x => x.left));
+        return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
+          : `heading ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
+      })(),
+      capPx: cap ? parseFloat(getComputedStyle(cap).fontSize) : 0,
+    };
+  });
+  ok('every step is labelled with the relationship Pearl.lesson names for it', kinds.shown.length >= 2 && kinds.shown.join('|') === kinds.want.join('|'),
+     kinds.shown.join(' · ') + ' / wanted ' + kinds.want.join(' · '));
+  ok('and carries its kind for the colour', kinds.kinds.every(k => /^(core|detail|contrast|caveat|why|condition)$/.test(k)), kinds.kinds.join(' · '));
+  ok('each label is drawn in its own step\'s edge colour', kinds.inkIsEdge, kinds.edges.join(' · '));
+  ok('steps of different kinds are drawn in different colours', new Set(kinds.edges).size === kinds.labelsDiffer && kinds.labelsDiffer >= 2,
+     `${new Set(kinds.edges).size} colours for ${kinds.labelsDiffer} kinds`);
+  ok('the concept is set with a capital', kinds.first === 'uppercase', kinds.first);
+  ok('the figure\'s caption is at a reading size', kinds.capPx >= 13, kinds.capPx + 'px');
+
+  /* Landscape on a tablet gives the card a fixed height, and the steps scroll inside it: a line cut at the edge read as
+     the end of the pearl. While more is below, the card says so (its foot fades, and a Show all button is under it); at
+     the end the fade clears, and the button stays, since the card still holds less than the pearl. Show all opens the
+     whole pearl and Show less folds it back. */
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.evaluate(() => {
+    pearlCurrent = pearlAll().slice().sort((a, b) => Pearl.lesson(b.text).length - Pearl.lesson(a.text).length || b.text.length - a.text.length)[0];
+    S.screen = 'home'; render();
+  });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl in landscape' });
+  await settled(page, () => !document.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity),
+    { label: 'the steps to arrive' });
+  const more = await page.evaluate(() => {
+    const wrap = document.getElementById('pearlBody'), card = document.getElementById('pearlCard');
+    const cue = () => { const b = card.querySelector('.pearl-morecue'); return !!b && getComputedStyle(b).display !== 'none' && b.tagName === 'BUTTON'; };
+    return { over: wrap.scrollHeight - wrap.clientHeight, cue: cue(), cls: card.classList.contains('pearl-more') };
+  });
+  if (more.over > 4) {
+    ok('while the steps run past the card, it says there is more', more.cls && more.cue, `${more.over}px below the fold`);
+    await page.evaluate(() => { const w = document.getElementById('pearlBody'); w.scrollTop = w.scrollHeight; });
+    await settled(page, () => !document.getElementById('pearlCard').classList.contains('pearl-more'), { timeout: 3000, label: 'the cue to clear at the end' })
+      .catch(() => {});
+    const end = await page.evaluate(() => ({ fade: document.getElementById('pearlCard').classList.contains('pearl-more'),
+      btn: getComputedStyle(document.getElementById('pearlMore')).display }));
+    ok('and at the end its foot no longer fades, while Show all stays', !end.fade && end.btn !== 'none', JSON.stringify(end));
+    const tapAll = () => page.evaluate(() => { document.getElementById('pearlMore').click();
+      const w = document.getElementById('pearlBody'), c = document.getElementById('pearlCard'), b = document.getElementById('pearlMore');
+      return { all: c.classList.contains('pearl-all'), over: w.scrollHeight - w.clientHeight, label: b.textContent.trim(), expanded: b.getAttribute('aria-expanded'),
+        steps: w.querySelectorAll('.pearl-step').length,
+        lastInView: (() => { const r = w.querySelector('.pearl-step:last-child').getBoundingClientRect(), cr = c.getBoundingClientRect(); return r.bottom <= cr.bottom + 1; })() }; });
+    const opened = await tapAll();
+    ok('Show all opens the whole pearl: every step inside the card, nothing left to scroll', opened.all && opened.over <= 4 && opened.lastInView && opened.label === 'Show less' && opened.expanded === 'true', JSON.stringify(opened));
+    const folded = await tapAll();
+    ok('and Show less folds it back', !folded.all && folded.over > 4 && folded.label === 'Show all' && folded.expanded === 'false', JSON.stringify(folded));
+  } else {
+    for (const l of ['while the steps run past the card, it says there is more', 'and at the end its foot no longer fades, while Show all stays',
+      'Show all opens the whole pearl: every step inside the card, nothing left to scroll', 'and Show less folds it back'])
+      ok(l, false, `UNMEASURED: the longest pearl fits (${more.over}px over), so nothing ran past`);
+  }
+
+  /* THE OWNER'S iPAD, IN PORTRAIT: nothing runs past the card there, and yet the last step sat faded under a "More" that
+     did nothing when tapped. The card had been measured once, while the steps were still rising in, when a moving
+     transform made every pearl run past it, and never again. Read once the steps have landed. */
+  await page.setViewportSize({ width: 834, height: 1091 });
+  await page.evaluate(() => { S.screen = 'home'; render(); });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl in portrait' });
+  await settled(page, () => !document.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity),
+    { label: 'the steps to land, in portrait' });
+  const port = await page.evaluate(() => { const w = document.getElementById('pearlBody'), c = document.getElementById('pearlCard'), b = document.getElementById('pearlMore');
+    return { over: w.scrollHeight - w.clientHeight, fade: c.classList.contains('pearl-more'), btn: getComputedStyle(b).display, stacked: getComputedStyle(c).flexDirection }; });
+  ok('in portrait the pearl is stacked, the steps across the whole card', port.stacked === 'column', port.stacked);
+  ok('and where every step fits, no step is faded and nothing offers more', port.over <= 4 && !port.fade && port.btn === 'none', JSON.stringify(port));
+  /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
+     the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
+  await page.setViewportSize({ width: 390, height: 844 });
+  /* What sets the width of that line is the widest thing in it that cannot wrap: the head, with its chapter chip. A
+     pearl from a chapter with a short name fitted either way, so the pearl is given the bank's longest chapter name. */
+  await page.evaluate(() => { pearlCurrent = Object.assign({}, pearlCurrent, { chapter: CHAPTERS.slice().sort((a, b) => b.length - a.length)[0] });
+    S.screen = 'home'; render(); });
+  await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl on a phone' });
+  const phone = await page.evaluate(() => { const c = document.getElementById('pearlCard').getBoundingClientRect();
+    return [...document.getElementById('pearlCard').children].filter(e => e.getBoundingClientRect().width)
+      .map(e => ({ el: e.className.split(' ')[0], over: Math.round(e.getBoundingClientRect().right - c.right) })); });
+  ok('on a phone every part of the pearl stays inside its card', phone.length > 1 && phone.every(p => p.over <= 1), JSON.stringify(phone));
+  await page.setViewportSize({ width: 1100, height: 1100 });
+
+  head('a pearl always has a picture beside it');
+  /* A note's figure when it has one; when it has none, its chapter's emblem, as decoration (aria-hidden), never as #pearlFig,
+     so the figure checks above still mean the note's own figure. */
+  const pics = await page.evaluate(async () => {
+    const base = pearlAll()[0], ch = CHAPTERS[0];
+    const show = async (p) => { pearlCurrent = p; S.screen = 'home'; render();
+      await new Promise(r => { const t0 = performance.now(); const f = () => (document.getElementById('pearlCard') && !window.__vtLive) || performance.now() - t0 > 4000 ? r() : requestAnimationFrame(f); f(); });
+      const em = document.getElementById('pearlEmblem');
+      return { fig: !!document.getElementById('pearlFig'), emblem: !!em, hidden: em && em.getAttribute('aria-hidden'), named: em ? em.textContent.trim() : '' }; };
+    const bare = await show(Object.assign({}, base, { figKey: null, figCap: '', chapter: ch }));
+    const withFig = pearlAll().find(p => p.figKey && refImgSrc(p.figKey));
+    const fig = withFig ? await show(withFig) : null;
+    /* and the emblem follows the pearl when another is asked for */
+    const keep = Pearl.pick; Pearl.pick = () => Object.assign({}, base, { figKey: null, figCap: '', chapter: ch, id: base.id + '-again' });
+    try { pearlNext(); } finally { Pearl.pick = keep; }
+    const swapped = { fig: !!document.getElementById('pearlFig'), emblem: !!document.getElementById('pearlEmblem') };
+    return { ch, bare, fig, swapped };
+  });
+  ok('a pearl whose note has no figure shows its chapter\'s emblem, as decoration', pics.bare.emblem && !pics.bare.fig && pics.bare.hidden === 'true' && pics.bare.named === pics.ch, JSON.stringify(pics.bare));
+  ok('a pearl with a figure shows the figure and no emblem', !!pics.fig && pics.fig.fig && !pics.fig.emblem, JSON.stringify(pics.fig));
+  ok('another pearl without a figure brings the emblem with it', pics.swapped.emblem && !pics.swapped.fig, JSON.stringify(pics.swapped));
 
   head('an empty library is not an error');
   const empty = await page.evaluate(() => {

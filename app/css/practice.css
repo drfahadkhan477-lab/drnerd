@@ -6,6 +6,7 @@
 .plab{
   --plab-bg:var(--bg);--plab-card:var(--card);--plab-ink:var(--text);--plab-muted:var(--muted);--plab-line:var(--border);
   --plab-accent:var(--accent);--plab-accent-ink:#fff;
+  --plab-fill:var(--teal-ink);   /* an accent button's fill, the accent's text ink: white on Daylight's accent read 4.1:1 */
   --plab-good:var(--green-ink);--plab-good-bg:var(--green-bg);--plab-bad:var(--red-ink);--plab-bad-bg:var(--red-bg);
   --plab-warn:var(--amber-ink);--plab-warn-bg:var(--amber-bg);
   --plab-trace:var(--text);--plab-grid:#f0d9d9;--plab-grid-major:#e6b9b9;--plab-right:#cfe0f5;--plab-left:#f6d6d0;
@@ -32,7 +33,8 @@ html[data-theme="dark"] .plab{
 
 .plab-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:6px 0 14px}
 .plab-topbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;min-height:44px}
-.plab-topbar .plab-title{font-weight:600;flex:1}
+/* A drill's title is its screen's level-one heading (the Lab's home has its own), sized as the bar's text. */
+.plab-topbar .plab-title{font-weight:600;flex:1;font-size:inherit;line-height:inherit;letter-spacing:normal;margin:0}
 .plab-back{flex:none;border:1px solid var(--plab-line);background:var(--plab-card);border-radius:999px;padding:8px 14px;min-height:44px}
 
 .plab-card{background:var(--plab-card);border:1px solid var(--plab-line);border-radius:var(--plab-radius);padding:16px;margin-bottom:var(--plab-gap)}
@@ -51,7 +53,7 @@ canvas.plab-view{width:100%;display:block;border:1px solid var(--plab-line);bord
 .plab-cursor.plab-on{opacity:0.8}
 .plab-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
 .plab-btn{border:1px solid var(--plab-line);background:var(--plab-card);border-radius:12px;padding:10px 16px;min-height:48px;font-weight:600}
-.plab-btn.plab-primary,.plab-btn[aria-pressed="true"]{background:var(--plab-accent);color:var(--plab-accent-ink);border-color:var(--plab-accent)}
+.plab-btn.plab-primary,.plab-btn[aria-pressed="true"]{background:var(--plab-fill);color:var(--plab-accent-ink);border-color:var(--plab-fill)}
 .plab-btn:disabled{opacity:0.5;cursor:default}
 
 .plab-options{display:grid;gap:10px;margin:14px 0}

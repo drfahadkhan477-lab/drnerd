@@ -8,9 +8,10 @@
  * No browser, no build. AGENTS.md's rule is blunt — "If you write a sentence
  * containing a number, guard it or do not write it" — and two patch headers
  * broke it the day they were written. highcontrast-patch.js quotes relative
- * luminances and contrast ratios to justify every colour it picks;
- * calibrationtrack-patch.js quotes a tick ratio for each of six palettes to
- * justify how faint they are. Nothing checked any of it. Retune one hex and
+ * luminances and contrast ratios to justify every colour it picks, and
+ * nothing checked any of it. (calibrationtrack-patch.js quoted a tick ratio
+ * for each of six palettes beside the home screen's progress track; those
+ * claims went with the track, which the owner took off Home.) Retune one hex and
  * every one of those sentences quietly becomes a lie that reads as evidence.
  *
  * TWO KINDS OF CHECK, AND THE FIRST MATTERS MORE. The properties come first:
@@ -27,16 +28,15 @@
  * find nothing to disagree with and pass — the failure this project has
  * produced more times than any other.
  *
- * WHY THE COLOUR MATH IS LOCAL. Three copies of it exist already, in
- * verify-home.js, verify-homeprog.js and verify-pearl.js — but all three live
+ * WHY THE COLOUR MATH IS LOCAL. Copies of it exist already, in
+ * verify-home.js and verify-pearl.js — but they live
  * inside page.evaluate() bodies, so they execute in the browser and cannot
  * require() anything. A shared tests/_colour.js would have exactly one
  * caller, which is an abstraction invented for a second consumer that does
  * not exist. If a second Node-side consumer ever turns up, lift it then.
  *
- * WHAT IT DOES NOT CHECK. Whether any of this looks right. The ticks are a
- * hairline by intent and no number here can say whether that reads as
- * calibration or as nothing; that needs an eye on a real screen.
+ * WHAT IT DOES NOT CHECK. Whether any of this looks right; that needs an eye
+ * on a real screen.
  */
 'use strict';
 const fs = require('fs');
@@ -59,7 +59,7 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
    drifted: the app renamed --teal/--teal2 to --accent/--accent-2, so the
    Monitor comparison below was reading a fallback literal, not the palette. */
 const CSS_RAW = require('./_appcut.js').stylesheet();
-const HC_RAW = CSS_RAW, CT_RAW = CSS_RAW, THEME_RAW = CSS_RAW;
+const HC_RAW = CSS_RAW, THEME_RAW = CSS_RAW;
 /* Blanked for anything that hunts a PATTERN, raw only where the comments are
    deliberately the subject. Both halves of that are load-bearing: the sweep
    in verify-figfade-pure went red on its own documentation before it was
@@ -83,17 +83,16 @@ const ratio = (a, b) => {
 const r2 = n => Math.round(n * 100) / 100;
 const l3 = n => Math.round(n * 1000) / 1000;
 
-/* A claim is a sentence, and a sentence wraps. The first draft of the tick
-   check read the source line by line and found four of the six figures —
-   "1.34" and "on Parchment" sit either side of a line break, and so do "2.06"
-   and "on Contrast". It was the vacuity guard that said so rather than the
+/* A claim is a sentence, and a sentence wraps. The first draft of a check
+   here (on the progress track's tick figures, since retired with the track)
+   read the source line by line and found four of six figures — "1.34" and
+   "on Parchment" sat either side of a line break. It was the vacuity guard that said so rather than the
    comparison, which would otherwise have reported that every claim it could
    find agreed while silently not looking at two of them. So: strip the
    comment furniture and collapse the whitespace before matching anything,
    which also means reflowing a paragraph cannot break these checks. */
 const flat = src => src.replace(/^[ \t]*\*[ \t]?/gm, ' ').replace(/\s+/g, ' ');
 const HC_FLAT = flat(HC_RAW);
-const CT_FLAT = flat(CT_RAW);
 
 /* ── reading a palette block out of a patch script ───────────────────────── */
 function palette(src, id, where) {
@@ -130,7 +129,7 @@ head('the properties Contrast exists for — floors, not snapshots');
      with. The first draft measured 2.72:1 here. */
   ok('--border clears 3:1 against --card, the WCAG non-text boundary',
      ratio(CONTRAST['--border'], card) >= 3, `${r2(ratio(CONTRAST['--border'], card))}:1`);
-  ok('--border3, which the calibration ticks are drawn in, clears it too',
+  ok('--border3, the strongest border weight, clears it too',
      ratio(CONTRAST['--border3'], card) >= 3, `${r2(ratio(CONTRAST['--border3'], card))}:1`);
   ok('the ladder is still a ladder — border2 < border < border3',
      ratio(CONTRAST['--border2'], card) < ratio(CONTRAST['--border'], card) &&
@@ -192,38 +191,6 @@ head('and the figures quoted beside the Contrast palette are those figures');
     const got = r2(ratio(CONTRAST['--accent'], CONTRAST['--bg']));
     ok('and it matches', Math.abs(want - got) < 0.011, `says ${want}:1, measures ${got}:1`);
   }
-}
-
-head('and the tick figures quoted beside the progress track are too');
-{
-  const NAME = { Slate: 'slate', Parchment: 'parchment', Nocturne: 'nocturne',
-                 'Cath Lab': 'cathlab', Monitor: 'monitor', Contrast: 'contrast' };
-  const claims = [...CT_FLAT.matchAll(/([\d.]+)(?::1)? on (Slate|Parchment|Nocturne|Cath Lab|Monitor|Contrast)/g)]
-    .map(m => ({ palette: NAME[m[2]], label: m[2], claim: Number(m[1]) }));
-  ok('the per-palette tick sentence is still there to check', claims.length === 6,
-     claims.length ? claims.map(c => `${c.label} ${c.claim}`).join(', ')
-                   : 'reworded — update this regex or drop the claim');
-
-  const wrong = claims.filter(c => {
-    const p = c.palette === 'contrast' ? CONTRAST : NAMED[c.palette];
-    return Math.abs(r2(ratio(p['--border3'], p['--border2'])) - c.claim) > 0.011;
-  });
-  ok('every quoted tick ratio is what that palette actually measures',
-     wrong.length === 0,
-     wrong.length ? wrong.map(c => {
-       const p = c.palette === 'contrast' ? CONTRAST : NAMED[c.palette];
-       return `${c.label} says ${c.claim}, measures ${r2(ratio(p['--border3'], p['--border2']))}`;
-     }).join(' | ') : 'all six agree');
-
-  /* The ticks are decoration beside an aria-valuenow, a legend and a
-     percentage, so they are deliberately NOT held to a contrast minimum —
-     but they do have to differ from the track at all, or the patch is a
-     no-op dressed as a feature. */
-  const flat = Object.entries({ ...NAMED, contrast: CONTRAST })
-    .filter(([, p]) => p['--border3'].toLowerCase() === p['--border2'].toLowerCase())
-    .map(([id]) => id);
-  ok('no palette draws the ticks in the same colour as the track they sit on',
-     flat.length === 0, flat.length ? flat.join(', ') : 'all six differ');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

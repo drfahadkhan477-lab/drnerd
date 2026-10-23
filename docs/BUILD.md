@@ -5,7 +5,7 @@ Build the standalone app, then extract its content before verifying the split PW
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
 node scripts/extract-content.js build/systole.html # refresh content for the split build
-node scripts/verify.js --pwa                           # → 8213 + 143 checks
+node scripts/verify.js --pwa                           # → 8186 + 143 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -33,7 +33,7 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
 - **Playwright** — for the test suites only, and pinned:
 
   ```bash
-  npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, from the lockfile
+  npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, axe-core 4.10.2, from the lockfile
   npx playwright install chromium webkit     # the engines the full run uses
   npx playwright install firefox             # also, to reproduce CI's memorizer-browser job
   ```
@@ -58,6 +58,10 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   `ts-fsrs` regenerates `tests/fixtures/fsrs-oracle.json` and is used for
   nothing else; the fixture is committed, so `verify-oracle` runs without it.
 
+  `axe-core` is the accessibility rule engine `verify-a11y` puts into each
+  screen of the app it opens. It has no dependencies of its own, and nothing
+  the app ships loads it.
+
 - **Python 3 with Pillow and numpy** — for `verify-figreview` only, which
   drives the figure-review sheet the way `tools/figure-review.py` and
   `tools/trim-figure.py` do:
@@ -66,8 +70,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 161
-  run normally — it is 35 of the 8213 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 160
+  run normally — it is 35 of the 8186 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -348,7 +352,7 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 162 suites, 8213 checks, plus 143 more on the split build. Those numbers are
+Across 161 suites, 8186 checks, plus 143 more on the split build. Those numbers are
 not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
 two halves, Systole's from a run where every Systole suite passed and the
 Memorizer's likewise, the other half kept as it was — and `verify-stats`
@@ -801,8 +805,8 @@ has a distinct empty/zero state:
 3. Sample only once the entrance animation has finished. Read a frame too
    early and an element reports its own container's colour back at you —
    which scores a perfect 1.00 contrast ratio and looks like a catastrophic
-   bug rather than a mistimed measurement. `verify-homeprog` waits for the
-   card's opacity to reach 1 rather than guessing a delay, and
+   bug rather than a mistimed measurement. `verify-a11y` waits until no
+   transition is running rather than guessing a delay, and
    `verify-chapters` carries a header note about the same trap in
    `document.startViewTransition`.
 
@@ -870,7 +874,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        162 suites · 100 need no browser · + pwa
+tests/        161 suites · 100 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
