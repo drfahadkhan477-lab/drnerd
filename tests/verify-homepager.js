@@ -246,6 +246,34 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return {calls,paints};
   });
   ok('the visible pearl keeps animating without recalculating its unchanged waveform', stableTrace.paints>2 && stableTrace.calls===0, JSON.stringify(stableTrace));
+  head('full-screen overlays leave Home at rest');
+  await page.evaluate(() => {
+    window.__homeWork = async () => {
+      const counts={pearl:0,ecg:0,heart:0}, undo=[];
+      const pearl=document.getElementById('pearlCurrent')?.getContext('2d');
+      const ecg=document.getElementById('heroECG')?.getContext('2d');
+      const heart=document.getElementById('heroHeart3d')?.getContext('webgl2');
+      const watch=(ctx,method,key)=>{ if(!ctx) return; const fn=ctx[method];
+        ctx[method]=function(...args){counts[key]++;return fn.apply(this,args);}; undo.push(()=>{ctx[method]=fn;}); };
+      watch(pearl,'clearRect','pearl'); watch(ecg,'stroke','ecg'); watch(heart,'clear','heart');
+      try { await new Promise(r=>{let n=0;const f=()=>++n<20?requestAnimationFrame(f):r();requestAnimationFrame(f);}); }
+      finally { undo.forEach(f=>f()); }
+      return {...counts,hasPearl:!!pearl,hasECG:!!ecg,hasHeart:!!heart};
+    };
+  });
+  const covered = v => v.hasPearl && v.hasECG && v.pearl===0 && v.ecg===0 && (!v.hasHeart || v.heart===0);
+  const visible = v => v.hasPearl && v.hasECG && v.pearl>2 && v.ecg>2 && (!v.hasHeart || v.heart>2);
+  const figureWork = await page.evaluate(async () => {
+    await openFigure('data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="gray"/></svg>'),'Overlay fixture','Test');
+    return {viewer:!!document.querySelector('.pswp'),...await __homeWork()};
+  });
+  ok('Home renderers stop behind the full-screen figure', figureWork.viewer && covered(figureWork), JSON.stringify(figureWork));
+  const afterFigure = await page.evaluate(async () => { closePeek(); return __homeWork(); });
+  ok('Home renderers resume after the figure is gone', visible(afterFigure), JSON.stringify(afterFigure));
+  const apexWork = await page.evaluate(async () => { toggleApexFull(); return {full:apexIsFull(),...await __homeWork()}; });
+  ok('Home renderers stop behind full-screen Apex', apexWork.full && covered(apexWork), JSON.stringify(apexWork));
+  const afterApex = await page.evaluate(async () => { toggleAI(); return __homeWork(); });
+  ok('Home renderers resume after full-screen Apex closes', visible(afterApex), JSON.stringify(afterApex));
   const h0 = await page.evaluate(() => brainLiveRun.frames);
   await page.evaluate(() => new Promise(r => { let n = 0; const f = () => (++n < 20 ? requestAnimationFrame(f) : r()); requestAnimationFrame(f); }));
   const h1 = await page.evaluate(() => brainLiveRun.frames);

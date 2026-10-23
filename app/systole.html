@@ -2752,6 +2752,7 @@ function closePeek(){
        it is taken down now. */
     if(v.destroy){ v.isDestroying=true; v.destroy(); } }
   if(peekKeyHandler){ document.removeEventListener('keydown',peekKeyHandler); peekKeyHandler=null; }
+  syncHomeMotion();
 }
 /* ═══════ a figure, full size ═══════
    Six-point legend type inside a 340px panel is not a figure, it is a
@@ -2832,6 +2833,7 @@ function openFigures(list,index){
   const at=Math.max(0,Math.min(items.length-1,index||0));
   const ticket={};
   figPs=ticket;   /* a second open before this one is ready replaces it */
+  syncHomeMotion();
   return Promise.all([figLib(),Promise.all(items.map(figMeasure))]).then(([PhotoSwipe,data])=>{
     if(figPs!==ticket) return null;
     const ps=new PhotoSwipe({
@@ -2895,7 +2897,11 @@ function openFigures(list,index){
       else if(k==='0'){ ev.preventDefault(); figFit(ps); }
     });
     ps.on('bindEvents',()=>{ ps.element.setAttribute('aria-modal','true'); });
-    ps.on('destroy',()=>{ if(figPs===ps) figPs=null; document.body.classList.remove('peek-locked'); });
+    ps.on('destroy',()=>{
+      if(figPs===ps) figPs=null;
+      if(!figPs) document.body.classList.remove('peek-locked');
+      syncHomeMotion();
+    });
     figPs=ps;
     /* The page beneath must not scroll under the overlay: a drag that moves the
        page while the picture stays still is exactly what "stuck" feels like. */
@@ -2904,6 +2910,7 @@ function openFigures(list,index){
     return ps;
   },err=>{
     if(figPs===ticket) figPs=null;
+    syncHomeMotion();
     if(typeof toast==='function') toast(err&&err.message?err.message:'The figure could not be opened');
     return null;
   });
@@ -4807,6 +4814,7 @@ function toggleApexFull(){
   try{ localStorage.setItem('accsap12.aiopen','1'); }catch(_){}
   const fab=document.getElementById('aiFab'); if(fab) fab.style.display='none';
   buildAI();
+  syncHomeMotion();
 }
 /* Escape leaves full-page and stops there. It deliberately does NOT go on to
    close the panel on a second press: someone reading a long answer full
@@ -4829,6 +4837,7 @@ function toggleAI(){
   try{localStorage.setItem('accsap12.aiopen',open?'1':'0');}catch(_){}
   const fab=document.getElementById('aiFab'); if(fab)fab.style.display=open?'none':'flex';
   if(open)buildAI();
+  syncHomeMotion();
 }
 
 /* ══════════════ Systole · Cardiology Board Review — application logic (v2) ══════════════ */
@@ -6618,10 +6627,9 @@ function mountHero(){
      the hero on a theme change, so a fresh read here is all it takes to follow. */
   const heroAccent=(getComputedStyle(document.documentElement).getPropertyValue('--hero-accent')||'#5EEAD4').trim();
   heroMon=new ECGMonitor(cv,{kind:heroCurrentKind,speed:0.12,amp:34,lineWidth:2,color:heroAccent});
-  heroMon.start();
   mountHeroHeart3d();
   paintHeroLabel(heroCurrentKind);
-  heroRotateTimer=startHeroRotation();
+  syncHomeMotion();
   return;
 }
 /* Extracted so visibilitychange can restart exactly what mountHero started.
@@ -6668,6 +6676,7 @@ function mountHeroHeart3d(){
     heroHeart3d.setMode(heroCutaway?'cutaway':'whole');
     heroHeart3d.start();
     document.getElementById('heroHeart')?.classList.add('heart-3d-active');
+    syncHomeMotion();
     return;
   }
   /* First mount of the page, or a rebuild after a genuinely lost context. The
@@ -6727,6 +6736,7 @@ function mountHeroHeart3d(){
   const mechanics=document.getElementById('heroMechanics'); if(mechanics)mechanics.disabled=!heroHeart3d;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');
+  syncHomeMotion();
 }
 /* the fallback SVG's CSS beat animation is keyed to a fixed 1.1s regardless
    of what's on the trace — sync its duration to the rhythm actually showing,
@@ -7422,10 +7432,10 @@ function homeMark(){
   if(homePage===1) homeFillBrain();
   syncHomeMotion();
 }
-/* The other Home pages remain mounted for swiping, but their hidden canvases
-   must not consume the frame budget of the page the reader is using. */
+/* Home remains mounted behind pager panels and full-screen overlays. Its
+   hidden canvases must not consume the foreground's frame budget. */
 function syncHomeMotion(){
-  const on=S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden';
+  const on=S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
   if(heroMon) on?heroMon.start():heroMon.stop();
   if(heroHeart3d) on?heroHeart3d.start():heroHeart3d.stop();
   if(pearlTrace) on?pearlTrace.resume():pearlTrace.pause();
