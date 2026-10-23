@@ -463,6 +463,12 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.memorizer != 'false' }}
     runs-on: ubuntu-latest
+    # This image matches package-lock.json. Its digest is verified against
+    # Microsoft's registry; update it together with the Playwright version.
+    # Browser/system packages are already present, avoiding the runner's slow APT mirror.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --ipc=host
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -484,16 +490,20 @@ jobs:
           node-version: '24'
       - name: install the pinned test tools
         run: npm ci
-      # THE BROWSER'S SYSTEM PACKAGES COME FROM THE RUNNER'S APT MIRROR, and on
-      # 22 October 2026 that mirror took 20 to 40 minutes to serve them: three
-      # jobs on #304 were cancelled at their time limit before a test ran, or
-      # part-way through the suites the install had left no time for. So the
-      # install is a step of its own, with its own limit and one retry, and each
-      # job's limit is the suites' old limit plus that allowance. No suite's own
-      # time or threshold changed.
-      - name: install the browser and its system packages
-        timeout-minutes: 25
-        run: npx playwright install --with-deps ${{ matrix.engine }} || (sleep 20 && npx playwright install --with-deps ${{ matrix.engine }})
+      - name: verify the preinstalled pinned browser can render
+        run: |
+          node - <<'NODE'
+          const { launch, engineName } = require('./tests/_engine');
+          (async () => {
+            const browser = await launch();
+            try {
+              const page = await browser.newPage();
+              await page.setContent('<title>Browser ready</title>');
+              if (await page.title() !== 'Browser ready') throw new Error('the page did not render');
+              console.log('PASS pinned ' + engineName() + ' browser renders');
+            } finally { await browser.close(); }
+          })().catch(err => { console.error('FAIL pinned browser readiness: ' + err.message); process.exit(1); });
+          NODE
       - name: prepare the pinned public reader libraries
         run: npm run test:prepare
       - if: ${{ !cancelled() }}
