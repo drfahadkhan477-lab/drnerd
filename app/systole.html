@@ -3652,7 +3652,45 @@ function apexSessionLapsed(r){
   const ct=(r.headers&&r.headers.get('content-type')||'').toLowerCase();
   return ct.indexOf('text/html')===0;
 }
-const APEX_LAPSED='Your session has expired. Reload the page, sign in again, and ask once more.';
+const APEX_LAPSED='Your sign-in has expired. Tap Sign in again at the top, then ask once more.';
+
+/* ══════════ a lapsed sign-in is said, and can be renewed ══════════
+   The installed app opens from the service worker's cache, so when the Access
+   session lapses nothing ever shows Access's sign-in page: the app opens as
+   usual, and every figure not already on the device comes back as that page,
+   which an <img> shows as nothing — and so is never kept for offline either.
+   Reloading cannot help; the reload is answered from the cache too.
+
+   So the app asks. A request with ?signin is never answered by the service
+   worker (scripts/build-pwa.js), and with redirect:'manual' a lapsed session
+   is an opaque redirect rather than the sign-in page followed to its end. When
+   it is, a bar says so, and its button opens the app at ?signin, which goes
+   to Access, which signs in and returns here. Asked at launch and when a
+   figure fails to load, and only online: offline, nothing can be renewed. */
+let signinAsked=0;
+function signinLapsed(){
+  if(location.protocol!=='https:'&&location.protocol!=='http:') return Promise.resolve(false);
+  if(navigator.onLine===false||Date.now()-signinAsked<30000) return Promise.resolve(false);
+  signinAsked=Date.now();
+  return fetch('manifest.webmanifest?signin=probe',{cache:'no-store',redirect:'manual',credentials:'same-origin'})
+    .then(r=>{ const lapsed=r.type==='opaqueredirect'||(r.status>=300&&r.status<400)||apexSessionLapsed(r);
+      if(lapsed) showSigninBar(); return lapsed; },()=>false);
+}
+function showSigninBar(){
+  if(document.getElementById('signinBar')) return;
+  const bar=document.createElement('div'); bar.id='signinBar'; bar.className='signin-bar'; bar.setAttribute('role','alert');
+  bar.innerHTML='<span>Your sign-in has expired, so figures and new content cannot load.</span>'+
+    '<button type="button" class="signin-go">Sign in again</button>';
+  bar.querySelector('button').onclick=()=>{ location.href=location.pathname+'?signin='+Date.now(); };
+  document.body.appendChild(bar);
+}
+/* Back from signing in: the address loses its ?signin, so a later reload is the app's own again. */
+if(/[?&]signin=/.test(location.search)){ try{ history.replaceState(null,'',location.pathname+location.hash); }catch(_){} }
+document.addEventListener('error',ev=>{
+  const t=ev.target; if(t&&t.tagName==='IMG'&&t.classList&&t.classList.contains('fig-img')) signinLapsed();
+},true);
+/* The split build's app.js can arrive after the page's load event, so a listener for it would never be called. */
+if(document.readyState==='complete') setTimeout(signinLapsed,1500); else window.addEventListener('load',()=>{ setTimeout(signinLapsed,1500); });
 
 /* A "prefer this source" instruction does not hold: a model told to prefer
    your notes will still bridge a gap with its own knowledge, and from the

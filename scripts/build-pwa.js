@@ -1372,6 +1372,15 @@ self.addEventListener('fetch', e => {
      outlive the key that produced it. */
   if (url.pathname.startsWith('/api/apex/')) return;
 
+  /* SIGNING IN AGAIN GOES TO THE NETWORK. Every launch is answered from the
+     cache, so once the Access session lapses (24 hours) Access never sees a
+     navigation it could answer with its sign-in page: the shell opens, and
+     every figure the cache does not already hold comes back as that page and
+     shows as nothing. The app asks with ?signin when it needs Access to see a
+     request (signinLapsed() and its "Sign in again" bar in app/systole.html),
+     and such a request is never answered here. */
+  if (url.searchParams.has('signin')) return;
+
   /* Was /content/figures/ only. Widened to all of /content/ so the two large
      JSON files stop being shell. keepable() already tells the two kinds apart:
      a figure must come back as an image, and anything else must not come back

@@ -461,3 +461,9 @@
   color:var(--muted);vertical-align:top}
 .ref-body tbody tr:last-child td{border-bottom:0}
 
+/* A lapsed sign-in (signinLapsed in app/systole.html): above everything, clear of the notch, one tap to renew. */
+.signin-bar{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top, 0px) + 10px);z-index:400;display:flex;
+  align-items:center;justify-content:space-between;padding:10px 12px 10px 16px;border-radius:14px;
+  background:#7C2D12;color:#fff;font-size:15px;line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.signin-bar span{flex:1;margin-right:12px}
+.signin-go{flex:none;min-height:44px;padding:0 16px;border:0;border-radius:10px;background:#fff;color:#7C2D12;font-weight:600;font-size:15px}
