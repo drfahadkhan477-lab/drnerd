@@ -124,6 +124,30 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the surface keeps the browser off its gestures', opened.touch === 'none', String(opened.touch));
   ok('and the page beneath is held still', opened.locked === true);
 
+  head('the zoom row and its state change together');
+  const immediateIn = await page.evaluate(() => {
+    const ps=__ps(); figZoomBy(ps,FIG_STEP);
+    return {ratio:ps.currSlide.currZoomLevel/ps.currSlide.zoomLevels.initial,
+      pct:ps.element.querySelector('.pswp__figv-pct').textContent,
+      zoomed:ps.element.classList.contains('figv-zoomed')};
+  });
+  ok('Zoom in updates its readout and grab cursor in the same event',
+    Math.abs(immediateIn.ratio-1.4)<0.01 && immediateIn.pct==='140%' && immediateIn.zoomed, JSON.stringify(immediateIn));
+  await settle();
+  /* Let the previous zoom paint before testing Fit. The assertion itself runs
+     synchronously with the control, before a queued animation frame can hide
+     a stale readout. No animation or close deadline is changed. */
+  await page.evaluate(() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+  const immediateFit = await page.evaluate(() => {
+    const ps=__ps(); figFit(ps);
+    return {ratio:ps.currSlide.currZoomLevel/ps.currSlide.zoomLevels.initial,
+      pct:ps.element.querySelector('.pswp__figv-pct').textContent,
+      zoomed:ps.element.classList.contains('figv-zoomed')};
+  });
+  ok('Fit updates its readout and removes the grab cursor in the same event',
+    Math.abs(immediateFit.ratio-1)<1e-6 && immediateFit.pct==='100%' && !immediateFit.zoomed, JSON.stringify(immediateFit));
+  await settle();
+
   head('the zoom row zooms, and Fit returns');
   await page.click('.pswp__button--figv-in'); await settle();
   const zin = await state();

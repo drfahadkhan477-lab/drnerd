@@ -2815,11 +2815,21 @@ function figZoomBy(ps,k){
   const s=ps&&ps.currSlide; if(!s||!s.isZoomable()) return;
   const lv=Math.min(s.zoomLevels.max,Math.max(s.zoomLevels.initial,s.currZoomLevel*k));
   s.zoomTo(lv,{x:ps.viewportSize.x/2,y:ps.viewportSize.y/2},220);
+  figSyncZoom(ps);
 }
-function figFit(ps){ const s=ps&&ps.currSlide; if(s) s.zoomTo(s.zoomLevels.initial,undefined,220); }
+function figFit(ps){ const s=ps&&ps.currSlide; if(s){ s.zoomTo(s.zoomLevels.initial,undefined,220); figSyncZoom(ps); } }
 function figPct(ps){
   const s=ps&&ps.currSlide;
   return s&&s.zoomLevels.initial?Math.round(s.currZoomLevel/s.zoomLevels.initial*100):100;
+}
+/* zoomTo sets the zoom level synchronously. Keep our controls in that same
+   state, rather than waiting for the next frame (which can be delayed in
+   WebKit). Gesture updates still use PhotoSwipe's zoomPanUpdate event. */
+function figSyncZoom(ps){
+  const root=ps&&ps.element; if(!root) return;
+  const pct=figPct(ps), el=root.querySelector('.pswp__figv-pct');
+  if(el) el.textContent=pct+'%';
+  root.classList.toggle('figv-zoomed',pct>100);
 }
 function openFigure(src,caption,source){
   if(!src) return Promise.resolve(null);
@@ -2873,9 +2883,9 @@ function openFigures(list,index){
       btn('figv-out',8,'Zoom out','<span class="figv-glyph" aria-hidden="true">−</span>',p=>figZoomBy(p,1/FIG_STEP));
       ps.ui.registerElement({name:'figv-pct',order:9,isButton:false,appendTo:'bar',html:'100%',
         onInit:(el,p)=>{ el.setAttribute('aria-live','off');
-          const show=()=>{ el.textContent=figPct(p)+'%'; p.element.classList.toggle('figv-zoomed',figPct(p)>100); };
-          /* zoomPanUpdate comes at the end of a zoom's transition; the level
-             itself is set as the zoom begins, so the readout follows from there. */
+          const show=()=>figSyncZoom(p);
+          /* Taps and gestures call PhotoSwipe directly. Read their new level
+             in the next frame; our own buttons synchronize it immediately. */
           p.on('zoomPanUpdate',show); p.on('change',show); p.on('beforeZoomTo',()=>requestAnimationFrame(show)); }});
       btn('figv-in',10,'Zoom in','<span class="figv-glyph" aria-hidden="true">+</span>',p=>figZoomBy(p,FIG_STEP));
       btn('figv-fit',11,'Fit to screen','<span class="figv-glyph figv-fitword" aria-hidden="true">Fit</span>',figFit);
