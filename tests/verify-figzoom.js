@@ -212,7 +212,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.click('.pswp__button--figv-in'); await page.click('.pswp__button--figv-in'); await page.click('.pswp__button--figv-in'); await settle();
   const p0 = await state();
   await page.mouse.move(450, 500); await page.mouse.down();
-  for (let k = 1; k <= 10; k++) await page.mouse.move(450 - k * 8, 500 - k * 5);
+  /* Like the pinch above, PhotoSwipe applies a pan in an animation frame.
+     A loaded WebKit can receive every move and mouse-up before that frame,
+     ending the drag without drawing its delta. Keep the pointer held across
+     frames, as a real drag is; the movement assertion and deadlines stay put. */
+  for (let k = 1; k <= 10; k++) {
+    await page.mouse.move(450 - k * 8, 500 - k * 5);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  }
   await page.mouse.up(); await settle();
   const p1 = await state();
   ok('dragging moves the figure', !!p0 && !!p1 && (p1.pan.x !== p0.pan.x || p1.pan.y !== p0.pan.y), p0 && p1 ? `${JSON.stringify(p0.pan)} → ${JSON.stringify(p1.pan)}` : '—');
