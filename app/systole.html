@@ -7337,8 +7337,9 @@ function brainKey(ev){
   g.setAttribute('tabindex','-1'); if(nx){ nx.setAttribute('tabindex','0'); nx.focus(); }
 }
 /* THE BRAIN, LIVE (Memorizer's ui.js brainLive): impulses run the wiring, neurons flash where they land. At most about
-   thirty draws a second, only while the Brain page is the one showing and the app is in view, and not at all when the
-   device asks for reduced motion. brainLiveRun says what it is doing (verify-homepager reads its frames). */
+   thirty draws a second, only while the Brain page is uncovered and the app is in view, and not at all when the
+   device asks for reduced motion (including a preference changed after mounting). brainLiveRun says what it is doing
+   (verify-homepager reads its frames). */
 function mountBrainLive(){
   const art=document.getElementById('brainArt');
   if(!art||typeof BrainMap==='undefined'||!homeMotionOK()||!window.requestAnimationFrame){ brainLiveRun=null; return; }
@@ -7398,7 +7399,9 @@ function mountBrainLive(){
   const frame=ts=>{
     if(brainLiveRun!==run) return;
     if(!art.isConnected||S.screen!=='home'){ run.running=false; return; }
-    if(homePage!==1||document.hidden){ last=ts; requestAnimationFrame(frame); return; }
+    if(homePage!==1||document.hidden||figPs||apexIsFull()||!homeMotionOK()){
+      last=ts; requestAnimationFrame(frame); return;
+    }
     const dt=last?Math.min(0.1,(ts-last)/1000):0;
     if(ts-drawn>=30){ BrainMap.liveStep(run.st,L,dt,Math.random); draw(); turn(ts); drawn=ts; last=ts; run.frames++; }
     requestAnimationFrame(frame);

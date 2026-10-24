@@ -233,6 +233,30 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const tap = await page.evaluate(() => ({ sel: brainSel, info: document.getElementById('brainInfo').textContent.replace(/\s+/g, ' ').trim(),
     tapped: brainLiveRun && brainLiveRun.st.lastTap ? brainLiveRun.st.lastTap.i : null, pressed: document.querySelector('#brainArt .neuron[data-i="3"]').getAttribute('aria-pressed') }));
   ok('a tap fires the neuron and says what it holds', tap.sel === 3 && tap.tapped === 3 && tap.pressed === 'true' && /This neuron .+ questions \d+–\d+/.test(tap.info), JSON.stringify(tap));
+  head('Brain rests under overlays and a changed motion preference');
+  const brainWork = () => page.evaluate(async () => {
+    const before=brainLiveRun.frames;
+    await new Promise(resolve=>{let n=0;const tick=()=>++n<20?requestAnimationFrame(tick):resolve();requestAnimationFrame(tick);});
+    return brainLiveRun.frames-before;
+  });
+  await page.evaluate(() => openFigure('data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="gray"/></svg>'),'Brain overlay fixture','Test'));
+  const brainFigure = await brainWork();
+  ok('Brain does not redraw behind a full-screen figure', brainFigure===0, `${brainFigure} draws in 20 animation frames`);
+  await page.evaluate(() => closePeek());
+  const brainAfterFigure = await brainWork();
+  ok('Brain resumes drawing when the figure closes', brainAfterFigure>2, `${brainAfterFigure} draws`);
+  await page.evaluate(() => toggleApexFull());
+  const brainApex = await brainWork();
+  ok('Brain does not redraw behind full-screen Apex', brainApex===0, `${brainApex} draws in 20 animation frames`);
+  await page.evaluate(() => toggleAI());
+  const brainAfterApex = await brainWork();
+  ok('Brain resumes drawing when full-screen Apex closes', brainAfterApex>2, `${brainAfterApex} draws`);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const brainReduced = await brainWork();
+  ok('enabling reduced motion stops an already-mounted Brain without a reload', brainReduced===0, `${brainReduced} draws in 20 animation frames`);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const brainAfterMotion = await brainWork();
+  ok('restoring motion resumes the already-mounted Brain', brainAfterMotion>2, `${brainAfterMotion} draws`);
   await page.evaluate(() => homeGo(0));
   await still('Home, leaving Brain');
   const stableTrace = await page.evaluate(async () => {
