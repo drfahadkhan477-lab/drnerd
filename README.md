@@ -25,9 +25,9 @@ and a row of glass doors to everything else.
 ```bash
 npm test                                            # no export needed: every suite CI runs
 npm run build -- path/to/ACCSAP_export.html       # → build/systole.html
-node scripts/verify.js                              # 8159 checks, 159 suites
+node scripts/verify.js                              # 9240 checks, 183 suites
 node scripts/extract-content.js build/systole.html   # refresh content for the split build
-node scripts/verify.js --pwa                        # + 143 more on the split build
+node scripts/verify.js --pwa                        # + 147 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
 ```
 
@@ -37,7 +37,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 8159 + 143 checks above — read it as 8076, not 8302.**
+**That badge is not the 9240 + 147 checks above — read it as 9157, not 9387.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around
@@ -51,7 +51,7 @@ list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
 the 99 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
-scope and why the other 226 checks can't run here.
+scope and why the other 230 checks can't run here.
 
 These totals use the last recorded measurements for active suites. The three
 Claude configuration suites were retired when that configuration was deleted;
