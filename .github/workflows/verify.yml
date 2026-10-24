@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 9240 checks in
-# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 9157.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 9246 checks in
+# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 9163.
 # The other 230 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 9157 real checks, up
+#                Across every job but split-build, 9163 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -615,7 +615,7 @@ jobs:
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (51 checks)
+        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (57 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
@@ -931,7 +931,7 @@ jobs:
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (51 checks)
+        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (57 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
