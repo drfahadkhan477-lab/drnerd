@@ -138,7 +138,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(() => toggleApexFull());
   await page.waitForTimeout(350);
   const full = await geoOf();
-  ok('expanding sets the full-page state', full.full);
+  await page.evaluate(async () => {
+    const src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="gray"/></svg>');
+    await openFigure(src,'Modal keyboard fixture','UI test');
+  });
+  await page.waitForFunction(() => figPs && figPs.opener.isOpen, null, {timeout:3000});
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.pswp'), null, {timeout:3000});
+  const afterFigure = await geoOf();
+  ok('expanding stays full page when a figure is closed', full.full && afterFigure.full);
   /* The measurement that matters: specificity actually beat the media-query
      rules, and the panel really is the width of the window. */
   ok('and the panel really spans the viewport', full.w >= full.vw - 2,

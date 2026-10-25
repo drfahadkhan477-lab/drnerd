@@ -23,7 +23,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
-const { booted, watchTransitions, resized } = require('./_render.js');
+const { booted, watchTransitions, resized, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -345,6 +345,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and it closes like any other', await closes());
 
   head('the question dialog is left alone');
+  await page.evaluate(() => startAdhocQuiz([POOL.find(q => !q.bad)], null));
+  await settled(page, () => S.screen === 'quiz' && !!document.querySelector('.opt'), {label:'a quiz behind the related question'});
   /* peekQuestion shows a related question and has no image: it must not open
      the figure viewer just because it shares closePeek. */
   const peek = await page.evaluate(async () => {
@@ -356,7 +358,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { opened: !!document.querySelector('.peek-card'), viewer: !!document.querySelector('.pswp') };
   });
   ok('it still opens', peek.opened === true);
-  ok('and the figure viewer does not', peek.viewer === false, String(peek.viewer));
+  await page.keyboard.press('b');
+  await page.keyboard.press('ArrowRight');
+  const peekBehind = await page.evaluate(() => ({screen:S.screen,answered:S.answered,index:S.qIdx,open:!!document.querySelector('.peek-card'),viewer:!!document.querySelector('.pswp')}));
+  await page.keyboard.press('Escape');
+  const peekClosed = await page.evaluate(() => !document.querySelector('.peek-card') && S.screen === 'quiz' && !S.answered && S.qIdx === 0);
+  ok('the related dialog keeps quiz keys outside and Escape closes only it', peek.viewer === false && !peekBehind.viewer && peekBehind.screen === 'quiz' && !peekBehind.answered && peekBehind.index === 0 && peekBehind.open && peekClosed, JSON.stringify(peekBehind));
   await close();
 
   head('a question\'s figures open full screen from the card');
@@ -399,7 +406,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       });
     }
     ok('it opens the question\'s figures, at the one tapped', !!qOpen && qOpen.n === qf.n && qOpen.at === last, JSON.stringify(qOpen));
-    ok('and does not also zoom the card in place', !!qOpen && qOpen.zoomed === -1, qOpen && String(qOpen.zoomed));
+    await page.keyboard.press('b');
+    await page.keyboard.press('ArrowRight');
+    const behind = await page.evaluate(() => ({screen:S.screen,answered:S.answered,index:S.qIdx,zoom:S.zoomed}));
+    ok('gallery reading keys leave the underlying quiz untouched', !!qOpen && qOpen.zoomed === -1 && behind.screen === 'quiz' && !behind.answered && behind.index === 0 && behind.zoom === -1, JSON.stringify(behind));
     await page.keyboard.press('Escape');
     ok('Escape gives the question back', !!qOpen && await closes() && await page.evaluate(() => S.screen === 'quiz'));
   }

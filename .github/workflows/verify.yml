@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 9255 checks in
-# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 9172.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 9258 checks in
+# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 9175.
 # The other 230 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 9172 real checks, up
+#                Across every job but split-build, 9175 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -783,7 +783,7 @@ jobs:
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
+        name: Apex can take the whole page, and a numbered list stays numbered (22 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a chapter you left is the chapter you come back to (33 checks)
@@ -1096,7 +1096,7 @@ jobs:
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: Apex can take the whole page, and a numbered list stays numbered (19 checks)
+        name: Apex can take the whole page, and a numbered list stays numbered (22 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a chapter you left is the chapter you come back to (33 checks)

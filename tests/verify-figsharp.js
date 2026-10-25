@@ -119,6 +119,7 @@ const measure = (page) => page.evaluate(async () => {
   const gotPixels = imgs.filter(i => i.naturalWidth > 0).length;
   const gotBox = imgs.filter(i => i.getBoundingClientRect().width > 0).length;
   return { rows, decoded: rows.length, total: imgs.length, gotPixels, gotBox,
+           calibrations: keys.length,
            cardW: rows.length ? Math.round(Math.max(...rows.map(r => r.avail))) : 0 };
 });
 
@@ -154,8 +155,8 @@ const measure = (page) => page.evaluate(async () => {
       : m.gotPixels === 0 ? ` — none of ${m.total} decoded at all, so the citations did not resolve or 20s was not enough here`
       : m.gotBox === 0 ? ` — all ${m.gotPixels} decoded, but every card was collapsed to zero width`
       : ` — ${m.gotPixels} decoded and ${m.gotBox} laid out, but never the same one`;
-    ok('figures were found, decoded and laid out', m.decoded > 0 && m.decoded === m.total,
-     `${m.decoded} of ${m.total} placed, card ${m.cardW}px${why}`);
+    ok('figures were found, decoded and laid out', m.total > m.calibrations && m.decoded === m.total,
+     `${m.decoded} of ${m.total} placed (${m.calibrations} calibration images), card ${m.cardW}px${why}`);
   if (!m.decoded) { await page.close(); continue; }
 
     const upscaled = m.rows.filter(r => r.css > r.nat + 1);
