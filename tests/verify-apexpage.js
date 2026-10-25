@@ -175,16 +175,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await settled(page, () => S.screen === 'quiz' && !!document.querySelector('.opt'), {label:'a quiz behind Apex'});
   await open();
   const reading = await page.evaluate(() => {
+    const history = chatFor(S.questions[S.qIdx]);
+    history.length = 0; history.push({role:'assistant',content:'Conversation reading fixture.\n\n'.repeat(100)});
+    buildAI();
     const body = document.getElementById('aiBody');
-    body.innerHTML = '<p>Conversation reading fixture.</p>'.repeat(100);
     body.scrollTop = 0; body.focus();
     return {focused:document.activeElement === body, overflow:body.scrollHeight > body.clientHeight,
       question:S.questions[S.qIdx].id};
   });
   ok('the conversation can receive keyboard focus with content to scroll', reading.focused && reading.overflow);
+  await page.evaluate(() => buildAI());
   await page.keyboard.press('PageDown');
   const scrolled = await page.waitForFunction(() => document.getElementById('aiBody').scrollTop > 0, null, {timeout:3000}).then(() => true, () => false);
-  ok('Page Down scrolls the focused conversation', scrolled);
+  ok('Page Down scrolls the conversation after a panel redraw', scrolled);
   await page.keyboard.press('b');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Space');

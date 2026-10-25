@@ -3869,9 +3869,9 @@ function chatFor(q){ const k=q?q.id:'_general'; return CHATS[k]||(CHATS[k]=[]); 
 /* ═══════════ what survives a rebuild ═══════════
    buildAI() replaces the whole panel, and it runs after every tool step. These
    two carry across the parts of it that belong to you rather than to the app:
-   the sentence you were part-way through typing, and the place you had scrolled
-   to. Without them, working through a long answer while Apex used a tool meant
-   losing both, several times per question. */
+   the sentence you were part-way through typing, the place you had scrolled
+   to, and keyboard focus while reading. Without them, working through a long
+   answer while Apex used a tool meant losing them, several times per question. */
 const APEX_STICK=40;         // px of slack — "at the bottom" is not an exact number
 function apexAtBottom(el){
   return !el || (el.scrollHeight - el.scrollTop - el.clientHeight) < APEX_STICK;
@@ -3880,6 +3880,7 @@ function apexPanelState(){
   const ta=document.getElementById('aiIn'), body=document.getElementById('aiBody');
   return { text: ta?ta.value:'', start: ta?ta.selectionStart:0, end: ta?ta.selectionEnd:0,
            focus: !!ta && document.activeElement===ta,
+           reading: !!body && document.activeElement===body,
            top: body?body.scrollTop:0, pinned: apexAtBottom(body) };
 }
 function apexPanelRestore(st){
@@ -3897,6 +3898,7 @@ function apexPanelRestore(st){
      stops the momentum — and this runs on every rebuild, which is after every
      tool step. */
   if(body){
+    if(st.reading){ try{body.focus({preventScroll:true});}catch(_){body.focus();} }
     const want = st.pinned ? body.scrollHeight : st.top;
     if(Math.abs(body.scrollTop - want) > 1) body.scrollTop = want;
   }

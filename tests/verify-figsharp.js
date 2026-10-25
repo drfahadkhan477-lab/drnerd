@@ -58,7 +58,27 @@ const measure = (page) => page.evaluate(async () => {
      re-applied to whatever is live now, and the measurement below reads the
      set the loop actually settled on. A DOM swap mid-wait then costs an
      iteration rather than the whole run. */
-  if (typeof goRefs === 'function') goRefs();
+  /* A paged library can legitimately start with notes that contain no images.
+     Seed timestamps can tie differently between launches, so "newest" never
+     selected a stable image sample. Keep image-free notes at the front, then
+     use the real single-note route for a copy of the most illustrated source
+     note, with explicitly labelled narrow/wide calibration images. Real notes
+     need not contain both sizes; neither direction may pass without one. */
+  const count = n => (String(n.body || '').match(/!\[[^\]]*\]\(refimg:\/\/[^)]+\)/g) || []).length;
+  const selected = notes.slice().sort((a,b) => count(b) - count(a))[0];
+  REF.push(...Array.from({length:REF_PAGE+1}, (_,i) => ({id:'figsharp-empty-'+i,
+    title:'Image-free layout fixture',body:'A layout fixture without an image. '.repeat(20),ts:Number.MAX_SAFE_INTEGER-i})));
+  const keys = ['__figsharp__/narrow.png','__figsharp__/wide.png'];
+  if(keys.some(k => REF_IMGS[k])) return {err:'reserved layout fixture key already exists'};
+  [80,2000].forEach((w,i) => {
+    const canvas = document.createElement('canvas'); canvas.width=w; canvas.height=w/2;
+    const ctx=canvas.getContext('2d'); ctx.fillStyle='gray'; ctx.fillRect(0,0,w,w/2);
+    REF_IMGS[keys[i]] = canvas.toDataURL('image/png');
+  });
+  const sample = Object.assign({},selected,{id:'figsharp-sample',body:selected.body+
+    `\n\n![Narrow layout fixture](refimg://${keys[0]})\n\n![Wide layout fixture](refimg://${keys[1]})`});
+  REF.push(sample);
+  if (typeof goRefs === 'function') goRefs(sample.id);
 
   const live = () => [...document.querySelectorAll('.ref-fig img')];
   const ready = i => i.naturalWidth > 0 && i.getBoundingClientRect().width > 0;
@@ -66,8 +86,8 @@ const measure = (page) => page.evaluate(async () => {
   const t0 = Date.now();
   while (Date.now() - t0 < 20000) {
     imgs = live();
-    /* loading="lazy" keeps naturalWidth at 0 for anything below the fold, and
-       most of 295 note cards are below it. Re-applied every pass because a
+    /* loading="lazy" keeps naturalWidth at 0 for anything below the fold.
+       Re-applied every pass because a
        swap brings back a fresh set with the attribute as authored. */
     imgs.forEach(i => { try { i.loading = 'eager'; } catch (_) {} });
     if (imgs.length && imgs.every(ready)) break;
@@ -134,15 +154,16 @@ const measure = (page) => page.evaluate(async () => {
       : m.gotPixels === 0 ? ` — none of ${m.total} decoded at all, so the citations did not resolve or 20s was not enough here`
       : m.gotBox === 0 ? ` — all ${m.gotPixels} decoded, but every card was collapsed to zero width`
       : ` — ${m.gotPixels} decoded and ${m.gotBox} laid out, but never the same one`;
-    ok('figures were found, decoded and laid out', m.decoded > 0,
+    ok('figures were found, decoded and laid out', m.decoded > 0 && m.decoded === m.total,
      `${m.decoded} of ${m.total} placed, card ${m.cardW}px${why}`);
   if (!m.decoded) { await page.close(); continue; }
 
     const upscaled = m.rows.filter(r => r.css > r.nat + 1);
+    const narrow = m.rows.filter(r => r.nat < r.avail);
     const worst = m.rows.reduce((a, r) => (r.css / r.nat > (a ? a.css / a.nat : 0) ? r : a), null);
     ok('no figure is drawn wider than the pixels it has',
-       upscaled.length === 0,
-       upscaled.length
+       narrow.length > 0 && upscaled.length === 0,
+       !narrow.length ? 'no figure narrower than its container was measured' : upscaled.length
          ? `${upscaled.length} upscaled, worst ${worst.nat}px → ${Math.round(worst.css)}px (${(worst.css / worst.nat).toFixed(2)}x)`
          : `worst ratio ${(worst.css / worst.nat).toFixed(2)}x on a ${worst.nat}px figure`);
 
@@ -154,7 +175,7 @@ const measure = (page) => page.evaluate(async () => {
 
     const wide = m.rows.filter(r => r.avail > 0 && r.nat > r.avail);
     ok('a figure wider than its container is still brought down to fit',
-       wide.every(r => r.css <= r.avail + 1),
+       wide.length > 0 && wide.every(r => r.css <= r.avail + 1),
        wide.length ? `${wide.length} wider than their container, largest drawn at ${Math.round(Math.max(...wide.map(r => r.css)))}px`
                    : 'none rendered here are wider than their container');
 
