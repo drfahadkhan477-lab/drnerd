@@ -233,6 +233,7 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     const http = require('http'), net = require('net');
     const dir = path.join(TMP, 'serve'); fs.mkdirSync(dir);
     fs.writeFileSync(path.join(dir, 'index.html'), 'home');
+    fs.writeFileSync(path.join(dir, 'viewer.css'), '.pswp { position: fixed; }');
     /* A file that opens but cannot be read, or cannot be opened at all. Mode
        000 does that for anyone but root, who ignores it; as root (this
        session's container), a link to /proc/self/mem opens and then fails its
@@ -260,10 +261,14 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     await new Promise(r => { srv.stdout.on('data', d => { if (/serving/.test(String(d))) r(); }); setTimeout(r, 5000); });
     const get = p => new Promise(resolve => {
       const q = http.request({ host: '127.0.0.1', port, path: p, method: 'GET' },
-        r => { let b = ''; r.on('data', d => b += d); r.on('end', () => resolve({ status: r.statusCode, body: b })); r.on('error', () => resolve({ status: r.statusCode, body: 'cut' })); });
+        r => { let b = ''; r.on('data', d => b += d); r.on('end', () => resolve({ status: r.statusCode, body: b, type: r.headers['content-type'] })); r.on('error', () => resolve({ status: r.statusCode, body: 'cut' })); });
       q.on('error', () => resolve({ status: 0, body: '' })); q.setTimeout(5000, () => { q.destroy(); }); q.end();
     });
     ok('the server starts and serves a file', (await get('/index.html')).status === 200);
+    const css = await get('/viewer.css');
+    ok('a stylesheet is served as CSS so WebKit can load lazy figure styles',
+       css.status === 200 && css.type === 'text/css; charset=utf-8' && css.body === '.pswp { position: fixed; }',
+       `status ${css.status}, type ${css.type}`);
     /* The root guard, here as well as in verify-pwa, which needs the real
        build: a sibling whose name starts with the root's, and a plain walk up.
        Sent raw, since a normalising client would resolve the ".." itself. */

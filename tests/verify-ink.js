@@ -207,7 +207,7 @@ const TOOLS = () => {
         for (const q of POOL) { for (const x of (q.s + ' ' + q.ex).split(/[^A-Za-z]+/)) if (x.length >= 7 && search(x, { limit: 5 }).some(h => h.meta.kind === 'q')) { w = x; break; } if (w) break; }
         searchGo(w || ''); }, [['a result\'s chapter label', '.hit-ch']]],
       ['the notes', () => { goRefs(); }, null, [['a note\'s tag', '.ref-tags span:not(.ref-more)']]],
-      ['Apex\'s settings', () => { startAdhocQuiz([POOL.find(x => !x.bad)], null); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); },
+      ['Apex\'s settings', () => { startAdhocQuiz([POOL.find(x => !x.bad)], null); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); aiSettings(); },
         [['the source picked', '.prov-pick.on .pp-name']]],
       ['the rhythm lab', () => { goLab(); }, null, [['the phase chip', '#physioPhase']]],
       ['the Echo screen', () => { goEcho(); }, null, [['the selected tab', '.echo-tab.on']]],
@@ -239,7 +239,7 @@ const TOOLS = () => {
       return { on: on ? getComputedStyle(on, '::after').backgroundImage : null, off: off ? getComputedStyle(off, '::after').backgroundImage : null }; });
     ok('the selected Echo tab has no glass sheen under its text, where the others have one', !!sheen.on && sheen.on === 'none' && !!sheen.off && /gradient/.test(sheen.off),
       JSON.stringify({ on: sheen.on && sheen.on.slice(0, 40), off: sheen.off && sheen.off.slice(0, 40) }));
-    await at(() => { openSearch(); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); });
+    await at(() => { openSearch(); }, () => { if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); aiSettings(); });
     const unnamed = await page.evaluate(() => { const s = [...document.querySelectorAll('select')];
       return { n: s.length, bare: s.filter(x => !x.labels.length && !(x.getAttribute('aria-label') || '').trim() && !x.getAttribute('aria-labelledby')).map(x => '#' + x.id) }; });
     ok('every <select> on the search screen and in Apex\'s settings has a name', unnamed.n >= 2 && unnamed.bare.length === 0, `${unnamed.n} selects; unnamed: ${unnamed.bare.join(' ') || 'none'}`);

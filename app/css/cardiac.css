@@ -357,7 +357,7 @@
 .off-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .off-note{font-size:11px;line-height:1.45;color:var(--muted);min-width:0}
 .off-btn{flex:0 0 auto;padding:8px 14px;border-radius:11px;cursor:pointer;font-family:inherit;
-  font-size:13px;font-weight:650;color:var(--white);background:var(--teal);border:0;
+  font-size:13px;font-weight:650;color:var(--teal-ink);background:var(--teal4);border:1px solid var(--teal3);
   transition:transform .26s var(--spring),opacity .2s}
 @media (hover:hover){.off-btn:hover{transform:translateY(-1px)}}
 .off-btn:disabled{cursor:default;opacity:.55;transform:none;
@@ -637,7 +637,7 @@ html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;-
   background:var(--card);color:var(--muted);font-size:var(--t-tiny);font-weight:600}
 /* The concept is the card's title: the bank's own word, often lower case, set as a heading with a capital and a rule of
    the step colours under it, instead of a squeezed lower-case serif. */
-.pearl-concept{position:relative;font-family:inherit;font-weight:750;font-size:clamp(24px,2.4vw,32px);line-height:1.15;
+.pearl-concept{position:relative;font-family:inherit;font-weight:750;font-size:clamp(1.5rem,2.4vw,2rem);line-height:1.2;
   letter-spacing:-.02em;margin:0 0 16px;padding-bottom:12px}
 .pearl-concept::first-letter{text-transform:uppercase}
 .pearl-concept::after{content:'';position:absolute;left:0;bottom:0;width:64px;height:4px;border-radius:4px;
@@ -667,6 +667,18 @@ html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;-
 .pearl-card .pearl-body{padding:14px 16px;border:1px solid var(--teal3);border-left:4px solid var(--teal-ink);
   border-radius:14px;background:var(--teal4);font-family:inherit;font-weight:550}
 .pearl-recall{color:var(--teal-ink);background:var(--teal4);border-color:var(--teal3)}
+.pearl-actions{flex-wrap:wrap;gap:8px}
+.pearl-reading{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;
+  padding:8px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--card);color:var(--muted);
+  font:inherit;font-size:var(--t-meta);font-weight:600;cursor:pointer}
+.pearl-reading[aria-pressed="true"]{background:var(--teal4);border-color:var(--teal3);color:var(--teal-ink)}
+.pearl-prompt{gap:12px;align-content:center;text-align:center;font-family:inherit;font-size:var(--t-body);
+  line-height:1.6;color:var(--text);padding:20px 16px}
+.pearl-prompt-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;
+  background:var(--teal4);color:var(--teal-ink)}
+.pearl-prompt strong{font-size:var(--t-lead);line-height:1.4}
+.pearl-prompt>span:last-child{max-width:42ch;color:var(--muted)}
+.pearl-body{max-width:65ch;overflow-wrap:break-word}
 /* While the steps run past the card (a landscape grid gives them a fixed height), the column's foot fades and a button
    under it opens the whole pearl, where a line cut at the edge read as the end of it; opened, it folds it back. It is
    there only while there is more than the card shows (pearlFit), so it never offers what is already on the screen. */

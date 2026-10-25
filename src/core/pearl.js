@@ -431,14 +431,18 @@ function passageContext(body, run, title) {
   const headings = Array.from(body.matchAll(/^#{1,6}\s+(.+)$/gm));
   const before = span && headings.filter(h => h.index < span.index);
   const heading = before && before.length ? clean(before[before.length - 1][1]) : '';
-  const subject = /\*\*([^*]+)\*\*/.exec(run);
-  const bold = subject && clean(subject[1]);
   const frame = /^(?:In|For|With)\s+([^,;:.]{3,90})[,;]/i.exec(clean(run));
   /* A title has to name a topic. A bold run that is a label ("Caption:"), a grade ("Class IIb", "LOE B") or a number,
      and a heading the extraction wrote ("Extracted text (7)", "Page 12"), name nothing; the next candidate is taken. */
   const topic = t => !!t && /[a-z]{3}/i.test(t) && t.length <= 90 && !/:\s*$/.test(t) &&
     !/^(?:class\s+(?:i{1,3}|iv)[ab]?|loe\b|level of evidence|grade\b|caption|figure|fig\.|table|extracted text|page\b|text\b|notes?\b|summary\b|key points?\b)/i.test(t) &&
     !/^[\d\s.,%()–-]+$/.test(t);
+  /* Emphasis can mark a recommendation, a grade, or an exception's subject.
+     Only topical spans in the opening sentence can name the main idea. Walk
+     past a grade rather than letting the first bold span decide everything.
+     This selects source words; it never generates a clinical heading. */
+  const bold = Array.from(sentences(run)[0].matchAll(/\*\*([^*]+)\*\*/g), m => clean(m[1]))
+    .find(t => topic(t) && !FINITE.test(t) && !ACT.test(t) && !UNIT.test(t));
   const pick = [bold, frame && frame[1], heading, String(title || '').split('—').pop().trim()].find(topic);
   const concept = pick || 'From your notes';
   return { concept, span, headings };

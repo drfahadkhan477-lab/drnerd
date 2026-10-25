@@ -25,7 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -169,6 +169,27 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('closing the panel clears full-page too', !closed.full && !closed.open);
   ok('and clears it in storage, so the next launch is not a surprise',
      closed.stored === '0', `stored ${closed.stored}`);
+
+  head('reading the conversation from the keyboard');
+  await page.evaluate(() => startAdhocQuiz(POOL.filter(q => !q.bad).slice(0, 2), null));
+  await settled(page, () => S.screen === 'quiz' && !!document.querySelector('.opt'), {label:'a quiz behind Apex'});
+  await open();
+  const reading = await page.evaluate(() => {
+    const body = document.getElementById('aiBody');
+    body.innerHTML = '<p>Conversation reading fixture.</p>'.repeat(100);
+    body.scrollTop = 0; body.focus();
+    return {focused:document.activeElement === body, overflow:body.scrollHeight > body.clientHeight,
+      question:S.questions[S.qIdx].id};
+  });
+  ok('the conversation can receive keyboard focus with content to scroll', reading.focused && reading.overflow);
+  await page.keyboard.press('PageDown');
+  const scrolled = await page.waitForFunction(() => document.getElementById('aiBody').scrollTop > 0, null, {timeout:3000}).then(() => true, () => false);
+  ok('Page Down scrolls the focused conversation', scrolled);
+  await page.keyboard.press('b');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Space');
+  const kept = await page.evaluate(() => ({question:S.questions[S.qIdx].id, answered:S.answered}));
+  ok('reading keys never answer or advance the quiz behind Apex', kept.question === reading.question && !kept.answered);
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();

@@ -377,15 +377,31 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('Escape gives the question back', false, 'no button to tap');
   } else if (!qf.none) {
     const last = qf.n - 1;
-    await page.locator('.fig-slot .fig-full').nth(last).click();
-    const qOpen = await page.evaluate(async () => {
-      const ps = await __rest(__ps());
-      return ps ? { n: ps.getNumItems(), at: ps.currIndex, zoomed: S.zoomed } : null;
+    /* Opening awaits the real image dimensions. Observe the promise returned
+       by the actual click handler, as openFig awaits openFigure above; a
+       cached image used to hide this race in the standalone build. */
+    await page.evaluate(() => {
+      window.__questionFigureHandler = openQuestionFigures;
+      window.__questionFigureOpening = null;
+      openQuestionFigures = (...args) => (window.__questionFigureOpening = window.__questionFigureHandler(...args));
     });
+    let qOpen;
+    try {
+      await page.locator('.fig-slot .fig-full').nth(last).click();
+      qOpen = await page.evaluate(async () => {
+        const ps = await __rest(await window.__questionFigureOpening);
+        return ps ? { n: ps.getNumItems(), at: ps.currIndex, zoomed: S.zoomed } : null;
+      });
+    } finally {
+      await page.evaluate(() => {
+        openQuestionFigures = window.__questionFigureHandler;
+        delete window.__questionFigureHandler; delete window.__questionFigureOpening;
+      });
+    }
     ok('it opens the question\'s figures, at the one tapped', !!qOpen && qOpen.n === qf.n && qOpen.at === last, JSON.stringify(qOpen));
     ok('and does not also zoom the card in place', !!qOpen && qOpen.zoomed === -1, qOpen && String(qOpen.zoomed));
     await page.keyboard.press('Escape');
-    ok('Escape gives the question back', await closes() && await page.evaluate(() => S.screen === 'quiz'));
+    ok('Escape gives the question back', !!qOpen && await closes() && await page.evaluate(() => S.screen === 'quiz'));
   }
 
   head('a TALL figure is whole at Fit');

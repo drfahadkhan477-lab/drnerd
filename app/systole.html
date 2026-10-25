@@ -3969,7 +3969,7 @@ function buildAI(){
       title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}" loading="lazy">
       <figcaption>${e(clip(f.caption,150))}<span class="ai-fig-src">${e(clip(f.noteTitle,44))}</span></figcaption></figure>`).join('')}</div></div>`:'';
   wrap.innerHTML=head+
-    `<div class="ai-body" id="aiBody">${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
+    `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
      ${srcStrip}
      ${figStrip}
      <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>(!c[2]||c[2](q))?`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`:'').join('')}
@@ -4024,11 +4024,12 @@ function visionBadge(q){
 function setupHtml(){
   const p=AI.provider, meta=PROVIDERS.find(x=>x[0]===p);
   const models=MODELS[p], active=cur();
+  const onSite=location.protocol!=='file:';
   return `<div class="setup">
     <div class="setup-hero">
       <div class="setup-mark">${icon("heart-pulse","icon-xl")}</div>
-      <h2>One-time setup</h2>
-      <p>This file runs entirely on your iPad with no server behind it, so the tutor talks to a provider using a key you own. Paste it once — you will not be asked again.</p>
+      <h2>${onSite?'Provider settings':'One-time setup'}</h2>
+      <p>${onSite?'Gemini uses this site\'s connection when no personal Gemini key is saved. Add a key below to use your own account or another provider.':'This file runs entirely on your iPad with no server behind it, so the tutor talks to a provider using a key you own. Paste it once — you will not be asked again.'}</p>
     </div>
     <div class="prov-row">${PROVIDERS.map(([id,name,tag])=>
       `<button class="prov-pick${id===p?' on':''}" data-prov="${id}">
@@ -6848,7 +6849,9 @@ function pearlMark(escaped){
 const PEARL_KINDS={'Core idea':['core',icon('target','icon-sm')],'Detail':['detail',icon('book','icon-sm')],
   'Contrast':['contrast',icon('repeat','icon-sm')],'Caveat':['caveat',icon('alert','icon-sm')],
   'Why it matters':['why',icon('zap','icon-sm')],'Condition':['condition',icon('flag','icon-sm')]};
+let pearlAsWritten=false;
 function pearlLadder(p){
+  if(pearlAsWritten) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
   let steps=[];
   try{ steps=(typeof Pearl!=='undefined')?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
   if(steps.length<2) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
@@ -6857,6 +6860,17 @@ function pearlLadder(p){
     return `<li class="pearl-step" data-kind="${k[0]}" style="--i:${i}"><span class="pearl-n">${i+1}</span>
       <span class="pearl-txt"><span class="pearl-role">${k[1]}${e(s.label||'Detail')}</span>
       ${s.lead?`<em class="pearl-lead">${e(s.lead)}</em> `:''}${pearlMark(e(s.text))}</span></li>`; }).join('')}</ol>`;
+}
+/* The paragraph retains the full statement and punctuation. Switching views
+   only replaces this card's body, leaving the heart and the rest of Home alone. */
+function pearlReading(){
+  const body=document.getElementById('pearlBody'), button=document.getElementById('pearlReading');
+  if(!body||!button||!pearlCurrent)return;
+  pearlAsWritten=!pearlAsWritten;
+  body.innerHTML=pearlLadder(pearlCurrent);
+  body.scrollTop=0;
+  button.setAttribute('aria-pressed',String(pearlAsWritten));
+  pearlFit();
 }
 function pearlRecall(){
   const card=document.getElementById('pearlCard'); if(!card)return;
@@ -7108,10 +7122,15 @@ function buildHome(){
           <div class="pearl-bodywrap" id="pearlBody" onscroll="pearlFit()">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
-          <p class="pearl-prompt" id="pearlPrompt" hidden aria-label="Recall this concept">?</p>
+          <div class="pearl-prompt" id="pearlPrompt" hidden>
+            <span class="pearl-prompt-icon" aria-hidden="true">${icon('brain')}</span>
+            <strong>Explain it in your own words.</strong>
+            <span>State the key rule, then any condition or exception. Reveal it when you're ready to compare.</span>
+          </div>
           <div class="pearl-actions">
             <button class="pearl-recall" id="pearlRecall" onclick="pearlRecall()" aria-controls="pearlBody" aria-expanded="true">Recall</button>
-            <button class="pearl-open" onclick="pearlOpen()" title="${e(p.source||'Your reference notes')}">Source ${icon('arrow-right','icon-sm')}</button>
+            <button class="pearl-reading" id="pearlReading" onclick="pearlReading()" aria-controls="pearlBody" aria-pressed="${pearlAsWritten}" title="Read the complete statement as a paragraph">${icon('book','icon-sm')} Paragraph</button>
+            <button class="pearl-open" onclick="pearlOpen()" title="${e(p.source||'Your reference notes')}">Read note ${icon('arrow-right','icon-sm')}</button>
           </div>
           <div class="pearl-source sr-only" id="pearlSource">${e(p.source||'Your reference notes')}</div>
 
@@ -7883,6 +7902,8 @@ document.addEventListener('keydown',ev=>{
 document.addEventListener('keydown',ev=>{
   const t=ev.target.tagName;
   if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||ev.target.isContentEditable)return;
+  // A focused conversation owns its reading keys, including Space and arrows.
+  if(ev.target.closest&&ev.target.closest('#aiBody'))return;
   if(S.screen==='mock'){ mockKey(ev); return; }
   if(S.screen!=='quiz')return;
   if(!ev.ctrlKey&&!ev.metaKey&&!ev.altKey&&ev.key&&ev.key.toLowerCase()==='f'){ ev.preventDefault(); if(!ev.repeat) toggleFlag(); return; }   // a held key flags once

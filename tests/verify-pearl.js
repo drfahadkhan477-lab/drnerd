@@ -423,6 +423,26 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and the hero is not re-rendered underneath it', next.heroIntact);
 
   head('a named concept, recall, and the selected source note');
+  const readingProse = await page.evaluate(() => {
+    const b = document.getElementById('pearlReading');
+    if (!b) return null;
+    b.click();
+    return { pressed:b.getAttribute('aria-pressed'), text:document.getElementById('pearlBody').textContent,
+      expected:pearlCurrent.text, steps:document.querySelectorAll('#pearlBody .pearl-step').length };
+  });
+  ok('paragraph mode reads the complete statement with its original punctuation', !!readingProse && readingProse.pressed === 'true' && readingProse.text === readingProse.expected && readingProse.steps === 0);
+  const proseNext = await page.evaluate(() => {
+    const b = document.getElementById('pearlReading');
+    if (!b) return null;
+    const next = pearlAll().find(p => p.id !== pearlCurrent.id && Pearl.lesson(p.text).length > 1);
+    if (!next) return null;
+    const pick = Pearl.pick;
+    try { Pearl.pick = () => next; pearlNext(); } finally { Pearl.pick = pick; }
+    const kept = b.getAttribute('aria-pressed') === 'true' && document.getElementById('pearlBody').textContent === pearlCurrent.text;
+    b.click();
+    return {kept, restored:b.getAttribute('aria-pressed') === 'false' && !!document.querySelector('#pearlBody .pearl-step')};
+  });
+  ok('another pearl keeps paragraph mode, and switching back restores the steps', !!proseNext && proseNext.kept && proseNext.restored);
   const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source}));
   ok('the heading names the selected concept', await page.locator('#pearlConcept').textContent() === current.concept);
   await page.locator('#pearlRecall').click();
@@ -430,6 +450,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     prompt:!document.getElementById('pearlPrompt').hidden,expanded:document.getElementById('pearlRecall').getAttribute('aria-expanded'),
     figure:!document.getElementById('pearlFig')||document.getElementById('pearlFig').hidden}));
   ok('recall hides text and image, and shows a recall prompt', hidden.body && hidden.figure && hidden.prompt && hidden.expanded === 'false');
+  ok('the recall prompt tells the reader what to retrieve', /explain/i.test(await page.locator('#pearlPrompt').textContent()) && /exception/i.test(await page.locator('#pearlPrompt').textContent()));
   await page.locator('#pearlRecall').click();
   ok('reveal restores the pearl', await page.locator('#pearlBody').isVisible() && await page.locator('#pearlRecall').getAttribute('aria-expanded') === 'true');
   await page.locator('#pearlRecall').click();

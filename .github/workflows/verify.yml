@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 9248 checks in
-# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 9165.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 9255 checks in
+# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 9172.
 # The other 230 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 9165 real checks, up
+#                Across every job but split-build, 9172 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -345,7 +345,7 @@ jobs:
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (39 checks)
         run: node tests/verify-heartbake-pure.js
-      - name: the pearls found at build time are the ones the search finds (44 checks)
+      - name: the pearls found at build time are the ones the search finds (47 checks)
         run: node tests/verify-pearlbake-pure.js
       - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
         run: node tests/verify-stripcomments-pure.js
@@ -375,7 +375,7 @@ jobs:
         run: node tests/verify-record-pure.js
       - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (53 checks)
         run: node tests/verify-suitetime-pure.js
-      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (54 checks)
+      - name: each build in its own workspace, suite tags read from each suite's code, a JSON report that carries no output text, a doctor that says what to fix, and a clean that cannot reach the export (55 checks)
         run: node tests/verify-devtools-pure.js
       - name: Memorizer — every word of a PDF taught once, headings kept with their body, topics as sections, highlights never figures, a boxed table named by its own title, the Cloudflare zip read back (262 checks)
         run: node tests/verify-memorizer-chunk-pure.js
@@ -648,7 +648,7 @@ jobs:
         name: the figure Apex is reasoning from is one you can see (43 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home screen opens with something worth knowing (93 checks)
+        name: the home screen opens with something worth knowing (96 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
@@ -964,7 +964,7 @@ jobs:
         name: the figure Apex is reasoning from is one you can see (43 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
-        name: the home screen opens with something worth knowing (93 checks)
+        name: the home screen opens with something worth knowing (96 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)

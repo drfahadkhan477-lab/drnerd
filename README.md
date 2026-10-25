@@ -16,16 +16,16 @@ written on, a text size for the question that each device keeps for itself, and 
 notes, reads the figures they cite, knows what you chose and how you tend to
 miss, plans a session from it, and remembers you between sessions.
 
-The home screen says one thing: a live ECG, one pearl drawn from your own
-reference notes — broken at its own joints into a numbered ladder, over ECG
-paper, with the pressure–volume loop turning in its corner — how far through
-the bank you are,
-and a row of glass doors to everything else.
+Home pairs a live cardiac cycle with a pearl drawn from your own reference
+notes. Read the pearl as labelled steps, or choose **Paragraph** for the complete
+statement with its punctuation intact. **Recall** hides the explanation and
+figure while you explain the rule and its qualifications; **Read note** opens
+the selected source. Brain holds your progress, and Labs opens the practice tools.
 
 ```bash
 npm test                                            # no export needed: every suite CI runs
 npm run build -- path/to/ACCSAP_export.html       # → build/systole.html
-node scripts/verify.js                              # 9248 checks, 183 suites
+node scripts/verify.js                              # 9255 checks, 183 suites
 node scripts/extract-content.js build/systole.html   # refresh content for the split build
 node scripts/verify.js --pwa                        # + 147 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
@@ -37,7 +37,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 9248 + 147 checks above — read it as 9165, not 9395.**
+**That badge is not the 9255 + 147 checks above — read it as 9172, not 9402.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around

@@ -25,6 +25,9 @@ const REAL_DIR = fs.existsSync(DIR) ? fs.realpathSync(DIR) : DIR;
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  /* The split app loads the figure viewer's stylesheet on demand. WebKit
+     rejects it as a stylesheet if it arrives as application/octet-stream. */
+  '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.webp': 'image/webp',

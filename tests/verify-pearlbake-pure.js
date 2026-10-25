@@ -187,6 +187,13 @@ ok('an unrelated image is omitted', !P.harvest([{id:'no-match',body:rule+'\n\n![
 ok('baked and live lessons have the same concept and figure', J(P.harvest([figNote],P.bake([figNote]))) === J(P.harvest([figNote])));
 const blocks=P.lesson(rule+' '+exception);
 ok('whole sentences separate the idea from its caveat', blocks.length === 2 && blocks[0].label === 'Core idea' && blocks[1].label === 'Caveat' && /not required/.test(blocks[1].text));
+const headed = (body) => P.harvest([{id:'heading',title:'Unit — Section',body}])[0];
+const instruction = headed('### Amber syndrome\n\nAmber syndrome treatment **should be avoided** within 24 hours when the initial invented scan remains uncertain.');
+ok('an emphasized instruction cannot displace the section topic', instruction && instruction.concept === 'Amber syndrome');
+const graded = headed('### Section\n\n**Class I** guidance for **Amber syndrome** requires a repeat scan within 24 hours when the initial invented scan remains uncertain.');
+ok('a grade before the emphasized subject does not hide that subject', graded && graded.concept === 'Amber syndrome');
+const lateSubject = headed('### Amber syndrome\n\nAmber syndrome requires a repeat scan within 24 hours when the initial scan is uncertain. However, **Blue syndrome** requires a different scan.');
+ok('a subject in a later caveat does not rename the main idea', lateSubject && lateSubject.concept === 'Amber syndrome');
 const readout='Agent X should be continued within 24 hours, unlike placebo, after a trial reported HR 0.80 and P = .01 for superiority.';
 ok('a trial readout gives way to the teaching rule', P.harvest([{id:'trial',body:readout+'\n\n'+rule}])[0].text === P.clean(rule));
 
