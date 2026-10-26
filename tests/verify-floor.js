@@ -248,7 +248,11 @@ const palettes = css => {
       settle: () => { try { physio.pause(); physio.setTime(0.3); __physioNotePhase = ''; paintPhysioNote(); } catch (e) {} } },
   ];
   const open = async (file, w, h) => {
-    const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+    /* These are static layout comparisons. Slow machines can leave one page
+       idle past the ambient threshold while its peer is measured. Use the
+       real reduced-motion preference on both so the screensaver cannot add
+       a different diagram/caption. verify-ambient covers its idle lifecycle. */
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
     const page = watch(await ctx.newPage(), events, path.basename(file));
     page.on('pageerror', e => errors.push(path.basename(file) + ': ' + e.message));
     await page.addInitScript(SEED);
