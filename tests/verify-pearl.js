@@ -519,13 +519,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
            to the last's right, and only when they share a line. */
         const rects = [...r.getClientRects()];
         if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
-        const cs = getComputedStyle(h), probe = document.createElement('span');
-        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
-        document.body.appendChild(probe);
-        probe.textContent = text; const lower = probe.getBoundingClientRect().width;
-        probe.textContent = text[0].toUpperCase() + text.slice(1); const upper = probe.getBoundingClientRect().width;
+        const width = () => { const range=document.createRange(); range.selectNodeContents(h);
+          const boxes=[...range.getClientRects()]; return Math.max(...boxes.map(x=>x.right))-Math.min(...boxes.map(x=>x.left)); };
+        const w=width(), probe=document.createElement('style');
+        document.head.appendChild(probe);
+        // Use the same first-letter formatting box: a detached span loses its kerning boundary in WebKit.
+        probe.textContent='#pearlConcept::first-letter{text-transform:none!important}'; const lower=width();
+        probe.textContent='#pearlConcept::first-letter{text-transform:uppercase!important}'; const upper=width();
         probe.remove();
-        const w = Math.max(...rects.map(x => x.right)) - Math.min(...rects.map(x => x.left));
         return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
           : `heading ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
       })(),
@@ -633,18 +634,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('another pearl without a figure brings the emblem with it', pics.swapped.emblem && !pics.swapped.fig, JSON.stringify(pics.swapped));
 
   head('an empty library is not an error');
-  const empty = await page.evaluate(() => {
-    const keep = REF.slice();
-    REF.length = 0; invalidateIndex();
-    pearlCurrent = null;
-    let threw = false;
-    try { S.screen = 'home'; render(); } catch (_) { threw = true; }
-    const gone = !document.getElementById('pearlCard');
-    REF.push(...keep); invalidateIndex(); pearlCurrent = null;
-    return { threw, gone };
+  await page.evaluate(() => {
+    window.__atlasKeptRefs=REF.slice(); REF.length=0; invalidateIndex(); pearlCurrent=null; S.screen='home'; render();
   });
-  ok('no notes means no card, rather than an empty one', empty.gone);
-  ok('and nothing throws', !empty.threw);
+  await settled(page,()=>!window.__vtLive && !!document.querySelector('.hero-h1'),{label:'empty library Home'});
+  const empty=await page.evaluate(()=>({gone:!document.getElementById('pearlCard'),
+    heading:document.querySelector('#homePage0 h1')?.textContent,
+    open:[...document.querySelectorAll('#homePage0 button')].some(b=>b.textContent==='Open notes')}));
+  ok('no notes means no card, rather than an empty one',empty.gone);
+  ok('and nothing throws',errors.length===0);
+  ok('empty Home invites one idea and offers Open notes',empty.heading==='Make one idea stick.'&&empty.open);
+  if(empty.open){
+    await page.getByRole('button',{name:'Open notes',exact:true}).click();
+    await settled(page,()=>!window.__vtLive,{label:'Open notes transition'});
+  }
+  ok('empty Home Open notes opens the reference library',await page.evaluate(()=>S.screen==='refs'));
+  await page.evaluate(()=>{REF.push(...window.__atlasKeptRefs);delete window.__atlasKeptRefs;invalidateIndex();pearlCurrent=null;goHome();});
+  await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
 
   head('regression');
   head('a pearl is a whole thought now');

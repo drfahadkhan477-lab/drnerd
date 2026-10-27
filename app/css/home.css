@@ -468,3 +468,11 @@ body.on-home .nav-title{line-height:1.1}
   #homePage0 .hero-live-status{bottom:14px}
   #homePage0 .hero-mechanics{left:auto;right:22px}
 }
+
+/* A paused Home also holds still when canvas support is unavailable. */
+.atlas-paused .hero-live *,.atlas-paused .hero-live *::before,.atlas-paused .hero-live *::after{animation-play-state:paused!important}
+.atlas-pause{position:absolute;z-index:5;right:16px;bottom:14px;min-width:64px;min-height:44px;border:1px solid var(--border2);border-radius:999px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){#homePage0 .hero-mechanics{right:96px}}
+/* Captions and enlarged controls remain reachable within their constrained cards. */
+#app[data-screen="home"] #homePage0 .pearl-main{overflow:auto}
+#app[data-screen="home"] #homePage0 .pearl-fig{overflow:auto}

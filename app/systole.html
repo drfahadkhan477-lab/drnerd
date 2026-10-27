@@ -7076,6 +7076,7 @@ function dismissHello(){
 function buildHome(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
   const dueN=dueQuestions().length, seenN=startedCount();
+  const atlasPearl=pearlNow();
   const today=S.daily[todayISO()]||{a:0,c:0};
   const covered=Math.round(seenN/TOTAL_Q*100);
   /* Mastery is FSRS's own recall estimate, summed over the whole bank — the
@@ -7084,7 +7085,7 @@ function buildHome(){
   const masteryFrac=TOTAL_Q?CHAPTERS.reduce((s,ch)=>s+masteryFor(ch)*POOL.filter(q=>q.ch===ch).length,0)/TOTAL_Q:0;
   const masteryPct=Math.round(masteryFrac*100);
 
-  return `<div class="home-pages" id="homePages">
+  return `<div class="home-pages${atlasPaused?' atlas-paused':''}" id="homePages">
     <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
     <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
     <div class="home-wrap anim-fade" data-home="${S.homeLayout}">
@@ -7093,7 +7094,8 @@ function buildHome(){
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner">
         <div class="hero-greet">${greet()}</div>
-        <h1 class="hero-h1">Systole</h1>
+        ${atlasPearl?'<div class="hero-h1">Systole</div>':'<h1 class="hero-h1">Make one idea stick.</h1>'}
+        ${atlasPearl?'':'<button class="btn" onclick="goRefs()">Open notes</button>'}
         <p class="hero-description">Cardiology, in motion.</p>
         <div class="hero-line">
           <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>
@@ -7111,6 +7113,7 @@ function buildHome(){
       <span class="hero-live-status"><i aria-hidden="true"></i> Live cardiac cycle</span>
       <button class="hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleHeroMechanics()"
         aria-label="Show heart chambers, valves, and blood flow" aria-pressed="${heroCutaway}" title="Show heart chambers, valves, and blood flow">${icon('layers','icon-sm')} Mechanics</button>
+      <button class="atlas-pause" id="atlasPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${atlasPaused?'Play':'Pause'}</button>
     </div>
 
     ${(()=>{ const p=pearlNow(); if(!p) return '';
@@ -7124,7 +7127,7 @@ function buildHome(){
             <button class="pearl-next" onclick="pearlNext()"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
-          <h2 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h2>
+          <h1 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h1>
           <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlFit()">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
@@ -7174,6 +7177,14 @@ function buildHome(){
    time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
    the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
    was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
+let atlasPaused=false;
+function toggleAtlasMotion(){
+  atlasPaused=!atlasPaused;
+  document.getElementById('homePages')?.classList.toggle('atlas-paused',atlasPaused);
+  const b=document.getElementById('atlasPause');
+  if(b){b.textContent=atlasPaused?'Play':'Pause';b.setAttribute('aria-label',atlasPaused?'Play animation':'Pause animation');}
+  syncHomeMotion();
+}
 let homePage=0, homeRaf=0, homeTween=0, homeSized=false, homeLastGo=null;   /* homeLastGo: the last tab move, and whether it glided (the suite reads it) */
 function buildBrain(dueN,seenN,covered,masteryPct,today){
   const ret=avgRetention();
@@ -7190,7 +7201,7 @@ function buildBrain(dueN,seenN,covered,masteryPct,today){
     </button>`;
   }).join('');
   return `<header class="page-head"><span class="page-eyebrow">${icon('brain','icon-sm')} Your brain</span>
-      <h2 class="page-title">What you remember</h2>
+      <h1 class="page-title">What you remember</h1>
       <p class="page-sub">Mastery is FSRS's own estimate of what you would recall today, chapter by chapter.</p></header>
     <div class="brain-hero">
       <div class="brain-stage"><div class="brain-3d" id="brain3d"><div class="brain-tilt" id="brainTilt">${buildBrainArt()}</div></div>
@@ -7221,7 +7232,7 @@ function buildBrain(dueN,seenN,covered,masteryPct,today){
 }
 function buildLabs(dueN){
   return `<header class="page-head"><span class="page-eyebrow">${icon('activity','icon-sm')} Labs</span>
-      <h2 class="page-title">Hear it, see it, read it</h2>
+      <h1 class="page-title">Hear it, see it, read it</h1>
       <p class="page-sub">Traces drawn live, echo views to explore, and sounds and strips to practise on.</p></header>
     <div class="labs-grid">
       <button class="lab-card lab-rhythm" onclick="goLab()">
@@ -7475,7 +7486,7 @@ function homeMark(){
 /* Home remains mounted behind pager panels and full-screen overlays. Its
    hidden canvases must not consume the foreground's frame budget. */
 function syncHomeMotion(){
-  const on=S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
+  const on=!atlasPaused&&S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
   if(heroMon) on?heroMon.start():heroMon.stop();
   if(heroHeart3d) on?heroHeart3d.start():heroHeart3d.stop();
   if(pearlTrace) on?pearlTrace.resume():pearlTrace.pause();

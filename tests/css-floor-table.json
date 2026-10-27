@@ -76,6 +76,7 @@
       "animation-delay",
       "animation-duration",
       "animation-iteration-count",
+      "animation-play-state",
       "background",
       "background-attachment",
       "background-clip",
