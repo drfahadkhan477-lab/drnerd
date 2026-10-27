@@ -96,11 +96,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect();
       const tabs = r(document.querySelector('.home-tabs')), pager = r(document.getElementById('homePager')), fab = r(document.getElementById('aiFab'));
       const buttons=[...document.querySelectorAll('.home-tab')].map(r);
-      return { doc: document.documentElement.scrollHeight, vh: innerHeight,
-        placement: innerWidth>=700 ? tabs.left>=0 && tabs.right<=pager.left && tabs.top>=0 && tabs.bottom<=innerHeight
+      /* WHICH WAY THE RAIL SITS IS READ OFF THE SCREEN, not from the 700px the script uses. Asking
+         innerWidth>=700 for the answer asks the implementation to mark its own paper: homeMark() and
+         homeTabKey() both carry that literal, the stylesheet carries it in seven media queries, and
+         nothing binds the two. Move the stylesheet's breakpoint alone and the rail would sit under the
+         pages while aria-orientation still said vertical and the arrow keys still ran up and down.
+         Beside the pages is a rail; under them is a bar. */
+      const besidePages = tabs.right <= pager.left + 1;
+      return { doc: document.documentElement.scrollHeight, vh: innerHeight, besidePages,
+        placement: besidePages ? tabs.left>=0 && tabs.top>=0 && tabs.bottom<=innerHeight
           : pager.bottom<=tabs.top && Math.abs(innerHeight-12-tabs.bottom)<=1,
         orientation: document.querySelector('.home-tabs').getAttribute('aria-orientation'),
-        wanted: innerWidth>=700?'vertical':'horizontal',
+        wanted: besidePages?'vertical':'horizontal',
         fabClear:buttons.every(t=>fab.right<=t.left||fab.left>=t.right||fab.bottom<=t.top||fab.top>=t.bottom) };
     });
     ok(`${label}: the screen does not scroll, the pages do`,g.doc<=g.vh+1,JSON.stringify(g));
@@ -108,6 +115,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok(`${label}: and the Apex button is clear of every tab`,g.fabClear,JSON.stringify(g));
   };
   await fits('landscape');
+  /* ON THE BREAKPOINT ITSELF. Every other width here is hundreds of pixels clear of 700, so a
+     stylesheet that moved its breakpoint and left the script behind would lay out and announce
+     consistently at all of them and say nothing. These two sit either side of the line. */
+  for (const w of [699, 701]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.evaluate(()=>homeGo(0,false)); await still('Home at the breakpoint');
+    await fits(`${w}px, across the 700px breakpoint`);
+  }
+  await page.setViewportSize({width:1180,height:820});
+  await page.evaluate(()=>homeGo(0,false)); await still('Home after the breakpoint pair');
   for (const size of [{width:1180,height:820},{width:834,height:1194},{width:1024,height:768}]) {
     await page.setViewportSize(size);
     for(let i=0;i<3;i++) {

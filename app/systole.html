@@ -7462,7 +7462,12 @@ function homePagerSync(){
 function homeMark(){
   const root=document.getElementById('homePages'); if(!root) return;
   root.dataset.page=String(homePage);
-  root.querySelector('.home-tabs').setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
+  /* Guarded like the line above it: this now runs on every resize event, and a throw there repeats
+     for as long as the drag lasts rather than once. 700px is the stylesheet's breakpoint too —
+     tests/verify-homepager.js reads the rail's direction off the screen rather than off this number,
+     so the two cannot drift apart unnoticed. */
+  const tabs=root.querySelector('.home-tabs');
+  if(tabs) tabs.setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
   for(let i=0;i<3;i++){
     const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
     if(tab){ tab.setAttribute('aria-selected',String(i===homePage)); tab.tabIndex=i===homePage?0:-1; }
