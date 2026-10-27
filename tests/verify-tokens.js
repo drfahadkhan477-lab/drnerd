@@ -116,12 +116,11 @@ const ACCENT_BY_THEME = {
   const rgb = hex => { const n = parseInt(String(hex).trim().slice(1), 16); return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`; };
 
   const nav = await page.evaluate(() => {
-    const el = document.querySelector('.nav-logo');
-    return el ? getComputedStyle(el).backgroundImage : null;
+    const el=document.querySelector('.nav-logo');
+    if(!el)return null;
+    const c=getComputedStyle(el);return {image:c.backgroundImage,color:c.backgroundColor};
   });
-  const [stop1, stop2] = [perTheme.daylight.accent, perTheme.daylight.accent2].map(rgb);
-  ok('.nav-logo\'s gradient runs from --accent to --accent-2', !!nav && nav.includes(stop1) && nav.indexOf(stop2) > nav.indexOf(stop1),
-     `${nav || 'not found'}; wants ${stop1} then ${stop2}`);
+  ok('Home logo uses the flat Atlas teal in Daylight',!!nav&&nav.image==='none'&&nav.color==='rgb(33, 86, 92)',JSON.stringify(nav));
 
   const answer = await page.evaluate(() => {
     startQuiz(CHAPTERS[0], 'all');
