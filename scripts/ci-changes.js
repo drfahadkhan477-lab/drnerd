@@ -31,8 +31,17 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 
-/* Reaches neither browser job. */
-const DOCS = [/^docs\//, /^tasks\//, /^\.claude\//, /^[^/]+\.md$/];
+/* Reaches neither browser job.
+   .gitignore is here because the two suites that read it — verify-engine.js
+   ("the transcript is gitignored") and verify-leakguard.js — are both in the
+   logic job, which has no `needs: changes` and so runs whatever this decides.
+   Changing it was therefore starting the Memorizer matrix in three engines,
+   the synthetic job and the split build to measure nothing they can see. No
+   browser suite reads it; checked by grepping tests/ for the name, as the
+   lists above were. The other root dotfiles are NOT here: .node-version picks
+   the runtime for every job, and .gitattributes can change what a checkout
+   even contains. */
+const DOCS = [/^docs\//, /^tasks\//, /^\.claude\//, /^[^/]+\.md$/, /^\.gitignore$/];
 /* Reaches memorizer-browser only: the Memorizer. The Practice Lab is a Systole screen
    (src/lab/), and its browser suite, tests/verify-lab.js, runs in the synthetic jobs. */
 const MEMORIZER_ONLY = [/^memorizer\//, /^tests\/verify-memorizer[a-z0-9-]*\.js$/];
