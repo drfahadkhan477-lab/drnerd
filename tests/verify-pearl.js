@@ -519,15 +519,27 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
            to the last's right, and only when they share a line. */
         const rects = [...r.getClientRects()];
         if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
+        /* ONE GLYPH AGAINST ONE GLYPH, not one string against a nearly identical string. This compared the whole
+           heading's width with the whole word capitalised and the whole word as stored, and that stopped working the
+           day the concept took a serif face (Quiet Atlas, app/css/home.css). In DM Serif Display a capital is barely
+           a different width from its lower case — over "pulmonary embolism" the two spellings came to 207.8px and
+           209.5px, and the drawn heading landed between them at 208.7px, so the check could not say which it was and
+           reported a failure against a heading that was correctly capitalised. At some sizes the gap falls to 0.4px,
+           under this measurement's own 0.5px floor.
+           ::first-letter is a box of its own, so rects[0] IS the drawn first letter: comparing that against the two
+           single characters moves the signal from under a pixel to about 3.5px in both engines, and it does not shrink
+           as the word gets longer. If the browser ever stops giving the first letter its own box the comparison has
+           nothing to stand on, so that says UNMEASURED rather than guessing. */
+        if (rects.length < 2) return 'UNMEASURED: the first letter is not a box of its own';
         const cs = getComputedStyle(h), probe = document.createElement('span');
         probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
         document.body.appendChild(probe);
-        probe.textContent = text; const lower = probe.getBoundingClientRect().width;
-        probe.textContent = text[0].toUpperCase() + text.slice(1); const upper = probe.getBoundingClientRect().width;
+        probe.textContent = text[0]; const lower = probe.getBoundingClientRect().width;
+        probe.textContent = text[0].toUpperCase(); const upper = probe.getBoundingClientRect().width;
         probe.remove();
-        const w = Math.max(...rects.map(x => x.right)) - Math.min(...rects.map(x => x.left));
+        const w = rects[0].width;
         return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
-          : `heading ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
+          : `first letter ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
       })(),
       capPx: cap ? parseFloat(getComputedStyle(cap).fontSize) : 0,
     };
