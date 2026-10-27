@@ -1,12 +1,13 @@
 # Models, usage, and limits in Claude Code
 
-Historical reference: `CLAUDE.md` and `.claude/` were removed from master.
-The repository-specific agents and rules described below are no longer provided.
-
 Owner-facing reference for keeping Claude Code sessions on this repo cheap and
-sharp. `CLAUDE.md` carries only the short rules Claude acts on; this file is
-the full explanation, kept out of `CLAUDE.md` because that file is resent on
-every turn.
+sharp. `AGENTS.md` carries the short rules Claude acts on; this file is the full
+explanation, kept out of it because that file is resent on every turn.
+
+`CLAUDE.md` and `.claude/agents/` were deleted from master (`57c822b`,
+`2915c54`), and the rules they carried moved into `AGENTS.md`. Where this file
+names a file or an agent that no longer exists, the section says so; nothing
+below is a description of something to recreate.
 
 ## How usage is metered
 
@@ -33,13 +34,13 @@ everything else; Haiku for doc tweaks and lookups.
 
 ## What consumes tokens
 
-Every turn resends (1) the whole conversation so far, (2) `CLAUDE.md` plus any
+Every turn resends (1) the whole conversation so far, (2) `AGENTS.md` plus any
 files read, (3) your new prompt. Item 1 grows fastest — that is where cost and
 context limits come from.
 
 ## Managing the context window
 
-- **`/clear`** — wipe the chat, keep `CLAUDE.md` and files. Use when switching tasks. Cannot be undone.
+- **`/clear`** — wipe the chat, keep `AGENTS.md` and files. Use when switching tasks. Cannot be undone.
 - **`/compact`** — summarise history to free space mid-task. Auto-runs near the limit.
 - **`/context`** — see what is loaded.
 
@@ -50,15 +51,17 @@ Rule of thumb: `/clear` for a new task, `/compact` to continue a long one.
 1. **Clear between tasks.** If your next prompt would make sense in a fresh terminal, `/clear` first.
 2. **Match the model to the job** (above).
 3. **Point at files, don't paste them.** Write a bare path (`scripts/assemble-app.js`, the `producers` function) — an `@` prefix injects the whole file. Trim logs to the relevant 20–30 lines; put big dumps on disk and reference the path. In this repo, never paste suite output or `tests/last-run.log` — it quotes licensed question text.
-4. **Keep `CLAUDE.md` lean.** Add a rule only the second time you correct Claude on the same thing; keep it under roughly 200 lines; prune stale notes every few weeks.
+4. **Keep `AGENTS.md` lean.** Add a rule only the second time you correct Claude on the same thing; prune stale notes every few weeks. Every rule in it is resent on every turn, so a rule that no longer earns its place costs tokens on each one.
 5. **Ask for a plan before big changes.** For anything over two or three files: Plan Mode, or "list the files you'll touch and what you'll do in each first." Correct the plan, then execute — ideally plan on Opus, execute on Sonnet.
 
-## Agents and the working method
+## Agents and the working method — removed
 
-`.claude/agents/` holds small agents, each with one job, a stated input and
-output, its failure modes and a list of what it never does. Ask for one by name
-("run the verifier", "have the planner plan this"); Claude does not start them
-on its own.
+**This section is history, not instructions.** `.claude/agents/` held the six
+agents below until `2915c54` deleted it. There is no agent team in this
+repository now, and the rules the agents encoded live in `AGENTS.md` as prose.
+It is kept here because the reasoning in the last paragraph is still the
+project's position, and because a tool that offers to generate an agent harness
+will otherwise read the table as a specification to restore.
 
 | Agent | Model | Job |
 | --- | --- | --- |
@@ -69,13 +72,13 @@ on its own.
 | `leak-auditor` | haiku | Look for licensed content in a branch before it is pushed. |
 | `ci-log-reader` | haiku | Read one CI job log and return only what failed. |
 
-Keep the team this small. Add an agent only when the same job has been done by
-hand more than once and has a failure mode worth writing down; a new agent is a
-new thing to keep true.
+That smallness was the point, and it is why the directory went: each agent is
+a thing to keep true, and prose in `AGENTS.md` that states *why* a rule exists
+survives a refactor better than a definition that has to be maintained
+alongside the code it describes.
 
 `tasks/lessons.md` is the record of corrections, read at the start of a
 session. `tasks/todo.md` (gitignored) holds the plan for the task in hand.
-Both are described in `CLAUDE.md`, "Working method".
 
 ## When you hit a limit
 
