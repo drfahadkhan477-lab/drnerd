@@ -6405,7 +6405,7 @@ function buildScreen(){
 }
 function buildNav(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):null;
-  const col=p===null?'#5EEAD4':p>=70?'#34D399':p>=50?'#FBBF24':'#F87171';
+  const col=S.screen==='home'?(p===null?'var(--teal-ink)':p>=70?'var(--green-ink)':p>=50?'var(--amber-ink)':'var(--red-ink)'):(p===null?'#5EEAD4':p>=70?'#34D399':p>=50?'#FBBF24':'#F87171');
   return `<nav class="nav">
     <div class="nav-brand" onclick="goHome()" role="button" tabindex="0" aria-label="Home">
       <div class="nav-logo">${icon("heart-pulse")}</div>
@@ -7125,7 +7125,7 @@ function buildHome(){
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
           <h2 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h2>
-          <div class="pearl-bodywrap" id="pearlBody" onscroll="pearlFit()">${pearlLadder(p)}</div>
+          <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlFit()">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
           <div class="pearl-prompt" id="pearlPrompt" hidden>
@@ -7144,12 +7144,13 @@ function buildHome(){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
+    <div class="atlas-session"><div><small>Your next session</small><strong>${dueN?`${dueN} questions ready`:'Build your next idea'}</strong></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Start review':'Explore chapters'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">
         <b>New here?</b>
         <i><b>Chapters</b> holds all ${TOTAL_Q} questions, grouped by topic.
-           <b>Apex</b> — the button at the bottom right — explains any answer,
+           <b>Apex</b> — your study companion — explains any answer,
            and can read the figures with you.</i>
         <button class="hello-x" onclick="dismissHello()">Got it</button>
       </div>
@@ -7461,6 +7462,7 @@ function homePagerSync(){
 function homeMark(){
   const root=document.getElementById('homePages'); if(!root) return;
   root.dataset.page=String(homePage);
+  root.querySelector('.home-tabs').setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
   for(let i=0;i<3;i++){
     const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
     if(tab){ tab.setAttribute('aria-selected',String(i===homePage)); tab.tabIndex=i===homePage?0:-1; }
@@ -7510,7 +7512,8 @@ function homeGo(i){
   homeTween=requestAnimationFrame(step);
 }
 function homeTabKey(ev){
-  const k=ev.key, n=k==='ArrowRight'?homePage+1:k==='ArrowLeft'?homePage-1:k==='Home'?0:k==='End'?2:null;
+  const k=ev.key, vertical=matchMedia('(min-width:700px)').matches;
+  const n=(k==='ArrowRight'||(vertical&&k==='ArrowDown'))?homePage+1:(k==='ArrowLeft'||(vertical&&k==='ArrowUp'))?homePage-1:k==='Home'?0:k==='End'?2:null;
   if(n==null) return;
   ev.preventDefault(); homeGo(n);
   const tab=document.getElementById('homeTab'+homePage); if(tab) tab.focus();
@@ -7522,7 +7525,7 @@ function mountHomePager(){
   pg.scrollLeft=homePage*pg.clientWidth;
   homePagerSync(); homeMark();
   if(!homeSized){ homeSized=true;
-    window.addEventListener('resize',()=>{ const p=document.getElementById('homePager'); if(p){ p.scrollLeft=homePage*p.clientWidth; homePagerSync(); } }); }
+    window.addEventListener('resize',()=>{ const p=document.getElementById('homePager'); if(p){ p.scrollLeft=homePage*p.clientWidth; homePagerSync(); homeMark(); } }); }
 }
 
 /* ── the page the material moved to ──────────────────────────────────────────

@@ -61,7 +61,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const pillAt = () => page.evaluate(() => {
     const pill = document.querySelector('.home-tab-pill').getBoundingClientRect();
     return [0, 1, 2].map(i => document.getElementById('homeTab' + i).getBoundingClientRect())
-      .map(t => ({ left: t.left, width: t.width })).concat([{ pill: pill.left, w: pill.width }]);
+      .map(t => ({ left: innerWidth>=700?t.top:t.left, width: innerWidth>=700?t.height:t.width })).concat([{ pill: innerWidth>=700?pill.top:pill.left, w: innerWidth>=700?pill.height:pill.width }]);
   });
 
   await page.evaluate(() => { homePage = 0; S.screen = 'home'; render(); });
@@ -91,19 +91,34 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
   head('one screen tall');
-  /* The tab bar is at the foot of the screen, under the pages (the owner asked, 22 October 2026), 12px off the bottom
-     edge (no home indicator here), and the Apex button keeps clear of it: beside it on an iPad, above it on a phone. */
+  /* Tablet navigation follows the selected left-rail design; phones retain bottom tabs. */
   const fits = async (label) => {
     const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect();
       const tabs = r(document.querySelector('.home-tabs')), pager = r(document.getElementById('homePager')), fab = r(document.getElementById('aiFab'));
-      return { doc: document.documentElement.scrollHeight, vh: innerHeight, pagerBottom: Math.round(pager.bottom),
-        tabsTop: Math.round(tabs.top), tabsBottom: Math.round(tabs.bottom),
-        fabClear: fab.width > 0 && (fab.right <= tabs.left || fab.left >= tabs.right || fab.bottom <= tabs.top) }; });
-    ok(`${label}: the screen does not scroll, the pages do`, g.doc <= g.vh + 1, JSON.stringify(g));
-    ok(`${label}: the tab bar is at the foot of the screen, under the pages`, g.pagerBottom <= g.tabsTop && Math.abs(g.vh - 12 - g.tabsBottom) <= 1, JSON.stringify(g));
-    ok(`${label}: and the Apex button is clear of it`, g.fabClear, JSON.stringify(g));
+      const buttons=[...document.querySelectorAll('.home-tab')].map(r);
+      return { doc: document.documentElement.scrollHeight, vh: innerHeight,
+        placement: innerWidth>=700 ? tabs.left>=0 && tabs.right<=pager.left && tabs.top>=0 && tabs.bottom<=innerHeight
+          : pager.bottom<=tabs.top && Math.abs(innerHeight-12-tabs.bottom)<=1,
+        orientation: document.querySelector('.home-tabs').getAttribute('aria-orientation'),
+        wanted: innerWidth>=700?'vertical':'horizontal',
+        fabClear:buttons.every(t=>fab.right<=t.left||fab.left>=t.right||fab.bottom<=t.top||fab.top>=t.bottom) };
+    });
+    ok(`${label}: the screen does not scroll, the pages do`,g.doc<=g.vh+1,JSON.stringify(g));
+    ok(`${label}: navigation fits its viewport and declares its direction`,g.placement&&g.orientation===g.wanted,JSON.stringify(g));
+    ok(`${label}: and the Apex button is clear of every tab`,g.fabClear,JSON.stringify(g));
   };
   await fits('landscape');
+  for (const size of [{width:1180,height:820},{width:834,height:1194},{width:1024,height:768}]) {
+    await page.setViewportSize(size);
+    for(let i=0;i<3;i++) {
+      await page.evaluate(i=>homeGo(i,false),i); await still('tablet landing page');
+      const g=await page.evaluate(i=>{const e=document.getElementById('homePage'+i);return {height:e.clientHeight,content:e.scrollHeight,width:e.clientWidth,contentWidth:e.scrollWidth};},i);
+      ok(`${size.width}×${size.height}: landing page ${i} fits without clipping or page scrolling`,g.height>0&&g.content<=g.height+1&&g.contentWidth<=g.width+1,JSON.stringify(g));
+    }
+  }
+  await page.setViewportSize({width:1180,height:820});
+  await page.evaluate(()=>homeGo(0,false)); await still('Home after tablet sizes');
+
 
   head('a swipe');
   const s0 = await state();
@@ -117,19 +132,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a swipe to the left lands on Brain', Math.abs(s1.f - 1) < 0.01 && s1.sel.join() === '1' && s1.homePage === 1, JSON.stringify(s1));
   ok('and Brain is now the live page, Home inert', s1.inert.join() === 'true,false,true' && s1.hidden.join() === 'true,false,true', s1.inert.join());
   const p1 = await pillAt();
-  ok('the pill sits on the Brain tab', Math.abs(p1[3].pill - p1[1].left) <= 2, `pill at ${p1[3].pill.toFixed(1)}, Brain tab at ${p1[1].left.toFixed(1)}`);
+  ok('the pill sits on the Brain tab', p1[1].left > p1[0].left && Math.abs(p1[3].pill - p1[1].left) <= 2, `pill at ${p1[3].pill.toFixed(1)}, Brain tab at ${p1[1].left.toFixed(1)}`);
 
   head('the pill follows the finger');
   /* Half a page, held there (the snap lifted so it stays): the pill is half way between the two tabs. */
   const half = await page.evaluate(() => new Promise(r => {
     const p = document.getElementById('homePager'); p.style.scrollSnapType = 'none'; p.scrollLeft = p.clientWidth * 1.5;
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const pill = document.querySelector('.home-tab-pill').getBoundingClientRect().left;
-      const a = document.getElementById('homeTab1').getBoundingClientRect().left, b = document.getElementById('homeTab2').getBoundingClientRect().left;
+      const pill = document.querySelector('.home-tab-pill').getBoundingClientRect().top;
+      const a = document.getElementById('homeTab1').getBoundingClientRect().top, b = document.getElementById('homeTab2').getBoundingClientRect().top;
       p.style.scrollSnapType = ''; r({ pill, a, b });
     }));
   }));
-  ok('half a swipe from Brain to Labs puts the pill half way', Math.abs(half.pill - (half.a + half.b) / 2) <= 3, `pill ${half.pill.toFixed(1)}, half way ${((half.a + half.b) / 2).toFixed(1)}`);
+  ok('half a swipe from Brain to Labs puts the pill half way', half.b > half.a && Math.abs(half.pill - (half.a + half.b) / 2) <= 3, `pill ${half.pill.toFixed(1)}, half way ${((half.a + half.b) / 2).toFixed(1)}`);
   await page.evaluate(() => homeGo(1));
   await still('back on Brain');
 
@@ -152,11 +167,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the Labs tab glides there rather than jumping', glide.moving, JSON.stringify(glide));
   ok('and lands on Labs', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2', JSON.stringify(s2));
   await page.locator('#homeTab2').focus();
-  await page.keyboard.press('ArrowLeft');
-  await still('after ArrowLeft');
+  await page.keyboard.press('ArrowUp');
+  await still('after ArrowUp');
   const k = await page.evaluate(() => ({ f: document.getElementById('homePager').scrollLeft / document.getElementById('homePager').clientWidth,
     focus: document.activeElement && document.activeElement.id }));
-  ok('ArrowLeft on the tab bar goes to Brain and takes the focus with it', Math.abs(k.f - 1) < 0.01 && k.focus === 'homeTab1', JSON.stringify(k));
+  ok('ArrowUp on the vertical tab bar goes to Brain and takes the focus with it', Math.abs(k.f - 1) < 0.01 && k.focus === 'homeTab1', JSON.stringify(k));
   const tabStop = await page.evaluate(() => [0, 1, 2].map(i => document.getElementById('homeTab' + i).tabIndex).join());
   ok('only the selected tab is a tab stop', tabStop === '-1,0,-1', tabStop);
 
@@ -331,7 +346,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('turning the iPad');
   await page.evaluate(() => homeGo(1)); await still('Brain before turning');
   await page.setViewportSize({ width: 820, height: 1180 });
-  await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth && innerWidth === 820, { label: 'the pager to take the portrait width' });
+  await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth - 80 && innerWidth === 820, { label: 'the pager to take the portrait width' });
   await still('after turning');
   const turned = await state();
   ok('turned to portrait, Brain is still the page', Math.abs(turned.f - 1) < 0.01 && turned.sel.join() === '1', JSON.stringify(turned));
@@ -341,7 +356,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await still('on a phone');
   await fits('a phone');
   await page.setViewportSize({ width: 820, height: 1180 });
-  await settled(page, () => document.getElementById('homePager').clientWidth === 820, { label: 'the pager back at the portrait width' });
+  await settled(page, () => document.getElementById('homePager').clientWidth === 740, { label: 'the pager back at the portrait width' });
   await still('back in portrait');
 
   head('reduced motion');

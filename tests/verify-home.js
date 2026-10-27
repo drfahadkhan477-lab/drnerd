@@ -414,8 +414,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        pro.appW / pro.vw > 0.9, `${pro.appW} of ${pro.vw}`);
     ok('and the home screen fits in one screen, with nothing to scroll',
        pro.over <= 0, `${pro.over}px over`);
-    ok('the pearl sits beside the hero rather than under it',
-       pro.pearl.x > pro.hero.x + pro.hero.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
+    ok('the pearl sits to the left of the heart',
+       pro.hero.x >= pro.pearl.x + pro.pearl.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
     ok('and it runs taller than the letterbox it used to be',
        pro.pearl.h > 400, `${pro.pearl.h}px tall`);
     /* The doors moved off Home: it is the hero and the pearl now, and the doors are on the Labs page, two swipes away
@@ -475,8 +475,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     ok('portrait still stacks, and still fits',
        port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
     /* The pages run the full width now, and Home's column is the fixed measure (.home-page-in, 900px). */
-    ok('and its column is a fixed measure, not the width of whatever pearl was picked',
-       !!port.col && port.col.w === 900, port.col ? `${port.col.w}px` : 'no column');
+    ok('and its column reserves space for the navigation rail',
+       !!port.col && port.col.w === port.vw - 128, port.col ? `${port.col.w}px` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem. */

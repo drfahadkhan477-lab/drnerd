@@ -592,7 +592,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const port = await page.evaluate(() => { const w = document.getElementById('pearlBody'), c = document.getElementById('pearlCard'), b = document.getElementById('pearlMore');
     return { over: w.scrollHeight - w.clientHeight, fade: c.classList.contains('pearl-more'), btn: getComputedStyle(b).display, stacked: getComputedStyle(c).flexDirection }; });
   ok('in portrait the pearl is stacked, the steps across the whole card', port.stacked === 'column', port.stacked);
-  ok('and where every step fits, no step is faded and nothing offers more', port.over <= 4 && !port.fade && port.btn === 'none', JSON.stringify(port));
+  ok('the long portrait pearl offers access to the rest of its text', port.over > 4 && port.fade && port.btn !== 'none', JSON.stringify(port));
+  await page.evaluate(()=>{ const w=document.getElementById('pearlBody'); w.innerHTML='<p>A short teaching cue.</p>'; pearlFit(); });
+  const shortCue=await page.evaluate(()=>{const w=document.getElementById('pearlBody');return {over:w.scrollHeight-w.clientHeight,fade:document.getElementById('pearlCard').classList.contains('pearl-more'),hidden:document.getElementById('pearlMore').hidden};});
+  ok('where a short cue fits, nothing is faded and nothing offers more',shortCue.over<=4&&!shortCue.fade&&shortCue.hidden,JSON.stringify(shortCue));
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
      the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
   await page.setViewportSize({ width: 390, height: 844 });
