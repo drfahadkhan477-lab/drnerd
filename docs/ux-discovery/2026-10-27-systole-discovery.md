@@ -32,7 +32,8 @@ assumption that has never met a real session:
 | Timed mock, no feedback until hand-in | Exam simulation is wanted before the exam is near |
 | Grounded Apex (pick, confidence, miss patterns) | The tutor is consulted mid-study, not skipped |
 | Flags + per-question notes | Questions get revisited, not just marked |
-| Daily pearl, Recall step | The day starts in the app rather than in the bank |
+| Daily pearl, Recall step | The day starts in the app rather than in the bank — **and that the pearl wins against the habit of opening the ACCSAP reader**, which is the real competitor, not another feature |
+| Timed mock, again | That it is wanted *now* — it may be a late-cycle tool only, worth nothing until the exam is near, in which case building it early cost a cycle |
 | Labs, Brain, 3D heart | Exploration earns its screen against question throughput |
 | Three-page Home / Quiet Atlas | Home is a place you pass through, and its layout matters |
 
@@ -60,6 +61,24 @@ finish, then write down:
 3. Anything you ignored completely.
 4. Whether you reached for Apex, and if not, why not.
 5. Whether you would open it again tomorrow unprompted.
+6. **When you reached for study material, did you open Systole or the ACCSAP
+   reader?** If the reader, say what it gave you that Systole did not. This is
+   the question the rest of the document missed: the competitor is an existing
+   habit, not a missing feature, and no amount of polish beats a habit that is
+   never interrupted.
+7. Whether the timed mock felt wanted today, or like something for the month
+   before the exam.
+
+### Battery, honestly
+
+An open question is what three live canvases on Home cost in battery. It cannot
+be answered from a container. An attempt on 27 Oct counted canvas and WebGL draw
+calls per second in headless Chromium and WebKit; a control that changed nothing
+between two runs moved the number as much as the condition under test did
+(84 → 88 draws/s), so the instrument could not see the effect and its readings
+were discarded rather than reported. The measurement that counts is the iPad's
+own battery figure across a real session, which the session above produces for
+free. Note the percentage before and after.
 
 Then look at Brain. It will hold real pick/confidence/pace data for the first
 time, which is worth more than any further design reasoning in this document.
