@@ -461,3 +461,10 @@ body.on-home .nav .icon-btn{color:var(--text);border-color:var(--border2);backgr
 body.on-home .score-pill{color:var(--text)}
 body.on-home .nav-brand{height:42px}
 body.on-home .nav-title{line-height:1.1}
+/* Short portrait windows need reading room even with the first-visit welcome.
+   Compact the illustration before sacrificing the pearl's readable area. */
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
+  #app[data-screen="home"] #homePage0 .home-wrap{grid-template-rows:200px minmax(0,1fr) auto auto}
+  #homePage0 .hero-live-status{bottom:14px}
+  #homePage0 .hero-mechanics{left:auto;right:22px}
+}

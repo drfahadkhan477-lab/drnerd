@@ -51,8 +51,9 @@ fixed and affected checks rerun. Raw reports remain outside Git.
 - Compare the original source image and final captures in one normalized
   visual review; decide whether further heart framing and visual refinement
   are wanted.
-- Rebuild with the owner's complete licensed library and validate the private
-  app and regenerated PWA. Synthetic checks do not establish private release
-  readiness.
+- The licensed library is now recovered and hash-verified. The initial full
+  run found a short-portrait pearl-reading defect; the hero has been compacted
+  to preserve reading room. The focused probe passes, but the full app and
+  regenerated PWA still need validation. See the private-checkpoint JSON.
 - Review CI results and the remaining affected theme/layout coverage before
   merging or deploying. Desktop WebKit does not constitute a physical iPad run.

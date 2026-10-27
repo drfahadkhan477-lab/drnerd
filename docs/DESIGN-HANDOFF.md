@@ -49,3 +49,13 @@ if ($LASTEXITCODE -ne 0) { throw "PWA build failed" }
 Consult `node scripts/verify.js --help` and the current suite registry before
 choosing validation options. Prepare reader assets before enabling offline test
 mode. Keep synthetic preview outputs separate from private release outputs.
+
+## Private validation checkpoint
+
+See `docs/validation/quiet-atlas-private-checkpoint.json` for the latest measured
+status. The licensed input archive has now been recovered and hash-verified.
+The initial full run was interrupted after reproducing a short-portrait reading
+failure. A layout correction is committed, but its focused probe is not a full
+suite pass. Rebuild the PWA and complete the listed validation gates before
+merging or deploying. Raw logs remain under the ignored
+`build/private-validation/atlas-release/` directory in the current workspace.
