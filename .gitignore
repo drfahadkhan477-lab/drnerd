@@ -78,3 +78,10 @@ node_modules/
 # studies belongs in the repository, whosever it is.
 dist-memorizer/
 memorizer/samples/
+
+# Session handoffs (.handoff/, context-handoff plugin). Written fresh each
+# session and regrown from the conversation, so nothing here is a source. It
+# is kept out of Git because it captures whatever the session was handling:
+# a handoff written during a run over the bank would carry question text into
+# a tracked file, which is the one thing scripts/leak-guard.js exists to stop.
+.handoff/
