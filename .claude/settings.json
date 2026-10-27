@@ -6,5 +6,31 @@
       "Bash(unzip:*)",
       "mcp__cloudflare__execute"
     ]
+  },
+  "enabledPlugins": {
+    "education-agent-skills@synced": false,
+    "ux-superpowers@synced": false,
+    "ghost-writer@synced": false,
+    "backend-design@synced": false,
+    "agentic-harness@synced": false,
+    "learning-framework@synced": false,
+    "design-skills@synced": false,
+    "superpowers@synced": false,
+    "review-council@synced": false,
+    "active-memory@synced": false,
+    "design@synced": false,
+    "agent-context-kit@synced": false,
+    "shepherd@synced": false,
+    "design-council@synced": false,
+    "cowork-plugin-management@synced": false,
+    "agent-army@synced": false,
+    "prompt-fixer@synced": false,
+    "context-handoff@synced": false,
+    "code-review-plugin@synced": false,
+    "claudemeter@synced": false,
+    "claude-code-setup@synced": false,
+    "claude-memory@synced": false,
+    "skill-creator@synced": false,
+    "pptx-deck@synced": false
   }
 }
