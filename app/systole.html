@@ -6814,13 +6814,23 @@ function pearlNow(){
    wavefront belong on one line, and a diagram stacked underneath reads as a
    second, unrelated thing. */
 /* As a note's figure: the caption is the image's alt, and the copy shown under it is hidden from a screen reader. */
+function pearlFigureKey(ev,figure){
+  if(ev.altKey||ev.ctrlKey||ev.metaKey) return;
+  if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();ev.stopImmediatePropagation();figure.click();return;}
+  if(figure.scrollHeight<=figure.clientHeight) return;
+  const next=ev.key==='Home'?0:ev.key==='End'?figure.scrollHeight:
+    ev.key==='ArrowDown'?figure.scrollTop+40:ev.key==='ArrowUp'?figure.scrollTop-40:
+    ev.key==='PageDown'?figure.scrollTop+figure.clientHeight:ev.key==='PageUp'?figure.scrollTop-figure.clientHeight:null;
+  if(next===null) return;
+  ev.preventDefault();ev.stopPropagation();figure.scrollTop=next;
+}
 function pearlFigure(p){
   if(!p||!p.figKey) return '';
   const src=(typeof refImgSrc==='function')?refImgSrc(p.figKey):'';
   if(!src) return '';
   const cap=(p.figCap||'').trim();
   return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
-    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();this.click()}"
+    onkeydown="pearlFigureKey(event,this)"
     title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')} Figure <i>${icon('expand','icon-sm')} Tap to enlarge</i></span>
     <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
