@@ -329,6 +329,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       fallback:getComputedStyle(document.querySelector('.h-beat')).animationPlayState};
   });
   ok('Pause stops Home canvases and the CSS heart with a Play name',covered(paused)&&paused.label==='Play animation'&&paused.fallback==='paused',JSON.stringify(paused));
+  await page.evaluate(()=>render());
+  await still('paused Home remounted');
+  await settled(page,()=>!document.getAnimations().some(a=>a.playState==='running'&&a.effect&&Number.isFinite(a.effect.getTiming().iterations)),{label:'Home entrance effects finished'});
+  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('.hero-h1')).opacity,
+    label:document.getElementById('atlasPause')?.getAttribute('aria-label')}));
+  ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play animation',JSON.stringify(pausedRemount));
   const resumed = await page.evaluate(async () => {
     document.getElementById('atlasPause')?.click();
     return {...await __homeWork(),label:document.getElementById('atlasPause')?.getAttribute('aria-label'),

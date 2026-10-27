@@ -7098,7 +7098,7 @@ function buildHome(){
   return `<div class="home-pages${atlasPaused?' atlas-paused':''}" id="homePages">
     <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
     <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
-    <div class="home-wrap anim-fade" data-home="${S.homeLayout}">
+    <div class="home-wrap anim-fade" data-home="${S.homeLayout}" data-pearl-empty="${!atlasPearl}">
     <div class="hero-live">
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
