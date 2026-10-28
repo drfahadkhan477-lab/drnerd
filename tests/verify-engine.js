@@ -333,9 +333,11 @@ head('the public-browser job exercises every engine without weakening the iPad g
   const job = jobBody(fs.readFileSync(path.join(ROOT, '.github/workflows/verify.yml'), 'utf8'), 'public-browser') || '';
   const entries = [...job.matchAll(/^\s*- engine: (\w+)\s*\n\s+label: (\w+)\s*$/gm)]
     .map(m => [m[1], m[2]]);
-  ok('Chromium, WebKit and Firefox keep their own named CI entries',
+  /* Firefox left CI to save a runner on every push; it stays an engine here
+     (ENGINES, "firefox is selectable" above), for a run by hand. */
+  ok('Chromium and WebKit keep their own named CI entries, and Firefox is not run there',
      JSON.stringify(entries) === JSON.stringify([
-       ['chromium', 'Chromium'], ['webkit', 'WebKit'], ['firefox', 'Firefox']
+       ['chromium', 'Chromium'], ['webkit', 'WebKit']
      ]), JSON.stringify(entries));
   ok('an engine failure cannot cancel the other engine runs', /fail-fast:\s*false\b/.test(job));
   ok('the matrix engine reaches the test helper',

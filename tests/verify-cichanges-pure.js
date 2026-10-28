@@ -136,12 +136,18 @@ head('the workflow is wired so a failed decision runs both');
   ok('and publishes both answers from that step',
      /public:\s*\$\{\{\s*steps\.which\.outputs\.public\s*\}\}/.test(ch) &&
      /synthetic:\s*\$\{\{\s*steps\.which\.outputs\.synthetic\s*\}\}/.test(ch) && /id:\s*which\b/.test(ch));
-  for (const [name, body, key] of [['public-browser', pub, 'public'], ['synthetic-browser', syn, 'synthetic'],
+  /* synthetic-build makes the one build the synthetic shards download, so it
+     is skipped on their answer, and they wait for it as well as for the
+     decision. */
+  for (const [name, body, key] of [['public-browser', pub, 'public'], ['synthetic-build', jobBody('synthetic-build'), 'synthetic'],
+                                    ['synthetic-browser', syn, 'synthetic'],
                                     ['synthetic-webkit', jobBody('synthetic-webkit'), 'synthetic'],
                                     ['split-build', jobBody('split-build'), 'synthetic']]) {
     const cond = (body.match(/\n    if:\s*(.+)/) || [])[1] || '';
     ok(`${name} is in the workflow`, body.length > 0);
-    ok(`${name} waits for the decision`, /\n    needs:\s*\[?\s*changes\s*\]?\s*\n/.test(body));
+    const needs = (body.match(/\n    needs:\s*(\[[^\]\n]*\]|[a-z0-9-]+)\s*\n/) || [])[1] || '';
+    const want = /^synthetic-(browser|webkit)$/.test(name) ? '[changes, synthetic-build]' : 'changes';
+    ok(`${name} waits for the decision${want === 'changes' ? '' : ' and for the build'}`, needs === want, needs || 'no needs');
     /* `!= 'false'`: an empty output, from a changes job that failed, runs the
        job. `== 'true'` would skip it. !cancelled(): without it a failed
        dependency skips this job outright. */

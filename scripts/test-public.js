@@ -22,8 +22,11 @@
  * THE LIST IS THE WORKFLOW'S, NOT A COPY OF IT. The suites are read from
  * .github/workflows/verify.yml: every `node tests/verify-*.js` step in the
  * `logic` job (pure), the `public-browser` job (browser), and the
- * `synthetic-browser` job, whose build commands (`node scripts/...` lines)
- * are run first and whose suites are each handed the target the step names.
+ * `synthetic-browser` job, whose suites are each handed the target the step
+ * names, after the build commands (`node scripts/...` lines) of the
+ * `synthetic-build` job that makes that target. synthetic-browser is a matrix
+ * of shards (scripts/shard.js), and every shard is the whole job body with
+ * each step run or skipped, so the body read here is the union of the shards.
  * A synthetic build that fails fails every suite waiting on it. Last come the
  * `split-build` job's commands, in order: they make the split build from the
  * synthetic one and check it through scripts/verify.js --pwa. So a suite
@@ -68,11 +71,14 @@ function jobBody(yml, job) {
 const invoked = body => [...(body || '').matchAll(/^\s*run:\s*node\s+tests\/(verify-[a-z0-9-]+)\.js\s*$/gm)].map(m => m[1]);
 
 /* The synthetic-browser job: the commands that build its target, in order,
-   and each suite with the target its step hands it. A job that is absent
-   gives none of either; verify-testpublic-pure holds the real workflow's
-   list to every suite it runs, so a renamed job cannot drop out unseen. */
-function syntheticJob(body) {
-  const build = [...(body || '').matchAll(/^\s+node\s+(scripts\/[a-z0-9-]+\.js)((?:[ \t]+\S+)*)[ \t]*$/gm)]
+   and each suite with the target its step hands it. The build is read from
+   the synthetic-build job, which makes it for the shards, and then from the
+   suites' own job, which made it before there were shards. A job that is
+   absent gives none of either; verify-testpublic-pure holds the real
+   workflow's list to every suite it runs, so a renamed job cannot drop out
+   unseen. */
+function syntheticJob(body, buildBody) {
+  const build = [...((buildBody || '') + '\n' + (body || '')).matchAll(/^\s+node\s+(scripts\/[a-z0-9-]+\.js)((?:[ \t]+\S+)*)[ \t]*$/gm)]
     .map(m => [m[1]].concat(m[2].trim().split(/\s+/).filter(Boolean)));
   const suites = [...(body || '').matchAll(/^\s*run:\s*node\s+tests\/(verify-[a-z0-9-]+)\.js\s+(\S+)\s*$/gm)]
     .map(m => ({ name: m[1], target: m[2] }));
@@ -94,7 +100,7 @@ function suitesFromWorkflow(yml) {
   const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'public-browser');
   if (logic === null || browser === null)
     throw new Error(`the workflow has no ${logic === null ? 'logic' : 'public-browser'} job — nothing to take the suite list from`);
-  return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser')),
+  return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser'), jobBody(yml, 'synthetic-build')),
            split: splitJob(jobBody(yml, 'split-build')) };
 }
 
@@ -280,7 +286,8 @@ A browser suite whose inputs are identical to an earlier pass is REUSED, not
 measured again, and the last line says how many. The cache is off when CI or
 SYSTOLE_NO_CACHE is set.
 
-Set SYSTOLE_ENGINE to chromium, webkit or firefox to choose the browser.
+Set SYSTOLE_ENGINE to chromium, webkit or firefox to choose the browser
+(CI runs chromium and webkit; firefox is for a run by hand).
 `);
     process.exit(0);
   }
