@@ -451,8 +451,28 @@ body.on-home .nav .icon-btn{color:var(--text);border-color:var(--border2);backgr
 @media(min-width:700px){
   .home-tabs{height:calc(100% - 36px);align-self:stretch}
   #homePage0 .pearl-main{flex:1 1 auto}
-  #app[data-screen="home"] #homePage0 .pearl-card .pearl-fig{max-width:none;width:100%;flex:0 0 145px;padding:8px 22px;box-sizing:border-box}
-  #homePage0 .pearl-card .pearl-fig img{max-height:90px;width:auto;object-fit:contain;padding:0;box-shadow:none}
+  /* 0 1, not 0 0. The figure used to claim 145px that it could not give back:
+     on an 11-inch iPad in portrait (744x1133) the card is 480px, the figure
+     took its 145, and .pearl-main's overflow:hidden left the pearl's own body
+     40px tall with 411px of it hidden — the card showed the words CORE IDEA
+     and no sentence. The figure now yields first, down to nothing, and
+     .pearl-bodywrap below keeps the floor. */
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-fig{max-width:none;width:100%;flex:0 1 145px;min-height:0;padding:8px 22px;box-sizing:border-box}
+  /* Four lines of the pearl survive any height the grid row hands the card.
+     Stated in em so the reading-size control moves the floor with the type. */
+  #app[data-screen="home"] #homePage0 .pearl-bodywrap{min-height:8em}
+  /* Set by pearlFit() when the band cannot hold the picture and its caption.
+     Hiding the whole band, not just the image: the padding and the top border
+     would otherwise stay behind as an empty strip under the pearl. */
+  #app[data-screen="home"] #homePage0 .pearl-card.pearl-nofig .pearl-fig{display:none}
+  /* The picture takes what the band has left after the label and the caption,
+     rather than a fixed 90px the band could then not hold: a caption that
+     wraps to two lines pushed the panel past its own box, and it was cut
+     13px short in landscape and 16px in portrait — through the caption's last
+     line, which is the half that says what the picture shows. A second row of
+     minmax(0,1fr) lets the image shrink; the caption keeps its own height. */
+  #homePage0 .pearl-card .pearl-fig{grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+  #homePage0 .pearl-card .pearl-fig img{max-height:100%;min-height:0;width:auto;object-fit:contain;padding:0;box-shadow:none}
   #homePage0 .pearl-card .pearl-fig figcaption{padding-top:4px}
 }
 

@@ -4302,6 +4302,15 @@ function bindChat(q){
 let lastHits=[], lastHitsKey=null;
 function fire(text){
   text=(text||'').trim(); if(!text||aiBusy||apexAway())return;
+  /* Empty the composer BEFORE buildAI(). buildAI() reads the panel through
+     apexPanelState() and writes it back through apexPanelRestore(), so a draft
+     survives a rebuild that happens mid-typing — which is right, and is also
+     why the question you had just sent came back into the box and sat there
+     under the next one. Only when the composer holds exactly what is going:
+     a chip fires its own text, and a half-typed draft beside it is not ours
+     to throw away. */
+  const ta=document.getElementById('aiIn');
+  if(ta && ta.value.trim()===text){ ta.value=''; ta.style.height='auto'; }
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=apexTrim(chatFor(q));
   hist.push({role:'user',content:text});
@@ -6596,6 +6605,22 @@ function pearlFit(){
      the canvas stops where the prose column does (--pc-foot, the band's height; 0 side by side). */
   const main=card.querySelector('.pearl-main');
   if(main) card.style.setProperty('--pc-foot',Math.max(0,card.clientHeight-main.offsetTop-main.offsetHeight)+'px');
+  /* Both or neither. On an 11-inch iPad in portrait the card is 480px, and
+     once the pearl keeps its four readable lines there is no longer room for
+     a picture AND its caption: the band came up 13px short, cut through the
+     caption's last line — the half that says what the picture shows, while
+     Read note still carries all of it. So: if the figure would be cut, it is
+     not drawn. No height to tune, which is the point; an earlier pass here
+     used 560px and hid the figure on a 540px card where it fitted perfectly
+     well. Measured while the figure is SHOWN, so the class cannot feed back
+     into the measurement that sets it, and only where contain:size fixes the
+     card's height from the grid row — under 700px the card is sized by its
+     own content and this would be a ResizeObserver loop. */
+  const fig=document.getElementById('pearlFig');
+  if(fig&&matchMedia('(min-width:700px)').matches&&!card.classList.contains('pearl-all')){
+    card.classList.remove('pearl-nofig');
+    card.classList.toggle('pearl-nofig',fig.scrollHeight-fig.clientHeight>1);
+  }
   /* Measured as if the button were not there: it takes its own height from the column, so a pearl that fits without it
      runs past the card with it, and once shown (while the steps rise in, everything runs past) it would stay for good,
      offering a sliver. */
