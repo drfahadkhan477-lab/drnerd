@@ -1036,6 +1036,10 @@ fs.mkdirSync(path.join(DIST, 'icons'), { recursive: true });
    deploy?", which neither digest answers alone. Taken over the UNSTAMPED bytes,
    because stamping changes them; deterministic either way, since the
    placeholder is a constant. */
+/* The scanned heart ships beside the app (copied to heart-scan/ below); this
+   is how the app learns it is there. Before the digest, so the build id
+   covers it. */
+appCode = "window.HEART_SCAN_BASE='heart-scan/';\n" + appCode;
 const shellDigest = crypto.createHash('sha256')
   .update(html).update(appCode).digest('hex').slice(0, 16);
 const BUILD_ID = crypto.createHash('sha256')
@@ -1173,6 +1177,15 @@ fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'perfect-freehand', 'LICENSE')
 const echoDir = path.join(DIST, 'echo');
 fs.mkdirSync(echoDir, { recursive: true });
 for (const [name, bytes] of echoAssets) fs.writeFileSync(path.join(echoDir, name), bytes);
+
+/* The scanned heart (assets/heart-scan, CC BY 4.0, credit in its manifest)
+   ships as files beside the app and is fetched after the first paint, so it
+   costs the shell nothing; HEART_SCAN_BASE tells the app it is here. */
+/* The same five the service worker keeps (NICE_TO_HAVE, written out there because its template is read as text). */
+const SCAN_FILES = ['heart-scan.json', 'heart-scan.bin', 'base.webp', 'normal.webp', 'mr.webp'];
+const scanDir = path.join(DIST, 'heart-scan');
+fs.mkdirSync(scanDir, { recursive: true });
+for (const n of SCAN_FILES) fs.copyFileSync(path.join(ROOT, 'assets', 'heart-scan', n), path.join(scanDir, n));
 
 const splashDir = path.join(DIST, 'content', 'splash-heart');
 fs.mkdirSync(splashDir, { recursive: true });
@@ -1351,7 +1364,8 @@ const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.s
    nobody asked for. */
 const isContent = u => u.indexOf('content/') === 0 || u.indexOf('/content/') > -1;
 const NICE_TO_HAVE = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
-                      ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)}];
+                      ${JSON.stringify(fontAssets.map(([n]) => 'fonts/' + n)).slice(1, -1)},
+                      'heart-scan/heart-scan.json', 'heart-scan/heart-scan.bin', 'heart-scan/base.webp', 'heart-scan/normal.webp', 'heart-scan/mr.webp'];
 
 /* INSTALL CHECKS WHAT IT IS STORING, because addAll does not. The note further
    down about authenticating proxies — Access answering 200 OK with a sign-in
