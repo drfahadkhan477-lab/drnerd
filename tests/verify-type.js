@@ -84,7 +84,7 @@ const LADDER = [9, 11, 13, 16, 19, 23, 28, 33, 40, 48, 58];
     });
     await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
     await booted(page, { timeout: 150000 });
-    await page.evaluate(() => startQuiz(null));
+    await page.evaluate(() => (S.resume = {}, startQuiz)(null));
     /* WAS a fixed 900ms sleep. startQuiz sets S.screen='quiz' and calls
        render(), which on a screen change hands the DOM swap to
        startViewTransition — the same async gap AGENTS.md names as a cause

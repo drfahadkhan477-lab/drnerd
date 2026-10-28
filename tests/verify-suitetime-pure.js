@@ -262,10 +262,10 @@ head('the split build alone');
       '    steps:',
       '      - name: a (1 checks)',
       '        run: node tests/verify-alpha-pure.js',
-      '  memorizer-browser:',
+      '  public-browser:',
       '    steps:',
       '      - name: b (1 checks)',
-      '        run: node tests/verify-memorizer-beta.js',
+      '        run: node tests/verify-beta.js',
       '  synthetic-browser:',
       '    steps:',
       '      - name: c (1 checks)',
@@ -276,8 +276,8 @@ head('the split build alone');
       '',
     ].join('\n');
     const set = ciSuites(fixture);
-    ok('ciSuites() takes the logic, Memorizer and synthetic jobs, by registry name',
-       ['alpha-pure', 'memorizer-beta', 'gamma'].every(n => set.has(n)), [...set].join(','));
+    ok('ciSuites() takes the logic, public-browser and synthetic jobs, by registry name',
+       ['alpha-pure', 'beta', 'gamma'].every(n => set.has(n)), [...set].join(','));
     ok('and not the full job, which runs only on a machine with the export', !set.has('delta'));
 
     /* Against the real registry and workflow, with a different instrument: a

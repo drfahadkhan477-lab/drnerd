@@ -1,3 +1,9 @@
+/* KEPT FOR scripts/build-bank.js, which reads study files with this parser.
+   Memorizer's own file, moved here unchanged below this note when Memorizer
+   moved to its own repository (drfahadkhan477-lab/Memorizer, copied from this
+   one at 396a465). Its references to Memorizer's other modules and suites
+   name that repository's files. A change to the study-file format belongs
+   there first; bring it here with this note kept. */
 /* ═══════════════════════════════════════════════════════════════════════════
    studyImport.js — a study file (.md written by Claude, or a saved .html page)
    made into a unit.

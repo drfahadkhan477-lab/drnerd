@@ -34,8 +34,9 @@
  *   1. PATH      anything under content/, build/, dist/ or source/, plus
  *                tests/last-run.log, whose output quotes question text, plus
  *                graphify-out/, which is not the corpus but is built from it,
- *                plus memorizer/samples/, where the chapters Memorizer is
- *                tried on are kept.
+ *                plus memorizer/samples/, where the chapters Memorizer was
+ *                tried on were kept, and may still be in a checkout from
+ *                before Memorizer moved to its own repository.
  *   1b. LOG      the same log SAVED UNDER ANOTHER NAME, recognised by the
  *                header scripts/verify.js writes rather than by its filename.
  *                `verify.js > 1.txt` produces identical content and rule 1
@@ -140,9 +141,11 @@ const DIRS  = ['content/', 'build/', 'dist/', 'source/'];
 const DERIVED = ['graphify-out/'];
 const FILES = ['tests/last-run.log'];
 /* RULE 1, THIRD HALF: NOT THE CORPUS, AND STILL NOT OURS. memorizer/samples/
-   is gitignored as the place to keep the PDFs Memorizer is tried on — a
-   chapter of somebody's book. Kept apart from DIRS so the refusal says that,
-   not "licensed content". */
+   was the gitignored place to keep the PDFs Memorizer was tried on — a
+   chapter of somebody's book. Memorizer has moved to its own repository, but
+   git leaves ignored files where they are, so a checkout from before the move
+   can still hold them: the path stays refused, and stays in .gitignore. Kept
+   apart from DIRS so the refusal says that, not "licensed content". */
 const OWN = ['memorizer/samples/'];
 /* RULE 1b, AND IT IS HERE BECAUSE OF A FILE CALLED tests/1.txt.
  *
@@ -166,9 +169,10 @@ const OWN = ['memorizer/samples/'];
 const LOGHEAD = /^#\s*systole verify\s+—/;
 /* RULE 6: THE OWNER'S TEXTBOOK, BY WAY OF MEMORIZER.
  *
- * memorizer/src/pack.js writes a prompt that carries a chapter of the
- * owner's book, page by page, for them to paste into their own Claude chat,
- * and imports the JSON pack Claude writes back. Both live on the device
+ * Memorizer's pack.js (in its own repository since it moved out of this one)
+ * writes a prompt that carries a chapter of the owner's book, page by page,
+ * for them to paste into their own Claude chat, and imports the JSON pack
+ * Claude writes back. Both live on the device
  * (IndexedDB) and the app never writes either to disk. But a reply saved to
  * a file to paste in later, or a prompt kept for next time, is the book in a
  * file, in a public repository — and like a verify log, it is small enough
@@ -176,8 +180,8 @@ const LOGHEAD = /^#\s*systole verify\s+—/;
  *
  * So it is recognised by what it says: the pack's format marker AS JSON
  * WRITES IT, with the key quoted — which the prompt carries too, in the
- * shape it asks Claude for. The source files that name the format, pack.js
- * and its tests, build it as a JavaScript string and do not contain it.
+ * shape it asks Claude for. The source files that name the format build it
+ * as a JavaScript string and do not contain it.
  * (A second test, for the prompt's first line, was written and taken out:
  * with it removed the suite stayed green, because every prompt already
  * carries the marker. It measured nothing this one does not.) */

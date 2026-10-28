@@ -247,7 +247,7 @@ head('the shared comment blanker blanks comments, and only comments');
       if (e.isDirectory()) walk(p); else if (e.name.endsWith('.js')) corpus.push(p);
     }
   };
-  ['tests', 'scripts', 'tools', 'src', 'memorizer/src', 'memorizer/tools']
+  ['tests', 'scripts', 'tools', 'src']
     .forEach(d => walk(path.join(ROOT, d)));
   const compiles = code => {
     try { vm.compileFunction(code.replace(/^#!.*/, ''), ['exports', 'require', 'module', '__filename', '__dirname']); return true; }
@@ -327,15 +327,17 @@ head('the runner can actually be told which engine to use');
      /ENGINES\.includes\(ENGINE\)/.test(v));
 }
 
-head('Memorizer CI exercises every engine without weakening the iPad gate');
+head('the public-browser job exercises every engine without weakening the iPad gate');
 {
   const { jobBody } = require('../scripts/test-public.js');
-  const job = jobBody(fs.readFileSync(path.join(ROOT, '.github/workflows/verify.yml'), 'utf8'), 'memorizer-browser') || '';
+  const job = jobBody(fs.readFileSync(path.join(ROOT, '.github/workflows/verify.yml'), 'utf8'), 'public-browser') || '';
   const entries = [...job.matchAll(/^\s*- engine: (\w+)\s*\n\s+label: (\w+)\s*$/gm)]
     .map(m => [m[1], m[2]]);
-  ok('Chromium, WebKit and Firefox keep their own named CI entries',
+  /* Firefox left CI to save a runner on every push; it stays an engine here
+     (ENGINES, "firefox is selectable" above), for a run by hand. */
+  ok('Chromium and WebKit keep their own named CI entries, and Firefox is not run there',
      JSON.stringify(entries) === JSON.stringify([
-       ['chromium', 'Chromium'], ['webkit', 'WebKit'], ['firefox', 'Firefox']
+       ['chromium', 'Chromium'], ['webkit', 'WebKit']
      ]), JSON.stringify(entries));
   ok('an engine failure cannot cancel the other engine runs', /fail-fast:\s*false\b/.test(job));
   ok('the matrix engine reaches the test helper',
@@ -343,7 +345,7 @@ head('Memorizer CI exercises every engine without weakening the iPad gate');
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).devDependencies.playwright;
   const image = (job.match(/^\s*image:\s*(\S+)/m) || [])[1] || '';
   const at = job.indexOf('- name: verify the preinstalled pinned browser can render');
-  const end = job.indexOf('- name: prepare the pinned public reader libraries', at);
+  const end = job.indexOf('\n      - ', at + 1);
   const probe = at >= 0 && end > at ? blankComments(job.slice(at, end)) : '';
   // An installed image is not proof a browser can run. Keep the matching
   // package version and immutable digest, plus an actual shared-engine render

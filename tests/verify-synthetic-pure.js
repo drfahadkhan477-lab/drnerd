@@ -175,7 +175,7 @@ try {
     ok('the built app carries the mark', Syn.isSyntheticBuild(file));
     ok('and a build without it is not taken for synthetic', !Syn.isSyntheticBuild(unmarked));
     ok('nor is a file that is not there', !Syn.isSyntheticBuild(path.join(TMP, 'absent.html')));
-    const said = f => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), f, '--only', 'study-file-check'],
+    const said = f => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), f, '--only', 'record-pure'],
                                 { cwd: ROOT, encoding: 'utf8' }).stdout || '';
     ok('verify.js says it will not write the record for the marked build', /synthetic build: tests\/test-stats\.json will not be written/.test(said(file)));
     ok('and does not say so for the unmarked one', !/synthetic build/.test(said(unmarked)));

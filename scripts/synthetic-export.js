@@ -172,6 +172,38 @@ function isSyntheticBuild(file) {
   try { return fs.readFileSync(file, 'utf8').includes(MARK); } catch (_) { return false; }
 }
 
+/* shapedNotes(ch, p, images) — three long notes per chapter in the SHAPE of
+   the owner's library, every word invented. The short notes above are what
+   the suites were written against; these exist so that layout, the pearl
+   engine and its headings meet, in public CI, what the real notes are like:
+   measured over the licensed library (numbers only, 28 October 2026), a note
+   runs to ~1400 characters (p90 ~2300), a paragraph to ~260 (p90 ~820), a
+   sentence to ~125 (p95 ~330), with ~4 bold terms and ~12 abbreviations a
+   note, a figure in more than half, the odd reference number left after a
+   full stop, a heading in lower case, and a clause that goes on ", or in
+   whom…". Deterministic: the same text on every run. */
+function shapedNotes(ch, p, images) {
+  const t = k => TOPICS[(p.charCodeAt(0) + k) % TOPICS.length];
+  const ac = `SYN-${p}`, trial = `INVENTA-${p.charCodeAt(1) % 9 + 1}`;
+  const heads = [`Invented ${t(1)} strategy in ${ac}`, `the invented ${t(2)} window`, `Outrank, unusual`];
+  let md = '';
+  heads.forEach((h, i) => {
+    const key = `synthetic-${p.toLowerCase()}-shape-${i + 1}.png`;
+    md += `\n## ${h}\n\n`
+      + `In patients with **invented ${t(i)} syndrome** and ${ac}, the invented early strategy reduced the invented composite end point at 30 days in ${trial}, but at 5 years the benefit of an early invasive strategy over a selective approach was no longer apparent, in part because of crossover to the invented procedure in the latter group.17 `
+      + `Thus an invasive strategy is recommended in patients with ${ac} who have an invented marker rise on admission, or in whom these invented high-risk features develop over the subsequent 24 hours, provided the invented anatomy is suitable and no contraindication applies.\n\n`
+      + `**Invented agent ${p}${i + 7}** should be started at 2.5 mg twice daily and titrated every 2 weeks to the invented target of 10 mg, whereas **invented agent ${p}${i + 8}** should be avoided in ${ac} with an invented ejection fraction below 40%, because the invented ${t(i + 1)} response is blunted and the invented pressure falls further. `
+      + `The invented ${t(i + 2)} score (IVS) and the invented ${t(i + 3)} index (IVI) were compared in ${trial}; neither predicted the invented outcome as well as the invented biomarker measured twice, 6 hours apart, and the second reading decided the invented course of action. `
+      + `Where the invented marker is unavailable, the invented echocardiographic gradient above 40 mmHg is the accepted surrogate, but it overestimates the invented severity in low-flow states and should be confirmed with an invented stress study before any invented procedure is offered.\n\n`
+      + `![Invented ${t(i)} gradient across the synthetic ${ch} valve, measured twice ${p}-S${i + 1}](refimg://${key})\n\n`
+      + `- invented bullet: the ${ac} threshold is lower in the invented elderly\n`
+      + `- invented bullet: the ${trial} result did not extend to the invented subgroup\n\n`
+      + `This closing paragraph is synthetic filler for the ${ch} library, long enough that the note sits in the same range of lengths the real notes do, and carries nothing a reader should learn.\n`;
+    images.push([key, figurePng(2000 + images.length)]);
+  });
+  return md;
+}
+
 /* syntheticRefs(perChapter) → { files: [[name, text]], images: [[key, Buffer]] }
    One file per chapter, perChapter notes in each, every one of them over the
    forty-word floor ref-seed.js enforces. */
@@ -188,6 +220,7 @@ function syntheticRefs(perChapter = 10) {
          + `\nThis paragraph is filler for the synthetic ${ch} library, written so the section clears the forty-word floor every seeded note is held to.\n`;
       images.push([key, figurePng(1000 + images.length)]);
     }
+    md += shapedNotes(ch, p, images);
     files.push([`synthetic-${p.toLowerCase()}.md`, md]);
   }
   return { files, images };

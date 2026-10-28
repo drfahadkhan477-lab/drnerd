@@ -50,6 +50,20 @@ ok('the commands that build their target are found, and each script exists',
    synthetic.build.map(c => c[0]).join(', '));
 ok('and the last of them writes the target the suites read',
    synthetic.build.length > 0 && synthetic.suites.every(x => synthetic.build[synthetic.build.length - 1].includes(x.target)));
+/* The synthetic jobs are matrices of shards that download one build. npm test
+   reads the build from the job that makes it, and the suites from the whole
+   job body, which is every shard's list at once (scripts/shard.js). */
+{
+  const { jobBody } = require('../scripts/test-public.js');
+  const { shardOf } = require('../scripts/shard.js');
+  const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
+  const cmds = b => [...(b || '').matchAll(/^\s+node\s+scripts\/(synthetic-export|assemble-app)\.js/gm)].length;
+  ok('the build commands are the synthetic-build job\u2019s, and neither sharded job builds again',
+     cmds(jobBody(yml, 'synthetic-build')) === 2 && cmds(jobBody(yml, 'synthetic-browser')) === 0 && cmds(jobBody(yml, 'synthetic-webkit')) === 0);
+  const union = [1, 2, 3, 4].flatMap(i => shardOf(yml, stats, 'synthetic-browser', i, 4));
+  ok('and the suites npm test runs are the union of synthetic-browser\u2019s shards, not one of them',
+     synNames.length > 30 && JSON.stringify(union.slice().sort()) === JSON.stringify(synNames.slice().sort()), `${union.length} in the shards, ${synNames.length} read`);
+}
 ok('together they are every suite the workflow runs, each once',
    JSON.stringify(pure.concat(browser, synNames).sort()) === JSON.stringify(all.slice().sort()), `${pure.length + browser.length + synNames.length} of ${all.length}`);
 /* The split-build job names no suite, so the check above cannot see it: its
@@ -91,7 +105,7 @@ const SPLIT = cmds => !cmds ? '' : `  split-build:\n    steps:\n      - name: ma
   `      - name: check it\n        run: node ${cmds[cmds.length - 1].join(' ')}\n`;
 const Y = (logic, browserJob, after, syn, split) =>
   `jobs:\n  logic:\n    steps:\n${logic.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js\n`).join('')}` +
-  `  memorizer-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
+  `  public-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
   SYN(syn) + SPLIT(split) + (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
 {
   const s = suitesFromWorkflow(Y(['verify-a', 'verify-b'], ['verify-c'], 'verify-z'));
@@ -102,7 +116,7 @@ const Y = (logic, browserJob, after, syn, split) =>
      JSON.stringify(p.split) === JSON.stringify(cmds), JSON.stringify(p.split));
   let msg = '';
   try { suitesFromWorkflow('jobs:\n  logic:\n    steps: []\n'); } catch (e) { msg = e.message; }
-  ok('a workflow without the browser job is refused, not read as zero browser suites', /no memorizer-browser job/.test(msg), msg || 'accepted');
+  ok('a workflow without the browser job is refused, not read as zero browser suites', /no public-browser job/.test(msg), msg || 'accepted');
 }
 
 head('running them');

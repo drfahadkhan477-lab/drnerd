@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * The counts record, in two halves: scripts/record.js decides which half a run
- * earned, and keeps the other half as it was.
+ * The counts record: scripts/record.js decides whether a run earned a write,
+ * and what the write keeps.
  *
  *   node tests/verify-record-pure.js
  *
- * The rule it holds: a family (Systole, or the Memorizer) is written only when
- * every one of its registered suites ran in this run and passed — 'stats'
- * excepted, since it fails exactly when the record is stale. A half the run
- * did not earn keeps its previous counts. The split-build figure moves only
- * with Systole. A suite no longer registered leaves the record. Totals add
- * both halves.
+ * The rule it holds: the record is written only when every registered suite
+ * ran in this run and passed — 'stats' excepted, since it fails exactly when
+ * the record is stale. Any other run writes nothing. A suite no longer
+ * registered leaves the record, and so does the Memorizer's half of the
+ * record from before Memorizer moved to its own repository. The split-build
+ * figure is carried forward from a run without --pwa.
  *
  * Fixtures are invented names and numbers; nothing here reads the real record.
  */
-const { familyOf, mergeRecord } = require('../scripts/record.js');
+const { mergeRecord } = require('../scripts/record.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -24,85 +24,70 @@ const ok = (label, cond, detail = '') => {
 };
 const head = t => console.log('\n── ' + t + ' ──');
 
-const REG = ['home', 'stats', 'memory', 'memorizer', 'memorizer-data', 'memorizer-chunk-pure'];
+const REG = ['home', 'stats', 'memory', 'lab'];
+/* A record in the shape the two-half writer left it: a Memorizer half, a
+   suite since deleted, and provenance per family. */
 const PREV = {
   engine: 'chromium', jobs: 1, pwa: 134,
   families: { systole: { commit: 'old-s', jobs: 1 }, memorizer: { commit: 'old-m', jobs: 1 } },
-  suites: { home: 10, stats: 5, memory: 7, memorizer: 20, 'memorizer-data': 8, 'memorizer-chunk-pure': 30, gone: 99 },
-  seconds: { home: 1, stats: 1, memory: 1, memorizer: 9, 'memorizer-data': 2, 'memorizer-chunk-pure': 1, gone: 3 },
+  suites: { home: 10, stats: 5, memory: 7, lab: 3, memorizer: 20, 'memorizer-data': 8, gone: 99 },
+  seconds: { home: 1, stats: 1, memory: 1, lab: 1, memorizer: 9, 'memorizer-data': 2, gone: 3 },
 };
+const CHECKS = { home: 11, stats: 6, memory: 8, lab: 4 };
 const run = (over = {}, drop = []) => REG.filter(n => !drop.includes(n)).map(n => Object.assign(
-  { name: n, ok: true, checks: { home: 11, stats: 6, memory: 8, memorizer: 21, 'memorizer-data': 9, 'memorizer-chunk-pure': 31 }[n], secs: '4.0' },
-  over[n] || {}));
+  { name: n, ok: true, checks: CHECKS[n], secs: '4.0' }, over[n] || {}));
 const opts = { engine: 'chromium', jobs: 4, commit: 'master @ new' };
 
-head('which family a suite belongs to');
-ok('memorizer and memorizer-* are the Memorizer', ['memorizer', 'memorizer-data', 'memorizer-chunk-pure'].every(n => familyOf(n) === 'memorizer'));
-ok('memory (Systole’s own screen) is Systole, not the Memorizer', familyOf('memory') === 'systole');
-ok('lab and stats are Systole', familyOf('lab') === 'systole' && familyOf('stats') === 'systole');
-
-head('Systole green, the Memorizer failing: Systole is written, the Memorizer kept');
+head('a green run writes the record');
 {
-  const out = mergeRecord(PREV, run({ memorizer: { ok: false } }), REG, Object.assign({ pwaCount: 140 }, opts));
-  ok('a record comes back', !!out);
-  if (out) {
-    const r = out.record;
-    ok('only systole was written', out.written.join() === 'systole', out.written.join());
-    ok('the memorizer half is reported as kept', out.kept.join() === 'memorizer', out.kept.join());
-    ok('Systole counts are this run’s', r.suites.home === 11 && r.suites.memory === 8 && r.suites.stats === 6, JSON.stringify(r.suites));
-    ok('Memorizer counts are the previous record’s, the failing suite included',
-       r.suites.memorizer === 20 && r.suites['memorizer-data'] === 8 && r.suites['memorizer-chunk-pure'] === 30, JSON.stringify(r.suites));
-    ok('the split-build count moves with Systole', r.pwa === 140, String(r.pwa));
-    ok('systole provenance is this run', r.families.systole.commit === 'master @ new' && r.families.systole.jobs === 4);
-    ok('memorizer provenance is still the old run', r.families.memorizer.commit === 'old-m');
-    ok('memorizer seconds are kept, systole seconds replaced', r.seconds.memorizer === 9 && r.seconds.home === 4);
-  }
+  const out = mergeRecord(PREV, run(), REG, Object.assign({ pwaCount: 140 }, opts));
+  ok('a record comes back', !!(out && out.record));
+  const r = (out && out.record) || { suites: {}, seconds: {} };
+  ok('every count is this run’s', r.suites.home === 11 && r.suites.stats === 6 && r.suites.memory === 8 && r.suites.lab === 4, JSON.stringify(r.suites));
+  ok('the split-build count is this run’s', r.pwa === 140, String(r.pwa));
+  ok('provenance is this run', r.commit === 'master @ new' && r.jobs === 4 && r.engine === 'chromium', `${r.commit} ${r.jobs} ${r.engine}`);
+  ok('seconds are this run’s', r.seconds.home === 4 && r.seconds.lab === 4, JSON.stringify(r.seconds));
 }
 
-head('the Memorizer green, Systole not: the reverse');
+head('what is no longer registered leaves the record');
 {
-  const out = mergeRecord(PREV, run({ home: { ok: false } }), REG, Object.assign({ pwaCount: 140 }, opts));
-  ok('only memorizer was written', out && out.written.join() === 'memorizer', out && out.written.join());
-  ok('Systole counts kept', out && out.record.suites.home === 10 && out.record.suites.memory === 7);
-  ok('Memorizer counts are this run’s', out && out.record.suites.memorizer === 21);
-  ok('the split-build count does NOT move without Systole', out && out.record.pwa === 134, out && String(out.record.pwa));
+  const r = mergeRecord(PREV, run(), REG, opts).record;
+  ok('a deleted suite is dropped from counts and seconds', !('gone' in r.suites) && !('gone' in r.seconds));
+  ok('so are the Memorizer’s suites, which left with it', !('memorizer' in r.suites) && !('memorizer-data' in r.suites) && !('memorizer' in r.seconds),
+     Object.keys(r.suites).join());
+  ok('and the half that held them: no per-family provenance is carried forward', !('families' in r), JSON.stringify(r.families));
+  ok('suites are in registry order', Object.keys(r.suites).join() === REG.join(), Object.keys(r.suites).join());
 }
 
-head('a half covered only partly is not written');
+head('any run short of every suite green writes nothing');
 {
-  const skipped = mergeRecord(PREV, run({}, ['memory']), REG, opts);
-  ok('a skipped Systole suite keeps Systole from being written', skipped && !skipped.written.includes('systole'), skipped && skipped.written.join());
-  ok('...and its old counts stand', skipped && skipped.record.suites.home === 10);
-  const memSkip = mergeRecord(PREV, run({}, ['memorizer', 'memorizer-data']), REG, opts);
-  ok('skipping Memorizer browser suites still writes Systole (the --skip memorizer,… run)',
-     memSkip && memSkip.written.join() === 'systole', memSkip && memSkip.written.join());
-  const zero = mergeRecord(PREV, run({ memory: { checks: 0 } }), REG, opts);
-  ok('a suite that ran no checks does not count as covering its family', zero && !zero.written.includes('systole'));
-  ok('nothing earned: null, and the caller leaves the file alone',
-     mergeRecord(PREV, run({ home: { ok: false }, memorizer: { ok: false } }), REG, opts) === null);
+  ok('a failing suite: null, and the caller leaves the file alone', mergeRecord(PREV, run({ memory: { ok: false } }), REG, opts) === null);
+  ok('a skipped suite: null', mergeRecord(PREV, run({}, ['lab']), REG, opts) === null);
+  ok('a suite that ran no checks does not count as having run', mergeRecord(PREV, run({ lab: { checks: 0 } }), REG, opts) === null);
+  ok('a suite that reported no count at all does not either', mergeRecord(PREV, run({ lab: { checks: undefined } }), REG, opts) === null);
+  ok('an empty registry earns nothing', mergeRecord(PREV, [], [], opts) === null);
+  ok('a result for a suite not registered does not stand in for one that is',
+     mergeRecord(PREV, run({}, ['lab']).concat([{ name: 'memorizer', ok: true, checks: 21, secs: '1' }]), REG, opts) === null);
 }
 
-head('stats failing is the record being stale, not Systole failing');
+head('stats failing is the record being stale, not the run failing');
 {
   const out = mergeRecord(PREV, run({ stats: { ok: false } }), REG, opts);
-  ok('systole is still written when only stats failed', out && out.written.includes('systole'), out && out.written.join());
-  ok('...with stats’ executed count', out && out.record.suites.stats === 6);
+  ok('the record is still written when only stats failed', !!out);
+  ok('...with stats’ executed count', !!out && out.record.suites.stats === 6);
+  ok('but not when another suite failed beside it', mergeRecord(PREV, run({ stats: { ok: false }, home: { ok: false } }), REG, opts) === null);
 }
 
 head('the totals and the record’s shape');
 {
-  const out = mergeRecord(PREV, run({ memorizer: { ok: false } }), REG, opts);
-  const r = out.record;
+  const r = mergeRecord(PREV, run(), REG, opts).record;
   const sum = Object.values(r.suites).reduce((a, b) => a + b, 0);
-  ok('total is the sum over both halves', r.total === sum && r.total === 11 + 6 + 8 + 20 + 8 + 30, `${r.total} vs ${sum}`);
-  ok('suiteCount is the number of recorded suites', r.suiteCount === Object.keys(r.suites).length);
-  ok('a suite no longer registered is dropped from counts and seconds', !('gone' in r.suites) && !('gone' in r.seconds));
-  ok('suites are in registry order', Object.keys(r.suites).join() === REG.join(), Object.keys(r.suites).join());
+  ok('total is the sum of the counts', r.total === sum && r.total === 11 + 6 + 8 + 4, `${r.total} vs ${sum}`);
+  ok('suiteCount is the number of recorded suites', r.suiteCount === Object.keys(r.suites).length && r.suiteCount === 4, String(r.suiteCount));
   ok('pwa carried forward when this run did not measure it', r.pwa === 134, String(r.pwa));
-  ok('the input record is not mutated', PREV.suites.home === 10 && PREV.families.systole.commit === 'old-s');
-  const fresh = mergeRecord({}, run({ memorizer: { ok: false } }), REG, opts);
-  ok('from no previous record, the unearned half is simply absent', fresh && !('memorizer' in fresh.record.suites) && fresh.record.pwa === null);
-  ok('suiteCount counts what is recorded, not what is registered', fresh && fresh.record.suiteCount === 3, fresh && String(fresh.record.suiteCount));
+  ok('the input record is not mutated', PREV.suites.home === 10 && PREV.suites.memorizer === 20 && PREV.families.memorizer.commit === 'old-m');
+  const fresh = mergeRecord({}, run(), REG, opts);
+  ok('from no previous record, an unmeasured split build is null, not invented', !!fresh && fresh.record.pwa === null, fresh && String(fresh.record.pwa));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

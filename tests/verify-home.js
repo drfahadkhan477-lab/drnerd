@@ -484,16 +484,23 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        !!port.col && port.col.w === port.vw - 128, port.col ? `${port.col.w}px` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
-       vignette is readable; widening the home screen must not widen a stem. */
+       vignette is readable; widening the home screen must not widen a stem.
+       The stem's column is the reader's own width setting (Wide by default),
+       never Home's full width. */
     await resized(page, 1366, 1024);
     const quiz = await page.evaluate(() => {
       const q = ALL_Q.find(x => !x.bad);
       jumpTo(q.id); render();
       const app = document.getElementById('app');
-      return { w: Math.round(app.getBoundingClientRect().width), screen: app.dataset.screen };
+      const w = () => Math.round(app.getBoundingClientRect().width);
+      const wide = w();
+      setReadWidth(1); const medium = w(); setReadWidth(2);
+      return { wide, medium, screen: app.dataset.screen };
     });
-    ok('a question stem keeps its reading measure on the same wide screen',
-       quiz.screen === 'quiz' && quiz.w <= 980, `${quiz.w}px on ${quiz.screen}`);
+    ok('a question stem keeps the Wide reading measure on the same wide screen, not Home\'s width',
+       quiz.screen === 'quiz' && quiz.wide <= 1200, `${quiz.wide}px on ${quiz.screen}`);
+    ok('and the Medium setting gives it the narrower measure',
+       quiz.screen === 'quiz' && quiz.medium <= 980, `${quiz.medium}px on ${quiz.screen}`);
     await page.evaluate(() => { goHome(); render(); });
   }
 

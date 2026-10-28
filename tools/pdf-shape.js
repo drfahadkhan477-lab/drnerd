@@ -37,7 +37,7 @@
  * WHAT IT NEVER PRINTS: any of the PDF's text. The kinds come from fixed
  * patterns and a fixed list of headings defined here; lengths are numbers.
  *
- * pdf.js is the version Memorizer pins (memorizer/src/pdf.js), checked
+ * pdf.js is the version tools/pdfjs-pin.js pins, checked
  * against the same integrity hashes, run in the browser the test suites use.
  */
 const fs = require('fs');
@@ -51,10 +51,7 @@ const SKELETON_PAGES = pi > -1 ? Math.max(1, +args[pi + 1] || 4) : 4;
 const files = args.filter((a, i) => !a.startsWith('--') && !(pi > -1 && i === pi + 1));
 if (!files.length) { console.error('usage: node tools/pdf-shape.js <file.pdf> [more.pdf …] [--pages N]'); process.exit(1); }
 
-const PDFSRC = fs.readFileSync(path.join(__dirname, '..', 'memorizer', 'src', 'pdf.js'), 'utf8');
-const BASE = /var BASE = '([^']+)'/.exec(PDFSRC)[1];
-const LIB = { url: BASE + 'pdf.min.js', sri: /var LIB = \{[^}]*sri: '([^']+)'/.exec(PDFSRC)[1] };
-const WORKER = { url: BASE + 'pdf.worker.min.js', sri: /var WORKER = \{[^}]*sri: '([^']+)'/.exec(PDFSRC)[1] };
+const { LIB, WORKER } = require('./pdfjs-pin.js');
 
 /* Runs in the page. Returns numbers and kind labels only. */
 async function shape({ lib, worker, pages: skeletonPages, detail }) {
@@ -163,7 +160,7 @@ async function shape({ lib, worker, pages: skeletonPages, detail }) {
     await page.route('http://pdf.shape/**', r => r.request().url().endsWith('/doc.pdf')
       ? r.fulfill({ status: 200, body: bytes, headers: { 'content-type': 'application/pdf' } })
       : r.fulfill({ status: 200, body: '<!doctype html><title>shape</title>', headers: { 'content-type': 'text/html' } }));
-    /* jsDelivr fetched from the Node side, as verify-memorizer does: a sandboxed
+    /* jsDelivr fetched from the Node side: a sandboxed
        browser may not trust a TLS-intercepting proxy that Node does. The page
        still checks every byte against the pinned integrity hashes. */
     await page.route('https://cdn.jsdelivr.net/**', async r => {

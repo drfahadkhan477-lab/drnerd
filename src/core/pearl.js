@@ -531,18 +531,45 @@ function matchingFigure(body, run, context) {
 }
 
 /* Whole sentences establish the main idea; clause joints make its supporting
-   detail scannable. Labels name the source relationship, not an inferred
-   diagnosis or treatment recommendation. */
+   detail scannable. Each step is named for what its OWN words say it is — a
+   cause because it says "due to", a treatment because it says "give" or
+   "first-line", a key number because it carries a measurement — never for a
+   diagnosis or a recommendation inferred from outside the sentence. A step
+   whose words name nothing is a Key point (the first) or a Key fact. The
+   joint a step opens with (but, whereas, if) outranks its contents: a caveat
+   about a dose is a caveat first. */
+const KIND_RULES = [
+  ['Caveat', /^(?:but|however|yet|unless|except|although|though|without)\b/i, true],
+  ['Contrast', /^(?:whereas|unlike|in contrast|rather than|versus)\b/i, true],
+  ['Condition', /^(?:if|when|provided|in patients? with)\b/i, true],
+  ['Cause', /^(?:because|since|as a result of)\b/i, true],
+  ['Result', /^(?:so|therefore|thus|hence|resulting|leading|meaning|consequently)\b/i, true],
+  ['Avoid', /\b(?:avoid(?:ed)?|contraindicated|should not|must not|do not|never)\b/i],
+  ['Cause', /\b(?:due to|caused by|results? from|secondary to|because of|owing to|arises? from|aetiolog\w*|etiolog\w*|precipitated by|triggered by)\b/i],
+  ['Mechanism', /\b(?:mechanism|mediated|via|through|by (?:block|inhibit|activat|increas|decreas|reduc|rais|lower)\w*|inhibit\w*|blockade|blocks? (?:the|its)|blocking|activat\w*|binds?|receptors?|channels?|pathway|depolari[sz]\w*|repolari[sz]\w*|afterload|preload|re-?entry|automaticity)\b/i],
+  ['Result', /\b(?:leads? to|led to|results? in|causing|produces?|so that|thereby|which (?:causes|leads|results))\b/i],
+  ['Risk', /\b(?:risk|mortality|prognos\w*|predicts?|predictor|associated with|survival|incidence|outcomes?|death)\b/i],
+  ['Treatment', /\b(?:treat\w*|therapy|therapies|given|administer\w*|first-line|second-line|indicated|recommended|titrat\w*|dos(?:e|es|ing)|implant\w*|ablation|pacing|ICD|surgery|surgical|replacement|repair|anticoagula\w*)\b/i],
+  ['Key number', /\b\d[\d.,]*(?:\s?[–—-]\s?\d[\d.,]*)?\s?(?:%|mg|mcg|kg|g|mmHg|mL|mm|cm|hours?|days?|weeks?|months?|years?|minutes?|beats|bpm|mmol|mEq|ms|m\/s)(?![A-Za-z])/i],
+  ['Finding', /\b(?:ECG|EKG|QRS|P waves?|T waves?|ST|interval|shows?|showing|reveals?|seen|findings?|signs?|presents?|presentation|diagnos\w*|characteri[sz]ed|murmur|echo\w*|imaging|MRI|CT|biopsy|potentials?|elevat\w*|depress\w*)\b/i],
+  ['Typical', /\b(?:usually|most common(?:ly)?|typically|often|classic(?:ally)?|majority|frequently|commonest)\b/i]];
+/* Six colours for fourteen names: a step's colour is its family (the app's six step inks), its name and icon say which
+   member. Teal states, violet explains, green is the why-chain, pink is what to do and when, amber weighs, red warns. */
+const FAMILY = { 'Key point': 'core', 'Finding': 'core', 'Key number': 'core',
+  'Key fact': 'detail', 'Typical': 'detail', 'Mechanism': 'detail',
+  'Cause': 'why', 'Result': 'why', 'Condition': 'condition', 'Treatment': 'condition',
+  'Contrast': 'contrast', 'Risk': 'contrast', 'Caveat': 'caveat', 'Avoid': 'caveat' };
+function kindOf(t, first) {
+  const lead = KIND_RULES.find(([, re, opener]) => opener && re.test(t));
+  if (lead) return lead[0];
+  const body = KIND_RULES.find(([, re, opener]) => !opener && re.test(t));
+  return body ? body[0] : first ? 'Key point' : 'Key fact';
+}
 function lesson(text) {
   const blocks = sentences(String(text || '')).filter(Boolean).flatMap(s => steps(s));
   return blocks.map((s, i) => {
     const t = (s.lead ? s.lead + ' ' : '') + s.text;
-    const label = i === 0 ? 'Core idea'
-      : /^(?:but|however|yet|unless|except|although|though|without)\b/i.test(t) ? 'Caveat'
-      : /^(?:whereas|unlike|in contrast|rather than|versus)\b/i.test(t) ? 'Contrast'
-      : /^(?:because|since|so|therefore|thus|resulting|leading|meaning)\b/i.test(t) ? 'Why it matters'
-      : /^(?:if|when|provided)\b/i.test(t) ? 'Condition' : 'Detail';
-    return { lead: s.lead, text: s.text, label };
+    return { lead: s.lead, text: s.text, label: kindOf(t, i === 0) };
   });
 }
 
@@ -788,6 +815,6 @@ function steps(text) {
 function entryFits(body, e) { return fromTable(body, e) !== undefined; }
 
 root.Pearl = { harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
-               weakWords, aimWords, steps, lesson, matchingFigure, passageSpan, passageContext, subject, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
+               weakWords, aimWords, steps, lesson, FAMILY, matchingFigure, passageSpan, passageContext, subject, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);

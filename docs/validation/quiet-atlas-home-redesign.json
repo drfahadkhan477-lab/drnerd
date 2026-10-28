@@ -52,5 +52,18 @@
     "heroart": 33,
     "heartreuse": 30,
     "polish": 79
+  },
+  "latestMasterIntegration": {
+    "master": "5126783d0e306a568e3400d8d133a7edf9c10df4",
+    "status": "integrated; combined validation in progress",
+    "preserved": [
+      "Echo rail",
+      "scanned heart with attribution/menu",
+      "pearl subject and sizing fixes",
+      "chapter resume and reading width",
+      "CI sharding",
+      "upstream Memorizer removal"
+    ],
+    "note": "Earlier focused/private results do not certify this combined source."
   }
 }

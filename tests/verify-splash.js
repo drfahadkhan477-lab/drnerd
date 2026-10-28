@@ -247,7 +247,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     /* The rule that keeps this a study tool: no ambient animation behind
        reading. If a future change puts one there, this should fail. */
     const quiet = await page.evaluate(() => {
-      startQuiz('Arrhythmias'); render();
+      (S.resume = {}, startQuiz)('Arrhythmias'); render();
       const card = document.querySelector('.q-card');
       if (!card) return { noCard: true };
       const bad = [];

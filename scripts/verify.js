@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 183 suites and roughly 9258 checks, and they
+ * WHY THIS EXISTS. There are 155 suites and roughly 6950 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -195,8 +195,6 @@ const SUITES = [
      remote, and .gitignore stops being a boundary the moment somebody types
      `git add -f`. */
   ['leakguard',    'the licensed question bank cannot be committed, however it is renamed'],
-  ['reader-assets-pure', 'pinned public readers are prepared once, checked before use, and failed or unbounded downloads cannot enter the test cache'],
-  ['study-file-check', 'a study file is checked by the app\u2019s own import code before it is handed over'],
   /* Step 1 of retiring the patch chain: the chain's output cuts into the app
      and its payloads losslessly, and the app carries none of what was cut. */
   ['app-slots-pure', 'the built file cuts into the app and its payloads byte for byte, and the app carries none of the bank'],
@@ -356,7 +354,10 @@ const SUITES = [
   /* scripts/ci-changes.js: a pull request skips a browser job only when every
      changed file is known not to reach it, and anything doubtful runs both. */
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
-  ['record-pure',    'the counts record in two halves: each written only from a run where every one of its suites ran and passed, the other half kept'],
+  /* scripts/shard.js and scripts/browser-done.js: the browser jobs' shards run
+     every suite once, and the one required check fails on any shard that did not pass. */
+  ['shard-pure', 'every suite of a sharded browser job runs in exactly one shard, each step only in its own, and browser-done fails on a failed, cancelled or unexplained skipped job'],
+  ['record-pure',    'the counts record is written only from a run where every registered suite ran and passed, and keeps nothing that is no longer a suite'],
   ['suitetime-pure', 'a suite that runs far past its recorded time is stopped and named with the section it was in, and every section is timed'],
   /* The browser half of floor-css-pure. It makes the features that have a fallback unknown to the engine, the way an older Safari does not know
      them, and compares what the app draws with what it draws as it ships, and with the fallbacks laid over the features. Needs the built page. */
@@ -383,39 +384,6 @@ const SUITES = [
   ['figsharp',     'no figure is drawn wider than the pixels it has'],
   ['heartreuse',   'navigating the app does not spend WebGL contexts'],
   ['flushguard',   'a reply can be stopped, and the last chunk is painted however the stream ends'],
-  /* Memorizer — a second, standalone app in memorizer/: upload a PDF (or
-     photos, or pasted notes), it is split into sections, and each is taught
-     — key points, numbers, mnemonics, analogies — then drilled with
-     multiple-choice questions; a final exam closes the unit, and every miss
-     becomes an FSRS card. It carries no licensed
-     content, so none of these needs a build: the -pure ones run in CI's
-     logic job, and the two browser suites in its memorizer-browser job. */
-  ['memorizer-chunk-pure',   'every word of the PDF is taught once, in sections of a teachable size, headings kept with their body'],
-  ['memorizer-prompts-pure', 'the model is held to your PDF, only the section being studied goes out, and a bad reply is never a pass'],
-  ['memorizer-session-pure', 'no phase of the protocol is skipped, and every miss becomes exactly one card'],
-  ['memorizer-coach-pure',   'the built-in coach needs no key, invents nothing, and asks fair multiple-choice questions'],
-  ['memorizer-appearance-pure', 'Daylight by day, Clinical at night, Paper and Neuron, and Systole\u2019s Contrast, each readable at every contrast and brightness, on glass over the aurora as well as solid'],
-  ['memorizer-home-pure',    'the home screen\u2019s progress counts what happened, its brain lights a neuron per section drilled, and its pearl is your PDF\u2019s own sentence'],
-  ['memorizer-book-pure',   'a whole textbook: its parts in order, its pages straight through, its chapters found three ways'],
-  ['memorizer-ask-pure',    'asking your book: its own sentences with their pages, from the right section, or nothing found'],
-  ['memorizer-ground-pure', 'the on-device AI says nothing the book does not: no new number or name, cited, answers found in the section'],
-  ['memorizer-vec-pure',    'search by meaning: similarity, a measured floor, and the merge with search by words'],
-  ['memorizer-sheet-pure',  'a lesson laid out to be remembered: points under clinical headings, numbers as tiles, nothing twice'],
-  ['memorizer-figure-pure', 'figures made from the book: a study card and a comparison chart, every word the lesson\u2019s, escaped and wrapped'],
-  ['memorizer-agent-pure',  'the Coach as an agent: each tool reached, its topic, follow-ups remembered, a model\u2019s plan used only when it names a real tool'],
-  ['memorizer-study-pure',  'studying beyond the drill: recall and figure cards from the book, checks days apart, timed practice, an exam plan, teach-back, corrections, notes, progress'],
-  ['memorizer-provenance-pure', 'where a unit came from: a real SHA-256 of its bytes, a duplicate recognised, and an import report that counts what happened'],
-  ['memorizer-pack-pure',   'a study pack written with Claude: the prompt carries the chapter, and the reply is held to the book \u2014 numbers, pages, names and quotes \u2014 before any of it is used'],
-  ['memorizer-studyimport-pure', 'a study file, markdown or a saved HTML page: every question read, an unmarked answer never guessed, and its points and questions held to the unit\u2019s own text'],
-  ['memorizer',              'a real PDF becomes its sections, and a unit goes through lesson, multiple-choice drill, exam and review in a browser'],
-  ['memorizer-misses-pure',  'what the misses say: the pairs taken for one another, and each missed item\u2019s attempts in order, with a lapse named'],
-  ['memorizer-offline',       'Prepare for offline, with the app\u2019s service worker: nothing called ready before, every pinned reader kept after, and served with the network cut'],
-  ['memorizer-spec-pure',    'one study format for both Claude prompts: spec.js\u2019s rules word for word in each, the counts the checker enforces, the prompt\u2019s own example read and passed, the doc the app\u2019s prompt'],
-  ['memorizer-recall-pure',  'explain it first: on a later day the lesson waits for what you remember, marked point by point, the gaps taught first'],
-  ['memorizer-layout-pure',  'the review\u2019s layout rules: a lesson\u2019s first five points, a unit\u2019s one next step, and when to remind about a backup'],
-  ['memorizer-studyimport',  'a saved HTML page read in the browser, and the Import Study dialog driven: right options and answers, a real modal, too large refused, no half-imported unit'],
-  ['memorizer-data',         'your data and what the page may do: a backup holds units, packs and progress and restores into an empty browser, a bad file is refused, and the browser refuses any host but the app\u2019s'],
-  ['memorizer-hardening',    'a double tap lands once, a failed save is said and stores nothing half-way, a late reply is dropped, and a dialog holds focus'],
   /* What the result cache learns of a page a browser loads from the repository,
      held in the engine that runs it. CI runs it in all three. */
   ['suitecache',             'the browser reports every file a page loads from disk, in the engines the result cache traces, and the cache stays off for an engine that reports none'],
@@ -516,12 +484,13 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+/* shard-pure: added with the browser shards, after the last record. */
+const PENDING_RECORD = ['shard-pure'];
 
-/* ── suites deleted since their half of the record was last written ─────────
+/* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
-   tests/test-stats.json until a qualifying family run rewrites the record
-   (scripts/record.js drops unregistered names from both halves), and until
+   tests/test-stats.json until a green run rewrites the record
+   (scripts/record.js drops unregistered names), and until
    then verify-stats would read it as the record holding something that is no
    longer a suite. Naming it here says that is on purpose. Checked in both
    directions like PENDING_RECORD: a name here must still be in the record and
@@ -530,7 +499,24 @@ const PENDING_RECORD = [];
    entries. Systole's active counts still come from its previous green run. */
 /* homeprog went with the progress bar it checked: the owner took the bar off Home, and the Brain page's gauge, which
    carries the same two numbers, is held to its claims in verify-home. */
-const RETIRED_RECORD = [];
+/* Memorizer moved to its own repository (drfahadkhan477-lab/Memorizer, copied
+   from this one at 396a465), and its suites with it: those below that start
+   memorizer, and two that held Memorizer's code from here —
+   reader-assets-pure (the pinned readers only Memorizer's suites load) and
+   study-file-check (what Memorizer's import would say of a study file). Their
+   counts stay in the record, untouched, until the next green run rewrites it
+   and drops them; verify-stats leaves them out of every number it holds the
+   prose to meanwhile. */
+const RETIRED_RECORD = [
+  'reader-assets-pure', 'study-file-check',
+  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure',
+  'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure',
+  'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer-sheet-pure', 'memorizer-figure-pure',
+  'memorizer-agent-pure', 'memorizer-study-pure', 'memorizer-provenance-pure', 'memorizer-pack-pure',
+  'memorizer-studyimport-pure', 'memorizer', 'memorizer-misses-pure', 'memorizer-offline',
+  'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-studyimport',
+  'memorizer-data', 'memorizer-hardening',
+];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
@@ -566,19 +552,6 @@ const RETIRED_RECORD = [];
    serial to 24.2 min at --jobs 3, so the parallelism bought nothing there and
    cost three suites to do it.
 
-   AND THREE MEMORIZER SUITES, FOUND THE SAME WAY (October 8, master 28a8df4,
-   SYSTOLE_JOBS=3 on the owner's Windows laptop):
-
-     memorizer             locator.waitFor 60s, at the first PDF it reads
-     memorizer-hardening   locator.click 30s, at its first double tap
-     memorizer-studyimport twenty minutes inside "the dialog"
-
-   Twice at three at a time they failed or hung; then, on the same commit and
-   machine with --jobs 1, they gave 484, 69 and 72 checks, all passing, the
-   counts CI and the record hold. Like the three above they wait on browser
-   work (PDF rendering in a worker, layout settling, the clipboard), not on a
-   clock.
-
    Everything else in the registry asserts on content, geometry or arithmetic,
    and was verified to give the same result under --jobs 3 as it does alone —
    that comparison is the evidence, not this list. */
@@ -589,8 +562,7 @@ const RETIRED_RECORD = [];
 /* inksave counts what the page writes against the page's own timers, a pause of 900 ms and a ceiling of 10 s, and a loaded machine can hold
    a suite past them between one stroke and the next. */
 const SERIAL = new Set(['stage0', 'physio', 'splash', 'splash-heart',
-                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs', 'backup', 'inksave',
-                        'memorizer', 'memorizer-hardening', 'memorizer-studyimport']);
+                        'heroart', 'heartreuse', 'home', 'figsharp', 'chatfigs', 'backup', 'inksave']);
 
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
@@ -696,7 +668,7 @@ const only = list(opt('--only')), skip = list(opt('--skip'));
    by itself, on a synthetic build, so a run that selects no registry suite is
    allowed when it names pwa AND asks for --pwa. Named without --pwa it would
    select nothing and run nothing, which is a usage error, so it is refused as
-   one. Such a run never writes the record: no family has all its suites run. */
+   one. Such a run never writes the record: not every suite ran. */
 const PWA_ALONE = only.includes('pwa');
 if (PWA_ALONE && !flag('--pwa')) {
   console.error('\n  --only pwa names the split build, which runs only with --pwa: add --pwa.\n');
@@ -1104,13 +1076,11 @@ if (flag('--bail') && stopScheduling) console.log('\n  --bail: stopping here.\n'
    reads this file and holds the prose to it, which is only possible if the
    file is generated. So: generated here, never edited.
 
-   Written per FAMILY (scripts/record.js): Systole's half from a run in which
-   every Systole suite ran and passed, the Memorizer's half likewise, and a
-   half this run did not earn keeps its previous numbers. A --skip or --only
-   run can therefore still write a half it covered completely — a run that
-   skips the Memorizer writes Systole's numbers and leaves the Memorizer's
-   alone — and a half it covered partly is not touched. A --engine webkit run
-   still writes nothing: it measures a different browser. */
+   Written only from a run in which every registered suite ran and passed
+   (scripts/record.js), so a --skip or --only run writes nothing. It was kept
+   in two halves, Systole's and the Memorizer's, each written from its own
+   green run, until Memorizer moved to its own repository. A --engine webkit
+   run still writes nothing: it measures a different browser. */
 function writeStats(pwaCount) {
   /* A URL run measures the split build, and the numbers in the docs are the
      single-file build's. Same reason --engine webkit does not write: a true
@@ -1127,7 +1097,7 @@ function writeStats(pwaCount) {
      there, counting passes would record a smaller total than the same suite
      produces once it goes green, so the record would never settle.
      Seconds are a scheduling hint for the next --jobs run and nothing else; no
-     check reads them. They move with their family's counts. */
+     check reads them. They move with the counts. */
   const out = mergeRecord(prev, results, SUITES.map(([n]) => n), {
     engine: ENGINE,
     /* 1 is one suite at a time; higher ran the shared suites concurrently.
@@ -1137,12 +1107,11 @@ function writeStats(pwaCount) {
     pwaCount,
   });
   if (!out) {
-    console.log('  counts not written: no family had every one of its suites run and pass\n');
+    console.log('  counts not written: not every registered suite ran and passed\n');
     return;
   }
   fs.writeFileSync(file, JSON.stringify(out.record, null, 2) + '\n');
-  console.log(`  counts written to ${path.relative(process.cwd(), file)}: ${out.written.join(', ')}` +
-              (out.kept.length ? ` (kept from the previous record: ${out.kept.join(', ')})` : '') + '\n');
+  console.log(`  counts written to ${path.relative(process.cwd(), file)}\n`);
 }
 
 /* Written before the pass/fail gate, and deliberately NOT blocked by the one
@@ -1228,11 +1197,8 @@ console.log(`\n  ${total} checks across ${results.length} suites in ${((Date.now
     for (const x of top) console.log(`    ${fmtMin(x.ms).padStart(8)}  ${x.suite} › ${x.section}`);
   }
 }
-/* CALLED ON EVERY RUN; writeStats decides, family by family, what this run
-   earned. It used to wait for an all-green run, which tied Systole's record to
-   the Memorizer's: one Memorizer browser suite failing on one machine held
-   back Systole numbers measured green from end to end.
-   It also writes before --pwa, carrying the previous split-build figure
+/* CALLED ON EVERY RUN; writeStats decides whether this run earned a write.
+   It writes before --pwa, carrying the previous split-build figure
    forward. A full green run of 86 suites was once lost because the split build
    refused after every suite had passed, and process.exit(1) came before the
    only line that wrote the record. If the split build succeeds, the call below

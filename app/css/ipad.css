@@ -25,16 +25,16 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
 /* The control: four letters A, each larger than the one before, on the type scale. The menu it sits in scrolls when a
    short screen cannot hold it, which a phone on its side cannot. */
 .read-row{display:flex;gap:6px;padding:2px 7px 6px}
-.read-opt{flex:1 1 0;display:flex;align-items:center;justify-content:center;border-radius:9px;cursor:pointer;
+.read-opt,.width-opt{flex:1 1 0;display:flex;align-items:center;justify-content:center;border-radius:9px;cursor:pointer;
   border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-weight:700;line-height:1}
-.read-opt.on{border-color:var(--teal);color:var(--teal-ink);background:var(--teal4)}
+.read-opt.on,.width-opt.on{border-color:var(--teal);color:var(--teal-ink);background:var(--teal4)}
 .theme-menu{max-height:calc(100vh - 80px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* Touch targets. The chips beside these are already 44 px tall (refinements.css: about the least a finger on an iPad can
    hit), and these were not: Ask Apex why (32), the theme options (37), and the composer's More and Send (40). The
    composer's two keep their drawn size, and their hit area is grown to 44 by a box that is not drawn, as .icon-btn's is;
    a box is placed from the padding edge, so More, which has a 1.5 px border, needs 3.5 px and Send, which has none, 2. */
-.miss-ask,.theme-opt,.read-opt{min-height:44px}
+.miss-ask,.theme-opt,.read-opt,.width-opt{min-height:44px}
 .ai-more,.ai-send{position:relative}
 .ai-more::after,.ai-send::after{content:'';position:absolute}
 .ai-more::after{top:-3.5px;right:-3.5px;bottom:-3.5px;left:-3.5px}
@@ -74,3 +74,34 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
   #shell.ai-open ~ .tool-rail{bottom:max(14px,env(safe-area-inset-bottom));right:auto;left:max(10px,env(safe-area-inset-left))}
 }
 #shell.ai-full ~ .tool-rail{display:none}
+
+/* ── reading width (readWidthHtml) ──
+   --measure is the column the navbar and every reading screen are drawn to. On a tablet the four steps set it: Narrow keeps
+   a book's line, Medium is the width this app always had, Wide (the default) uses a landscape iPad, Full runs edge to edge
+   with room left for the pencil rail. Home is a full-width layout of its own and keeps it. */
+@media(min-width:768px){
+  html[data-width="0"]{--measure:720px}
+  html[data-width="1"]{--measure:960px}
+  html[data-width="2"]{--measure:1200px}
+  html[data-width="3"]{--measure:100vw}
+  html[data-width] #app:not([data-screen="home"]){max-width:var(--measure)}
+}
+/* From 1024px the pencil rail floats at the left edge and Apex at the right (below it the rail wraps to the top). Where the
+   column reaches the edge of the screen its padding grows until the text clears them by 92px; where the screen leaves
+   margins of its own, 24px is enough. */
+@media(min-width:1024px){
+  html[data-width] #app:not([data-screen="home"]){
+    padding-left:max(24px,calc(92px - (100vw - min(var(--measure),100vw)) / 2));
+    padding-right:max(24px,calc(92px - (100vw - min(var(--measure),100vw)) / 2))}
+}
+.theme-menu .width-opt{min-height:44px;height:44px;box-sizing:border-box}
+.width-glyph{display:block;height:14px;border-left:2px solid currentColor;border-right:2px solid currentColor;box-sizing:border-box;
+  background:linear-gradient(currentColor,currentColor) center/calc(100% - 6px) 2px no-repeat}
+/* The quiz header: one line of chapter and count over the progress line, and the running score only once there is one. */
+.qstats:empty{display:none}
+/* A wider column must not make a figure taller than the screen: on a tablet the picture keeps its proportions inside
+   a band of at most ~60% of the window, centred, the way a reader app sets a plate. Tap or the corner button still
+   enlarges it. */
+@media(min-width:768px){
+  .fig-card .fig-img{width:auto;max-width:100%;max-height:min(60vh,640px);margin:0 auto}
+}

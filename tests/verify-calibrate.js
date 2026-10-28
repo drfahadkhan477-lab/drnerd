@@ -58,6 +58,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const startAndWait = async (pg = page) => pg.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     goHome(); render();
+    /* A fresh deck each time: a chapter left on its first question comes back to it, answered (verify-resume). */
+    S.resume = {};
     startQuiz(CHAPTERS[0], 'all');
     for (let i = 0; i < 60 && !document.querySelector('.opt'); i++) await wait(50);
   });

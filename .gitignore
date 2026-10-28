@@ -73,9 +73,10 @@ node_modules/
 # file, not a directory — so the pattern is a suffix too.
 *.graphify-bak
 
-# Memorizer (memorizer/) — build output, and a place to keep PDFs you test it
-# with. The app reads a PDF in the browser and never stores it; nothing a user
-# studies belongs in the repository, whosever it is.
+# Memorizer lived in memorizer/ until it moved to its own repository. Git
+# leaves ignored files in place, so a checkout from before the move may still
+# hold its build output and the chapters it was tried on: still ignored (and
+# memorizer/samples/ still refused by scripts/leak-guard.js).
 dist-memorizer/
 memorizer/samples/
 

@@ -70,7 +70,7 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     /* The CI logic job is the set of pure suites CI can run: every one of
        them must be tagged pure, or the tag and the job disagree. */
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
-    const logic = yml.slice(yml.indexOf('\n  logic:'), yml.indexOf('\n  memorizer-browser:'));
+    const logic = yml.slice(yml.indexOf('\n  logic:'), yml.indexOf('\n  public-browser:'));
     const inLogic = [...logic.matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]);
     const notPure = inLogic.filter(n => tagsOf(n).join() !== 'pure');
     ok('every suite in CI\'s logic job is tagged pure', inLogic.length > 20 && notPure.length === 0, notPure.join(', ') || `${inLogic.length} suites`);
@@ -209,11 +209,11 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     const R = path.join(TMP, 'repo');
     const put = (rel, body) => { const f = path.join(R, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, body || 'x'); };
     ['source/ACCSAP_export.html', 'content/refs-repo/note.md', 'content/refs/unit.md', 'content/questions.json', 'content/manifest.json',
-     'content/figures/a.webp', 'build/systole.html', 'build/.work/run-1/stage0.html', 'dist/index.html', 'dist-memorizer/index.html'].forEach(f => put(f));
+     'content/figures/a.webp', 'build/systole.html', 'build/.work/run-1/stage0.html', 'dist/index.html'].forEach(f => put(f));
     const has = rel => fs.existsSync(path.join(R, rel));
     const pub = clean({ root: R });
     ok('the public clean removes only what a clone makes again without the export',
-       !has('dist-memorizer') && !has('build/.work') && has('build/systole.html') && has('dist/index.html') && has('content/questions.json'), pub.removed.join(', '));
+       !has('build/.work') && has('build/systole.html') && has('dist/index.html') && has('content/questions.json'), pub.removed.join(', '));
     const dry = clean({ root: R, private: true });
     ok('the private clean without --yes removes nothing, lists what it would, and exits non-zero',
        dry.code === 1 && has('build/systole.html') && has('dist/index.html') && dry.listed.length === 5, dry.listed.join(', '));

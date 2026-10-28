@@ -122,10 +122,10 @@ const sse = text => [
     const go = {
       home: () => goHome(), stats: () => goStats(), lab: () => goLab(), refs: () => goRefs(),
       memory: () => goMemory(), study: () => goStudy(), search: () => openSearch(),
-      quiz: () => startQuiz(CHAPTERS[0], 'all'),
+      quiz: () => (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'),
       /* The quiz with its question flagged (the badge beside the stem, the button pressed), and the list of what has been
          written on: a note long enough to wrap, one with only pencil, and a flagged and a missed question among them. */
-      quizflag: () => { startQuiz(CHAPTERS[0], 'all'); S.flagged.add(S.questions[0].id); render(); },
+      quizflag: () => { (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'); S.flagged.add(S.questions[0].id); render(); },
       annotations: () => {
         NOTES = {}; INK = {};
         NOTES[POOL[0].id] = [{ id: 'n1', x: .1, y: .1, text: 'A long note about the first question that goes on for more than one line so that a row has to wrap it, with a long-unbroken-token-' + 'x'.repeat(60), color: '' }];

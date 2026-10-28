@@ -74,7 +74,7 @@ const FOCUS_BTN = '#navbar [onclick="toggleFocusMode()"]';
     ok('and offers no focus control there, where it could not do anything',
        onHome.btn === false);
 
-    await page.evaluate(() => startQuiz(CHAPTERS[0], 'all'));
+    await page.evaluate(() => (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'));
     await onScreen(page, 'quiz', { marker: '.q-card' });
     const onQuiz = await page.evaluate(sel => {
       const b = document.querySelector(sel);
@@ -206,7 +206,7 @@ const FOCUS_BTN = '#navbar [onclick="toggleFocusMode()"]';
     const restored = await page.evaluate(() => S.focusMode);
     ok('it is still on after a reload', restored === true, String(restored));
 
-    await page.evaluate(() => startQuiz(CHAPTERS[0], 'all'));
+    await page.evaluate(() => (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'));
     await onScreen(page, 'quiz', { marker: '.q-card' });
     await quiet(page);
     const applied = await page.evaluate(() => ({

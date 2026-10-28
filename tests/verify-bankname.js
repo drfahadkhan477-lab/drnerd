@@ -116,7 +116,7 @@ async function screens(page) {
   await page.evaluate(() => { goRefs(); render(); });
   await onScreen(page, 'refs', { marker: '.hero-sub' });
   out.refs = await page.evaluate(() => document.body.innerText);
-  await page.evaluate(() => { goHome(); render(); startQuiz(CHAPTERS[0], 'all'); });
+  await page.evaluate(() => { goHome(); render(); (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'); });
   await onScreen(page, 'quiz', { marker: '.opt' });
   /* Answered right: that is when the reveal says how many candidates did too. */
   await page.evaluate(() => { const q = S.questions[S.qIdx]; selectOpt(q.ci); });

@@ -1,6 +1,6 @@
 # Quiet Atlas design comparison
 
-final result: passed
+final result: blocked
 
 This is the visual-composition review, not a declaration of release readiness.
 Full application validation is tracked separately in the validation checkpoints.
@@ -54,3 +54,12 @@ move within the caption region, with the existing regression retained.
   may scroll. Desktop WebKit is not a physical iPad measurement.
 - Production has not been updated. A full green application run is still a
   separate release gate; do not infer it from this visual review.
+
+
+## Latest-master integration
+
+Integrated origin/master through 5126783, including the independent Echo rail,
+scanned-model attribution/menu, pearl sizing/readability, chapter resume and CI
+changes. The screenshot-led invitation and bottom session strip remain the
+owner's latest requested Home composition. The previous visual pass applies to
+its earlier source; the combined version needs fresh captures and validation.

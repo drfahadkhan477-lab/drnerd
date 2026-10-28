@@ -6,7 +6,7 @@
  *   node tests/verify-buildbank-pure.js
  *
  * Pure Node. scripts/build-bank.js turns study files in Memorizer's format
- * (docs/MEMORIZER-STUDY-FILE-PROMPT.md) and a bank.json into a bank in the
+ * (read by scripts/study-file/, Memorizer's parser) and a bank.json into a bank in the
  * content schema, which npm run build turns into the app. This holds:
  *
  *   - a signed study file becomes a bank the app builds from: each question

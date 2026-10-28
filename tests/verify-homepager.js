@@ -335,23 +335,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const visible = v => v.hasPearl && v.hasECG && v.pearl>2 && v.ecg>2 && (!v.hasHeart || v.heart>2);
   const paused = await page.evaluate(async () => {
     document.getElementById('atlasPause')?.click();
-    return {...await __homeWork(),label:document.getElementById('atlasPause')?.getAttribute('aria-label'),
+    return {...await __homeWork(),label:document.getElementById('atlasPause')?.textContent.trim(),
       fallback:getComputedStyle(document.querySelector('.h-beat')).animationPlayState};
   });
-  ok('Pause stops Home canvases and the CSS heart with a Play name',covered(paused)&&paused.label==='Play animation'&&paused.fallback==='paused',JSON.stringify(paused));
+  ok('Pause stops Home canvases and the CSS heart with a Play name',covered(paused)&&paused.label==='Play motion'&&paused.fallback==='paused',JSON.stringify(paused));
   await page.evaluate(()=>render());
   await still('paused Home remounted');
   await settled(page,()=>!document.getAnimations().some(a=>a.playState==='running'&&a.effect&&Number.isFinite(a.effect.getTiming().iterations)),{label:'Home entrance effects finished'});
   const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('.hero-h1')).opacity,
-    label:document.getElementById('atlasPause')?.getAttribute('aria-label')}));
-  ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play animation',JSON.stringify(pausedRemount));
+    label:document.getElementById('atlasPause')?.textContent.trim()}));
+  ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play motion',JSON.stringify(pausedRemount));
 
   const resumed = await page.evaluate(async () => {
     document.getElementById('atlasPause')?.click();
-    return {...await __homeWork(),label:document.getElementById('atlasPause')?.getAttribute('aria-label'),
+    return {...await __homeWork(),label:document.getElementById('atlasPause')?.textContent.trim(),
       fallback:getComputedStyle(document.querySelector('.h-beat')).animationPlayState};
   });
-  ok('Play resumes Home canvases and the CSS heart with a Pause name',visible(resumed)&&resumed.label==='Pause animation'&&resumed.fallback==='running',JSON.stringify(resumed));
+  ok('Play resumes Home canvases and the CSS heart with a Pause name',visible(resumed)&&resumed.label==='Pause motion'&&resumed.fallback==='running',JSON.stringify(resumed));
   const figureWork = await page.evaluate(async () => {
     await openFigure('data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="gray"/></svg>'),'Overlay fixture','Test');
     return {viewer:!!document.querySelector('.pswp'),...await __homeWork()};
@@ -436,6 +436,35 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});
   ok('a long figure caption can be scrolled with the keyboard',captionScroll.overflow>0&&captionScroll.scroll>0,JSON.stringify(captionScroll));
 
+  head('the hero: numbers where the action was, and the heart is the control');
+  /* Round five (the owner's marked screenshot): the Explore button went and the numbers took its place, under the
+     rhythm; the three round tools beside the heart went, and a tap on the heart opens them as a menu. */
+  await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
+  await still('hero, nothing due');
+  const hero=await page.evaluate(()=>{
+    const r=s=>{const e=document.querySelector(s);return e?e.getBoundingClientRect():null;};
+    const rhythm=r('#homePage0 .hero-rhythm-label'), stats=r('#homePage0 .hero-stats-row'), live=r('#homePage0 .hero-live');
+    const loose=[...document.querySelectorAll('#homePage0 .hero-tool')].filter(b=>!b.closest('#heroMenu')&&b.offsetWidth>0).length;
+    const entry=r('#atlasExplore');
+    return {entry:!!entry&&entry.width>=44&&entry.height>=44,
+      below:!!(rhythm&&stats)&&stats.top>=rhythm.bottom-1, inside:!!(stats&&live)&&stats.bottom<=live.bottom+1&&stats.top>=live.top,
+      loose, menuHidden:document.getElementById('heroMenu')?.hidden};
+  });
+  ok('the selected design keeps a touch-sized explicit 3D entry',hero.entry,JSON.stringify(hero));
+  ok('no round tool stands beside the heart; they are in its menu, closed',hero.loose===0&&hero.menuHidden===true,JSON.stringify(hero));
+  await page.locator('#heroHeartBtn').click();
+  const opened=await page.evaluate(()=>{const m=document.getElementById('heroMenu'),b=document.getElementById('heroHeartBtn');
+    const items=[...m.querySelectorAll('button')].filter(x=>!x.hidden).map(x=>({t:x.textContent.trim(),h:Math.round(x.getBoundingClientRect().height)}));
+    return {open:!m.hidden&&m.offsetHeight>0,expanded:b.getAttribute('aria-expanded'),items};});
+  ok('a tap on the heart opens its menu: motion and the chambers, each 44px tall',opened.open&&opened.expanded==='true'&&
+     opened.items.some(i=>/motion/i.test(i.t))&&opened.items.some(i=>/chambers/i.test(i.t))&&opened.items.every(i=>i.h>=44),JSON.stringify(opened));
+  await page.keyboard.press('Escape');
+  const esc=await page.evaluate(()=>({hidden:document.getElementById('heroMenu').hidden,focus:document.activeElement&&document.activeElement.id}));
+  ok('Escape closes it and gives focus back to the heart',esc.hidden===true&&esc.focus==='heroHeartBtn',JSON.stringify(esc));
+  await page.locator('#heroHeartBtn').click();
+  await page.mouse.click(5,5);
+  ok('and a tap anywhere else closes it',await page.evaluate(()=>document.getElementById('heroMenu').hidden===true));
+
   head('next session uses the actual due deck');
   await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
   await still('empty due deck');
@@ -443,6 +472,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await settled(page,()=>!window.__vtLive,{label:'chapter action'});
   ok('with no due cards the next-session action opens Chapters',await page.evaluate(()=>S.screen==='study'));
+
   const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
     homePage=0;S.screen='home';render();return dueQuestions().map(q=>q.id);});
   await still('two due cards');
