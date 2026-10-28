@@ -1,0 +1,32 @@
+{
+  "status": "checkpoint; full release validation pending",
+  "runtimeBaseCommit": "0f51e9e",
+  "scope": "Reference-led Home redesign; Memorizer unchanged",
+  "observedChromium": {
+    "home": 67,
+    "homepager": 86,
+    "pearl": 99
+  },
+  "observedWebKit": {
+    "home": 67,
+    "homepager": 86,
+    "pearl": 99,
+    "a11y": 19,
+    "type": 12,
+    "tokens": 119,
+    "floor": 15,
+    "tapsAfterHeaderFix": 24
+  },
+  "measurementNote": "Focused runs, not one complete release run. Source subsequently changed to fix header controls; full validation still required.",
+  "negativeEvidence": [
+    "All six new landing checks fail with their corresponding injected defect and pass without it.",
+    "Header control count and visible-search size checks fail with an extra control and collapsed search."
+  ],
+  "pwa": {
+    "shellGzipKB": 272,
+    "budgetKB": 280,
+    "validation": "First PWA phase correctly refused mismatched extraction after header rebuild; extraction refreshed and WebKit rerun started."
+  },
+  "privateContent": "Original export and library retained; raw logs and screenshots outside Git.",
+  "deployment": "Not performed"
+}

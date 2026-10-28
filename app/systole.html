@@ -6428,10 +6428,10 @@ function buildNav(){
       ${S.screen==='quiz'?`<button class="icon-btn" onclick="toggleFocusMode()" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
-      <button class="icon-btn atlas-secondary" onclick="goNoteSearch()" title="Search your notes"
+      ${S.screen!=='home'?`<button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
-      <button class="icon-btn atlas-secondary" onclick="goEcho()" title="Echo Studio"
-        aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>
+      <button class="icon-btn" onclick="goEcho()" title="Echo Studio"
+        aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>`:''}
       ${S.screen==='home'?`<button class="icon-btn" onclick="setTheme(themeIsDark()?'daylight':'midnight')" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
       <div class="theme-wrap">
         <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
@@ -7128,8 +7128,9 @@ function buildHome(){
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
       <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
-      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleAtlas3D()"
+      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" onclick="toggleAtlas3D()"
         aria-label="Explore heart in 3D" aria-pressed="${atlas3D}" title="Explore heart in 3D">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
+      <button class="atlas-cutaway" id="heroMechanics" onclick="toggleHeroMechanics()" aria-label="Show heart chambers, valves, and blood flow" aria-pressed="${heroCutaway}"${atlas3D?'':' hidden'}>${icon('layers','icon-sm')} Chambers &amp; flow</button>
       <button class="atlas-pause" id="atlasPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${atlasPaused?'Play':'Pause'}</button>
     </div>
 
@@ -7200,10 +7201,11 @@ function toggleAtlas3D(){
   atlas3D=!atlas3D;
   const hero=document.querySelector('#homePage0 .hero-live');
   if(hero)hero.classList.toggle('atlas-3d',atlas3D);
-  const button=document.getElementById('heroMechanics');
+  const button=document.getElementById('atlasExplore');
   if(button){button.setAttribute('aria-pressed',String(atlas3D));button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
   const label=document.querySelector('.hero-live-status');
   if(label)label.textContent=atlas3D?'Live cardiac cycle':'Illustrative anatomy';
+  const cutaway=document.getElementById('heroMechanics');if(cutaway)cutaway.hidden=!atlas3D;
   syncHomeMotion();
 }
 
