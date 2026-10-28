@@ -53,6 +53,7 @@ const LEADS = /^(this|that|these|those|it|they|he|she|there|such|both|either|nei
 /* Strip the note's markup back to the prose underneath. Figures go entirely —
    a caption is not a pearl — and emphasis markers go after being used as a
    signal for whether the sentence carries a taught term. */
+const CITE = /([a-z)\]])\.(\d{1,3}(?:\s?[,\u2013-]\s?\d{1,3})*)(?=\s|$)/g;
 function plain(body) {
   return String(body || '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')          // figures
@@ -70,6 +71,12 @@ function plain(body) {
        boundary matters: two sentences either side of a blank line are two
        different points, and joining them makes the non-sequitur this module
        exists to avoid. Runs of spaces still collapse. */
+    /* A reference number the book set after a full stop, "…the latter group.43
+       Thus…": it hides the sentence boundary from sentences() and shows on the
+       card as a stray number. Digits straight after the stop, before a space
+       or the end, are a citation; a decimal or a figure number has a digit or
+       a space before its point. */
+    .replace(CITE, '$1.')
     .replace(/[ \t]+/g, ' ')
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -268,6 +275,7 @@ function clean(raw) {
        ("short- and long-term") and stays. */
     .replace(/\b([A-Za-z]{2,})- (?!(?:and|or|to|nor)\b)([a-z]{2,})/g, '$1$2')
     .replace(/\s*\((?:pp?\.|page)\s*\d+(?:\s*[-–]\s*\d+)?\)/gi, '')
+    .replace(CITE, '$1.')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([.,;:])/g, '$1')
     .trim();
@@ -443,9 +451,60 @@ function passageContext(body, run, title) {
      This selects source words; it never generates a clinical heading. */
   const bold = Array.from(sentences(run)[0].matchAll(/\*\*([^*]+)\*\*/g), m => clean(m[1]))
     .find(t => topic(t) && !FINITE.test(t) && !ACT.test(t) && !UNIT.test(t));
-  const pick = [bold, frame && frame[1], heading, String(title || '').split('—').pop().trim()].find(topic);
+  /* A heading or a title is held to more than "names something". The notes
+     carry headings the extraction cut from running prose — two words and a
+     comma, "Outweigh, uncommon" — which are words of the book, but not a topic
+     a reader can file the pearl under. A list of single words, a phrase that
+     opens in lower case or with a verb, or one with no content word, is passed
+     over, and the passage is asked instead (subject()). */
+  const named = t => {
+    if (!topic(t) || /^[a-z]/.test(t) || FINITE.test(t.split(/\s+/)[0]) || ACT.test(t.split(/\s+/)[0])) return false;
+    const parts = t.split(/\s*[,;]\s*/).filter(Boolean);
+    if (parts.length > 1 && parts.every(part => !/\s/.test(part))) return false;
+    return (t.match(/[A-Za-z][A-Za-z-]{3,}/g) || []).some(w => !COMMON.has(w.toLowerCase()));
+  };
+  const pick = [bold, frame && frame[1]].find(topic) ||
+    [heading, String(title || '').split('—').pop().trim()].find(named) || subject(run);
   const concept = pick || 'From your notes';
   return { concept, span, headings };
+}
+/* THE PASSAGE'S OWN SUBJECT, from its own words. When the note gives no usable
+   name, the heading is built from what the passage keeps returning to: the
+   commonest "modifier + head noun" pair ("invasive strategy") and the
+   abbreviation it is about ("NSTE-ACS"), as "Invasive strategy in NSTE-ACS".
+   Every word is the source's; nothing is inferred, and a passage with neither
+   gets no heading of this kind. */
+const HEAD = /^(?:strategy|therapy|approach|treatment|management|revasculari[sz]ation|anticoagulation|ablation|implantation|replacement|repair|imaging|testing|criteria|score|risk|dysfunction|stenosis|regurgitation|failure|syndrome|infarction|cardiomyopathy|hypertension|fibrillation|flutter|block|tachycardia|bradycardia|pressure|gradient|fraction|perfusion|isch(?:a)?emia|angina|disease|inhibitors?|blockers?|antagonists?|agents?|pacing|shock|thrombosis|embolism|aneurysm|dissection|effusion|tamponade|pericarditis|myocarditis|endocarditis|murmur|interval|hypertrophy|remodell?ing|prophylaxis|monitoring|screening|surveillance|closure|valve|valvuloplasty|occlusion|sedation|rehabilitation)$/i;
+const PLAIN = new Set(('versus early late later latter former absence presence group groups appropriate subsequent apparent benefit benefits part '
+  + 'high higher low lower long short term same other such each more less many much several').split(' '));
+const NOT_ACR = new Set(['HR', 'OR', 'RR', 'CI', 'LOE', 'II', 'III', 'IV', 'VI', 'NB', 'USA', 'UK']);
+function subject(run) {
+  const words = clean(String(run || '')).split(/[^A-Za-z0-9-]+/).filter(Boolean);
+  const content = w => w.length >= 4 && !/^\d/.test(w) && !COMMON.has(w.toLowerCase()) && !PLAIN.has(w.toLowerCase()) &&
+    !FINITE.test(w) && !ACT.test(w) && !HEAD.test(w) && !/^[A-Z0-9-]+$/.test(w);
+  const freq = {};
+  for (const w of words) { const k = w.toLowerCase(); freq[k] = (freq[k] || 0) + 1; }
+  const pairs = {};
+  for (let i = 0; i + 1 < words.length; i++) {
+    if (content(words[i]) && HEAD.test(words[i + 1])) {
+      const k = (words[i] + ' ' + words[i + 1]).toLowerCase();
+      pairs[k] = (pairs[k] || 0) + 1;
+    }
+  }
+  let phrase = '', best = -1;
+  for (const k of Object.keys(pairs)) {
+    const [a, b] = k.split(' ');
+    const sc = pairs[k] * 3 + freq[a] + freq[b];
+    if (sc > best) { best = sc; phrase = k; }
+  }
+  const acrs = {};
+  for (const w of words) {
+    if (/^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$/.test(w) && (w.length >= 3 || w.includes('-')) && !NOT_ACR.has(w) && !/^[IVX]+$/.test(w)) acrs[w] = (acrs[w] || 0) + 1;
+  }
+  let acr = '', n = 0;
+  for (const k of Object.keys(acrs)) if (acrs[k] > n) { n = acrs[k]; acr = k; }
+  if (phrase) return phrase[0].toUpperCase() + phrase.slice(1) + (acr ? ' in ' + acr : '');
+  return acr;
 }
 function matchingFigure(body, run, context) {
   body = String(body || '');
@@ -480,7 +539,7 @@ function lesson(text) {
     const t = (s.lead ? s.lead + ' ' : '') + s.text;
     const label = i === 0 ? 'Core idea'
       : /^(?:but|however|yet|unless|except|although|though|without)\b/i.test(t) ? 'Caveat'
-      : /^(?:whereas|unlike|in contrast|rather than|versus|or)\b/i.test(t) ? 'Contrast'
+      : /^(?:whereas|unlike|in contrast|rather than|versus)\b/i.test(t) ? 'Contrast'
       : /^(?:because|since|so|therefore|thus|resulting|leading|meaning)\b/i.test(t) ? 'Why it matters'
       : /^(?:if|when|provided)\b/i.test(t) ? 'Condition' : 'Detail';
     return { lead: s.lead, text: s.text, label };
@@ -677,10 +736,14 @@ function steps(text) {
      The first two fold backwards, the third forwards, and all three keep the
      separator they were cut at, so the sentence survives being rejoined. */
   const weak = p => /^(?:or|and)\b/i.test(p.text);
+  /* "…on admission, or in whom these features develop later" continues the
+     clause it was cut from: a relative clause has no subject of its own, so
+     however long it is, it is not a step. */
+  const continuation = p => /^(?:or|and)\s+(?:(?:in|for|of|to|with|from)\s+)?(?:whom|who|which|whose|where|when)\b/i.test(p.text);
   const merged = [];
   for (const p of pieces) {
     const tooShort = p.text.length < MIN_STEP;
-    const listTail = weak(p) && p.text.length < WEAK_MIN;
+    const listTail = (weak(p) && p.text.length < WEAK_MIN) || continuation(p);
     if (merged.length && (tooShort || listTail)) {
       merged[merged.length - 1] = { sep: merged[merged.length - 1].sep,
                                     text: join(merged[merged.length - 1], p) };
@@ -725,6 +788,6 @@ function steps(text) {
 function entryFits(body, e) { return fromTable(body, e) !== undefined; }
 
 root.Pearl = { harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
-               weakWords, aimWords, steps, lesson, matchingFigure, passageSpan, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
+               weakWords, aimWords, steps, lesson, matchingFigure, passageSpan, passageContext, subject, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);

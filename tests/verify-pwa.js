@@ -240,26 +240,35 @@ async function heapAfterBoot(page, url) {
       })();
     }));
     ok('the hero draws the scan', model === 'scan', model);
-    const credit = await page.evaluate(() => {
-      const el = document.getElementById('heroScanCredit');
-      if (!el) return null;
+    /* The credit is one tap away: an info button among the hero's tools,
+       shown while the scan is drawn, which opens the full credit in place. */
+    const inHero = sel => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
       const b = el.getBoundingClientRect(), hero = document.querySelector('.hero-live').getBoundingClientRect();
       const cs = getComputedStyle(el);
-      return { text: el.textContent.replace(/\s+/g, ' ').trim(), hidden: el.hidden,
-               seen: b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0.5 &&
-                     b.top >= hero.top && b.bottom <= hero.bottom && b.left >= hero.left && b.right <= hero.right,
+      return !el.hidden && b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0.5 &&
+        b.top >= hero.top && b.bottom <= hero.bottom && b.left >= hero.left && b.right <= hero.right;
+    };
+    const button = await page.evaluate(`(${inHero})('#heroCreditBtn')`);
+    ok('the credit button is on screen, inside the hero, while the scan is drawn', button);
+    const credit = await page.evaluate(`(() => {
+      document.getElementById('heroCreditBtn').click();
+      const el = document.getElementById('heroScanCredit');
+      return { text: el.textContent.replace(/\\s+/g, ' ').trim(), seen: (${inHero})('#heroScanCredit'),
+               expanded: document.getElementById('heroCreditBtn').getAttribute('aria-expanded'),
                links: [...el.querySelectorAll('a')].map(a => a.getAttribute('href')) };
-    });
-    ok('the credit is on screen, inside the hero', !!credit && !credit.hidden && credit.seen, credit ? credit.text : 'no #heroScanCredit');
+    })()`);
+    ok('pressing it shows the credit, inside the hero', credit.seen && credit.expanded === 'true', credit.text);
     ok('it names the work, the author and the licence',
-       !!credit && /Realistic Human Heart/.test(credit.text) && /neshallads/.test(credit.text) && /CC BY 4\.0/.test(credit.text));
-    ok('and links the source and the licence', !!credit && !!man && credit.links.includes(man.credit.source) &&
-       credit.links.includes('https://creativecommons.org/licenses/by/4.0/'), credit ? credit.links.join(' ') : '');
+       /Realistic Human Heart/.test(credit.text) && /neshallads/.test(credit.text) && /CC BY 4\.0/.test(credit.text));
+    ok('and links the source and the licence', !!man && credit.links.includes(man.credit.source) &&
+       credit.links.includes('https://creativecommons.org/licenses/by/4.0/'), credit.links.join(' '));
     const back = await page.evaluate(() => {
       heroHeart3d.setModel('procedural'); paintHeroScanCredit();
-      return document.getElementById('heroScanCredit').hidden;
+      return { credit: document.getElementById('heroScanCredit').hidden, button: document.getElementById('heroCreditBtn').hidden };
     });
-    ok('the credit goes when the scan does', back === true);
+    ok('the credit and its button go when the scan does', back.credit === true && back.button === true, JSON.stringify(back));
     await page.close();
   }
 
