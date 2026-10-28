@@ -122,6 +122,15 @@ const go = (logic, br, opts, syn, split) => {
   return Object.assign(r, { text: lines.join('\n') });
 };
 {
+  suite('verify-memorizer-x', 'process.exit(5)');
+  const r = go(['verify-a', 'verify-memorizer-x'], ['verify-c'], { pure: true });
+  ok('a Systole run leaves the Memorizer suites out, runs none of them, and names them',
+     r.code === 0 && !r.ran.includes('verify-memorizer-x') && !r.failed.includes('verify-memorizer-x') &&
+     /1 Memorizer suites left out .*verify-memorizer-x/.test(r.text), r.text);
+  const w = go(['verify-a', 'verify-memorizer-x'], ['verify-c'], { pure: true, memorizer: true });
+  ok('--with-memorizer runs them again', w.code === 1 && JSON.stringify(w.failed) === '["verify-memorizer-x"]', JSON.stringify(w.failed));
+}
+{
   const r = go(['verify-a', 'verify-b'], ['verify-c'], { pure: true });
   ok('a failing suite fails the run, and is named', r.code === 1 && JSON.stringify(r.failed) === '["verify-b"]', JSON.stringify(r.failed));
 }
