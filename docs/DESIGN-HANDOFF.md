@@ -59,3 +59,11 @@ failure. A layout correction is committed, but its focused probe is not a full
 suite pass. Rebuild the PWA and complete the listed validation gates before
 merging or deploying. Raw logs remain under the ignored
 `build/private-validation/atlas-release/` directory in the current workspace.
+
+## Continuation review
+
+The follow-up source incorporates the merged pearl-reading and Apex fixes. Its
+measured results and remaining release gates are in the pull request, not here:
+AGENTS.md keeps unguarded counts out of the repository. The earlier checkpoint
+above is retained as history. No historical run should be presented as
+validation of the current source.

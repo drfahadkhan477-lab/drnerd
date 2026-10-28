@@ -47,6 +47,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   /* A precondition, never the claim: the screen change has finished, and the pager is still (no glide, no scroll). */
   const still = async (label) => {
+    // Long renderer probes can cross the idle threshold; wake through real input before navigating.
+    await page.keyboard.press('Shift');
     await settled(page, () => !window.__vtLive && !!document.getElementById('homePager'), { label: label + ': the home screen' });
     await settled(page, () => { const p = document.getElementById('homePager'); const w = p.clientWidth;
       return !homeTween && Math.abs(p.scrollLeft / w - Math.round(p.scrollLeft / w)) < 0.01; }, { timeout: 8000, label: label + ': the pager to come to rest on a page' });
@@ -131,6 +133,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       await page.evaluate(i=>homeGo(i,false),i); await still('tablet landing page');
       const g=await page.evaluate(i=>{const e=document.getElementById('homePage'+i);return {height:e.clientHeight,content:e.scrollHeight,width:e.clientWidth,contentWidth:e.scrollWidth};},i);
       ok(`${size.width}×${size.height}: landing page ${i} fits without clipping or page scrolling`,g.height>0&&g.content<=g.height+1&&g.contentWidth<=g.width+1,JSON.stringify(g));
+      const headings=await page.evaluate(()=>[...document.querySelectorAll('.home-page:not([inert]) h1')].length);
+      ok(`${size.width}×${size.height}: active landing page ${i} has one H1`,headings===1,String(headings));
     }
   }
   await page.setViewportSize({width:1180,height:820});
@@ -319,6 +323,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   const covered = v => v.hasPearl && v.hasECG && v.pearl===0 && v.ecg===0 && (!v.hasHeart || v.heart===0);
   const visible = v => v.hasPearl && v.hasECG && v.pearl>2 && v.ecg>2 && (!v.hasHeart || v.heart>2);
+  const paused = await page.evaluate(async () => {
+    document.getElementById('atlasPause')?.click();
+    return {...await __homeWork(),label:document.getElementById('atlasPause')?.getAttribute('aria-label'),
+      fallback:getComputedStyle(document.querySelector('.h-beat')).animationPlayState};
+  });
+  ok('Pause stops Home canvases and the CSS heart with a Play name',covered(paused)&&paused.label==='Play animation'&&paused.fallback==='paused',JSON.stringify(paused));
+  await page.evaluate(()=>render());
+  await still('paused Home remounted');
+  await settled(page,()=>!document.getAnimations().some(a=>a.playState==='running'&&a.effect&&Number.isFinite(a.effect.getTiming().iterations)),{label:'Home entrance effects finished'});
+  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('.hero-h1')).opacity,
+    label:document.getElementById('atlasPause')?.getAttribute('aria-label')}));
+  ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play animation',JSON.stringify(pausedRemount));
+  const resumed = await page.evaluate(async () => {
+    document.getElementById('atlasPause')?.click();
+    return {...await __homeWork(),label:document.getElementById('atlasPause')?.getAttribute('aria-label'),
+      fallback:getComputedStyle(document.querySelector('.h-beat')).animationPlayState};
+  });
+  ok('Play resumes Home canvases and the CSS heart with a Pause name',visible(resumed)&&resumed.label==='Pause animation'&&resumed.fallback==='running',JSON.stringify(resumed));
   const figureWork = await page.evaluate(async () => {
     await openFigure('data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="gray"/></svg>'),'Overlay fixture','Test');
     return {viewer:!!document.querySelector('.pswp'),...await __homeWork()};
@@ -388,6 +410,33 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await still('Brain with reduced motion');
   const rm = await page.evaluate(() => ({ run: brainLiveRun, art: !!document.getElementById('brainArt') }));
   ok('and the brain is drawn but not run', rm.art && rm.run === null, JSON.stringify({ art: rm.art, run: rm.run && rm.run.running }));
+
+  head('long captions remain keyboard readable');
+  await page.evaluate(()=>{homePage=0;S.screen='home';pearlCurrent=pearlAll().find(p=>p.figKey&&refImgSrc(p.figKey));render();});
+  await still('caption reading');
+  const compactHidden=await page.evaluate(()=>{const f=document.getElementById('pearlFig');f.querySelector('figcaption').textContent='Long caption for keyboard scrolling. '.repeat(60);pearlFit();return getComputedStyle(f).display==='none';});
+  await page.evaluate(()=>pearlToggleAll());
+  await still('expanded caption reading');
+  const expandedFigure=await page.evaluate(()=>getComputedStyle(document.getElementById('pearlFig')).display!=='none');
+  ok('Show all restores a figure hidden by the compact layout',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
+  if(expandedFigure){await page.locator('#pearlFig').focus();await page.keyboard.press('End');}
+  await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+  const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});
+  ok('a long figure caption can be scrolled with the keyboard',captionScroll.overflow>0&&captionScroll.scroll>0,JSON.stringify(captionScroll));
+
+  head('next session uses the actual due deck');
+  await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
+  await still('empty due deck');
+  await page.locator('.atlas-session button').click();
+  await settled(page,()=>!window.__vtLive,{label:'chapter action'});
+  ok('with no due cards the next-session action opens Chapters',await page.evaluate(()=>S.screen==='study'));
+  const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
+    homePage=0;S.screen='home';render();return dueQuestions().map(q=>q.id);});
+  await still('two due cards');
+  await page.locator('.atlas-session button').click();
+  await settled(page,()=>!window.__vtLive,{label:'due action'});
+  const actual=await page.evaluate(()=>({screen:S.screen,ids:S.questions.map(q=>q.id),mode:S.mode}));
+  ok('the next-session review opens only the cards actually due',wanted.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&JSON.stringify(actual.ids)===JSON.stringify(wanted),JSON.stringify({count:actual.ids.length}));
 
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));

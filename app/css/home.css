@@ -488,3 +488,23 @@ body.on-home .nav-title{line-height:1.1}
   #homePage0 .hero-live-status{bottom:14px}
   #homePage0 .hero-mechanics{left:auto;right:22px}
 }
+
+/* Pause the heart and decorative loops, including the canvas fallback.
+   Entrance effects must finish when a paused Home is mounted again. */
+.atlas-paused .h-beat,.atlas-paused .hero-orbit span,.atlas-paused .hero-live::before,.atlas-paused .hero-live::after,.atlas-paused .hero-heart-plate::before{animation-play-state:paused!important}
+.atlas-pause{position:absolute;z-index:5;right:16px;bottom:14px;min-width:64px;min-height:44px;border:1px solid var(--border2);border-radius:999px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){#homePage0 .hero-mechanics{right:96px}}
+/* Captions and enlarged controls remain reachable within their constrained cards. */
+#app[data-screen="home"] #homePage0 .pearl-main{overflow:auto}
+#app[data-screen="home"] #homePage0 .pearl-fig{overflow:auto}
+
+/* The empty library has one teaching panel; reserve a separate column for the live heart. */
+#homePage0 [data-pearl-empty="true"] .hero-inner{max-width:52%}
+#homePage0 [data-pearl-empty="true"] .hero-h1{font-family:'DM Serif Display',Georgia,serif;font-size:var(--t-h2);line-height:1.1}
+#homePage0 [data-pearl-empty="true"] .hero-description,#homePage0 [data-pearl-empty="true"] .hero-greet{max-width:none}
+#homePage0 .hero-live-status{left:24px;right:auto;bottom:68px}
+@media(min-width:700px){
+  #homePage0 [data-pearl-empty="true"] .hero-h1{font-size:var(--t-display)}
+  #app[data-screen="home"] #homePage0 .home-wrap[data-pearl-empty="true"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"hero" "session" "hello"}
+  #homePage0 [data-pearl-empty="true"] .hero-heart-plate,#homePage0 [data-pearl-empty="true"] .hero-heart-3d{left:auto;right:22px;top:8%;width:42%;height:80%}
+}

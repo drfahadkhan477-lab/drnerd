@@ -676,18 +676,35 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('another pearl without a figure brings the emblem with it', pics.swapped.emblem && !pics.swapped.fig, JSON.stringify(pics.swapped));
 
   head('an empty library is not an error');
-  const empty = await page.evaluate(() => {
-    const keep = REF.slice();
-    REF.length = 0; invalidateIndex();
-    pearlCurrent = null;
-    let threw = false;
-    try { S.screen = 'home'; render(); } catch (_) { threw = true; }
-    const gone = !document.getElementById('pearlCard');
-    REF.push(...keep); invalidateIndex(); pearlCurrent = null;
-    return { threw, gone };
+  await page.evaluate(() => {
+    window.__atlasKeptRefs=REF.slice(); REF.length=0; invalidateIndex(); pearlCurrent=null; S.screen='home'; render();
   });
-  ok('no notes means no card, rather than an empty one', empty.gone);
-  ok('and nothing throws', !empty.threw);
+  await settled(page,()=>!window.__vtLive && !!document.querySelector('.hero-h1'),{label:'empty library Home'});
+  const empty=await page.evaluate(()=>({gone:!document.getElementById('pearlCard'),
+    heading:document.querySelector('#homePage0 h1')?.textContent,
+    open:[...document.querySelectorAll('#homePage0 button')].some(b=>b.textContent==='Open notes')}));
+  ok('no notes means no card, rather than an empty one',empty.gone);
+  ok('and nothing throws',errors.length===0);
+  ok('empty Home invites one idea and offers Open notes',empty.heading==='Make one idea stick.'&&empty.open);
+  for(const size of [{width:1194,height:834},{width:834,height:1194},{width:390,height:844}]){
+    await page.setViewportSize(size);
+    await settled(page,()=>!window.__vtLive,{label:'empty Home resized'});
+    const room=await page.evaluate(()=>{
+      const h=document.querySelector('#homePage0 h1'),heart=document.getElementById('heroHeart3dSlot').getBoundingClientRect();
+      const range=document.createRange();range.selectNodeContents(h);
+      const clear=[...range.getClientRects()].every(r=>r.right<=heart.left||r.left>=heart.right||r.bottom<=heart.top||r.top>=heart.bottom);
+      const wrap=document.querySelector('#homePage0 .home-wrap').getBoundingClientRect(),hero=document.querySelector('#homePage0 .hero-live').getBoundingClientRect();
+      return {clear,fullPanel:Math.abs(wrap.width-hero.width)<=1};
+    });
+    ok(`${size.width}×${size.height}: empty Home gives its prompt and heart separate space`,room.clear&&room.fullPanel,JSON.stringify(room));
+  }
+  if(empty.open){
+    await page.getByRole('button',{name:'Open notes',exact:true}).click();
+    await settled(page,()=>!window.__vtLive,{label:'Open notes transition'});
+  }
+  ok('empty Home Open notes opens the reference library',await page.evaluate(()=>S.screen==='refs'));
+  await page.evaluate(()=>{REF.push(...window.__atlasKeptRefs);delete window.__atlasKeptRefs;invalidateIndex();pearlCurrent=null;goHome();});
+  await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
 
   head('regression');
   head('a pearl is a whole thought now');
