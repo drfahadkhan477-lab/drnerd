@@ -611,6 +611,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{ const w=document.getElementById('pearlBody'); w.innerHTML='<p>A short teaching cue.</p>'; pearlFit(); });
   const shortCue=await page.evaluate(()=>{const w=document.getElementById('pearlBody');return {over:w.scrollHeight-w.clientHeight,fade:document.getElementById('pearlCard').classList.contains('pearl-more'),hidden:document.getElementById('pearlMore').hidden};});
   ok('where a short cue fits, nothing is faded and nothing offers more',shortCue.over<=4&&!shortCue.fade&&shortCue.hidden,JSON.stringify(shortCue));
+  head('a pearl Home chose that cannot fit is passed over');
+  /* Round five: on a smaller iPad window some of the owner's notes ran past the card even at the smallest scale. Home
+     passes over a pearl it chose itself (pearlPicked) for one that fits; one opened on purpose is left alone, which is
+     what the Show all checks above rely on. The library's longest pearl, three times over, cannot fit. */
+  const skip = await page.evaluate(async () => {
+    const longest = pearlAll().slice().sort((a, b) => b.text.length - a.text.length)[0];
+    const long = Object.assign({}, longest, { text: [longest.text, longest.text, longest.text].join(' ') });
+    pearlCurrent = long; pearlPicked = long; pearlSkips = 0; S.screen = 'home'; render();
+    for (let i = 0; i < 60 && pearlCurrent === long; i++) await new Promise(r => setTimeout(r, 50));
+    for (let i = 0; i < 40 && pearlSkips > 0; i++) await new Promise(r => setTimeout(r, 50));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const w = document.getElementById('pearlBody');
+    return { replaced: pearlCurrent !== long, over: w.firstElementChild.offsetHeight - w.clientHeight, more: !document.getElementById('pearlMore').hidden };
+  });
+  ok('a pearl Home chose that runs past the card is replaced by one that fits, with no Show all', skip.replaced && skip.over <= 1 && !skip.more, JSON.stringify(skip));
+
   /* THE CARD IS SHORT BEFORE IT IS ANYTHING ELSE (28 October 2026). On an 11-inch iPad in portrait, 744x1133, the card
      is 480px and the figure's flex-basis was a rigid 145px it could not give back; .pearl-main's overflow:hidden took
      the difference out of the pearl itself, which rendered 40px tall with 411px hidden. What the reader saw was the

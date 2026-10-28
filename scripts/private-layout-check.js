@@ -56,12 +56,27 @@ const SIZES = [[834, 1100], [1194, 770], [1024, 1260], [1366, 950], [744, 1000],
         if (wrap && wrap.firstElementChild && wrap.firstElementChild.offsetHeight > wrap.clientHeight + 1) cut++;
         if (document.getElementById('pearlFig')) { figs++; if (card.classList.contains('pearl-figthumb')) thumbs++; }
       }
+      /* What Home shows: it passes over a pearl of its own choosing that does not fit (pearlPicked), so the walk above,
+         which forces each pearl, counts the ones too long for this window, and this, Home choosing for itself, counts
+         what a reader could be shown cut. */
+      let shownCut = 0;
+      const nap = () => new Promise(res => setTimeout(res, 120));
+      for (let k = 0; k < 30; k++) {
+        pearlNext();
+        for (let w = 0; w < 30 && pearlSkips > 0 && pearlCurrent === pearlPicked; w++) await nap();
+        await nap();
+        const wrap = document.getElementById('pearlBody');
+        const over = () => { const w = document.getElementById('pearlBody'); return !!(w && w.firstElementChild && w.firstElementChild.offsetHeight > w.clientHeight + 1); };
+        /* Read once Home has settled: a pearl being passed over is cut for the frame before it is replaced. */
+        if (over()) { for (let w = 0; w < 20 && (pearlSkips > 0 || over()); w++) await nap(); }
+        if (wrap && over()) shownCut++;
+      }
       const pages = [1, 2].map(i => { const pg = document.getElementById('homePage' + i); return pg ? pg.scrollHeight - pg.clientHeight : -1; });
-      return { pearls: all.length, tried, scrolled, worstPx: px, brain: pages[0], labs: pages[1], cut, figs, thumbs };
+      return { pearls: all.length, tried, scrolled, worstPx: px, brain: pages[0], labs: pages[1], cut, figs, thumbs, shownCut };
     }, PEARLS);
-    worst = Math.max(worst, r.worstPx, r.brain, r.labs, r.cut);
+    worst = Math.max(worst, r.worstPx, r.brain, r.labs, r.shownCut);
     console.log(`${w}x${h}  home: ${r.scrolled}/${r.tried} pearls scroll, worst ${r.worstPx}px  brain: ${r.brain}px  labs: ${r.labs}px` +
-      `  cut inside the card: ${r.cut}  figures as thumbnails: ${r.thumbs}/${r.figs}`);
+      `  too long for this window: ${r.cut}  shown cut: ${r.shownCut}/30  figures as thumbnails: ${r.thumbs}/${r.figs}`);
     await page.close();
   }
 

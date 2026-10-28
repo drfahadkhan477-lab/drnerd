@@ -6690,6 +6690,11 @@ function pearlFit(){
     btn.setAttribute('aria-expanded',String(all));
     btn.lastElementChild.textContent=all?'Show less':'Show all';
   }
+  const cut=!all&&over&&!wrap.hidden;
+  if(!cut) pearlSkips=0;
+  else if(pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
+    pearlSkips++; requestAnimationFrame(()=>{ if(pearlCurrent===pearlPicked) pearlNext(true); });
+  }
 }
 /* The largest text scale at which the pearl fits its card, so a short pearl fills the card and a long one still needs
    no scroll. Measured from the layout box (offsetHeight), which a step's entrance transform does not change, so the
@@ -6964,8 +6969,14 @@ function pearlNow(){
      owner's next full run. A suite that needs a pearl needs notes. */
   if(!all.length) return null;
   try{ pearlCurrent=Pearl.pick(all, null); }catch(_){ pearlCurrent=all[0]; }
+  pearlPicked=pearlCurrent;
   return pearlCurrent;
 }
+/* A PEARL IS TAKEN IN AT A GLANCE (round five). On a smaller iPad window some of the owner's notes ran past the card even
+   at the smallest scale pearlScale allows, and stood there under a Show all. A pearl Home chose itself (pearlPicked) that
+   does not fit is passed over for another, up to twelve times; one opened on purpose is left as it is. The long ones
+   still come up on a window they fit. */
+let pearlPicked=null, pearlSkips=0;
 /* The note's figure, when it has one. Shown beside the sentence rather than
    under it: a pearl about the wavefront of necrosis and the diagram of the
    wavefront belong on one line, and a diagram stacked underneath reads as a
@@ -7058,10 +7069,12 @@ function pearlRecall(){
   pearlFit();
 }
 function pearlOpen(){ if(pearlCurrent)goRefs(pearlCurrent.id); }
-function pearlNext(){
+function pearlNext(auto){
   const all=pearlAll();
   if(all.length<2) return;
   try{ pearlCurrent=Pearl.pick(all, pearlCurrent&&pearlCurrent.id); }catch(_){}
+  pearlPicked=pearlCurrent;
+  if(auto!==true) pearlSkips=0;
   const el=document.getElementById('pearlBody');
   if(!el||!pearlCurrent) return;
   /* Repaint in place: re-rendering the whole home screen to change one
@@ -7069,7 +7082,7 @@ function pearlNext(){
      the ladder from scratch also restarts its own stagger, which is the point
      — the steps should arrive one at a time on every pearl, not just the first. */
   el.innerHTML=pearlLadder(pearlCurrent);
-  const announcement=document.getElementById('pearlAnnounce'); if(announcement)announcement.textContent='New pearl: '+(pearlCurrent.concept||pearlCurrent.title);
+  const announcement=document.getElementById('pearlAnnounce'); if(announcement&&auto!==true)announcement.textContent='New pearl: '+(pearlCurrent.concept||pearlCurrent.title);
   el.hidden=false;
   document.getElementById('pearlConcept').textContent=pearlCurrent.concept||pearlCurrent.title;
   document.getElementById('pearlSource').textContent=pearlCurrent.source||'Your reference notes';
