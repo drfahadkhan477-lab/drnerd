@@ -57,3 +57,24 @@ fixed and affected checks rerun. Raw reports remain outside Git.
   regenerated PWA still need validation. See the private-checkpoint JSON.
 - Review CI results and the remaining affected theme/layout coverage before
   merging or deploying. Desktop WebKit does not constitute a physical iPad run.
+
+## Latest visual comparison — 0e88344
+
+The owner reattached the selected reference. A direct visual review against the
+new licensed Home capture confirms the ivory/teal palette, dark serif heading,
+left navigation rail, two-column landscape composition and bottom session strip.
+All three landing pages fit at 1180×820, 834×1194 and 1024×768 in the measured
+Chromium captures, with no page overflow in those nine cases.
+
+This remains an adaptation, not a faithful reproduction: the existing animated
+heart is smaller than the reference anatomical illustration; the hero repeats
+the brand and greeting; search remains an icon rather than a field; and actual
+pearl content replaces the reference's Observe/Explain/Recall introduction.
+Long headings occupy more space, with Show all retaining access to the text.
+These differences remain visible and are not treated as resolved visual findings.
+The reference and captures have not been assembled into a normalized artifact.
+
+The latest capture includes Pause/Play. Private screenshots and full logs stay
+outside Git. The portrait fix passed all 97 licensed pearl checks on 818a02d.
+The full Chromium Systole/PWA run now targets 0e88344; focused WebKit and PWA
+checks are queued. No complete release pass or deployment is claimed.
