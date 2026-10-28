@@ -91,7 +91,7 @@ const SPLIT = cmds => !cmds ? '' : `  split-build:\n    steps:\n      - name: ma
   `      - name: check it\n        run: node ${cmds[cmds.length - 1].join(' ')}\n`;
 const Y = (logic, browserJob, after, syn, split) =>
   `jobs:\n  logic:\n    steps:\n${logic.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js\n`).join('')}` +
-  `  memorizer-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
+  `  public-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
   SYN(syn) + SPLIT(split) + (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
 {
   const s = suitesFromWorkflow(Y(['verify-a', 'verify-b'], ['verify-c'], 'verify-z'));
@@ -102,7 +102,7 @@ const Y = (logic, browserJob, after, syn, split) =>
      JSON.stringify(p.split) === JSON.stringify(cmds), JSON.stringify(p.split));
   let msg = '';
   try { suitesFromWorkflow('jobs:\n  logic:\n    steps: []\n'); } catch (e) { msg = e.message; }
-  ok('a workflow without the browser job is refused, not read as zero browser suites', /no memorizer-browser job/.test(msg), msg || 'accepted');
+  ok('a workflow without the browser job is refused, not read as zero browser suites', /no public-browser job/.test(msg), msg || 'accepted');
 }
 
 head('running them');
@@ -121,15 +121,6 @@ const go = (logic, br, opts, syn, split) => {
   const r = run(Object.assign({ root: TMP, yml: Y(logic, br, null, syn, split), log: s => lines.push(s) }, opts));
   return Object.assign(r, { text: lines.join('\n') });
 };
-{
-  suite('verify-memorizer-x', 'process.exit(5)');
-  const r = go(['verify-a', 'verify-memorizer-x'], ['verify-c'], { pure: true });
-  ok('a Systole run leaves the Memorizer suites out, runs none of them, and names them',
-     r.code === 0 && !r.ran.includes('verify-memorizer-x') && !r.failed.includes('verify-memorizer-x') &&
-     /1 Memorizer suites left out .*verify-memorizer-x/.test(r.text), r.text);
-  const w = go(['verify-a', 'verify-memorizer-x'], ['verify-c'], { pure: true, memorizer: true });
-  ok('--with-memorizer runs them again', w.code === 1 && JSON.stringify(w.failed) === '["verify-memorizer-x"]', JSON.stringify(w.failed));
-}
 {
   const r = go(['verify-a', 'verify-b'], ['verify-c'], { pure: true });
   ok('a failing suite fails the run, and is named', r.code === 1 && JSON.stringify(r.failed) === '["verify-b"]', JSON.stringify(r.failed));

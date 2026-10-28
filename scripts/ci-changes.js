@@ -5,9 +5,11 @@
  *
  *   node scripts/ci-changes.js        (in the workflow's `changes` job)
  *
- * The synthetic-browser job takes about twelve minutes and never reads
- * memorizer/; the memorizer-browser job never reads the Systole shell in app/
- * or assets/. A pull request that touches only one side was paying for both.
+ * The public-browser job never reads the Systole shell in app/ or assets/,
+ * and no browser job reads the docs. A pull request that touches only those
+ * was paying for jobs that cannot see the change. (The public-browser job was
+ * memorizer-browser, and the synthetic job was skipped for a change to
+ * memorizer/ alone, until Memorizer moved to its own repository.)
  *
  * THE DIRECTION OF EVERY DOUBT IS "RUN IT". A job is skipped only when every
  * changed file is on a short list known not to reach it. Anything not on a
@@ -17,10 +19,9 @@
  * command that failed: none of those may read as "nothing changed".
  *
  * WHAT THE LISTS ARE BASED ON, checked by reading the code rather than assumed:
- *   - No suite or build step in synthetic-browser reads memorizer/ (verify-csp
- *     walks scripts/ and src/, not memorizer/). scripts/build-memorizer.js is
- *     NOT memorizer-only: verify-csp scans it, and verify-bankstore uses it.
- *   - No suite or build step in memorizer-browser reads app/ or assets/.
+ *   - No suite in public-browser reads app/ or assets/: verify-bankstore
+ *     takes the loader from scripts/build-pwa.js and its modules from
+ *     src/core/, and verify-suitecache writes its own pages.
  *   - No browser suite reads docs/, tasks/, .claude/ or a top-level .md; the
  *     suites that do (such as verify-stats) are in the logic job, which
  *     always runs, as do syntax and build-guard.
@@ -35,32 +36,29 @@ const fs = require('fs');
    .gitignore is here because the two suites that read it — verify-engine.js
    ("the transcript is gitignored") and verify-leakguard.js — are both in the
    logic job, which has no `needs: changes` and so runs whatever this decides.
-   Changing it was therefore starting the Memorizer matrix in three engines,
-   the synthetic job and the split build to measure nothing they can see. No
+   Changing it was therefore starting the public-browser matrix in three
+   engines, the synthetic job and the split build to measure nothing they can see. No
    browser suite reads it; checked by grepping tests/ for the name, as the
    lists above were. The other root dotfiles are NOT here: .node-version picks
    the runtime for every job, and .gitattributes can change what a checkout
    even contains. */
 const DOCS = [/^docs\//, /^tasks\//, /^\.claude\//, /^[^/]+\.md$/, /^\.gitignore$/];
-/* Reaches memorizer-browser only: the Memorizer. The Practice Lab is a Systole screen
-   (src/lab/), and its browser suite, tests/verify-lab.js, runs in the synthetic jobs. */
-const MEMORIZER_ONLY = [/^memorizer\//, /^tests\/verify-memorizer[a-z0-9-]*\.js$/];
-/* Reaches synthetic-browser only. */
+/* Reaches synthetic-browser only, not public-browser. */
 const SYSTOLE_ONLY = [/^app\//, /^assets\//];
 
 const any = (res, f) => res.some(re => re.test(f));
 
 /* files: the changed paths, or null when they could not be read. */
 function classify(files) {
-  if (!Array.isArray(files) || files.length === 0) return { memorizer: true, synthetic: true };
+  if (!Array.isArray(files) || files.length === 0) return { public: true, synthetic: true };
   return {
-    memorizer: !files.every(f => any(DOCS, f) || any(SYSTOLE_ONLY, f)),
-    synthetic: !files.every(f => any(DOCS, f) || any(MEMORIZER_ONLY, f)),
+    public: !files.every(f => any(DOCS, f) || any(SYSTOLE_ONLY, f)),
+    synthetic: !files.every(f => any(DOCS, f)),
   };
 }
 
 function decide(event, files) {
-  return event === 'pull_request' ? classify(files) : { memorizer: true, synthetic: true };
+  return event === 'pull_request' ? classify(files) : { public: true, synthetic: true };
 }
 
 /* On a pull_request event the checkout is GitHub's merge commit, whose first
@@ -68,7 +66,7 @@ function decide(event, files) {
    as it would land. Needs fetch-depth: 2.
    --no-renames: by default git lists a moved file under its new name only, so
    src/core/x.js moved to app/x.js would read as a Systole-only change and skip
-   the Memorizer job, which had used src/core/x.js. Both paths are listed. */
+   the public-browser job, which had used src/core/x.js. Both paths are listed. */
 function changedFiles() {
   try {
     const out = execFileSync('git', ['diff', '--name-only', '--no-renames', 'HEAD^1', 'HEAD'], { encoding: 'utf8' });
@@ -84,10 +82,10 @@ if (require.main === module) {
   const files = event === 'pull_request' ? changedFiles() : null;
   const d = decide(event, files);
   console.log(`event: ${event || '(none)'}; changed files: ${files ? files.length : 'not read'}`);
-  console.log(`memorizer-browser: ${d.memorizer ? 'runs' : 'skipped'}; synthetic-browser: ${d.synthetic ? 'runs' : 'skipped'}`);
+  console.log(`public-browser: ${d.public ? 'runs' : 'skipped'}; synthetic-browser: ${d.synthetic ? 'runs' : 'skipped'}`);
   if (process.env.GITHUB_OUTPUT) {
-    fs.appendFileSync(process.env.GITHUB_OUTPUT, `memorizer=${d.memorizer}\nsynthetic=${d.synthetic}\n`);
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `public=${d.public}\nsynthetic=${d.synthetic}\n`);
   }
 }
 
-module.exports = { classify, decide, DOCS, MEMORIZER_ONLY, SYSTOLE_ONLY };
+module.exports = { classify, decide, DOCS, SYSTOLE_ONLY };

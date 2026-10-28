@@ -302,9 +302,7 @@ const palettes = css => {
 
   /* ── the rules ───────────────────────────────────────────────────────────────────────────────────────────────────────────── */
   head('every rule of the older spelling, on an element the rule matches');
-  /* The app's stylesheet only (the Practice Lab's, app/css/practice.css, is in it). The Memorizer's is held by the pure guard, which runs whatever changes; this suite
-     is run by the jobs that take the built app, and a change to memorizer/ alone does not start them (tests/verify-cichanges-pure.js holds the suites of those jobs
-     to that, so one that read that directory would be skipped on exactly the change it was for). */
+  /* The app's stylesheet (the Practice Lab's, app/css/practice.css, is in it), the only one the pages ship. */
   const css = stylesheet();
   /* the tokens a component sets for itself, or that a script sets in a style attribute, which an element built from a selector alone would not have */
   const TOKENS = '--ch:#2A9D8F;--rc:#C0392B;--acc:#8E44AD;--accent:#2980B9';

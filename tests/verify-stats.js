@@ -13,9 +13,8 @@
  * sentences moved with it. Nobody was lying; a person edited three files from
  * memory eight times and got one of them wrong.
  *
- * So scripts/verify.js now writes tests/test-stats.json from green runs — in
- * two halves, Systole's and the Memorizer's, each from a run where every one
- * of its suites passed (scripts/record.js) — and this suite holds the prose to it. A count in a document is now a claim
+ * So scripts/verify.js now writes tests/test-stats.json from green runs — from
+ * a run where every registered suite passed (scripts/record.js) — and this suite holds the prose to it. A count in a document is now a claim
  * that fails a check when it is false, which is the only kind of claim worth
  * writing down.
  *
@@ -150,7 +149,7 @@ head('every registered suite is in the record');
 /* The honest CI number, derived rather than quoted: whichever suites the
    workflow actually invokes, summed from what they actually reported.
    EACH SUITE ONCE. synthetic-webkit runs suites synthetic-browser already
-   runs, in a second engine; they are the same checks, as memorizer-browser's
+   runs, in a second engine; they are the same checks, as public-browser's
    three engines are, and summing every line that names one counted them
    twice (6737 against 6499 the day that job was added). */
 const yml = read('.github/workflows/verify.yml');
@@ -161,7 +160,7 @@ const ciTotal = ciSuites.reduce((n, s) => n + (stats.suites[s] || 0), 0);
    below actually count ("pure Node", "need neither a browser nor a build",
    "need no browser"). They were compared against every suite the workflow
    invokes, which was the same number while every suite it invoked was pure.
-   The memorizer-browser job made it two more, and the guard then demanded
+   The browser job that was memorizer-browser made it two more, and the guard then demanded
    that the prose call two browser suites pure Node — a guard insisting on a
    false sentence.
 
@@ -239,7 +238,7 @@ head('the browser-free count is not every suite CI runs');
   ok('some suites CI runs need no browser', pureCI.length > 20, `${pureCI.length} of ${ciSuites.length}`);
   const browserInCI = ciSuites.filter(n => !pureCI.includes(n));
   ok('and the ones left out are the workflow\u2019s browser job, and nothing else',
-     JSON.stringify(browserInCI) === JSON.stringify([...new Set([...yml.slice(yml.indexOf('\n  memorizer-browser:')).matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]))]),
+     JSON.stringify(browserInCI) === JSON.stringify([...new Set([...yml.slice(yml.indexOf('\n  public-browser:')).matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]))]),
      browserInCI.join(', ') || 'none');
 }
 

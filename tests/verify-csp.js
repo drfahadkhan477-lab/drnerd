@@ -85,14 +85,6 @@ head('the allowlist covers every host the shipped app can reach');
     'fonts.googleapis.com':  'stage0 — fonts: drop Google Fonts links',
     'fonts.gstatic.com':     'stage0 — fonts: drop Google Fonts links',
   };
-  /* Scripts under scripts/ that are not part of this app at all. The scan is
-     of what the shipped app can reach, and a tool run by hand on the owner's
-     machine reaches whatever it likes without the app's policy being wrong.
-     Each is named with why, and the check below holds the claim: no other
-     file under scripts/ or src/ names it, so no build step can be loading it. */
-  const NOT_SHIPPED = {
-    'scripts/model-manifest.js': 'a Memorizer maintenance tool — run by hand, writes memorizer/src/models.js',
-  };
   const relPath = p => path.relative(path.join(__dirname, '..'), p).split(path.sep).join('/');
   const roots = ['scripts', 'src'];
   const files = [];
@@ -111,14 +103,6 @@ head('the allowlist covers every host the shipped app can reach');
     ...fs.readdirSync(path.join(appDir, 'css')).filter(f => f.endsWith('.css')).sort().map(f => path.join(appDir, 'css', f))];
   files.push(...SHELL_FILES);
 
-  const loaders = Object.keys(NOT_SHIPPED).map(tool => {
-    const base = path.basename(tool);
-    const by = files.filter(f => relPath(f) !== tool && blankComments(fs.readFileSync(f, 'utf8')).includes(base)).map(relPath);
-    return by.length ? tool + ' is named by ' + by.join(', ') : '';
-  }).filter(Boolean);
-  ok('a script excused from the scan is one nothing in the build names',
-     loaders.length === 0 && Object.keys(NOT_SHIPPED).every(t => files.some(f => relPath(f) === t)), loaders.join('; ') || 'none');
-
   // Literal anchor hrefs navigate when clicked; connect-src governs fetch,
   // not navigation. Mask only anchor destinations, preserving image/src URLs
   // and direct fetches even when they use the same host as a source link.
@@ -134,7 +118,6 @@ head('the allowlist covers every host the shipped app can reach');
      resourceHosts('<a style="background:url(https://example.org/image.jpg)" href="https://example.org/guideline">').has('example.org'));
   const hosts = new Set();
   for (const f of files) {
-    if (relPath(f) in NOT_SHIPPED) continue;
     for (const host of resourceHosts(fs.readFileSync(f, 'utf8'))) hosts.add(host);
   }
   const allowed = new Set(CSP.CONNECT.filter(s => s.startsWith('https://'))

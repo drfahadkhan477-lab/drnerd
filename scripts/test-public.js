@@ -21,7 +21,7 @@
  *
  * THE LIST IS THE WORKFLOW'S, NOT A COPY OF IT. The suites are read from
  * .github/workflows/verify.yml: every `node tests/verify-*.js` step in the
- * `logic` job (pure), the `memorizer-browser` job (browser), and the
+ * `logic` job (pure), the `public-browser` job (browser), and the
  * `synthetic-browser` job, whose build commands (`node scripts/...` lines)
  * are run first and whose suites are each handed the target the step names.
  * A synthetic build that fails fails every suite waiting on it. Last come the
@@ -91,9 +91,9 @@ function splitJob(body) {
 }
 
 function suitesFromWorkflow(yml) {
-  const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'memorizer-browser');
+  const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'public-browser');
   if (logic === null || browser === null)
-    throw new Error(`the workflow has no ${logic === null ? 'logic' : 'memorizer-browser'} job — nothing to take the suite list from`);
+    throw new Error(`the workflow has no ${logic === null ? 'logic' : 'public-browser'} job — nothing to take the suite list from`);
   return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser')),
            split: splitJob(jobBody(yml, 'split-build')) };
 }
@@ -105,15 +105,7 @@ function run(opts) {
   const root = o.root || ROOT;
   const log = o.log || (s => console.log(s));
   const yml = o.yml != null ? o.yml : fs.readFileSync(path.join(root, '.github', 'workflows', 'verify.yml'), 'utf8');
-  const all = suitesFromWorkflow(yml);
-  /* Memorizer is a second app. Its suites stay in CI, but a Systole run
-     leaves them out unless asked (--with-memorizer), and says so: a suite
-     left out is named, never counted as passing. */
-  const isMem = n => /^verify-memorizer(-|$)/.test(n);
-  const leftOut = o.memorizer ? [] : all.pure.concat(all.browser).filter(isMem);
-  const pure = all.pure.filter(n => !leftOut.includes(n)), browser = all.browser.filter(n => !leftOut.includes(n));
-  const { synthetic, split } = all;
-  if (leftOut.length) log(`  ${leftOut.length} Memorizer suites left out (not run; --with-memorizer runs them): ${leftOut.join(', ')}`);
+  const { pure, browser, synthetic, split } = suitesFromWorkflow(yml);
   const synNames = synthetic.suites.map(x => x.name);
   /* The split build is reported as one item, under its job's name. */
   const splitNames = split.length ? ['split-build'] : [];
@@ -275,14 +267,13 @@ module.exports = { suitesFromWorkflow, run, jobBody, ciSuites };
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage: node scripts/test-public.js [--pure] [--fresh] [--plan] [--with-memorizer] [--help]
+    console.log(`Usage: node scripts/test-public.js [--pure] [--fresh] [--plan] [--help]
 
   --pure       Run only suites that need no browser or private export
   --fresh      Measure every browser suite now, ignoring remembered passes
                (they are remembered again afterwards; SYSTOLE_FRESH=1 is the same)
   --plan       Say which browser suites would be reused and which would run,
                and why. Runs no suite (it does make the synthetic build)
-  --with-memorizer  Also run the Memorizer app's suites, left out by default
   --help, -h   Show help without starting tests
 
 A browser suite whose inputs are identical to an earlier pass is REUSED, not
@@ -293,7 +284,7 @@ Set SYSTOLE_ENGINE to chromium, webkit or firefox to choose the browser.
 `);
     process.exit(0);
   }
-  const unexpected = args.find(arg => !['--pure', '--fresh', '--plan', '--with-memorizer'].includes(arg));
+  const unexpected = args.find(arg => !['--pure', '--fresh', '--plan'].includes(arg));
   if (unexpected !== undefined) {
     console.error(`Unexpected argument: ${unexpected}\nUse --help to see public test options.`);
     process.exit(2);
@@ -305,6 +296,6 @@ Set SYSTOLE_ENGINE to chromium, webkit or firefox to choose the browser.
   const SC = () => require('./suite-cache.js');
   const cache = args.includes('--pure') ? null
     : ({ root, engine }) => SC().fromEnv({ root, engine, fresh: args.includes('--fresh'), plan: args.includes('--plan'), commit: require('./stamp.js').gitCommit(root) });
-  try { process.exit(run({ pure: args.includes('--pure'), memorizer: args.includes('--with-memorizer'), cache }).code); }
+  try { process.exit(run({ pure: args.includes('--pure'), cache }).code); }
   catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
 }

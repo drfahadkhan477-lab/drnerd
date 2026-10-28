@@ -23,8 +23,9 @@
  *
  *   bank.json   which bank this is, the manifest's bank block
  *               (docs/CONTENT-SCHEMA.md): { "id": "my-bank", "name": "My bank" }
- *   *.md        study files in Memorizer's format
- *               (docs/MEMORIZER-STUDY-FILE-PROMPT.md): the questions Claude
+ *   *.md        study files in Memorizer's format (the study-file prompt is
+ *               Memorizer's docs/MEMORIZER-STUDY-FILE-PROMPT.md, in its own
+ *               repository): the questions Claude
  *               drafts from a chapter of your notes, or ones you write
  *
  * and each study file can say, in its front matter,
@@ -33,8 +34,9 @@
  *   prefix:    the start of every id it gives (its file name otherwise)
  *   reviewed:  written by --sign once you have read every question in it
  *
- * The file is read by Memorizer's own parser (memorizer/src/studyImport.js),
- * so a file Memorizer reads one way is not read another way here.
+ * The file is read by Memorizer's parser, kept in scripts/study-file/ since
+ * Memorizer moved to its own repository, so a file Memorizer reads one way is
+ * not read another way here while the two copies are the same.
  *
  * WHAT IT REFUSES, naming the file and the question's number, never a word
  * of a question:
@@ -65,8 +67,8 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
-const SI = require(path.join(ROOT, 'memorizer', 'src', 'studyImport.js'));
-const Spec = require(path.join(ROOT, 'memorizer', 'src', 'spec.js'));
+const SI = require('./study-file/studyImport.js');
+const Spec = require('./study-file/spec.js');
 const { ACCSAP } = require('./which-bank.js');
 const { writeBankFolder } = require('./bank-folder.js');
 

@@ -321,11 +321,6 @@
       "class": "accepted",
       "note": "gap on a flex box is not read before the version in this row (on a grid it already is). The items of a row close up: a chip against its icon, a button against the next. Measured on Chromium with gap: 0 put on every flex box: every screen changes, and the three looked at (home, study, a question answered) lose nothing. Not fixed: it would need a runtime shim for every gap in the stylesheets, since whether a rule's box is a flex box is the cascade's to say and not the text's."
     },
-    "media prefers-reduced-transparency": {
-      "since": null,
-      "class": "progressive",
-      "note": "No Safari reads it. The block that asks for opaque panes is skipped, and the panes keep their glass."
-    },
     "property aspect-ratio": {
       "since": "15",
       "class": "fallback",
@@ -337,9 +332,7 @@
       ],
       "sim": "aspect-ratio",
       "exempt": {
-        ".echo-teaching-image": "An img: where aspect-ratio is not read it is shown at its own proportions, without the black bars of its box.",
-        ".pages .fig img": "An img in the Memorizer, whose script holds the figure's space itself (memorizer/src/ui.js lazyImage): where it is not read the page grows as the figure is drawn.",
-        "memorizer/src/ui.js#lazyImage": "The figure's box is held by script until the image is drawn, and the function says it holds nothing where aspect-ratio is not read. Exempt in this function only: another use in that file is found."
+        ".echo-teaching-image": "An img: where aspect-ratio is not read it is shown at its own proportions, without the black bars of its box."
       },
       "narrower": {
         ".heat-cell": {
@@ -419,11 +412,6 @@
       "class": "fallback",
       "how": "split",
       "note": "As :focus-visible. The one rule that holds it alone is a refinement, and the pair that keeps a unit's menu above the cards below it is two rules."
-    },
-    "selector :where": {
-      "since": "14",
-      "class": "accepted",
-      "note": "The Memorizer's glass sheen (memorizer/app.css) is one rule that holds it: where :where() is not read the rule is dropped and the panes are flat."
     },
     "unit dvh": {
       "since": "15.4",

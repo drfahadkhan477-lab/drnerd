@@ -79,7 +79,7 @@ w('data/dir/x.txt', 'x'); w('data/tree/sub/y.txt', 'y'); w('data/cpdir/sub/z.txt
 const BROWSER = ['verify-a', 'verify-b', 'verify-dynenv', 'verify-flag', 'verify-env', 'verify-child', 'verify-child2', 'verify-mode', 'verify-flaky', 'verify-spawn', 'verify-touch', 'verify-recursive', 'verify-cp'];
 const SYN = ['verify-target', 'verify-readtarget'];
 const yml = (browser, syn) => 'jobs:\n  logic:\n    steps:\n      - name: pure (1 checks)\n        run: node tests/verify-pure.js\n' +
-  '  memorizer-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n' + browser.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('') +
+  '  public-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n' + browser.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('') +
   (syn.length ? '  synthetic-browser:\n    steps:\n      - name: build\n        run: |\n          node scripts/mkt.js build/t.html\n' +
     syn.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js build/t.html\n`).join('') : '');
 

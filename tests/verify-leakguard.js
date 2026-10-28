@@ -138,20 +138,24 @@ head('it refuses the licensed bank, by every route in');
   r = run([write('run-npm.txt', '\n> systole@1.0.0 verify\n> node scripts/verify.js\n\n' + redirected)]);
   ok('and after npm\u2019s own lines, as `npm run verify > 1.txt` keeps it', r.code === 1 && /LOG/.test(r.out), r.out.trim().slice(0, 80));
 
-  /* 6. PACK — the owner's textbook, by way of Memorizer's study pack
-     (memorizer/src/pack.js). Both fixtures are made here by pack.js itself,
-     from a two-line synthetic unit, so what is recognised is what the app
-     really writes and no book is involved. */
-  const Pack = require(path.join(ROOT, 'memorizer', 'src', 'pack.js'));
-  const unit = { id: 'u', name: 'Unit', clusters: [{ title: 'One', pageStart: 1, pageEnd: 1, segments: [{ text: 'A synthetic sentence.', page: 1 }] }] };
-  r = run([write('prompt-for-claude.txt', Pack.prompt(unit))]);
+  /* 6. PACK — the owner's textbook, by way of Memorizer's study pack. Memorizer
+     moved to its own repository; a prompt or a reply kept in an old checkout
+     is still the book in a file. The fixtures are written here in the shapes
+     Memorizer's pack.js wrote at 396a465 (the prompt shows Claude the JSON it
+     wants, key quoted), from a synthetic sentence, so no book is involved.
+     The marker is built from parts, so this file does not carry it. */
+  const FORMAT = 'memorizer' + '-pack';
+  const prompt = 'A STUDY PACK FOR THIS UNIT\n\nReply with JSON only, in this shape:\n' +
+    JSON.stringify({ format: FORMAT, version: 1, unit: 'Unit', sections: [] }, null, 2) +
+    '\n\n[p. 1] A synthetic sentence.\n';
+  r = run([write('prompt-for-claude.txt', prompt)]);
   ok('a Memorizer prompt, which carries the book\u2019s text and the pack\u2019s shape, is refused', r.code === 1 && /PACK/.test(r.out), r.out.match(/PACK.*/)?.[0] || r.out.slice(0, 60));
-  const reply = JSON.stringify({ format: Pack.FORMAT, version: Pack.VERSION, unit: 'Unit', sections: [Pack.EXAMPLE] }, null, 2);
+  const reply = JSON.stringify({ format: FORMAT, version: 1, unit: 'Unit', sections: [{ title: 'One', points: [{ text: 'A synthetic sentence.', page: 1 }] }] }, null, 2);
   r = run([write('chapter-7.json', reply)]);
   ok('and so is the pack Claude writes back, under any name', r.code === 1 && /PACK/.test(r.out));
-  r = run([write('reply.md', 'Here is reply 1.\n```json\n' + JSON.stringify({ format: Pack.FORMAT, sections: [] }) + '\n```\n')]);
+  r = run([write('reply.md', 'Here is reply 1.\n```json\n' + JSON.stringify({ format: FORMAT, sections: [] }) + '\n```\n')]);
   ok('in a code fence, compact, with prose around it', r.code === 1 && /PACK/.test(r.out));
-  r = run([path.join(ROOT, 'memorizer', 'src', 'pack.js'), path.join(ROOT, 'tests', 'verify-memorizer-pack-pure.js')]);
+  r = run([path.join(ROOT, 'scripts', 'leak-guard.js'), path.join(ROOT, 'tests', 'verify-leakguard.js')]);
   ok('while the code that names the format is not refused', r.code === 0, r.out.trim().slice(0, 80));
   r = run([write('pack-notes.md', 'Notes on the memorizer-pack format, and its "format" key.\n')]);
   ok('nor prose that mentions it', r.code === 0, r.out.trim().slice(0, 60));
@@ -724,7 +728,7 @@ head('the hook is wired the way the README says');
   /* And CI reads every commit a pull request adds, from a checkout that has
      them. The logic job, without its comments. */
   const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
-  const logicJob = yml.slice(yml.indexOf('\n  logic:'), yml.indexOf('\n  memorizer-browser:')).split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+  const logicJob = yml.slice(yml.indexOf('\n  logic:'), yml.indexOf('\n  public-browser:')).split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
   ok('CI\u2019s logic job reads every commit a pull request adds, from a checkout that has them',
      /node scripts\/leak-guard\.js --range HEAD\^1\.\.HEAD\^2/.test(logicJob) && /fetch-depth:\s*0\b/.test(logicJob),
      `range ${/--range HEAD\^1/.test(logicJob)}, fetch-depth 0 ${/fetch-depth:\s*0\b/.test(logicJob)}`);

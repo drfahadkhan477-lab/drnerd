@@ -26,7 +26,7 @@
  * lines, and this prints numbers, layout names, page numbers and line shapes.
  *
  * WHAT IT DOES
- *   1. Reads each PDF with pdf.js — the version Memorizer pins, checked
+ *   1. Reads each PDF with pdf.js — the version tools/pdfjs-pin.js pins, checked
  *      against the same integrity hashes (as tools/pdf-shape.js does) — page
  *      by page: its text lines with position, size, font and ink, and each
  *      figure, cut from the rendered page at the rectangle the page's own
@@ -134,10 +134,7 @@ function readBank() {
 }
 
 /* ── in the page: pdf.js, one page at a time ───────────────────────────── */
-const PDFSRC = fs.readFileSync(path.join(ROOT, 'memorizer', 'src', 'pdf.js'), 'utf8');
-const BASE = /var BASE = '([^']+)'/.exec(PDFSRC)[1];
-const LIB = { url: BASE + 'pdf.min.js', sri: /var LIB = \{[^}]*sri: '([^']+)'/.exec(PDFSRC)[1] };
-const WORKER = { url: BASE + 'pdf.worker.min.js', sri: /var WORKER = \{[^}]*sri: '([^']+)'/.exec(PDFSRC)[1] };
+const { LIB, WORKER } = require('./pdfjs-pin.js');
 
 async function openDoc({ lib, worker }) {
   await new Promise((ok, fail) => { const s = document.createElement('script'); s.src = lib.url; s.integrity = lib.sri;

@@ -566,8 +566,8 @@ head('and a style written in script is held to the rows the table has');
      scripts and pages write inline (style attributes, cssText strings, el.style.x, setProperty) is read by the same reader as the stylesheets and must be in the
      table, so that a feature that is only ever written there cannot arrive unclassified. And a property or a function that a row says is newer than the floor, in a
      string that looks like a style or in an assignment to element.style, is found, unless the row says it is read as an older spelling there (the image figure's
-     ratio in the Memorizer is exempt in the one function that sets it, by its name: file#function in the row). What is not read: CSS that a function builds from data
-     (the Memorizer's look sheet, memorizer/src/appearance.js css()), a style assembled from variables entirely, and the standalone demo pages (demo/), which are opened
+     ratio was exempt that way in the Memorizer, by its function's name: file#function in the row). What is not read: a style assembled from variables entirely,
+     and the standalone demo pages (demo/), which are opened
      in Safari on their own and are not the app (they write inset, aspect-ratio and :focus-visible with no fallback). */
   const T = C.loadTable();
   const above = Object.entries(T.above).filter(([k, r]) => (k.startsWith('property ') || k.startsWith('function ')) && r.class !== 'inert');
@@ -678,8 +678,6 @@ head('and a style written in script is held to the rows the table has');
   /* inline CSS goes through the same classification as a stylesheet: each piece is a pseudo-file, and analyse() sorts what is in it */
   const inlineFiles = [];
   for (const { rel } of sources) for (const seg of C.inlineSegments(real.rests[rel])) inlineFiles.push(parseFile(rel, seg.css, T));
-  const generated = C.generatedSheets();                  // a stylesheet a script builds from data is read as the script makes it
-  for (const g of generated) inlineFiles.push(parseFile(g.file, g.css, T));
   const resIn = analyse(inlineFiles, T, { inline: true });
   const inlineBad = [...[...resIn.unlisted].map(([k, w]) => `${w} ${k} is not in the table`), ...Object.values(resIn.rows).flat(), ...resIn.newerInside, ...resIn.newerInMedia, ...resIn.stray, ...resIn.prefix];
   ok('everything the scripts and pages write inline is in the table, so a feature that is only ever written there cannot arrive unclassified (node scripts/css-floor-table.js says how to add a row)', resIn.unlisted.size === 0 && inlineFiles.length > 0, list0([...resIn.unlisted].map(([k, w]) => `${w} ${k}`)) || `${inlineFiles.length} pieces`);
@@ -687,12 +685,10 @@ head('and a style written in script is held to the rows the table has');
   const crossBad = crossProblems(SHEETS, inlineFiles, T);
   ok('and a custom property is followed across a stylesheet and what the scripts write inline, so a feature that arrives through var() from the other side is classified too', crossBad.length === 0 && SHEETS.length > 0 && inlineFiles.length > 0, list0(crossBad) || `${SHEETS.length} stylesheets, ${inlineFiles.length} inline pieces`);
   const reads = rel => new Set(inlineFiles.filter(f => f.file === rel).flatMap(f => f.uses.map(u => u.key)));
-  ok('and the pieces the pages make are read: the shell\'s <style> block (@font-face), the style element its script fills (@keyframes, min()), the page builder\'s overlay, the Memorizer\'s scripts', reads('app/systole.html').has('atrule @font-face') && reads('app/systole.html').has('atrule @keyframes') &&
-     reads('app/systole.html').has('function min') && reads('app/systole.html').has('descriptor @font-face font-display') && reads('scripts/build-pwa.js').has('property z-index') && reads('memorizer/src/ui.js').has('property width'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);
-  ok('and the stylesheets that scripts build from data are read as built: the Memorizer\'s look sheet has its themes (:root blocks), its dark scheme (@media) and its custom properties', generated.length > 0 && generated.every(g => g.css.length > 500) && reads('memorizer/src/appearance.js').has('atrule @media') &&
-     reads('memorizer/src/appearance.js').has('property --*') && generated.some(g => /:root\[data-look="auto"\]/.test(g.css)), generated.map(g => `${g.file} ${g.css.length} chars`).join(', '));
-  ok('and the scripts and pages read are the ones the app ships: the shell, the builder, the Memorizer\'s page and the sources of both', ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html'].every(f => SRC.includes(f)) &&
-     ['src/', 'src/lab/', 'memorizer/src/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
+  ok('and the pieces the pages make are read: the shell\'s <style> block (@font-face), the style element its script fills (@keyframes, min()), the page builder\'s overlay', reads('app/systole.html').has('atrule @font-face') && reads('app/systole.html').has('atrule @keyframes') &&
+     reads('app/systole.html').has('function min') && reads('app/systole.html').has('descriptor @font-face font-display') && reads('scripts/build-pwa.js').has('property z-index'), `${inlineFiles.length} pieces in ${new Set(inlineFiles.map(f => f.file)).size} files`);
+  ok('and the scripts and pages read are the ones the app ships: the shell, the builder and the app\'s sources', ['app/systole.html', 'scripts/build-pwa.js'].every(f => SRC.includes(f)) &&
+     ['src/', 'src/lab/'].every(d => SRC.some(f => f.startsWith(d))) && sources.every(x => x.text.length > 0), `${SRC.length} files`);
   function list0(a) { return a.slice(0, 4).join(' | '); }
 }
 
