@@ -1445,7 +1445,10 @@ function warmIndex(){
 function invalidateIndex(){
   pearlCache=null; IDX=null; VOCAB=null; IDXJOB=null; }
 
-function search(query,{exclude=null,limit=5}={}){
+/* kind: rank only that kind of document ('q' questions, 'r' notes). Ranked together, the notes' boost and the weak-tail
+   cut below decided a questions-only search: when the notes held the word, every question fell under 32% of the top
+   note and was cut before runSearch could keep it (verify-stage0, once the synthetic notes grew to the real ones' size). */
+function search(query,{exclude=null,limit=5,kind=null}={}){
   if(!IDX) buildIndex();
   const qt=tok(query); if(!qt.length) return [];
   const k1=1.5,b=0.75, seen=Object.create(null), stubs=[];
@@ -1496,6 +1499,7 @@ function search(query,{exclude=null,limit=5}={}){
   for(let di=0;di<ND;di++){
     const d=docs[di];
     if(exclude&&d.key==='q:'+exclude) continue;
+    if(kind&&d.meta.kind!==kind) continue;
     const norm=k1*(1-b+b*d.len/IDX.avg);
     let s=0, covered=0;
     for(const t in seen){
@@ -3168,7 +3172,7 @@ function runSearch(q,ch){
   SQ.q=q; SQ.ch=ch!==undefined?ch:SQ.ch; SQ.ran=true;
   const term=(q||'').trim();
   if(!term){ SQ.hits=[]; return; }
-  const raw=search(term,{limit:400}).filter(h=>h.meta.kind==='q');
+  const raw=search(term,{limit:400,kind:'q'});
   const byId=Object.fromEntries(ALL_Q.map(x=>[x.id,x]));
   SQ.hits=raw.map(h=>byId[h.meta.id]?{q:byId[h.meta.id],score:h.score}:null)
              .filter(x=>x&&!x.q.bad)
