@@ -101,13 +101,37 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the way out');
   const restarted = await page.evaluate(() => {
+    const old = S.resume['all|' + S.chapter] && S.resume['all|' + S.chapter].i;
     restartQuiz();
-    return { at: S.qIdx, resumed: !!S.resumed, stored: !!S.resume['all|' + S.chapter] };
+    const rec = S.resume['all|' + S.chapter];
+    /* The deck is kept the moment it is dealt (round six), so after Start over a record exists: the NEW deck, at its
+       first question. What must be gone is the old place. */
+    return { at: S.qIdx, resumed: !!S.resumed, old,
+             stored: !!rec && !(rec.i === 0 && rec.ids.join() === S.questions.map(q => q.id).join()) };
   });
   ok('start over deals from the beginning', restarted.at === 0);
   ok('and stops claiming to be resumed', restarted.resumed === false);
   ok('and forgets the place, so it does not spring back',
-     restarted.stored === false);
+     restarted.old > 0 && restarted.stored === false, JSON.stringify(restarted));
+
+  head('question one is a place too');
+  /* Reported from the app (28 October 2026): open a chapter, answer the first question or only read it, go back, open
+     the chapter again, and it was question one of a freshly shuffled deck. A record at index 0 was read as "nothing
+     done", and the deck was not written down until the first answer or Next. */
+  const one = await page.evaluate(() => {
+    const ch = CHAPTERS[1] || CHAPTERS[0], out = {};
+    for (const [name, answer] of [['read', false], ['answered', true]]) {
+      clearResume(ch, 'all'); startQuiz(ch);
+      const ids = S.questions.map(q => q.id);
+      if (answer) selectOpt(0);
+      goHome(); startQuiz(ch);
+      out[name] = { same: S.questions.map(q => q.id).join() === ids.join(), at: S.qIdx, answered: S.answered };
+    }
+    return out;
+  });
+  ok('leaving from the first question, only read, comes back to it in the same deck', one.read.same && one.read.at === 0, JSON.stringify(one.read));
+  ok('and leaving it answered comes back to it answered, not asked again', one.answered.same && one.answered.at === 0 && one.answered.answered === true,
+     JSON.stringify(one.answered));
 
   head('a finished deck is not a deck you are in the middle of');
   const finished = await page.evaluate(() => {

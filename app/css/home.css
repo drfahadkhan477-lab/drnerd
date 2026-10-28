@@ -645,3 +645,26 @@ body.on-home .nav-title{line-height:1.1}
   .page-h3{margin:8px 2px 6px}
   .brain-ch{padding:6px 8px}
 }
+
+/* Round six (the owner): the app's heading, the pencil and the Apex mark, enhanced.
+   The heading is one design on every screen (it was a serif on Home and a sans everywhere else): the jewel logo, the
+   name in the display face, and the bank under it in small capitals with its count as a chip. The brand keeps its
+   42px box (verify-taps measures it). */
+.nav-brand{gap:12px;height:42px}
+.nav-logo{width:38px;height:38px;border-radius:12px;background:var(--teal-ink);background-image:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 18px -10px var(--teal-ink)}
+.nav-logo .icon{width:22px;height:22px;color:var(--white)}
+.nav-title,body.on-home .nav-title{font-family:'DM Serif Display',Georgia,serif;font-size:22px;font-weight:400;
+  letter-spacing:-.01em;line-height:1.05;color:var(--text)}
+.nav-sub,body.on-home .nav-sub{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:10px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.nav-count{padding:1px 7px;border-radius:999px;background:var(--teal4);color:var(--teal-ink);font-weight:750;letter-spacing:.04em}
+
+/* The pencil: a filled accent button that says "draw here", where a grey disc read as switched off. */
+.tool-rail.mini{padding:4px}
+.tool-rail.mini .rail-open{border:0;background:var(--teal-ink);color:var(--white);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),inset 0 -3px 8px rgba(0,0,0,.18),0 12px 24px -12px var(--teal-ink)}
+.tool-rail.mini .rail-open .icon{width:22px;height:22px;color:var(--white)}
+.tool-rail.mini .rail-open:focus-visible{outline:2.5px solid var(--teal);outline-offset:3px}
+@media(hover:hover){.tool-rail.mini .rail-open:hover{transform:translateY(-1px) scale(1.04)}}
+

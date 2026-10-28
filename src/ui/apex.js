@@ -100,11 +100,20 @@ function avatar(canvas, opts) {
     const R = Math.min(w, h) / 2 - 2;
     ctx.clearRect(0, 0, w, h);
 
-    // ── the disc it lives on
+    // ── the disc it lives on. As a badge (the Apex button), a solid jewel lit from the top left: at 26px a disc of 5-30%
+    //    ink read as a faint smudge with a line through it, not as something to tap.
+    const badge = !!opts.badge;
+    const shade = (c, f) => c.map(v => Math.max(0, Math.min(1, v * f)));
     const g = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.4, R * 0.1, cx, cy, R);
-    g.addColorStop(0, rgb(S.cur, 0.30));
-    g.addColorStop(0.55, rgb(S.cur, 0.13));
-    g.addColorStop(1, rgb(S.cur, 0.05));
+    if (badge) {
+      g.addColorStop(0, rgb(shade(S.cur, 1.15), 1));
+      g.addColorStop(0.6, rgb(shade(S.cur, 0.62), 1));
+      g.addColorStop(1, rgb(shade(S.cur, 0.32), 1));
+    } else {
+      g.addColorStop(0, rgb(S.cur, 0.30));
+      g.addColorStop(0.55, rgb(S.cur, 0.13));
+      g.addColorStop(1, rgb(S.cur, 0.05));
+    }
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fillStyle = g; ctx.fill();
 
     // ── the beat ring: it expands on every systole, so the thing is alive even
@@ -146,21 +155,29 @@ function avatar(canvas, opts) {
       const y = cy - v * R * 0.44;
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
-    ctx.strokeStyle = rgb(S.cur, 0.95);
-    ctx.lineWidth = 1.9; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.shadowColor = rgb(S.cur, 0.9); ctx.shadowBlur = 7;
+    ctx.strokeStyle = badge ? 'rgba(255,255,255,0.96)' : rgb(S.cur, 0.95);
+    ctx.lineWidth = badge ? 1.7 : 1.9; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.shadowColor = badge ? rgb(shade(S.cur, 1.3), 0.95) : rgb(S.cur, 0.9); ctx.shadowBlur = badge ? 4 : 7;
     ctx.stroke();
     ctx.shadowBlur = 0;
     // leading dot, where the trace is being written
     const vNow = beat(S.t % RR) * S.curAmp;
     ctx.beginPath();
     ctx.arc(cx + span / 2, cy - vNow * R * 0.44, 2.1, 0, 6.2832);
-    ctx.fillStyle = rgb(S.cur, 1); ctx.fill();
+    ctx.fillStyle = badge ? '#fff' : rgb(S.cur, 1); ctx.fill();
     ctx.restore();
+
+    // ── the jewel's highlight, a soft crescent of light across its top
+    if (badge) {
+      const hl = ctx.createLinearGradient(cx, cy - R, cx, cy);
+      hl.addColorStop(0, 'rgba(255,255,255,0.42)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.beginPath(); ctx.ellipse(cx, cy - R * 0.42, R * 0.72, R * 0.46, 0, 0, 6.2832);
+      ctx.fillStyle = hl; ctx.fill();
+    }
 
     // ── rim
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832);
-    ctx.strokeStyle = rgb(S.cur, 0.42); ctx.lineWidth = 1;
+    ctx.strokeStyle = badge ? 'rgba(255,255,255,0.55)' : rgb(S.cur, 0.42); ctx.lineWidth = 1;
     ctx.stroke();
   }
 
