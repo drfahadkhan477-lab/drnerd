@@ -115,7 +115,7 @@ try {
       '/* ══════════════ Glass — see scripts/glass-patch.js'),
     route: cut('app/systole.html', "    :S.screen==='notesearch'?buildNoteSearch()", "    :S.screen==='echo'?buildEchoScreen()"),
     doors: cut('app/systole.html', '      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"',
-      '      <div class="theme-wrap">'),
+      '      <!-- Study shortcuts end -->'),
     css: cutStylesheet('.echo-studio{', '/* ── glass — see scripts/glass-patch.js ── */'),
   };
 } catch (e) { cutError = e.message; }

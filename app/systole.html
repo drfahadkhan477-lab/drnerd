@@ -6428,10 +6428,13 @@ function buildNav(){
       ${S.screen==='quiz'?`<button class="icon-btn" onclick="toggleFocusMode()" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
-      ${S.screen!=='home'?`<button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
+      ${S.screen!=='home'?`
+      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
       <button class="icon-btn" onclick="goEcho()" title="Echo Studio"
-        aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>`:''}
+        aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>
+      <!-- Study shortcuts end -->
+      `:''}
       ${S.screen==='home'?`<button class="icon-btn" onclick="setTheme(themeIsDark()?'daylight':'midnight')" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
       <div class="theme-wrap">
         <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
@@ -6818,13 +6821,20 @@ function pearlNow(){
    wavefront belong on one line, and a diagram stacked underneath reads as a
    second, unrelated thing. */
 /* As a note's figure: the caption is the image's alt, and the copy shown under it is hidden from a screen reader. */
+function pearlFigureKey(event,figure){
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();figure.click();}
+  else if(event.key==='Home'||event.key==='End'){
+    event.preventDefault();event.stopPropagation();
+    figure.scrollTop=event.key==='Home'?0:figure.scrollHeight;
+  }
+}
 function pearlFigure(p){
   if(!p||!p.figKey) return '';
   const src=(typeof refImgSrc==='function')?refImgSrc(p.figKey):'';
   if(!src) return '';
   const cap=(p.figCap||'').trim();
   return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
-    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();this.click()}"
+    onkeydown="pearlFigureKey(event,this)"
     title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')} Figure <i>${icon('expand','icon-sm')} Tap to enlarge</i></span>
     <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;

@@ -20,13 +20,37 @@
   "measurementNote": "Focused runs, not one complete release run. Source subsequently changed to fix header controls; full validation still required.",
   "negativeEvidence": [
     "All six new landing checks fail with their corresponding injected defect and pass without it.",
-    "Header control count and visible-search size checks fail with an extra control and collapsed search."
+    "Header control count and visible-search size checks fail with an extra control and collapsed search.",
+    "Duplicate heading, incorrect invitation title and altered type styles each fail the revised polish assertions."
   ],
   "pwa": {
     "shellGzipKB": 272,
     "budgetKB": 280,
-    "validation": "First PWA phase correctly refused mismatched extraction after header rebuild; extraction refreshed and WebKit rerun started."
+    "validation": "WebKit: build, 121 PWA checks, 15 Pages checks and 10 cache-bucket checks passed before subsequent caption fix; final release recheck pending."
   },
   "privateContent": "Original export and library retained; raw logs and screenshots outside Git.",
-  "deployment": "Not performed"
+  "deployment": "Not performed",
+  "fullChromiumFirstRun": {
+    "selectedSuites": 157,
+    "passedSuites": 151,
+    "reportedChecks": 6978,
+    "status": "failed",
+    "failingSuites": [
+      "homepager",
+      "polish",
+      "echo",
+      "notesearch",
+      "heroart",
+      "heartreuse"
+    ],
+    "fixes": "Deterministic caption Home/End; visible heading semantics; correct extraction boundaries for nav fixtures; enter Explore in 3D before pixel/lifecycle checks."
+  },
+  "postFixFocused": {
+    "homepager": 86,
+    "echo": 35,
+    "notesearch": 16,
+    "heroart": 33,
+    "heartreuse": 30,
+    "polish": 79
+  }
 }

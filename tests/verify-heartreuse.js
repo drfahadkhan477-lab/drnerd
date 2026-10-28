@@ -81,6 +81,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
+  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
   /* DRIVER-SIDE. This was page.evaluate(m => new Promise(r => setTimeout(r, m))),
      which holds an execution context open for the whole pause — and this suite
      crashed inside it, at settle() on line 84, during the navigation loop. An
