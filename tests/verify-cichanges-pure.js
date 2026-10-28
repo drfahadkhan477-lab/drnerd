@@ -36,6 +36,11 @@ head('a pull request skips only the job its files cannot reach');
   ok('Systole shell only: the Memorizer job is skipped, the synthetic job runs', is(sys, false, true), show(classify(sys)));
   const docs = ['docs/BUILD.md', 'README.md', 'tasks/lessons.md', '.claude/agents/planner.md'];
   ok('docs only: both browser jobs are skipped', is(docs, false, false), show(classify(docs)));
+  /* .gitignore read only by verify-engine and verify-leakguard, both in the logic job,
+     which runs regardless of this decision. It used to start every browser job. */
+  ok('.gitignore alone skips both browser jobs', is(['.gitignore'], false, false), show(classify(['.gitignore'])));
+  ok('.gitignore beside docs still skips both', is(docs.concat(['.gitignore']), false, false));
+  ok('.gitignore beside Systole code still runs the synthetic job', is(['.gitignore', 'app/systole.html'], false, true));
   ok('docs beside Memorizer code still skip only the synthetic job', is(docs.concat(mem), true, false));
   ok('one file from each side runs both', is(['memorizer/src/ui.js', 'app/systole.html'], true, true));
   ok('the Practice Lab\'s browser suite, changed alone, runs the synthetic job: the Lab is a Systole screen now', classify(['tests/verify-lab.js']).synthetic === true, show(classify(['tests/verify-lab.js'])));

@@ -521,16 +521,28 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
            to the last's right, and only when they share a line. */
         const rects = [...r.getClientRects()];
         if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
-        const width = () => { const range=document.createRange(); range.selectNodeContents(h);
-          const boxes=[...range.getClientRects()]; return Math.max(...boxes.map(x=>x.right))-Math.min(...boxes.map(x=>x.left)); };
-        const w=width(), probe=document.createElement('style');
-        document.head.appendChild(probe);
-        // Use the same first-letter formatting box: a detached span loses its kerning boundary in WebKit.
-        probe.textContent='#pearlConcept::first-letter{text-transform:none!important}'; const lower=width();
-        probe.textContent='#pearlConcept::first-letter{text-transform:uppercase!important}'; const upper=width();
+        /* ONE GLYPH AGAINST ONE GLYPH, not one string against a nearly identical string. This compared the whole
+           heading's width with the whole word capitalised and the whole word as stored, and that stopped working the
+           day the concept took a serif face (Quiet Atlas, app/css/home.css). In DM Serif Display a capital is barely
+           a different width from its lower case — over "pulmonary embolism" the two spellings came to 207.8px and
+           209.5px, and the drawn heading landed between them at 208.7px, so the check could not say which it was and
+           reported a failure against a heading that was correctly capitalised. At some sizes the gap falls to 0.4px,
+           under this measurement's own 0.5px floor.
+           ::first-letter is a box of its own, so rects[0] IS the drawn first letter: comparing that against the two
+           single characters moves the signal from under a pixel to about 3.5px in both engines, and it does not shrink
+           as the word gets longer. If the browser ever stops giving the first letter its own box the comparison has
+           nothing to stand on, so that says UNMEASURED rather than guessing. */
+        if (rects.length < 2) return 'UNMEASURED: the first letter is not a box of its own';
+        const cs = getComputedStyle(h), probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
+        document.body.appendChild(probe);
+        probe.textContent = text[0]; const lower = probe.getBoundingClientRect().width;
+        probe.textContent = text[0].toUpperCase(); const upper = probe.getBoundingClientRect().width;
         probe.remove();
+        const w = rects[0].width;
+
         return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
-          : `heading ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
+          : `first letter ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
       })(),
       capPx: cap ? parseFloat(getComputedStyle(cap).fontSize) : 0,
     };
@@ -599,6 +611,38 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{ const w=document.getElementById('pearlBody'); w.innerHTML='<p>A short teaching cue.</p>'; pearlFit(); });
   const shortCue=await page.evaluate(()=>{const w=document.getElementById('pearlBody');return {over:w.scrollHeight-w.clientHeight,fade:document.getElementById('pearlCard').classList.contains('pearl-more'),hidden:document.getElementById('pearlMore').hidden};});
   ok('where a short cue fits, nothing is faded and nothing offers more',shortCue.over<=4&&!shortCue.fade&&shortCue.hidden,JSON.stringify(shortCue));
+  /* THE CARD IS SHORT BEFORE IT IS ANYTHING ELSE (28 October 2026). On an 11-inch iPad in portrait, 744x1133, the card
+     is 480px and the figure's flex-basis was a rigid 145px it could not give back; .pearl-main's overflow:hidden took
+     the difference out of the pearl itself, which rendered 40px tall with 411px hidden. What the reader saw was the
+     numeral 1, the words CORE IDEA, and a fade — the sentence the card exists to carry was entirely behind Show all,
+     and verify-pearl was green through all of it, because nothing here had ever asked whether the body was VISIBLE.
+     Measured at the sizes an iPad actually is: the card's height comes from the grid row, and the row from the
+     viewport, so a size that is not driven is a size that is not checked. */
+  head('the pearl is readable at every size an iPad is');
+  for (const [name, vw, vh] of [['iPad portrait', 1024, 1366], ['iPad landscape', 1366, 1024],
+                                ['iPad mini portrait', 744, 1133], ['Split View', 507, 1024]]) {
+    await page.setViewportSize({ width: vw, height: vh });
+    await page.evaluate(() => { S.screen = 'home'; render(); });
+    await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: name + ': the pearl' });
+    await page.evaluate(() => pearlFit());
+    const m = await page.evaluate(() => {
+      const wrap = document.getElementById('pearlBody'), fig = document.getElementById('pearlFig');
+      /* Four lines of the step's OWN type, not of the wrapper's: the two differ, and the wrapper's is the one the
+         floor is written in, so measuring that would only restate the stylesheet back to itself. */
+      const step = document.querySelector('#pearlBody .pearl-txt') || wrap;
+      const line = parseFloat(getComputedStyle(step).lineHeight) || 24;
+      return { visible: wrap.clientHeight, line: +line.toFixed(1), lines: +(wrap.clientHeight / line).toFixed(2),
+               figShown: !!fig && fig.offsetHeight > 0, figCut: fig ? fig.scrollHeight - fig.clientHeight : 0 };
+    });
+    ok(name + ': four lines of the pearl are on screen', m.lines >= 4, `${m.visible}px of body, ${m.lines} lines of ${m.line}px`);
+    /* A figure cut through its own caption is worse than no figure: the caption is the half that says what the picture
+       shows. Either the panel is whole or the card is too short for it and pearlFit() has put it away. */
+    ok(name + ': the figure panel is whole, or it is not shown at all', !m.figShown || m.figCut <= 1,
+       m.figShown ? `${m.figCut}px of the panel hidden` : 'too short for a figure, and none is drawn');
+  }
+  await page.setViewportSize({ width: 1100, height: 1100 });
+
+
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
      the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
   await page.setViewportSize({ width: 390, height: 844 });
@@ -642,10 +686,25 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await settled(page,()=>!window.__vtLive && !!document.querySelector('.hero-h1'),{label:'empty library Home'});
   const empty=await page.evaluate(()=>({gone:!document.getElementById('pearlCard'),
     heading:document.querySelector('#atlasTitle')?.textContent.replace(/\s+/g,' ').replace('oneidea','one idea'),
+
     open:[...document.querySelectorAll('#homePage0 button')].some(b=>b.textContent==='Open notes')}));
   ok('no notes means no card, rather than an empty one',empty.gone);
   ok('and nothing throws',errors.length===0);
   ok('empty Home invites one idea and offers Open notes',empty.heading==='Make one idea stick.'&&empty.open);
+  for(const size of [{width:1194,height:834},{width:834,height:1194},{width:390,height:844}]){
+    await page.setViewportSize(size);
+    await settled(page,()=>!window.__vtLive,{label:'empty Home resized'});
+    const room=await page.evaluate(()=>{
+      const h=document.querySelector('#homePage0 h1'),heart=document.getElementById('heroHeart3dSlot').getBoundingClientRect();
+      const range=document.createRange();range.selectNodeContents(h);
+      const clear=[...range.getClientRects()].every(r=>r.right<=heart.left||r.left>=heart.right||r.bottom<=heart.top||r.top>=heart.bottom);
+      const wrap=document.querySelector('#homePage0 .home-wrap').getBoundingClientRect(),hero=document.querySelector('#homePage0 .hero-live').getBoundingClientRect();
+      const intro=document.getElementById('atlasIntro').getBoundingClientRect();
+      return {clear,fullPanel:intro.width>0&&hero.width>0&&Math.min(intro.left,hero.left)>=wrap.left-1&&Math.max(intro.right,hero.right)<=wrap.right+1};
+    });
+    ok(`${size.width}×${size.height}: empty Home gives its prompt and heart separate space`,room.clear&&room.fullPanel,JSON.stringify(room));
+  }
+
   if(empty.open){
     await page.getByRole('button',{name:'Open notes',exact:true}).click();
     await settled(page,()=>!window.__vtLive,{label:'Open notes transition'});
@@ -655,6 +714,31 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
   await page.getByRole('button',{name:'Begin recall',exact:true}).click();
   await page.getByRole('button',{name:'Reveal',exact:true}).click();
+
+  head('headings and text the notes left behind');
+  /* Invented prose in the shape of the owner's notes (no licensed text). */
+  const left = await page.evaluate(() => {
+    const run = 'At 5 years the benefit of an early invasive strategy over a selective approach was gone, in part because of crossover in the latter group.17 Thus an invasive strategy is recommended in patients with NSTE-ACS who have troponin elevation on admission, or in whom these invented markers rise over the next 24 hours.';
+    const ctx = h => Pearl.passageContext('## ' + h + '\n\n' + run, run, 'Invented Unit — ' + h).concept;
+    return {
+      fragment: ctx('Outweigh, uncommon'),
+      kept: ctx('Invented valve disease'),
+      subject: Pearl.subject(run),
+      cite: Pearl.clean('crossover in the latter group.17 Thus an invasive'),
+      split: Pearl.sentences(Pearl.plain(run)).length,
+      decimal: Pearl.clean('Fig. 54.1 shows 2.5 mg.'),
+      steps: Pearl.lesson(Pearl.clean(run)).map(s => s.label + ':' + ((s.lead ? s.lead + ' ' : '') + s.text).slice(0, 12)),
+    };
+  });
+  ok('a heading that is two words and a comma is passed over for the passage\'s own subject', left.fragment === 'Invasive strategy in NSTE-ACS', left.fragment);
+  ok('a heading that names a topic is kept', left.kept === 'Invented valve disease', left.kept);
+  ok('the subject is the commonest modifier and head noun, with the abbreviation it is about', left.subject === 'Invasive strategy in NSTE-ACS', left.subject);
+  ok('a reference number after a full stop is removed', left.cite === 'crossover in the latter group. Thus an invasive', left.cite);
+  ok('and the sentence boundary it hid is found', left.split === 2, String(left.split));
+  ok('a decimal and a figure number are left alone', left.decimal === 'Fig. 54.1 shows 2.5 mg.', left.decimal);
+  ok('"or in whom" stays in the clause it continues, not a Contrast step of its own',
+     !left.steps.some(s => /^Contrast:/.test(s)) && !left.steps.some(s => /:Or in whom/i.test(s)), JSON.stringify(left.steps));
+
 
   head('regression');
   head('a pearl is a whole thought now');

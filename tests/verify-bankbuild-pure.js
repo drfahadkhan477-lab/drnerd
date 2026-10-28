@@ -256,6 +256,8 @@ const copyFolder = (to, edit) => {
       fs.copyFileSync(path.join(ROOT, 'app', 'css', 'photoswipe.css'), path.join(root, 'app', 'css', 'photoswipe.css'));
       fs.copyFileSync(path.join(ROOT, 'app', 'css', 'figviewer.css'), path.join(root, 'app', 'css', 'figviewer.css'));
       fs.cpSync(path.join(ROOT, 'docs', 'vendor'), path.join(root, 'docs', 'vendor'), { recursive: true });
+      /* the scanned heart, which the split build ships beside the app */
+      fs.cpSync(path.join(ROOT, 'assets', 'heart-scan'), path.join(root, 'assets', 'heart-scan'), { recursive: true });
       fs.mkdirSync(path.join(root, 'build'));
       const file = path.join(root, 'build', 'systole.html');
       fs.writeFileSync(file, html);

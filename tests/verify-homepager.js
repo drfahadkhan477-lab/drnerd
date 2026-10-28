@@ -101,11 +101,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect();
       const tabs = r(document.querySelector('.home-tabs')), pager = r(document.getElementById('homePager')), fab = r(document.getElementById('aiFab'));
       const buttons=[...document.querySelectorAll('.home-tab')].map(r);
-      return { doc: document.documentElement.scrollHeight, vh: innerHeight,
-        placement: innerWidth>=700 ? tabs.left>=0 && tabs.right<=pager.left && tabs.top>=0 && tabs.bottom<=innerHeight
+      /* WHICH WAY THE RAIL SITS IS READ OFF THE SCREEN, not from the 700px the script uses. Asking
+         innerWidth>=700 for the answer asks the implementation to mark its own paper: homeMark() and
+         homeTabKey() both carry that literal, the stylesheet carries it in seven media queries, and
+         nothing binds the two. Move the stylesheet's breakpoint alone and the rail would sit under the
+         pages while aria-orientation still said vertical and the arrow keys still ran up and down.
+         Beside the pages is a rail; under them is a bar. */
+      const besidePages = tabs.right <= pager.left + 1;
+      return { doc: document.documentElement.scrollHeight, vh: innerHeight, besidePages,
+        placement: besidePages ? tabs.left>=0 && tabs.top>=0 && tabs.bottom<=innerHeight
           : pager.bottom<=tabs.top && Math.abs(innerHeight-12-tabs.bottom)<=1,
         orientation: document.querySelector('.home-tabs').getAttribute('aria-orientation'),
-        wanted: innerWidth>=700?'vertical':'horizontal',
+        wanted: besidePages?'vertical':'horizontal',
+
         fabClear:buttons.every(t=>fab.right<=t.left||fab.left>=t.right||fab.bottom<=t.top||fab.top>=t.bottom) };
     });
     ok(`${label}: the screen does not scroll, the pages do`,g.doc<=g.vh+1,JSON.stringify(g));
@@ -113,6 +121,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok(`${label}: and the Apex button is clear of every tab`,g.fabClear,JSON.stringify(g));
   };
   await fits('landscape');
+  /* ON THE BREAKPOINT ITSELF. Every other width here is hundreds of pixels clear of 700, so a
+     stylesheet that moved its breakpoint and left the script behind would lay out and announce
+     consistently at all of them and say nothing. These two sit either side of the line. */
+  for (const w of [699, 701]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.evaluate(()=>homeGo(0,false)); await still('Home at the breakpoint');
+    await fits(`${w}px, across the 700px breakpoint`);
+  }
+  await page.setViewportSize({width:1180,height:820});
+  await page.evaluate(()=>homeGo(0,false)); await still('Home after the breakpoint pair');
+
   for (const size of [{width:1180,height:820},{width:834,height:1194},{width:1024,height:768}]) {
     await page.setViewportSize(size);
     for(let i=0;i<3;i++) {
@@ -120,6 +139,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       const g=await page.evaluate(i=>{const e=document.getElementById('homePage'+i);return {height:e.clientHeight,content:e.scrollHeight,width:e.clientWidth,contentWidth:e.scrollWidth};},i);
       ok(`${size.width}×${size.height}: landing page ${i} fits without clipping or page scrolling`,g.height>0&&g.content<=g.height+1&&g.contentWidth<=g.width+1,JSON.stringify(g));
       const headings=await page.evaluate(()=>[...document.querySelectorAll('.home-page:not([inert]) h1')].filter(h=>h.getClientRects().length).length);
+
       ok(`${size.width}×${size.height}: active landing page ${i} has one H1`,headings===1,String(headings));
     }
   }
@@ -128,6 +148,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.getByRole('button',{name:'Begin recall',exact:true}).click();
   await page.getByRole('button',{name:'Reveal',exact:true}).click();
   await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
+
 
 
   head('a swipe');
@@ -318,6 +339,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       fallback:getComputedStyle(document.querySelector('.h-beat')).animationPlayState};
   });
   ok('Pause stops Home canvases and the CSS heart with a Play name',covered(paused)&&paused.label==='Play animation'&&paused.fallback==='paused',JSON.stringify(paused));
+  await page.evaluate(()=>render());
+  await still('paused Home remounted');
+  await settled(page,()=>!document.getAnimations().some(a=>a.playState==='running'&&a.effect&&Number.isFinite(a.effect.getTiming().iterations)),{label:'Home entrance effects finished'});
+  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('.hero-h1')).opacity,
+    label:document.getElementById('atlasPause')?.getAttribute('aria-label')}));
+  ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play animation',JSON.stringify(pausedRemount));
+
   const resumed = await page.evaluate(async () => {
     document.getElementById('atlasPause')?.click();
     return {...await __homeWork(),label:document.getElementById('atlasPause')?.getAttribute('aria-label'),
@@ -397,9 +425,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('long captions remain keyboard readable');
   await page.evaluate(()=>{homePage=0;S.screen='home';pearlCurrent=pearlAll().find(p=>p.figKey&&refImgSrc(p.figKey));render();});
   await still('caption reading');
-  await page.evaluate(()=>{document.querySelector('#pearlFig figcaption').textContent='Long caption for keyboard scrolling. '.repeat(60);});
-  await page.locator('#pearlFig').focus();
-  await page.keyboard.press('End');
+  const compactHidden=await page.evaluate(()=>{const f=document.getElementById('pearlFig');f.querySelector('figcaption').textContent='Long caption for keyboard scrolling. '.repeat(60);pearlFit();return getComputedStyle(f).display==='none';});
+  await page.evaluate(()=>pearlToggleAll());
+  await still('expanded caption reading');
+  const expandedFigure=await page.evaluate(()=>getComputedStyle(document.getElementById('pearlFig')).display!=='none');
+  ok('Show all restores a figure hidden by the compact layout',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
+  if(expandedFigure){await page.locator('#pearlFig').focus();await page.keyboard.press('End');}
+
   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
   const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});
   ok('a long figure caption can be scrolled with the keyboard',captionScroll.overflow>0&&captionScroll.scroll>0,JSON.stringify(captionScroll));
@@ -408,12 +440,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
   await still('empty due deck');
   await page.locator('.atlas-session button').click();
+
   await settled(page,()=>!window.__vtLive,{label:'chapter action'});
   ok('with no due cards the next-session action opens Chapters',await page.evaluate(()=>S.screen==='study'));
   const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
     homePage=0;S.screen='home';render();return dueQuestions().map(q=>q.id);});
   await still('two due cards');
   await page.locator('.atlas-session button').click();
+
   await settled(page,()=>!window.__vtLive,{label:'due action'});
   const actual=await page.evaluate(()=>({screen:S.screen,ids:S.questions.map(q=>q.id),mode:S.mode}));
   ok('the next-session review opens only the cards actually due',wanted.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&JSON.stringify(actual.ids)===JSON.stringify(wanted),JSON.stringify({count:actual.ids.length}));

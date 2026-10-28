@@ -202,6 +202,9 @@ const KNOWN_BINARIES = [
   'assets/echo/plax.jpg', // Lynch/Jaffe, CC BY 2.5 anatomy illustration; assets/echo/ATTRIBUTION.md
   'assets/atlas-heart/heart.webp', // original ImageGen decorative anatomy, provenance beside asset; no licensed bank content
   'assets/hero-heart/heart.webp',   // the home screen's heart, drawn for this app
+  'assets/heart-scan/base.webp',    // "Realistic Human Heart" by neshallads, CC BY 4.0; credit in assets/heart-scan/heart-scan.json
+  'assets/heart-scan/normal.webp',  // the same model's normal map
+  'assets/heart-scan/mr.webp',      // the same model's metal/roughness map
 ];
 /* Every format IMAGE_EXT names is recognised renamed too, by its first bytes
    or, for an SVG, by its root element. This listed only PNG, JPEG, GIF, WebP

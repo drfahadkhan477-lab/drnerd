@@ -560,6 +560,12 @@ body{background-image:
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:6px 9px;color:var(--hero-accent);
   font-size:9px;letter-spacing:.04em;pointer-events:none}
 @supports not (color:color-mix(in srgb,red,blue)){.hero-live-status{background:var(--hero-c)}}
+/* The scanned heart's CC BY credit (paintHeroScanCredit), in the hero's top
+   corner: the heart moves between layouts, the corner does not. */
+.hero-scan-credit{position:absolute;right:16px;top:8px;z-index:3;max-width:min(60%,280px);margin:0;
+  text-align:right;font-size:var(--t-micro);line-height:1.35;color:var(--muted)}
+.hero-scan-credit[hidden]{display:none}
+.hero-scan-credit a{color:inherit;text-decoration:underline;white-space:nowrap}
 .hero-live-status i{width:5px;height:5px;background:var(--hero-accent);border-radius:50%;box-shadow:0 0 8px var(--hero-accent)}
 .hero-orbit{position:absolute;right:-18px;top:4px;width:240px;height:260px;pointer-events:none;z-index:0;
   background:radial-gradient(ellipse at center,color-mix(in srgb,var(--hero-accent) 12%,transparent),transparent 66%)}
