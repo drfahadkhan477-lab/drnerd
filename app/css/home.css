@@ -348,12 +348,12 @@ body.on-home .ai-fab{bottom:max(14px,var(--sab))}
    narrow, tall card, and the heart sat on the "today" figure with half the card empty under it: there it moves to the
    middle of that space, larger, its orbit with it. On a phone it is smaller, and the figures wrap short of it. */
 @media (min-width:1024px) and (orientation:landscape){
-  #app[data-screen="home"] .hero-heart-plate,#app[data-screen="home"] .hero-heart-3d{
+  #app[data-screen="home"] .hero-heart-plate,#app[data-screen="home"] .hero-heart-3d,#app[data-screen="home"] .hero-heart-hit{
     top:clamp(190px,36%,320px);right:0;left:0;margin:0 auto;width:clamp(210px,22vw,290px);height:clamp(228px,24vw,314px)}
   #app[data-screen="home"] .hero-orbit{top:calc(clamp(190px,36%,320px) - 26px);right:0;left:0;margin:0 auto;width:clamp(270px,28vw,360px);height:clamp(280px,29vw,370px)}
 }
 @media(max-width:520px){
-  .hero-heart-plate,.hero-heart-3d{width:128px;height:148px;top:52px}
+  .hero-heart-plate,.hero-heart-3d,.hero-heart-hit{width:128px;height:148px;top:52px}
   .hero-orbit{width:190px;height:214px;top:36px}
   .hero-line{max-width:calc(100% - 116px)}
 }
@@ -394,7 +394,7 @@ body.on-home{background:var(--bg)}
   #homePage0 .pearl-main{min-height:0;padding:22px;overflow:hidden}
   #homePage0 .pearl-fig{flex:0 0 24%;min-height:0;max-height:160px;border:0}
   #homePage0 .hero-h1{font-size:var(--t-h3);margin-bottom:4px}
-  #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d{top:28%;left:0;right:0;margin:0 auto;width:90%;height:58%;max-width:380px}
+  #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d,#homePage0 .hero-heart-hit{top:28%;left:0;right:0;margin:0 auto;width:90%;height:58%;max-width:380px}
   #homePage0 .hero-orbit{display:none}
   #homePage0 .hero-ecg{height:48px;bottom:60px;opacity:.3}
   #homePage0 .hero-live-status{bottom:68px;left:22px;right:auto}
@@ -421,7 +421,7 @@ body.on-home{background:var(--bg)}
 }
 @media(min-width:700px) and (orientation:portrait){
   #app[data-screen="home"] #homePage0 .home-wrap{grid-template-columns:minmax(0,1fr);grid-template-rows:280px minmax(0,1fr) auto auto;grid-template-areas:"hero" "pearl" "session" "hello"}
-  #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d{top:4%;left:auto;right:12px;width:48%;height:84%}
+  #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d,#homePage0 .hero-heart-hit{top:4%;left:auto;right:12px;width:48%;height:84%}
   .brain-chs{grid-template-columns:repeat(2,minmax(0,1fr))}
   .brain-hero{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"stage gauge" "stage side"}
 }
@@ -506,7 +506,7 @@ body.on-home .nav-title{line-height:1.1}
 @media(min-width:700px){
   #homePage0 [data-pearl-empty="true"] .hero-h1{font-size:var(--t-display)}
   #app[data-screen="home"] #homePage0 .home-wrap[data-pearl-empty="true"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"hero" "session" "hello"}
-  #homePage0 [data-pearl-empty="true"] .hero-heart-plate,#homePage0 [data-pearl-empty="true"] .hero-heart-3d{left:auto;right:22px;top:8%;width:42%;height:80%}
+  #homePage0 [data-pearl-empty="true"] .hero-heart-plate,#homePage0 [data-pearl-empty="true"] .hero-heart-3d,#homePage0 [data-pearl-empty="true"] .hero-heart-hit{left:auto;right:22px;top:8%;width:42%;height:80%}
 }
 
 /* ── Home, one screen (October 2026, round three) ───────────────────────────
@@ -517,48 +517,101 @@ body.on-home .nav-title{line-height:1.1}
    numbers, the rhythm, one action, the heart with three round tools, and the
    pearl, in two rows that fit the window. Echo moves into the rail. */
 
-/* Echo, in the rail under the three pages. A link, not a tab: it opens a
-   screen of its own rather than a page of the pager. On a phone it is on the
-   Labs page; the rail is a tablet layout. Off Home, Echo stays in the navbar. */
-.home-rail-link{display:none}
-@media(min-width:700px){
-  .home-rail-link{position:absolute;z-index:2;left:14px;top:calc(18px + 6px + 3 * 76px + 14px);width:52px;height:76px;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0;border:0;border-radius:12px;
-    background:transparent;color:var(--muted);font-family:inherit;font-size:var(--t-tiny);font-weight:700;cursor:pointer}
-  .home-rail-link::before{content:'';position:absolute;top:-8px;left:8px;right:8px;height:1px;background:var(--border2)}
-  .home-rail-link .icon{width:23px;height:23px}
-  .home-rail-link:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
-}
-@media(hover:hover) and (min-width:700px){.home-rail-link:hover{color:var(--teal-ink);background:var(--teal4)}}
-
-/* The hero's one action: the review that is due, or the chapters. */
-.atlas-next{display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:14px;padding:10px 18px;border:0;border-radius:999px;
-  background:var(--teal-ink);color:var(--white);font-family:inherit;font-size:var(--t-meta);font-weight:700;cursor:pointer;
-  box-shadow:0 10px 22px -14px var(--teal-ink),inset 0 1px 0 rgba(255,255,255,.22)}
-.atlas-next:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
+/* Round five (the owner's next marked screenshot): Echo leaves the rail (it is
+   on the Labs page), the Explore button goes and the numbers take its place,
+   the three round tools fold into the heart (a tap on it opens them), and Apex
+   moves up into the rail where Echo stood, a rail item rather than a badge. */
 #homePage0 .hero-h1{font-family:'DM Serif Display',Georgia,serif;font-weight:400;letter-spacing:-.01em}
 
-/* Three round tools beside the heart: the model's credit, the chambers, and
-   pause. Icons with names, 44px each. */
-#homePage0 .hero-tools{position:absolute;z-index:4;right:14px;bottom:14px;display:flex;gap:8px}
-#homePage0 .hero-tools .hero-tool{position:static;width:44px;height:44px;min-width:0;min-height:0;display:inline-flex;align-items:center;justify-content:center;
-  padding:0;margin:0;border:1px solid var(--border2);border-radius:50%;color:var(--teal-ink);cursor:pointer;
-  background:var(--card);background:color-mix(in srgb,var(--card) 72%,transparent);
-  backdrop-filter:blur(12px) saturate(1.3);-webkit-backdrop-filter:blur(12px) saturate(1.3);
-  box-shadow:inset 0 1px 0 var(--gl-rim),0 8px 18px -14px rgba(3,12,24,.5)}
-@supports not (color:color-mix(in srgb,red,blue)){#homePage0 .hero-tools .hero-tool{background:var(--card)}}
-#homePage0 .hero-tools .hero-tool[hidden]{display:none}
-#homePage0 .hero-tools .hero-tool .icon{width:19px;height:19px}
-#homePage0 .hero-tools .hero-tool.is-active,#homePage0 .hero-tools .hero-tool[aria-expanded="true"]{background:var(--teal-ink);color:var(--white);border-color:var(--teal-ink)}
-#homePage0 .hero-tools .hero-tool:disabled{opacity:.4;cursor:default}
-#homePage0 .hero-tools .hero-tool:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
-/* The credit opens beside the tools, on a ground of its own. */
-#homePage0 .hero-scan-credit{position:absolute;z-index:5;top:auto;right:14px;bottom:66px;max-width:min(78%,300px);margin:0;padding:8px 12px;
-  border:1px solid var(--border2);border-radius:12px;background:var(--card);color:var(--text);text-align:left;
-  font-size:var(--t-tiny);line-height:1.45;box-shadow:0 14px 30px -18px rgba(3,12,24,.55)}
+/* The numbers, where the action was: stat tiles at the foot of the hero. */
+#homePage0 .hero-stats-row{margin-top:14px;gap:8px}
+#homePage0 .hero-stats-row .hl-item{display:inline-flex;align-items:baseline;gap:6px;min-height:44px;box-sizing:border-box;
+  padding:10px 14px;border:1px solid var(--border2);border-radius:14px;font-size:var(--t-meta);color:var(--muted);
+  background:var(--card);background:color-mix(in srgb,var(--card) 78%,transparent);
+  box-shadow:inset 0 1px 0 var(--gl-rim)}
+@supports not (color:color-mix(in srgb,red,blue)){#homePage0 .hero-stats-row .hl-item{background:var(--card)}}
+#homePage0 .hero-stats-row .hl-item b{font-size:var(--t-lead);font-weight:750;color:var(--text);font-variant-numeric:tabular-nums}
+#homePage0 .hero-stats-row .hl-due{align-items:center;border:0;cursor:pointer;font-family:inherit;font-weight:700;
+  background:var(--teal-ink);color:var(--white);box-shadow:0 10px 22px -14px var(--teal-ink),inset 0 1px 0 rgba(255,255,255,.22)}
+#homePage0 .hero-stats-row .hl-due b{color:var(--white)}
+#homePage0 .hero-stats-row .hl-due:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
+
+/* The heart is the button. Invisible over the model, the size of it. */
+.hero-heart-hit{z-index:3;padding:0;margin:0;border:0;border-radius:28%;background:transparent;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+.hero-heart-hit:focus-visible{outline:2.5px solid var(--teal);outline-offset:4px}
+.hero-menu{position:absolute;z-index:6;right:14px;top:14px;display:flex;flex-direction:column;gap:4px;
+  width:max-content;max-width:min(86%,300px);padding:6px;border:1px solid var(--border2);border-radius:16px;
+  background:var(--card);background:color-mix(in srgb,var(--card) 88%,transparent);
+  backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
+  box-shadow:inset 0 1px 0 var(--gl-rim),0 18px 40px -22px rgba(3,12,24,.6)}
+@supports not (color:color-mix(in srgb,red,blue)){.hero-menu{background:var(--card)}}
+.hero-menu[hidden]{display:none}
+#homePage0 .hero-menu .hero-tool{position:static;top:auto;right:auto;bottom:auto;left:auto;width:auto;height:auto;min-width:0;box-shadow:none;display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;margin:0;border:0;border-radius:10px;
+  background:transparent;color:var(--text);font-family:inherit;font-size:var(--t-meta);font-weight:600;text-align:left;cursor:pointer}
+#homePage0 .hero-menu .hero-tool[hidden]{display:none}
+#homePage0 .hero-menu .hero-tool .icon{width:18px;height:18px;color:var(--teal-ink);flex:none}
+#homePage0 .hero-menu .hero-tool.is-active,#homePage0 .hero-menu .hero-tool[aria-pressed="true"],#homePage0 .hero-menu .hero-tool[aria-expanded="true"]{background:var(--teal4);color:var(--teal-ink)}
+#homePage0 .hero-menu .hero-tool:focus-visible{outline:2.5px solid var(--teal);outline-offset:-2px}
+@media(hover:hover){#homePage0 .hero-menu .hero-tool:hover{background:var(--teal4)}}
+.hero-menu .hero-scan-credit{position:static;max-width:none;margin:2px 4px 4px;padding:8px 10px;border:1px solid var(--border2);border-radius:10px;
+  background:var(--card);color:var(--text);font-size:var(--t-tiny);line-height:1.45;text-align:left;box-shadow:none}
+
+/* Apex in the rail, where Echo stood: an item like the three above it, its
+   name under its face, nothing overlapping. */
 @media(min-width:700px){
-  #homePage0 .hero-tools{top:14px;bottom:auto;flex-direction:column}
-  #homePage0 .hero-scan-credit{top:14px;bottom:auto;right:66px}
+  body.on-home .ai-fab{top:calc(var(--navh) + 18px + 6px + 3 * 76px + 14px);bottom:auto;left:14px;right:auto;width:52px;height:76px;min-width:0;
+    padding:0;border-radius:12px;flex-direction:column;justify-content:center;align-items:center;gap:7px;font-size:var(--t-tiny);font-weight:700}
+  body.on-home .ai-fab .fab-av{position:static;width:28px;height:28px;margin:0;flex:none}
+  body.on-home .ai-fab::before{content:'';position:absolute;top:-8px;left:8px;right:8px;height:1px;background:var(--border2)}
+}
+
+/* Apex sits in the rail as one of its items: no badge fill, no gloss. */
+@media(min-width:700px){
+  html body.on-home .ai-fab{background:transparent;color:var(--muted);box-shadow:none;border:0}
+  html body.on-home .ai-fab::after{display:none}
+  html body.on-home .ai-fab:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
+}
+@media(hover:hover) and (min-width:700px){html body.on-home .ai-fab:hover{color:var(--teal-ink);background:var(--teal4);transform:none}}
+
+/* A pearl the size of its card. pearlFit sets --pz, the largest text scale at
+   which the steps fit the card without scrolling: a short pearl with no figure
+   is set large and fills the card; a pearl with a figure gives the figure two
+   fifths of the card and keeps its text compact. */
+@media(min-width:700px){
+  #app[data-screen="home"] #homePage0 .pearl-card{--pz:1}
+  /* No transitions on what the scale sizes. Every element has transition:all 0s by default, and WebKit starts a
+     transition of zero length on each change: until it is done, a size read straight after a change is the old one, so
+     pearlScale measured the steps at a scale they were not drawn at, the card overflowed once it was, and the observer
+     ran the search again, for as long as the page was open. */
+  #app[data-screen="home"] #homePage0 .pearl-concept,#app[data-screen="home"] #homePage0 .pearl-bodywrap,
+  #app[data-screen="home"] #homePage0 .pearl-bodywrap *,#app[data-screen="home"] #homePage0 .pearl-fig{transition:none}
+  #app[data-screen="home"] #homePage0 .pearl-main{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
+  #app[data-screen="home"] #homePage0 .pearl-bodywrap{flex:1 1 auto;min-height:0}
+  #app[data-screen="home"] #homePage0 .pearl-card.pearl-all .pearl-main{overflow:visible}
+  #app[data-screen="home"] #homePage0 .pearl-card.pearl-all .pearl-bodywrap{flex:none}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-concept{font-size:calc(clamp(28px,2rem + 1vw,48px) * min(var(--pz),1.3))}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-steps{gap:calc(10px * var(--pz))}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-step{padding:calc(12px * var(--pz)) 14px calc(13px * var(--pz)) 12px}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-txt{font-size:calc(var(--t-body) * var(--pz))}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-step[data-kind] .pearl-txt{font-size:calc(var(--t-body) * var(--pz))}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-step:first-child .pearl-txt{font-size:calc(var(--t-lead) * var(--pz));font-weight:600}
+  #app[data-screen="home"] #homePage0 .pearl-card .pearl-body{font-size:calc(var(--t-lead) * var(--pz))}
+  #app[data-screen="home"] #homePage0 .pearl-card.has-fig:not(.pearl-nofig) .pearl-fig{flex:0 0 calc(var(--pf,40) * 1%);max-height:none;min-height:0}
+}
+@media(min-width:700px){
+  #app[data-screen="home"] #homePage0 .pearl-card.has-fig.pearl-figthumb .pearl-fig{position:absolute;z-index:3;top:16px;right:66px;
+    display:block;width:88px;height:56px;flex:none;padding:0;margin:0;border:1px solid var(--border2);border-radius:10px;overflow:hidden;
+    background:var(--white);box-shadow:0 8px 18px -12px rgba(3,12,24,.5)}
+  #app[data-screen="home"] #homePage0 .pearl-card.pearl-figthumb .pearl-fig img{width:100%;height:100%;max-height:none;padding:0;margin:0;object-fit:cover;border-radius:0}
+  #app[data-screen="home"] #homePage0 .pearl-card.pearl-figthumb .pearl-fig-label,
+  #app[data-screen="home"] #homePage0 .pearl-card.pearl-figthumb .pearl-fig figcaption{display:none}
+}
+@media(min-width:700px) and (orientation:portrait){
+  #app[data-screen="home"] #homePage0 .home-wrap{grid-template-rows:184px minmax(0,1fr) auto}
+  #homePage0 .home-wrap:not([data-pearl-empty="true"]) .hero-inner{position:absolute;top:22px;bottom:18px;left:22px;right:40%;
+    display:flex;flex-direction:column;align-items:flex-start}
+  #homePage0 .home-wrap:not([data-pearl-empty="true"]) .hero-stats-row{margin-top:auto}
 }
 
 /* Two rows, no third: the pearl and the hero share the window. */
@@ -568,7 +621,7 @@ body.on-home .nav-title{line-height:1.1}
 }
 @media(min-width:700px) and (orientation:portrait){
   #app[data-screen="home"] #homePage0 .home-wrap{grid-template-rows:240px minmax(0,1fr) auto;grid-template-areas:"hero" "pearl" "hello"}
-  #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d{right:68px;width:44%}
+  #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d,#homePage0 .hero-heart-hit{right:18px;width:44%}
 }
 @media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
   #app[data-screen="home"] #homePage0 .home-wrap{grid-template-rows:208px minmax(0,1fr) auto}
@@ -598,3 +651,26 @@ body.on-home .nav-title{line-height:1.1}
   .page-h3{margin:8px 2px 6px}
   .brain-ch{padding:6px 8px}
 }
+
+/* Round six (the owner): the app's heading, the pencil and the Apex mark, enhanced.
+   The heading is one design on every screen (it was a serif on Home and a sans everywhere else): the jewel logo, the
+   name in the display face, and the bank under it in small capitals with its count as a chip. The brand keeps its
+   42px box (verify-taps measures it). */
+.nav-brand{gap:12px;height:42px}
+.nav-logo{width:38px;height:38px;border-radius:12px;background:var(--teal-ink);background-image:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 18px -10px var(--teal-ink)}
+.nav-logo .icon{width:22px;height:22px;color:var(--white)}
+.nav-title,body.on-home .nav-title{font-family:'DM Serif Display',Georgia,serif;font-size:23px;font-weight:400;
+  letter-spacing:-.01em;line-height:1.05;color:var(--text)}
+.nav-sub,body.on-home .nav-sub{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:11px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.nav-count{padding:1px 7px;border-radius:999px;background:var(--teal4);color:var(--teal-ink);font-weight:750;letter-spacing:.04em}
+
+/* The pencil: a filled accent button that says "draw here", where a grey disc read as switched off. */
+.tool-rail.mini{padding:4px}
+.tool-rail.mini .rail-open{border:0;background:var(--teal-ink);color:var(--white);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),inset 0 -3px 8px rgba(0,0,0,.18),0 12px 24px -12px var(--teal-ink)}
+.tool-rail.mini .rail-open .icon{width:22px;height:22px;color:var(--white)}
+.tool-rail.mini .rail-open:focus-visible{outline:2.5px solid var(--teal);outline-offset:3px}
+@media(hover:hover){.tool-rail.mini .rail-open:hover{transform:translateY(-1px) scale(1.04)}}
+

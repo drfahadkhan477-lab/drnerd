@@ -357,7 +357,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const reg = await page.evaluate(() => {
     goHome(); render();
     const home = !!document.querySelector('.hero-h1');
-    startQuiz('Arrhythmias');
+    (S.resume = {}, startQuiz)('Arrhythmias');
     const q = S.questions[0];
     selectOpt(q.ci);
     const answered = S.answered;

@@ -491,8 +491,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      kinds are drawn apart. */
   await page.evaluate(() => {
     const all = pearlAll();
-    pearlCurrent = all.find(p => p.figKey && refImgSrc(p.figKey) && new Set(Pearl.lesson(p.text).map(s => s.label)).size >= 2) ||
-      all.find(p => new Set(Pearl.lesson(p.text).map(s => s.label)).size >= 2) || all[0];
+    const fams = p => new Set(Pearl.lesson(p.text).map(s => Pearl.FAMILY[s.label])).size;
+    pearlCurrent = all.find(p => p.figKey && refImgSrc(p.figKey) && fams(p) >= 2) || all.find(p => fams(p) >= 2) || all[0];
     S.screen = 'home'; render();
   });
   await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'a pearl with steps on the home screen' });
@@ -507,7 +507,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       kinds: steps.map(li => li.dataset.kind || ''),
       inkIsEdge: steps.every(li => role(li) && getComputedStyle(role(li)).color === edge(li)),
       edges: steps.map(edge),
-      labelsDiffer: new Set(want.map(s => s.label)).size,
+      labelsDiffer: new Set(want.map(s => Pearl.FAMILY[s.label])).size,
       /* A browser does not report ::first-letter through getComputedStyle (it answered 'none' with the capital on screen),
          so the capital is measured: the heading's text is as wide as the word with its first letter raised, not as the
          word as stored. Only a concept that starts in lower case can tell the two apart. */
@@ -544,12 +544,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       capPx: cap ? parseFloat(getComputedStyle(cap).fontSize) : 0,
     };
   });
-  ok('every step is labelled with the relationship Pearl.lesson names for it', kinds.shown.length >= 2 && kinds.shown.join('|') === kinds.want.join('|'),
+  ok('every step is labelled with the name Pearl.lesson gives it', kinds.shown.length >= 2 && kinds.shown.join('|') === kinds.want.join('|'),
      kinds.shown.join(' · ') + ' / wanted ' + kinds.want.join(' · '));
   ok('and carries its kind for the colour', kinds.kinds.every(k => /^(core|detail|contrast|caveat|why|condition)$/.test(k)), kinds.kinds.join(' · '));
   ok('each label is drawn in its own step\'s edge colour', kinds.inkIsEdge, kinds.edges.join(' · '));
-  ok('steps of different kinds are drawn in different colours', new Set(kinds.edges).size === kinds.labelsDiffer && kinds.labelsDiffer >= 2,
-     `${new Set(kinds.edges).size} colours for ${kinds.labelsDiffer} kinds`);
+  ok('steps of different families are drawn in different colours', new Set(kinds.edges).size === kinds.labelsDiffer && kinds.labelsDiffer >= 2,
+     `${new Set(kinds.edges).size} colours for ${kinds.labelsDiffer} families`);
   ok('the concept is set with a capital', kinds.first === 'uppercase', kinds.first);
   ok('the figure\'s caption is at a reading size', kinds.capPx >= 13, kinds.capPx + 'px');
 
@@ -557,9 +557,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      the end of the pearl. While more is below, the card says so (its foot fades, and a Show all button is under it); at
      the end the fade clears, and the button stays, since the card still holds less than the pearl. Show all opens the
      whole pearl and Show less folds it back. */
+  /* Round five: a pearl now shrinks its type until it fits (pearlScale), so only one too long even at the floor runs
+     past the card, and Show all is that pearl's way in. The library's longest pearl, three times over, is one. */
   await page.setViewportSize({ width: 1180, height: 820 });
   await page.evaluate(() => {
-    pearlCurrent = pearlAll().slice().sort((a, b) => Pearl.lesson(b.text).length - Pearl.lesson(a.text).length || b.text.length - a.text.length)[0];
+    const longest = pearlAll().slice().sort((a, b) => Pearl.lesson(b.text).length - Pearl.lesson(a.text).length || b.text.length - a.text.length)[0];
+    pearlCurrent = Object.assign({}, longest, { text: [longest.text, longest.text, longest.text].join(' ') });
     S.screen = 'home'; render();
   });
   await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl in landscape' });
@@ -608,6 +611,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{ const w=document.getElementById('pearlBody'); w.innerHTML='<p>A short teaching cue.</p>'; pearlFit(); });
   const shortCue=await page.evaluate(()=>{const w=document.getElementById('pearlBody');return {over:w.scrollHeight-w.clientHeight,fade:document.getElementById('pearlCard').classList.contains('pearl-more'),hidden:document.getElementById('pearlMore').hidden};});
   ok('where a short cue fits, nothing is faded and nothing offers more',shortCue.over<=4&&!shortCue.fade&&shortCue.hidden,JSON.stringify(shortCue));
+  head('a pearl Home chose that cannot fit is passed over');
+  /* Round five: on a smaller iPad window some of the owner's notes ran past the card even at the smallest scale. Home
+     passes over a pearl it chose itself (pearlPicked) for one that fits; one opened on purpose is left alone, which is
+     what the Show all checks above rely on. The library's longest pearl, three times over, cannot fit. */
+  const skip = await page.evaluate(async () => {
+    const longest = pearlAll().slice().sort((a, b) => b.text.length - a.text.length)[0];
+    const long = Object.assign({}, longest, { text: [longest.text, longest.text, longest.text].join(' ') });
+    pearlCurrent = long; pearlPicked = long; pearlSkips = 0; S.screen = 'home'; render();
+    for (let i = 0; i < 60 && pearlCurrent === long; i++) await new Promise(r => setTimeout(r, 50));
+    for (let i = 0; i < 40 && pearlSkips > 0; i++) await new Promise(r => setTimeout(r, 50));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const w = document.getElementById('pearlBody');
+    return { replaced: pearlCurrent !== long, over: w.firstElementChild.offsetHeight - w.clientHeight, more: !document.getElementById('pearlMore').hidden };
+  });
+  ok('a pearl Home chose that runs past the card is replaced by one that fits, with no Show all', skip.replaced && skip.over <= 1 && !skip.more, JSON.stringify(skip));
+
   /* THE CARD IS SHORT BEFORE IT IS ANYTHING ELSE (28 October 2026). On an 11-inch iPad in portrait, 744x1133, the card
      is 480px and the figure's flex-basis was a rigid 145px it could not give back; .pearl-main's overflow:hidden took
      the difference out of the pearl itself, which rendered 40px tall with 411px hidden. What the reader saw was the
@@ -637,6 +656,56 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok(name + ': the figure panel is whole, or it is not shown at all', !m.figShown || m.figCut <= 1,
        m.figShown ? `${m.figCut}px of the panel hidden` : 'too short for a figure, and none is drawn');
   }
+  await page.setViewportSize({ width: 1100, height: 1100 });
+
+  head('a pearl the size of its card, and never a scroll');
+  /* Round five (the owner's marked screenshot): a pearl should be taken in at a glance, so on a tablet it never scrolls
+     inside its card, a pearl with no figure is set large enough to fill the card, and a pearl with a figure gives it room
+     (a band, or where the card is too short, a thumbnail in the corner) and keeps its text compact. pearlScale() finds the
+     scale; this walks sixteen pearls at five iPad windows and measures what it chose. */
+  /* The last pass has Reduce Motion on, as an iPad can: figures.css then gives every transition .001ms rather than none,
+     and WebKit started one on each size the search tried, so it read the old size and chose a scale it never measured. */
+  for (const [vw, vh, reduce] of [[1024, 1366], [1366, 1024], [834, 1194], [1194, 834], [744, 1000], [834, 1194, true]]) {
+    await page.emulateMedia({ reducedMotion: reduce ? 'reduce' : 'no-preference' });
+    await page.setViewportSize({ width: vw, height: vh });
+    /* The everyday Home: the first-day welcome card takes a row of its own until it is dismissed, and Show all is how a
+       pearl is read in the short card that leaves. */
+    await page.evaluate(() => { try { dismissHello(); } catch (_) {} S.screen = 'home'; render(); });
+    await settled(page, () => !!document.querySelector('#pearlCard') && !document.getElementById('homeHello') && !window.__vtLive, { label: `${vw}x${vh}: the pearl` });
+    const w = await page.evaluate(async () => {
+      const out = { tried: 0, over: [], figs: 0, figGone: 0, pzFig: [], pzText: [], textFill: [] };
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      /* Eight with a figure and eight without: enough of each to compare, few enough for the suite's time. */
+      const all = pearlAll(), pick = all.filter(p => pearlFigure(p)).slice(0, 8).concat(all.filter(p => !pearlFigure(p)).slice(0, 8));
+      for (const p of pick) {
+        pearlCurrent = p; render();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        pearlFit();
+        /* Measured once the page has drawn what pearlFit chose, not straight after it: in WebKit a size read in the same
+           task as the change could be the old one, so a check reading there agreed with whatever pearlFit had read. */
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const card = document.getElementById('pearlCard'), wrap = document.getElementById('pearlBody'), fig = document.getElementById('pearlFig');
+        const content = wrap.firstElementChild.offsetHeight, room = wrap.clientHeight;
+        const pz = parseFloat(card.style.getPropertyValue('--pz')) || 1;
+        out.tried++;
+        if (content > room + 1) out.over.push(`${p.id}: ${content - room}px`);
+        if (fig) { out.figs++; if (!(fig.offsetHeight > 0)) out.figGone++; if (!card.classList.contains('pearl-figthumb')) out.pzFig.push(pz); }
+        else { out.pzText.push(pz); out.textFill.push(pz >= 1.59 ? 1 : content / room); }
+      }
+      const med = a => a.length ? a.slice().sort((x, y) => x - y)[a.length >> 1] : NaN;
+      return { tried: out.tried, over: out.over.slice(0, 3), overN: out.over.length, figs: out.figs, figGone: out.figGone,
+        pzFig: med(out.pzFig), bands: out.pzFig.length, pzText: med(out.pzText), texts: out.pzText.length, leastFill: Math.min(...out.textFill) };
+    });
+    const at = `${vw}x${vh}${reduce ? ', Reduce Motion' : ''}`;
+    ok(`${at}: no pearl runs past its card`, w.tried >= 12 && w.overN === 0, `${w.overN}/${w.tried} over ${w.over.join(', ')}`);
+    ok(`${at}: every pearl with a figure shows it, as a band or a thumbnail`, w.figs > 0 && w.figGone === 0, `${w.figGone}/${w.figs} hidden`);
+    /* Where every figure has folded to a thumbnail, the text has the card either way and there is no band to compare. */
+    if (w.bands) ok(`${at}: a pearl without a figure is set larger than one beside its figure band`, w.texts > 0 && w.pzText > w.pzFig, `text ${w.pzText}, figure ${w.pzFig}`);
+    else console.log(`  NOT MEASURED  ${at}: every figure folded to a thumbnail, so there is no band to compare with`);
+    ok(`${at}: and fills its card: steps take at least 80% of the room, or the scale is at its ceiling`, w.texts > 0 && w.leastFill >= 0.8,
+       `least ${(+w.leastFill).toFixed(2)} of ${w.texts}`);
+  }
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 1100, height: 1100 });
 
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps

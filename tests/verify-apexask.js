@@ -173,7 +173,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     const rowA = await page.evaluate(() => LOG[LOG.length - 1]);
     ok('the first option is logged as 0, a choice, and not as no choice', rowA && rowA.q === D && rowA.pick === 0, JSON.stringify(rowA));
     await fresh();
-    await page.evaluate(id => startQuiz(null, 'due', [QBYID[id]]), C);
+    await page.evaluate(id => (S.resume = {}, startQuiz)(null, 'due', [QBYID[id]]), C);
     await showing(C); await quiet(page);
     const rc = await rightPick(C);
     await answer(rc, null);
@@ -247,7 +247,7 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(() => { AI_GROUNDED = false; });
     /* A card rated in a review and looked at again: the rating is not the answer, so what is told of the answer is still the answer's. */
     await fresh();
-    await page.evaluate(ids => startQuiz(null, 'due', ids.map(id => QBYID[id])), [C, D]);
+    await page.evaluate(ids => (S.resume = {}, startQuiz)(null, 'due', ids.map(id => QBYID[id])), [C, D]);
     await showing(C); await quiet(page);
     await panel(false);
     await answer(await wrongPick(C), 2);

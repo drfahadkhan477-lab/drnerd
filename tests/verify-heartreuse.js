@@ -121,7 +121,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('there is a canvas to mark before we start', firstNode);
 
   for (let i = 0; i < 20; i++) {
-    await page.evaluate(() => { startQuiz(CHAPTERS[0]); });
+    await page.evaluate(() => { (S.resume = {}, startQuiz)(CHAPTERS[0]); });
     await settle(110);
     await page.evaluate(() => { goHome(); });
     await settle(210);
@@ -205,7 +205,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('leaving costs nothing but the frames');
   const paused = await page.evaluate(async () => {
-    startQuiz(CHAPTERS[0]);
+    (S.resume = {}, startQuiz)(CHAPTERS[0]);
     /* Wait for the QUIZ to be on screen, not for a stopwatch. render() goes
        through startViewTransition: at 100ms the home markup — slot included —
        is still in the document and at 300ms it is gone, so a fixed delay near

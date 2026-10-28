@@ -130,7 +130,7 @@ head('and it reaches the screen');
      back "Correct!" — that is the whole point of the change. */
   const revealed = await page.evaluate(() => {
     localStorage.clear();
-    startQuiz('Pericardial Disease');
+    (S.resume = {}, startQuiz)('Pericardial Disease');
     const i = S.questions.findIndex(q => q.id === 'PER_9');
     if (i < 0) return { found: false };
     S.qIdx = i;              /* the field selectOpt reads — the deck is shuffled */

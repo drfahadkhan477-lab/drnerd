@@ -250,8 +250,9 @@ async function heapAfterBoot(page, url) {
       return !el.hidden && b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0.5 &&
         b.top >= hero.top && b.bottom <= hero.bottom && b.left >= hero.left && b.right <= hero.right;
     };
-    const button = await page.evaluate(`(${inHero})('#heroCreditBtn')`);
-    ok('the credit button is on screen, inside the hero, while the scan is drawn', button);
+    /* Round five: the credit is in the heart's menu, which a tap on the heart opens. */
+    const button = await page.evaluate(`(() => { document.getElementById('heroHeartBtn').click(); return (${inHero})('#heroCreditBtn'); })()`);
+    ok('a tap on the heart opens its menu, and the credit is in it, inside the hero, while the scan is drawn', button);
     const credit = await page.evaluate(`(() => {
       document.getElementById('heroCreditBtn').click();
       const el = document.getElementById('heroScanCredit');
@@ -561,7 +562,7 @@ async function heapAfterBoot(page, url) {
     /* Go to a question that actually has figures and confirm one renders. */
     const shown = await page.evaluate(async () => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
-      startQuiz(q.ch);
+      (S.resume = {}, startQuiz)(q.ch);
       S.questions = [q]; S.qIdx = 0; render();
       await new Promise(r => setTimeout(r, 1200));
       const img = document.querySelector('.fig-img');
@@ -629,7 +630,7 @@ async function heapAfterBoot(page, url) {
     await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 30000 });
     const figId = await page.evaluate(() => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
-      startQuiz(q.ch); S.questions = [q]; S.qIdx = 0; render();
+      (S.resume = {}, startQuiz)(q.ch); S.questions = [q]; S.qIdx = 0; render();
       return q.id;
     });
     /* The fixture must have reached Cache Storage before the outage. A
@@ -655,7 +656,7 @@ async function heapAfterBoot(page, url) {
 
     await page.evaluate(id => {
       const q = ALL_Q.find(x => x.id === id);
-      startQuiz(q.ch); S.questions = [q]; S.qIdx = 0; render();
+      (S.resume = {}, startQuiz)(q.ch); S.questions = [q]; S.qIdx = 0; render();
     }, figId);
     const decoded = await page.waitForFunction(() => {
       const img = document.querySelector('.fig-img');

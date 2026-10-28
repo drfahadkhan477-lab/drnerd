@@ -123,7 +123,7 @@ const ACCENT_BY_THEME = {
   ok('Home logo uses the flat Atlas teal in Daylight',!!nav&&nav.image==='none'&&nav.color==='rgb(33, 86, 92)',JSON.stringify(nav));
 
   const answer = await page.evaluate(() => {
-    startQuiz(CHAPTERS[0], 'all');
+    (S.resume = {}, startQuiz)(CHAPTERS[0], 'all');
     const q = S.questions[S.qIdx];
     selectOpt(q.ci);
     const correctEl = document.querySelector('.opt.correct');
