@@ -94,7 +94,7 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
     padding-left:max(24px,calc(92px - (100vw - min(var(--measure),100vw)) / 2));
     padding-right:max(24px,calc(92px - (100vw - min(var(--measure),100vw)) / 2))}
 }
-.theme-menu .width-opt{min-height:44px;height:44px;box-sizing:border-box}
+#generalSettings .width-opt{min-height:44px;height:44px;box-sizing:border-box}
 .width-glyph{display:block;height:14px;border-left:2px solid currentColor;border-right:2px solid currentColor;box-sizing:border-box;
   background:linear-gradient(currentColor,currentColor) center/calc(100% - 6px) 2px no-repeat}
 /* The quiz header: one line of chapter and count over the progress line, and the running score only once there is one. */
@@ -105,3 +105,44 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
 @media(min-width:768px){
   .fig-card .fig-img{width:auto;max-width:100%;max-height:min(60vh,640px);margin:0 auto}
 }
+/* Shared settings and readable question columns. Native modal dialog supplies
+   focus containment and the top layer; the dimmer never intercepts input. */
+#generalSettings{position:fixed;top:12px;right:12px;bottom:12px;left:auto;margin:0;width:440px;max-width:calc(100vw - 24px);height:calc(100% - 24px);max-height:calc(100% - 24px);box-sizing:border-box;overflow:auto;padding:24px;border:1px solid var(--border);border-radius:18px;background:var(--card);color:var(--text)}
+#generalSettings header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#generalSettings section{padding:16px 0;border-top:1px solid var(--border)}
+#generalSettings label{display:block;margin:12px 0;font-weight:600}
+#generalSettings select{display:block;width:100%;min-height:44px;margin-top:8px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
+#generalSettings input[type="range"]{display:block;width:100%;min-height:44px}
+#generalSettings p{color:var(--muted);line-height:1.6}
+#generalSettings .setup{padding:0}
+#generalSettings .setup-hero{display:none}
+#generalSettings .btn{white-space:normal}
+#generalSettings .theme-opt{width:100%}
+#appDimmer{position:fixed;top:0;right:0;bottom:0;left:0;background:#000;pointer-events:none;z-index:2147483646}
+html{--reading-measure:65ch}
+html[data-reading-width="wide"]{--reading-measure:80ch}
+.reading-question,.reading-explanation{min-width:0}
+.reading-explanation:empty{display:none}
+#app[data-screen="quiz"]{max-width:calc(var(--reading-measure) + 56px)}
+html[data-width] #app[data-screen="quiz"].reading-wide-layout{max-width:none}
+.reading-split .reading-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.reading-columns{max-width:100%;margin:auto}
+.exp-text,.msg.bot,.pearl-card.pearl-all .pearl-main{max-width:var(--reading-measure)}
+html[data-read] #app[data-screen="home"] .pearl-card .pearl-txt{font-size:calc(var(--t-body) * var(--read))}
+html[data-read] #app[data-screen="home"] .pearl-card .pearl-step[data-kind="core"] .pearl-txt,
+html[data-read] #app[data-screen="home"] .pearl-card .pearl-body{font-size:calc(var(--t-lead) * var(--read))}
+@media(max-width:600px){#generalSettings{top:0;right:0;bottom:0;left:0;width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}}
+
+.reading-question,.reading-explanation{width:100%;max-width:var(--reading-measure);margin-left:auto;margin-right:auto}
+
+#generalSettings{z-index:2147483647}
+#generalSettings .icon-btn{background:var(--card);color:var(--text);border-color:var(--border)}
+#settingsBackdrop{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.35);z-index:2147483646}
+
+#generalSettings header{position:sticky;top:-24px;background:var(--card);z-index:2;padding:8px 0}
+
+.pearl-card .pearl-body{max-width:var(--reading-measure)}
+
+html[data-reading-width="narrow"]{--reading-measure:55ch}
+html[data-reading-width="full"]{--reading-measure:100%}
+.msg.bot{max-width:min(var(--reading-measure),32em)}

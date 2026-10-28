@@ -1,0 +1,109 @@
+{
+  "scope": "Unified Settings; synthetic content only; not a production release",
+  "base_commit": "bcaa00fac6ec400516514ff656da651b286e68d1",
+  "source_sha256": {
+    "app/systole.html": "d5e4df3c9693b6a4a90f20a7342d8007c66ed3fd205f2f59193cd88bfe92232c",
+    "app/css/ipad.css": "3ba3bc8e1c0b954c39198d61caa838efc6c309d0bbfd078a96b775df840199ae",
+    "tests/verify-settings.js": "4fcdf92e58eaabb69ee793a3feb1fd1d08588412793de314e3e62bc4877feae5"
+  },
+  "tested_artifact_sha256": "3d92c8c1940a6b79bfb5af675b12fd39048fa09f12dd8938261c4517d5438631",
+  "final_settings": {
+    "chromium": {
+      "passed": 23,
+      "failed": 0
+    },
+    "webkit": {
+      "passed": 23,
+      "failed": 0
+    }
+  },
+  "negative_controls_observed": [
+    "Settings opens with reading, appearance and Apex sections",
+    "layout preference does not reveal an unanswered explanation",
+    "answered landscape question uses two real columns",
+    "phone falls back without losing split preference",
+    "text size applies without replacing the answered question",
+    "brightness dims only the app and cannot intercept input",
+    "display preferences survive reload",
+    "opening the saved provider preserves its credential",
+    "failed validation retains the working credential",
+    "key visibility is explicit and reversible",
+    "successful mocked connection saves the chosen credential",
+    "display reset preserves Apex credentials",
+    "Escape closes Settings and restores focus",
+    "no browser errors",
+    "provider rejection preserves the key and redacts echoed credentials",
+    "cancelling key removal preserves the credential",
+    "confirmed removal clears the saved credential",
+    "blocked storage does not claim a display preference was saved",
+    "display changes preserve an unsent Apex draft",
+    "closing Settings cancels pending credential replacement",
+    "Settings passes accessibility checks",
+    "legacy dialog fallback contains keyboard focus",
+    "Settings owns keyboard shortcuts without changing the quiz"
+  ],
+  "existing_suite_negative_controls": [
+    "Wrong radio semantics failed the readsize control check",
+    "Closing on theme selection failed the keep-open check",
+    "Broken cancel handler failed dismissal",
+    "Pre-fix keyboard bubbling failed the quiz-preservation check in Chromium and WebKit"
+  ],
+  "broader_intermediate_build": {
+    "note": "Before final keyboard isolation, inline key-removal confirmation and test-harness fixes; not evidence of a production release",
+    "artifact_sha256": "f4fca2d6c087dab486c910059e8957c38d00a9c96a2674bfc5ae734c9047144a",
+    "engines": {
+      "chromium": {
+        "selected": 9,
+        "ran": 9,
+        "passed": 9,
+        "checks": 388,
+        "exitCode": 0
+      },
+      "webkit": {
+        "selected": 9,
+        "ran": 9,
+        "passed": 9,
+        "checks": 396,
+        "exitCode": 0
+      }
+    }
+  },
+  "pure_validation": {
+    "initial_run": {
+      "suites": 99,
+      "passed": 96,
+      "failed": [
+        "engine",
+        "ui-pure",
+        "devtools-pure"
+      ]
+    },
+    "reruns": {
+      "engine": {
+        "passed": 119,
+        "failed": 0
+      },
+      "ui-pure": {
+        "passed": 18,
+        "failed": 0
+      },
+      "devtools-pure": {
+        "passed": 55,
+        "failed": 0
+      }
+    },
+    "stats": {
+      "passed": 54,
+      "failed": 0
+    },
+    "css_floor": {
+      "passed": 144,
+      "failed": 0
+    }
+  },
+  "limitations": [
+    "Browser emulation; no physical iPad run",
+    "Provider responses mocked; no owner key used",
+    "No private-content build or Cloudflare deployment"
+  ]
+}
