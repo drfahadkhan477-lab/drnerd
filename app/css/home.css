@@ -518,11 +518,10 @@ body.on-home .nav-title{line-height:1.1}
    pearl, in two rows that fit the window. Echo moves into the rail. */
 
 /* Echo, in the rail under the three pages. A link, not a tab: it opens a
-   screen of its own rather than a page of the pager. Phones keep it in the
-   navbar, where it always was; the rail is a tablet layout. */
+   screen of its own rather than a page of the pager. On a phone it is on the
+   Labs page; the rail is a tablet layout. Off Home, Echo stays in the navbar. */
 .home-rail-link{display:none}
 @media(min-width:700px){
-  body.on-home .nav-echo{display:none}
   .home-rail-link{position:absolute;z-index:2;left:14px;top:calc(18px + 6px + 3 * 76px + 14px);width:52px;height:76px;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0;border:0;border-radius:12px;
     background:transparent;color:var(--muted);font-family:inherit;font-size:var(--t-tiny);font-weight:700;cursor:pointer}

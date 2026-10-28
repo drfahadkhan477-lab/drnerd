@@ -6438,8 +6438,8 @@ function buildNav(){
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
       <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
-      <button class="icon-btn nav-echo" onclick="goEcho()" title="Echo Studio"
-        aria-label="Echo Studio — views, findings and calculations">${icon('echo')}</button>
+      ${S.screen!=='home'?`<button class="icon-btn nav-echo" onclick="goEcho()" title="Echo Studio"
+        aria-label="Echo Studio — views, findings and calculations">${icon('echo')}</button>`:''}
       <div class="theme-wrap">
         <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
           aria-haspopup="menu" id="themeBtn">${icon('palette')}</button>
