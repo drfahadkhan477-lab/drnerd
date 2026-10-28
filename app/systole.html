@@ -5215,6 +5215,36 @@ function setReadSize(n){
   const live=document.getElementById('srLive');
   if(live){ live.textContent=''; live.textContent='Text size: '+READ_SIZES[kept]+'.'; }
 }
+/* ── reading width ──
+   How wide the reading column is on a tablet, the way a reader app offers margins: Narrow keeps a book's measure, Wide
+   (the default) uses an iPad's landscape screen, Full runs edge to edge. It moves --measure (app/css/base.css), which the
+   navbar and every reading screen are drawn to; Home is a full-width layout of its own and is not affected. Kept on the
+   device like the text size. Phones are narrower than every step and are unaffected. */
+const WIDTH_KEY='systole.readwidth';
+const READ_WIDTHS=['Narrow','Medium','Wide','Full'];
+const WIDTH_DEFAULT=2;
+function readWidth(){
+  try{ const r=localStorage.getItem(WIDTH_KEY); if(r===null||r.trim()==='') return WIDTH_DEFAULT;
+    const v=Number(r); return Number.isInteger(v)&&v>=0&&v<READ_WIDTHS.length?v:WIDTH_DEFAULT; }
+  catch(_){ return WIDTH_DEFAULT; }
+}
+function applyReadWidth(){ document.documentElement.setAttribute('data-width',String(readWidth())); }
+function setReadWidth(n){
+  if(!(Number.isInteger(n)&&n>=0&&n<READ_WIDTHS.length)) return;
+  try{ if(n===WIDTH_DEFAULT) localStorage.removeItem(WIDTH_KEY); else localStorage.setItem(WIDTH_KEY,String(n)); }catch(_){}
+  applyReadWidth();
+  const kept=readWidth();
+  document.querySelectorAll('.width-opt').forEach(b=>{ const on=+b.dataset.width===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false'); });
+  const live=document.getElementById('srLive');
+  if(live){ live.textContent=''; live.textContent='Reading width: '+READ_WIDTHS[kept]+'.'; }
+}
+function readWidthHtml(){
+  const cur=readWidth();
+  return `<div class="theme-menu-h" id="readWidthH">Reading width</div>
+    <div class="read-row" role="group" aria-labelledby="readWidthH">${READ_WIDTHS.map((label,i)=>
+      `<button class="width-opt${i===cur?' on':''}" type="button" role="menuitemradio" aria-checked="${i===cur}" data-width="${i}"
+        aria-label="${label}" title="${label}" onclick="setReadWidth(${i})"><span class="width-glyph" style="width:${[8,12,16,20][i]}px"></span></button>`).join('')}</div>`;
+}
 function readSizeHtml(){
   const cur=readSize();
   return `<div class="theme-menu-h" id="readSizeH">Text size</div>
@@ -6449,6 +6479,7 @@ function buildNav(){
           <div class="theme-menu-h">Dark</div>
           ${THEMES.filter(t=>t.group==='dark').map(themeOptHtml).join('')}
           ${readSizeHtml()}
+          ${readWidthHtml()}
         </div>
       </div>
     </div>
@@ -7921,7 +7952,7 @@ function buildQuiz(){
           title="Deal this chapter again from the beginning">Resumed · start over</button>`:''}
       </div>
       <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>
-      <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:'&nbsp;'}</div>
+      <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:''}</div>
     </div>
     ${figHtml}
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
@@ -8051,6 +8082,7 @@ document.addEventListener('touchend',ev=>{
 
 applyTheme();
 applyReadSize();
+applyReadWidth();
 /* After applyTheme so the first paint is already right, and before render so
    a flip during boot is not missed. */
 watchSystemTheme();

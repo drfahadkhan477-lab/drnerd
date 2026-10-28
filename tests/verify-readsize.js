@@ -27,7 +27,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, quiet } = require('./_render.js');
+const { booted, quiet, onScreen } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-readsize.js <build.html>'); process.exit(1); }
@@ -363,6 +363,56 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
       const reach = tools.map(b => { b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const q = b.getBoundingClientRect(); const el = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !!el && b.contains(el); });
       return { box: [rr.left, rr.top, rr.right, rr.bottom].map(Math.round), inView: rr.left >= 0 && rr.right <= innerWidth && rr.top >= 0 && rr.bottom <= innerHeight, tools: tools.length, reach: reach.filter(Boolean).length }; });
     ok(w + 'x' + h + ': the open rail is inside the screen, and every one of its tools can be reached and tapped', m.inView && m.tools >= 8 && m.reach === m.tools, JSON.stringify(m));
+    await page.context().close();
+  }
+
+  head('reading width');
+  /* The column a tablet reads in, the way a reader app offers margins: --measure, which the navbar and the reading
+     screens are drawn to. Wide is the default; Home is a full-width layout of its own. */
+  {
+    const page = await open({ width: 1366, height: 1024 });
+    await quiz(page);
+    const box = () => page.evaluate(() => { const a = document.getElementById('app').getBoundingClientRect(), n = document.querySelector('#navbar .nav').getBoundingClientRect();
+      const c = document.querySelector('.q-card').getBoundingClientRect(), r = document.getElementById('rail');
+      return { attr: document.documentElement.getAttribute('data-width'), app: Math.round(a.width), nav: Math.round(n.width), cardLeft: Math.round(c.left),
+        rail: r && r.offsetWidth ? Math.round(r.getBoundingClientRect().right) : null, vw: innerWidth }; });
+    const wide = await box();
+    ok('by default the column is Wide: 1200px on a landscape iPad, the navbar with it', wide.attr === '2' && wide.app === 1200 && wide.nav === 1200, JSON.stringify(wide));
+    await page.evaluate(() => toggleThemeMenu());
+    await page.waitForFunction(() => document.getElementById('themeMenu').classList.contains('open'), null, { timeout: 4000 }).catch(() => {});
+    await quiet(page);
+    await page.waitForFunction(() => !document.getElementById('themeMenu').getAnimations().length, null, { timeout: 4000 }).catch(() => {});
+    const items = await page.evaluate(() => [...document.querySelectorAll('#themeMenu .width-opt')].map(b => ({ label: b.getAttribute('aria-label'), role: b.getAttribute('role'), checked: b.getAttribute('aria-checked'), h: b.getBoundingClientRect().height })));
+    ok('four width items in the theme menu, named, Wide checked, each 44px tall', items.length === 4 && items.map(i => i.label).join() === 'Narrow,Medium,Wide,Full' &&
+       items.every(i => i.role === 'menuitemradio' && i.h >= 44) && items.map(i => i.checked).join() === 'false,false,true,false', JSON.stringify(items));
+    await page.click('#themeMenu .width-opt[data-width="0"]', { timeout: 4000 }).catch(() => {});
+    const narrow = await box();
+    const said = await page.evaluate(() => ({ live: (document.getElementById('srLive') || {}).textContent, own: localStorage.getItem('systole.readwidth'),
+      checked: [...document.querySelectorAll('#themeMenu .width-opt')].map(b => b.getAttribute('aria-checked')).join() }));
+    ok('a tap on Narrow sets a 720px column, says so, and is kept on this device', narrow.attr === '0' && narrow.app === 720 && said.live === 'Reading width: Narrow.' && said.own === '0' && said.checked === 'true,false,false,false', JSON.stringify([narrow, said]));
+    await page.reload({ waitUntil: 'load' });
+    await booted(page);
+    await quiz(page);
+    ok('after a reload it is still Narrow', (await box()).app === 720);
+    await page.evaluate(() => setReadWidth(3));
+    const full = await box();
+    ok('Full runs the column edge to edge, and the question still clears the pencil rail', full.attr === '3' && full.app >= full.vw - 2 && full.cardLeft >= 92 && (full.rail === null || full.rail < full.cardLeft), JSON.stringify(full));
+    await page.evaluate(() => setReadWidth(0));
+    await page.evaluate(() => { goHome(); render(); });
+    await onScreen(page, 'home', { marker: '.hero-h1' });
+    const home = await page.evaluate(() => ({ app: Math.round(document.getElementById('app').getBoundingClientRect().width), vw: innerWidth }));
+    ok('Home keeps its own full-width layout at any reading width', home.app >= home.vw - 2, JSON.stringify(home));
+    for (const junk of ['7', '-1', '1.5', 'abc', '']) {
+      await page.evaluate(v => localStorage.setItem('systole.readwidth', v), junk);
+      const n = await page.evaluate(() => { applyReadWidth(); return { attr: document.documentElement.getAttribute('data-width'), w: readWidth() }; });
+      ok('a stored "' + junk + '" is Wide', n.attr === '2' && n.w === 2, JSON.stringify(n));
+    }
+    await page.evaluate(() => { localStorage.removeItem('systole.readwidth'); applyReadWidth(); });
+    await page.evaluate(() => { const q = POOL.find(x => x.img && IMGS[x.id] && IMGS[x.id].length); if (q) startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const fig = await page.evaluate(() => { const i = document.querySelector('.fig-img'); return i ? { h: Math.round(i.getBoundingClientRect().height), vh: innerHeight } : null; });
+    ok('a figure in the wider column is no taller than about 60% of the window', !!fig && fig.h > 50 && fig.h <= Math.ceil(fig.vh * 0.6) + 1, JSON.stringify(fig));
     await page.context().close();
   }
 
