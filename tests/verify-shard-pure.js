@@ -184,5 +184,23 @@ head('the scripts, as the workflow runs them');
   }
 }
 
+head('the checks branch protection requires keep their names');
+{
+  /* The ruleset on master requires these four by their full job names. A
+     renamed job reports under a new name and the ruleset waits forever on
+     the old one, so a change here must also change the ruleset
+     (Settings > Rules > Rulesets), in the same change. */
+  const REQUIRED = {
+    'syntax': 'syntax — every file parses, both listings work',
+    'logic': 'logic — every suite that needs no browser and no build',
+    'build-guard': 'build-guard — refuses to run without the licensed source',
+    'browser-done': 'browser-done — every browser job passed, or was skipped for a change it cannot see',
+  };
+  for (const [job, name] of Object.entries(REQUIRED)) {
+    const got = ((jobBody(yml, job) || '').match(/\n    name:\s*(.+)/) || [])[1] || '';
+    ok(`${job} is still named as the ruleset requires it; renaming it means updating the ruleset too`, got.trim() === name, got.trim() || 'no name');
+  }
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
