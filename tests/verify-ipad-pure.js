@@ -258,7 +258,7 @@ head(`no script Safari parses needs a Safari newer than the floor (iPadOS ${FLOO
 head('and a file is read through the fallbacks, because the list cannot tell a Blob from a Response');
 {
   /* Blob.arrayBuffer(), Blob.text() and Blob.stream() came in Safari 14. A Response has the first two from Safari 10 and spells them the same,
-     so the list above cannot name the spelling without flagging every fetch (memorizer/src/ocr.js says as much). The sites are counted
+     so the list above cannot name the spelling without flagging every fetch. The sites are counted
      instead: in the shell each is the line in blobBytes() or blobText() that uses the method only where it exists, and anywhere else it is a
      Response. A site that is neither fails here until somebody says which it is, which for a file the picker hands over means those two
      helpers. The import that uses them is run on a page made to lack the methods in tests/verify-assets.js.
@@ -440,8 +440,7 @@ head('and a viewport height Safari before 15.4 does not know always has one it d
      !braces('.a{height:100dvh').balanced && !braces('.a{}}').balanced && !braces('@media (x){.a{color:red}').balanced &&
      braces('.a{color:red}.b{content:"}"}').balanced && braces('@media (x){.a{color:red}}').balanced);
 
-  const FAMILIES = [['the Systole app', CSS_FILES],
-                    ['the Memorizer', [path.join(ROOT, 'memorizer', 'app.css')]]];
+  const FAMILIES = [['the Systole app', CSS_FILES]];
   let used = 0;
   for (const [name, files] of FAMILIES) {
     const read = files.map(f => ({ f, ...newUnitsWithoutFallback(fs.readFileSync(f, 'utf8')) }));

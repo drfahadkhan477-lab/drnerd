@@ -33,7 +33,6 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
-| `memorizer/` | A sibling product with its own store and pipeline | Shared philosophy, separate codebase |
 
 ## The clock
 

@@ -21,7 +21,7 @@
  *
  * THE LIST IS THE WORKFLOW'S, NOT A COPY OF IT. The suites are read from
  * .github/workflows/verify.yml: every `node tests/verify-*.js` step in the
- * `logic` job (pure), the `memorizer-browser` job (browser), and the
+ * `logic` job (pure), the `public-browser` job (browser), and the
  * `synthetic-browser` job, whose build commands (`node scripts/...` lines)
  * are run first and whose suites are each handed the target the step names.
  * A synthetic build that fails fails every suite waiting on it. Last come the
@@ -91,9 +91,9 @@ function splitJob(body) {
 }
 
 function suitesFromWorkflow(yml) {
-  const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'memorizer-browser');
+  const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'public-browser');
   if (logic === null || browser === null)
-    throw new Error(`the workflow has no ${logic === null ? 'logic' : 'memorizer-browser'} job — nothing to take the suite list from`);
+    throw new Error(`the workflow has no ${logic === null ? 'logic' : 'public-browser'} job — nothing to take the suite list from`);
   return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser')),
            split: splitJob(jobBody(yml, 'split-build')) };
 }

@@ -18,7 +18,7 @@
  * It is the half of the result cache that SEES. Go's test cache does the same
  * thing for the same reason: a result may be reused only if nothing the test
  * looked at has changed, and "what it looked at" is not something to guess
- * from the source. A suite that builds its page from memorizer/src, reads a
+ * from the source. A suite that builds its page from src/core, reads a
  * fixture, or spawns a node script that reads docs/ is found out by watching
  * it do so.
  *

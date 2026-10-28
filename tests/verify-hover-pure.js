@@ -7,8 +7,8 @@
  * On a touch screen the element that was tapped goes on matching :hover until something else is tapped, so a hover style that is
  * not behind @media (hover:hover) stays on the screen after the tap: the Flag button, tapped on and then off, stayed amber with no
  * flag set. tests/verify-taps.js holds the Systole app to this in a browser, on the stylesheets as the engine holds them, and
- * taps the button. This reads the stylesheets as text, with no browser and no build, so that the Memorizer's page and the
- * Lab's are held to it as well, on every push, in a tenth of a second.
+ * taps the button. This reads the stylesheets as text, with no browser and no build, so that every one of them, the Lab's
+ * included, is held to it on every push, in a tenth of a second.
  *
  * HOW IT READS A STYLESHEET. Comments and strings are blanked, keeping every position, and the braces are followed with a stack of
  * the at-rules the walk is inside. A style rule whose selector list holds :hover counts as asked for if some @media rule on the stack
@@ -91,7 +91,6 @@ head('the stylesheets');
   const dirs = fs.readdirSync(path.join(ROOT, 'app', 'css')).filter(f => f.endsWith('.css')).sort().map(f => path.join('app', 'css', f));
   const families = [
     ['the Systole app', dirs],
-    ['the Memorizer', [path.join('memorizer', 'app.css')]],
   ];
   for (const [name, files] of families) {
     const text = files.map(f => ({ f, css: fs.readFileSync(path.join(ROOT, f), 'utf8') }));

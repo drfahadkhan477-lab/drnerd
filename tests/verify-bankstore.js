@@ -101,7 +101,7 @@ const settle = (pg, fn, arg) => pg.waitForFunction(fn, arg === undefined ? null 
     const manifest = JSON.parse(fs.readFileSync(path.join(c, 'manifest.json'), 'utf8'));
     manifest.schemaVersion = 1;
     fs.writeFileSync(path.join(c, 'manifest.json'), JSON.stringify(manifest));
-    return require('../scripts/build-memorizer.js').zipOf(c, ['manifest.json', 'questions.json', 'figures/OAB_2_1.jpg', 'figures/ZQ_1_1.webp']);
+    return require('../scripts/zip.js').zipOf(c, ['manifest.json', 'questions.json', 'figures/OAB_2_1.jpg', 'figures/ZQ_1_1.webp']);
   })();
 
   let section = 'setup';

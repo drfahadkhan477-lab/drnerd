@@ -5,7 +5,7 @@ Build the standalone app, then extract its content before verifying the split PW
 ```bash
 npm run build -- path/to/ACCSAP_12_export.html      # → build/systole.html
 node scripts/extract-content.js build/systole.html # refresh content for the split build
-node scripts/verify.js --pwa                           # → 9258 + 147 checks
+node scripts/verify.js --pwa                           # → 6950 + 147 checks
 ```
 
 Open `build/systole.html` in a browser. That single file is the whole app.
@@ -35,16 +35,16 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```bash
   npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, axe-core 4.10.2, from the lockfile
   npx playwright install chromium webkit     # the engines the full run uses
-  npx playwright install firefox             # also, to reproduce CI's memorizer-browser job
+  npx playwright install firefox             # also, to reproduce CI's public-browser job
   ```
 
   Pinned rather than ranged, and with `package-lock.json` committed, because a
   suite that measures a browser is measuring a *specific* browser — `^1.63.0`
   would make a green run mean "green on whatever shipped this week".
 
-  Firefox is required by CI's `memorizer-browser` job (Chromium, WebKit and
-  Firefox each run the Memorizer suites), so install all three engines to
-  reproduce that job locally. The full `scripts/verify.js` run in CI uses
+  Firefox is required by CI's `public-browser` job (Chromium, WebKit and
+  Firefox each run verify-bankstore and verify-suitecache), so install all
+  three engines to reproduce that job locally. The full `scripts/verify.js` run in CI uses
   Chromium and WebKit only. `--engine firefox` works wherever Firefox is
   installed; `scripts/verify.js` checks the executable exists and tells
   you how to install it before it spawns a single suite, rather than failing
@@ -70,8 +70,8 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   python -m pip install Pillow numpy
   ```
 
-  Without it that one suite refuses with the install command and the other 182
-  run normally — it is 35 of the 9258 checks. The suite tries `python3`,
+  Without it that one suite refuses with the install command and the other 154
+  run normally — it is 35 of the 6950 checks. The suite tries `python3`,
   `python` and `py -3` in turn, so the Windows spelling is covered, and it
   checks both libraries before running rather than dying halfway through.
 
@@ -246,8 +246,8 @@ exists to prevent, arriving through the convenience alias.
 ### The suites on their own
 
 Without the export, `npm test` runs every suite CI runs: the pure-Node ones,
-then the browser suites that make their own documents (the Memorizer and the
-code-only deploy's import), then the app's browser suites on the synthetic
+then the browser suites that make their own documents (the code-only deploy's
+import and the result cache's trace), then the app's browser suites on the synthetic
 build, which it makes first with the same commands as CI's
 `synthetic-browser` job (into `build/synthetic/`, never over your own
 `build/systole.html`). It reads all of that from
@@ -342,7 +342,7 @@ on changed, and must be when only something irrelevant did.
 
 | Where | What | When |
 |---|---|---|
-| GitHub, by itself | every suite that needs no export: the pure ones, the Memorizer in three browsers, and the app's own browser suites on an invented bank, in Chromium, and most of them again in WebKit, the iPad's engine (`synthetic-webkit`; the workflow names the ones left out and why), and the split build made from that bank, served and checked in Chromium and WebKit (`split-build`; not in the totals below) | on every pull request and every merge; nothing to do |
+| GitHub, by itself | every suite that needs no export: the pure ones, the code-only deploy and the result cache in three browsers, and the app's own browser suites on an invented bank, in Chromium, and most of them again in WebKit, the iPad's engine (`synthetic-webkit`; the workflow names the ones left out and why), and the split build made from that bank, served and checked in Chromium and WebKit (`split-build`; not in the totals below) | on every pull request and every merge; nothing to do |
 | Laptop, quick: `npm run test:laptop` | the suites tagged `laptop` (see `--list`): the ones no CI job runs, because they need your export | after a change to the app, in a few minutes |
 | Laptop, full: `npm run test:private` | the whole registry on your real build; the only run that writes `tests/test-stats.json` | before a release, or when the record should move |
 | iPad | Settings → Self-test, which checks the figure viewer and layout in the iPad's own Safari; and by hand, voice mode and the Lab's sounds | after installing a new version |
@@ -352,44 +352,34 @@ into CI leaves the quick laptop run the same day. The full run repeats on your
 real bank what GitHub already ran on the invented one, which is why it is the
 occasional run rather than the routine one.
 
-Across 183 suites, 9258 checks, plus 147 more on the split build. Those numbers are
-not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json` in
-two halves, Systole's from a run where every Systole suite passed and the
-Memorizer's likewise, the other half kept as it was — and `verify-stats`
+Across 155 suites, 6950 checks, plus 147 more on the split build. Those numbers are
+not typed here by hand — `scripts/verify.js` writes `tests/test-stats.json`
+from a run where every registered suite passed — and `verify-stats`
 fails if this sentence, the README or the CI header disagrees with it. They used to be maintained from memory in three files,
 and they drifted: the CI header claimed both "the other 1052" and "those 1210
 checks" for the same quantity.
 
 The totals exclude suites named in `RETIRED_RECORD` while their historical
-measurements remain in the record. The qualifying Memorizer run at `9bcb827`
+measurements remain in the record. Memorizer moved to its own repository
+(drfahadkhan477-lab/Memorizer, copied from this one at `396a465`), and its
+suites, with `reader-assets-pure` and `study-file-check`, are named there until
+the next green run rewrites the record without them. Until then the record
+also keeps its two-half shape (Systole's and the Memorizer's provenance);
+that write drops it. The history below is of the two-half record.
+
+The qualifying Memorizer run at `9bcb827`
 removed the three retired Claude suites and refreshed Memorizer's counts.
 Systole's active counts and the split-build count remain from their previous
 qualifying runs in that record. The later complete Systole run at `391f7c5`
 refreshed its half too and emptied `PENDING_RECORD`; that older record
 carried the split-build figure over from its previous measurement.
 
-### Prepared reader libraries for public browser checks
+### Prepared reader libraries (moved with Memorizer)
 
-```bash
-npm run test:prepare
-SYSTOLE_TEST_READERS_OFFLINE=1 npm test
-```
-
-Preparation downloads the nine version-pinned PDF, OCR, flowchart, and WebLLM
-runtime files and verifies their existing SHA-384 pins. It stores only these
-public reader assets under `node_modules/.cache/systole-reader-assets/`, including
-the English OCR model; no study content or language-model weights are cached
-there. The browser still checks the app's
-SRI hashes and runs the real parser and recognition engine.
-
-Downloads have a 20-second ceiling per attempt and at most three attempts.
-Missing files fail in reader-offline mode, and corrupt cache files fail rather
-than being silently replaced. Remove a corrupt cache file and rerun preparation
-to repair it. Changing a URL or integrity pin selects a new cache file.
-
-The Memorizer CI job prepares these libraries before its browser scenarios and
-uses reader-offline mode for those scenarios. This controls reader downloads;
-it does not claim that every browser scenario is disconnected from the network.
+`npm run test:prepare` and `SYSTOLE_TEST_READERS_OFFLINE=1` prepared the
+pinned PDF, OCR, flowchart and WebLLM readers that only the Memorizer's browser
+suites load. They went with Memorizer to its own repository. The measurements
+below were made while it lived here.
 
 Observed on 2026-10-13 with Node 24.19.0 and repository-pinned Playwright 1.63.0:
 all 148 public suites passed in Chromium (87 pure and 61 browser suites).
@@ -675,11 +665,11 @@ node scripts/verify.js --engine webkit     # or firefox; chromium is the default
 ```
 
 The target device is an iPad, so WebKit validation matters. CI runs the
-Memorizer job in Chromium, WebKit and Firefox, and the synthetic app job also
+public-browser job in Chromium, WebKit and Firefox, and the synthetic app job also
 has a WebKit counterpart with explicit exclusions. `verify-engine` enforces
 the shared launcher so suites cannot silently select a different engine.
 
-The prepared-reader section above records the latest local measurements.
+The section on prepared reader libraries above records local measurements from before Memorizer moved out.
 Engine differences and unavailable measurements remain explicit: WebKit has
 no Chromium heap API, and the launcher documents its view-transition
 workaround. Browser automation does not establish behavior on a physical
@@ -874,7 +864,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        183 suites · 99 need no browser · + pwa
+tests/        155 suites · 76 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

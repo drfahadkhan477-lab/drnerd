@@ -23,7 +23,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { zipOf } = require('../scripts/build-memorizer.js');
+const { zipOf } = require('../scripts/zip.js');
 
 const ROOT = path.join(__dirname, '..');
 const args = process.argv.slice(2);
@@ -53,8 +53,7 @@ function pack(dir, out, extras) {
   if (extraNames.length) manifest.extras = extraNames; else delete manifest.extras;
   const figs = fs.readdirSync(path.join(dir, 'figures')).filter(f => /\.(webp|png|jpg)$/.test(f)).sort();
 
-  /* Staged in a folder zipOf can read from, so the zip is built by the same
-     writer the Memorizer upload uses. */
+  /* Staged in a folder, which is what zipOf (scripts/zip.js) reads from. */
   const stage = out + '.stage-' + process.pid;
   fs.rmSync(stage, { recursive: true, force: true });
   fs.mkdirSync(path.join(stage, 'figures'), { recursive: true });

@@ -13,7 +13,6 @@ must work with synthetic fixtures; the licensed question bank stays private.
   bank of your own from reviewed study files, `scripts/import-bank.js` one
   from a licensed bank's CSV or JSON export (`docs/OWN-BANK.md`), and
   `scripts/which-bank.js` keeps ACCSAP's corrections to ACCSAP's bank.
-- `memorizer/`: PDF and study-file learning app, with its own storage and backup.
 - `lab/` and `src/lab/`: interactive learning tools.
 - `tests/`: logic and browser suites. `scripts/verify.js` is the suite registry;
   `scripts/test-public.js` derives the public test run from the CI workflow and
@@ -74,11 +73,6 @@ use it for a release, a doubt, or a change to the cache or to Playwright or a
 browser. CI always measures, and Firefox is not cached. Do not run the whole
 browser suite to establish a baseline: CI measured the base commit, so read its
 result and measure your change.
-
-Use `npm run test:prepare` to download and verify the pinned public reader
-libraries, then `SYSTOLE_TEST_READERS_OFFLINE=1 npm test` to exercise the public
-run without downloading those libraries during browser scenarios. This mode
-does not disable the app's requests or replace the real parsers and OCR engine.
 
 `npm run build` and `npm run test:private` require the owner's private export.
 For public build checks, use `scripts/synthetic-export.js` with the assembler;

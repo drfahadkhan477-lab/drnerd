@@ -91,7 +91,7 @@ const SPLIT = cmds => !cmds ? '' : `  split-build:\n    steps:\n      - name: ma
   `      - name: check it\n        run: node ${cmds[cmds.length - 1].join(' ')}\n`;
 const Y = (logic, browserJob, after, syn, split) =>
   `jobs:\n  logic:\n    steps:\n${logic.map(n => `      - name: ${n} (1 checks)\n        run: node tests/${n}.js\n`).join('')}` +
-  `  memorizer-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
+  `  public-browser:\n    strategy:\n      matrix:\n        engine: [chromium]\n    steps:\n${browserJob.map(n => `      - name: ${n}\n        run: node tests/${n}.js\n`).join('')}` +
   SYN(syn) + SPLIT(split) + (after ? `  build-guard:\n    steps:\n      - run: node tests/${after}.js\n` : '');
 {
   const s = suitesFromWorkflow(Y(['verify-a', 'verify-b'], ['verify-c'], 'verify-z'));
@@ -102,7 +102,7 @@ const Y = (logic, browserJob, after, syn, split) =>
      JSON.stringify(p.split) === JSON.stringify(cmds), JSON.stringify(p.split));
   let msg = '';
   try { suitesFromWorkflow('jobs:\n  logic:\n    steps: []\n'); } catch (e) { msg = e.message; }
-  ok('a workflow without the browser job is refused, not read as zero browser suites', /no memorizer-browser job/.test(msg), msg || 'accepted');
+  ok('a workflow without the browser job is refused, not read as zero browser suites', /no public-browser job/.test(msg), msg || 'accepted');
 }
 
 head('running them');

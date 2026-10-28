@@ -2,14 +2,10 @@
   "name": "Systole Codex / Codespaces",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:24",
   "postCreateCommand": "npm ci",
-  "forwardPorts": [8080, 8081],
+  "forwardPorts": [8080],
   "portsAttributes": {
     "8080": {
       "label": "Systole PWA",
-      "onAutoForward": "notify"
-    },
-    "8081": {
-      "label": "Memorizer",
       "onAutoForward": "notify"
     }
   },

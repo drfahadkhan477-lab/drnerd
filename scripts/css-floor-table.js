@@ -110,7 +110,6 @@ for (const fam of C.families()) for (const f of fam.files) firstPass.push(...C.u
 const inlineOf = watch => {                              // what scripts and pages write inline (style attributes, cssText, el.style.x, <style> blocks): the same Safari reads it
   const out = [];
   for (const f of C.scriptFiles()) for (const u of C.inlineUses(C.readFile(f), watch)) out.push(Object.assign(u, { node: { line: f + ':' + u.line } }));
-  for (const g of C.generatedSheets()) for (const u of C.usesOf(C.parseCss(g.css).root, watch)) out.push(Object.assign(u, { node: { line: g.file + ':' + u.line } }));
   return out;
 };
 firstPass.push(...inlineOf(null));
@@ -124,7 +123,7 @@ for (const p of props) {
 const uses = [];
 for (const fam of C.families()) for (const f of fam.files) uses.push(...C.usesOf(C.parseCss(C.readFile(f)).root, watch));
 uses.push(...inlineOf(watch));
-uses.push(...C.customValueUses([...C.families().flatMap(fam => fam.files.map(f => ({ file: f, root: C.parseCss(C.readFile(f)).root }))), ...C.generatedSheets().map(g => ({ file: g.file, root: C.parseCss(g.css).root })), ...C.scriptFiles().flatMap(f => C.inlineSegments(C.readFile(f)).map(seg => ({ file: f, root: C.parseCss(seg.css).root })))], watch).map(u => Object.assign(u, { node: { line: u.file + ':' + u.line } })));
+uses.push(...C.customValueUses([...C.families().flatMap(fam => fam.files.map(f => ({ file: f, root: C.parseCss(C.readFile(f)).root }))), ...C.scriptFiles().flatMap(f => C.inlineSegments(C.readFile(f)).map(seg => ({ file: f, root: C.parseCss(seg.css).root })))], watch).map(u => Object.assign(u, { node: { line: u.file + ':' + u.line } })));
 const keys = new Map();
 for (const u of uses) if (!keys.has(u.key)) keys.set(u.key, u);
 

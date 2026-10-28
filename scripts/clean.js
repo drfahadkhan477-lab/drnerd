@@ -6,7 +6,7 @@
  *   npm run clean:private               lists what the private clean would remove
  *   npm run clean:private -- --yes      and removes it
  *
- * PUBLIC (npm run clean): dist-memorizer/ and build/.work/, the per-run build
+ * PUBLIC (npm run clean): build/.work/, the per-run build
  * workspaces the deleted scripts/build.js left when a run was killed hard.
  *
  * PRIVATE (--private): what is made FROM the export and can be made again
@@ -27,7 +27,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-const PUBLIC = ['dist-memorizer', path.join('build', '.work')];
+const PUBLIC = [path.join('build', '.work')];
 const PRIVATE = ['build', 'dist', path.join('content', 'questions.json'), path.join('content', 'manifest.json'), path.join('content', 'figures')];
 const NEVER = ['source', path.join('content', 'refs'), path.join('content', 'refs-repo'), '.git'];
 

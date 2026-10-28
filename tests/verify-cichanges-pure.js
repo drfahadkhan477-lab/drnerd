@@ -25,15 +25,13 @@ const ok = (label, cond, detail = '') => {
 };
 const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
-const show = d => `memorizer=${d.memorizer} synthetic=${d.synthetic}`;
-const is = (files, m, s) => { const d = classify(files); return d.memorizer === m && d.synthetic === s; };
+const show = d => `public=${d.public} synthetic=${d.synthetic}`;
+const is = (files, p, s) => { const d = classify(files); return d.public === p && d.synthetic === s; };
 
 head('a pull request skips only the job its files cannot reach');
 {
-  const mem = ['memorizer/src/ui.js', 'tests/verify-memorizer-hardening.js'];
-  ok('Memorizer-only: the synthetic job is skipped, the Memorizer job runs', is(mem, true, false), show(classify(mem)));
   const sys = ['app/systole.html', 'assets/icon.png'];
-  ok('Systole shell only: the Memorizer job is skipped, the synthetic job runs', is(sys, false, true), show(classify(sys)));
+  ok('Systole shell only: the public-browser job is skipped, the synthetic job runs', is(sys, false, true), show(classify(sys)));
   const docs = ['docs/BUILD.md', 'README.md', 'tasks/lessons.md', '.claude/agents/planner.md'];
   ok('docs only: both browser jobs are skipped', is(docs, false, false), show(classify(docs)));
   /* .gitignore read only by verify-engine and verify-leakguard, both in the logic job,
@@ -41,21 +39,22 @@ head('a pull request skips only the job its files cannot reach');
   ok('.gitignore alone skips both browser jobs', is(['.gitignore'], false, false), show(classify(['.gitignore'])));
   ok('.gitignore beside docs still skips both', is(docs.concat(['.gitignore']), false, false));
   ok('.gitignore beside Systole code still runs the synthetic job', is(['.gitignore', 'app/systole.html'], false, true));
-  ok('docs beside Memorizer code still skip only the synthetic job', is(docs.concat(mem), true, false));
-  ok('one file from each side runs both', is(['memorizer/src/ui.js', 'app/systole.html'], true, true));
+  ok('docs beside the shell still skip only the public-browser job', is(docs.concat(sys), false, true));
+  /* Memorizer moved to its own repository, and its list went with it: a path
+     under memorizer/ is on no list now, so it is a doubt, and runs both. */
+  ok('a path under memorizer/ no longer skips the synthetic job', is(['memorizer/src/ui.js'], true, true), show(classify(['memorizer/src/ui.js'])));
   ok('the Practice Lab\'s browser suite, changed alone, runs the synthetic job: the Lab is a Systole screen now', classify(['tests/verify-lab.js']).synthetic === true, show(classify(['tests/verify-lab.js'])));
-  ok('but the Lab\'s modules in src/lab/ run both: verify-csp walks src/', is(['src/lab/heartsounds.js'], true, true));
+  ok('and the Lab\'s modules in src/lab/ run both', is(['src/lab/heartsounds.js'], true, true));
 }
 
 head('every doubtful case runs both');
 {
-  for (const f of ['src/core/fsrs.js', 'scripts/build-memorizer.js', 'scripts/build-pwa.js', 'tools/pack-content.js',
+  for (const f of ['src/core/fsrs.js', 'scripts/zip.js', 'scripts/build-pwa.js', 'tools/pack-content.js',
                    'tests/_render.js', 'tests/_engine.js', 'package.json', 'package-lock.json',
                    '.github/workflows/verify.yml', 'a-new-directory/file.js', 'docs.js', 'memorizer.js']) {
     ok(`${f} runs both`, is([f], true, true), show(classify([f])));
   }
-  /* A .md file is docs only at the top level; memorizer/IPAD-RUNSHEET.md is
-     still under memorizer/, and a nested one elsewhere is not on any list. */
+  /* A .md file is docs only at the top level; a nested one is not on any list. */
   ok('a .md below the top level is not treated as docs', is(['src/notes.md'], true, true));
   ok('an empty file list runs both, rather than reading as "nothing changed"', is([], true, true));
   ok('so does a list that could not be read', is(null, true, true));
@@ -64,9 +63,9 @@ head('every doubtful case runs both');
 head('only a pull request is filtered');
 {
   const docs = ['docs/BUILD.md'];
-  ok('a pull request of docs skips both', show(decide('pull_request', docs)) === 'memorizer=false synthetic=false');
+  ok('a pull request of docs skips both', show(decide('pull_request', docs)) === 'public=false synthetic=false');
   for (const ev of ['push', 'workflow_dispatch', '']) {
-    ok(`a ${ev || 'missing'} event runs both, whatever changed`, show(decide(ev, docs)) === 'memorizer=true synthetic=true');
+    ok(`a ${ev || 'missing'} event runs both, whatever changed`, show(decide(ev, docs)) === 'public=true synthetic=true');
   }
 }
 
@@ -87,12 +86,12 @@ head('each list is held against the files the job it skips really runs');
      workflow, so a suite added to a job is checked without anyone adding it
      here. */
   const runs = body => [...body.matchAll(/\bnode\s+((?:tests|scripts)\/[a-z0-9_-]+\.js)/g)].map(m => m[1]);
-  const memFiles = runs(jobBody('memorizer-browser'));
+  const pubFiles = runs(jobBody('public-browser'));
   const synFiles = runs(jobBody('synthetic-browser'));
-  ok('the Memorizer job’s files are found', memFiles.length >= 5, memFiles.length + '');
+  ok('the public-browser job’s files are found', pubFiles.length >= 2, pubFiles.join(', ') || 'none');
   ok('and the synthetic job’s', synFiles.length >= 30, synFiles.length + '');
-  const memSkipped = memFiles.filter(f => !classify([f]).memorizer);
-  ok('every file the Memorizer job runs, changed alone, runs it', memSkipped.length === 0, memSkipped.join(', ') || 'none');
+  const pubSkipped = pubFiles.filter(f => !classify([f]).public);
+  ok('every file the public-browser job runs, changed alone, runs it', pubSkipped.length === 0, pubSkipped.join(', ') || 'none');
   const synSkipped = synFiles.filter(f => !classify([f]).synthetic);
   ok('every file the synthetic job runs, changed alone, runs it', synSkipped.length === 0, synSkipped.join(', ') || 'none');
   /* synthetic-webkit is skipped on the same answer, so the same must hold
@@ -105,13 +104,15 @@ head('each list is held against the files the job it skips really runs');
   const helpers = fs.readdirSync(path.join(ROOT, 'tests')).filter(f => /^_.*\.js$/.test(f)).map(f => 'tests/' + f);
   const helperSkips = helpers.filter(f => !is([f], true, true));
   ok('every shared test helper runs both', helpers.length > 3 && helperSkips.length === 0, helperSkips.join(', ') || `${helpers.length} helpers`);
-  /* The other direction, for what the synthetic job is allowed to skip: no file it runs names a directory
-     on the Memorizer-only list as a path ('memorizer/…', or 'memorizer' handed to path.join). Read with
+  /* The other direction, for what the public-browser job is allowed to skip: no file it runs names a
+     directory on the Systole-only list as a path ('app/…', or 'app' handed to path.join). Read with
      comments blanked. */
   const { blankComments } = require('./_source.js');
-  const reads = synFiles.filter(f => fs.existsSync(path.join(ROOT, f)))
-    .filter(f => /['"`/]memorizer\/|join\([^)]*['"]memorizer['"]/.test(blankComments(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
-  ok('no file the synthetic job runs names memorizer/', synFiles.length >= 30 && reads.length === 0, reads.join(', ') || `${synFiles.length} files read`);
+  const SHELL = /['"`/](?:app|assets)\/|join\([^)]*['"](?:app|assets)['"]/;
+  const reads = pubFiles.filter(f => fs.existsSync(path.join(ROOT, f)))
+    .filter(f => SHELL.test(blankComments(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
+  ok('no file the public-browser job runs names app/ or assets/', pubFiles.length >= 2 && reads.length === 0, reads.join(', ') || `${pubFiles.length} files read`);
+  ok('and that reading finds such a name where there is one', SHELL.test(blankComments(fs.readFileSync(path.join(ROOT, 'tests', 'verify-app-slots-pure.js'), 'utf8'))));
   /* split-build is skipped on the same answer. It names a few scripts, and the
      last, verify.js --pwa, runs more: build-pwa, the static server and the
      split build's suites. Those are read from verify.js's --pwa block, so a
@@ -124,21 +125,18 @@ head('each list is held against the files the job it skips really runs');
      splitFiles.includes('scripts/verify.js') && splitFiles.includes('tests/verify-pwa.js') && splitFiles.length >= 8, splitFiles.join(', '));
   const splitSkipped = splitFiles.filter(f => !classify([f]).synthetic);
   ok('and every one of them, changed alone, runs it', splitSkipped.length === 0, splitSkipped.join(', ') || 'none');
-  const splitReads = splitFiles.filter(f => fs.existsSync(path.join(ROOT, f)))
-    .filter(f => /['"`/]memorizer\/|join\([^)]*['"]memorizer['"]/.test(blankComments(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
-  ok('and none of them names memorizer/', splitReads.length === 0, splitReads.join(', ') || `${splitFiles.length} files read`);
 }
 
 head('the workflow is wired so a failed decision runs both');
 {
-  const mem = jobBody('memorizer-browser'), syn = jobBody('synthetic-browser'), ch = jobBody('changes');
+  const pub = jobBody('public-browser'), syn = jobBody('synthetic-browser'), ch = jobBody('changes');
   ok('there is a `changes` job', ch.length > 0);
   ok('it runs the script', /\n\s+run:\s*node scripts\/ci-changes\.js\s*\n/.test(ch + '\n'));
   ok('with two commits of history, so HEAD^1 exists', /fetch-depth:\s*2\b/.test(ch));
   ok('and publishes both answers from that step',
-     /memorizer:\s*\$\{\{\s*steps\.which\.outputs\.memorizer\s*\}\}/.test(ch) &&
+     /public:\s*\$\{\{\s*steps\.which\.outputs\.public\s*\}\}/.test(ch) &&
      /synthetic:\s*\$\{\{\s*steps\.which\.outputs\.synthetic\s*\}\}/.test(ch) && /id:\s*which\b/.test(ch));
-  for (const [name, body, key] of [['memorizer-browser', mem, 'memorizer'], ['synthetic-browser', syn, 'synthetic'],
+  for (const [name, body, key] of [['public-browser', pub, 'public'], ['synthetic-browser', syn, 'synthetic'],
                                     ['synthetic-webkit', jobBody('synthetic-webkit'), 'synthetic'],
                                     ['split-build', jobBody('split-build'), 'synthetic']]) {
     const cond = (body.match(/\n    if:\s*(.+)/) || [])[1] || '';
@@ -178,13 +176,13 @@ head('the script itself, in throwaway repositories');
     return d;
   };
   try {
-    const mem = repo(['memorizer/src/ui.js']);
-    ok('a Memorizer-only commit writes memorizer=true synthetic=false', runIn(mem, 'pull_request') === 'memorizer=true synthetic=false', runIn(mem, 'pull_request'));
-    ok('the same commit pushed to master writes both true', runIn(mem, 'push') === 'memorizer=true synthetic=true', runIn(mem, 'push'));
-    const both = repo(['memorizer/src/ui.js', 'src/core/fsrs.js']);
-    ok('a commit that also touches src/ writes both true', runIn(both, 'pull_request') === 'memorizer=true synthetic=true', runIn(both, 'pull_request'));
+    const shell = repo(['app/systole.html']);
+    ok('a shell-only commit writes public=false synthetic=true', runIn(shell, 'pull_request') === 'public=false synthetic=true', runIn(shell, 'pull_request'));
+    ok('the same commit pushed to master writes both true', runIn(shell, 'push') === 'public=true synthetic=true', runIn(shell, 'push'));
+    const both = repo(['app/systole.html', 'src/core/fsrs.js']);
+    ok('a commit that also touches src/ writes both true', runIn(both, 'pull_request') === 'public=true synthetic=true', runIn(both, 'pull_request'));
     /* A shared file moved into app/: git names a rename by its new path only, which alone
-       would skip the Memorizer job although it had used the file at its old path. */
+       would skip the public-browser job although it had used the file at its old path. */
     const moved = fs.mkdtempSync(path.join(tmp, 'r-'));
     git(moved, 'init', '-q');
     fs.mkdirSync(path.join(moved, 'src', 'core'), { recursive: true });
@@ -192,12 +190,12 @@ head('the script itself, in throwaway repositories');
     git(moved, 'add', '.'); git(moved, 'commit', '-qm', 'base');
     fs.mkdirSync(path.join(moved, 'app'));
     git(moved, 'mv', 'src/core/shared.js', 'app/shared.js'); git(moved, 'commit', '-qm', 'move');
-    ok('a shared file moved into app/ still runs the Memorizer job: the path it left counts', runIn(moved, 'pull_request') === 'memorizer=true synthetic=true', runIn(moved, 'pull_request'));
+    ok('a shared file moved into app/ still runs the public-browser job: the path it left counts', runIn(moved, 'pull_request') === 'public=true synthetic=true', runIn(moved, 'pull_request'));
     /* One commit, so HEAD^1 does not exist: the diff fails, and must not
        read as "nothing changed". */
     const lone = fs.mkdtempSync(path.join(tmp, 'r-'));
     git(lone, 'init', '-q'); fs.writeFileSync(path.join(lone, 'README.md'), 'x'); git(lone, 'add', '.'); git(lone, 'commit', '-qm', 'one');
-    ok('a diff git cannot take writes both true', runIn(lone, 'pull_request') === 'memorizer=true synthetic=true', runIn(lone, 'pull_request'));
+    ok('a diff git cannot take writes both true', runIn(lone, 'pull_request') === 'public=true synthetic=true', runIn(lone, 'pull_request'));
   } catch (e) {
     ok('the script runs', false, String(e.message).split('\n')[0]);
   } finally {

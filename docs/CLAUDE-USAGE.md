@@ -67,7 +67,6 @@ will otherwise read the table as a specification to restore.
 | --- | --- | --- |
 | `planner` | sonnet | Plan for work over two or three files, before any edit. Read-only. |
 | `verifier` | haiku | Run the pre-push checks and report what ran, what passed and what did not run. |
-| `memorizer-reviewer` | sonnet | Review a change to `memorizer/` against the invariants in `memorizer/REVIEW.md`. |
 | `hollow-check-reviewer` | sonnet | Review new checks for the ways checks have passed without measuring anything. |
 | `leak-auditor` | haiku | Look for licensed content in a branch before it is pushed. |
 | `ci-log-reader` | haiku | Read one CI job log and return only what failed. |

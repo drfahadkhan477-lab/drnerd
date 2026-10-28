@@ -28,13 +28,13 @@ const { blankComments } = require('./_source.js');
 
 const ROOT = path.join(__dirname, '..');
 
-/* The two stylesheet families the pages ship: the app (every file in app/css, in the order they are listed here, which is only the
-   order of a directory listing: the cascade between files is the assembler's), and the Memorizer's. */
+/* The stylesheet family the pages ship: the app (every file in app/css, in the order they are listed here, which is only the
+   order of a directory listing: the cascade between files is the assembler's). The Memorizer's was the second until it moved to
+   its own repository. */
 function families() {
   const dir = path.join(ROOT, 'app', 'css');
   return [
     { name: 'the Systole app', files: fs.readdirSync(dir).filter(f => f.endsWith('.css')).sort().map(f => 'app/css/' + f) },
-    { name: 'the Memorizer', files: ['memorizer/app.css'] },
   ];
 }
 const readFile = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -413,8 +413,8 @@ function scriptFiles() {
       else if (/\.js$/.test(e.name)) out.push(rel + '/' + e.name);
     }
   };
-  walk('src'); walk('memorizer/src');
-  for (const f of ['app/systole.html', 'scripts/build-pwa.js', 'memorizer/index.html']) if (fs.existsSync(path.join(ROOT, f))) out.push(f);
+  walk('src');
+  for (const f of ['app/systole.html', 'scripts/build-pwa.js']) if (fs.existsSync(path.join(ROOT, f))) out.push(f);
   return out;
 }
 
@@ -509,13 +509,6 @@ function inlineSegments(text) {
   return out;
 }
 
-/* Stylesheets that a script builds from data and does not write out in text: the Memorizer's look sheet, which memorizer/src/appearance.js css() returns. They are read
-   as the script makes them, so that what they hold is classified like the rest. */
-function generatedSheets() {
-  const look = require(path.join(ROOT, 'memorizer', 'src', 'appearance.js'));
-  return [{ file: 'memorizer/src/appearance.js', css: look.css(look.DEFAULT) }];
-}
-
 /* The uses of the same shape the stylesheet reader gives, for everything inline: property, function, unit, color, value, selector, at-rule. */
 function inlineUses(text, watch) {
   const out = [];
@@ -523,4 +516,4 @@ function inlineUses(text, watch) {
   return out;
 }
 
-module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, generatedSheets, customValueUses, divisorsOf, SYNTAX };
+module.exports = { ROOT, families, readFile, blankCss, squash, parseCss, blocks, splitList, ancestors, usesOf, versionCmp, supportAt, TABLE_PATH, loadTable, classify, SIM, unknownFeatures, forceFallbacks, scriptFiles, inlineSegments, inlineUses, customValueUses, divisorsOf, SYNTAX };

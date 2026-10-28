@@ -35,8 +35,10 @@ own machine. The folder holds:
   is ("the … commentary"); leave it out for plain "commentary".
   `node scripts/build-bank.js --init "My Cardiology Bank" [--by "…"]` writes
   it, with an id made from the name, and never replaces one.
-- One study file per chapter or topic, in Memorizer's format
-  (`docs/MEMORIZER-STUDY-FILE-PROMPT.md`). Its front matter can say:
+- One study file per chapter or topic, in Memorizer's format (its prompt for
+  Claude is `docs/MEMORIZER-STUDY-FILE-PROMPT.md` in the
+  [Memorizer repository](https://github.com/drfahadkhan477-lab/Memorizer); the
+  parser that reads it here is `scripts/study-file/`). Its front matter can say:
 
   ```
   ---
@@ -52,9 +54,10 @@ own machine. The folder holds:
 
 1. **Draft.** Give Claude a chapter with the study-file prompt; it writes the
    file into `source/bank/`.
-2. **Check.** `node tools/study-file-check.js source/bank/<file>.md` says
-   what Memorizer would drop or flag. It checks against the file's own text,
-   not against the book or the medicine.
+2. **Check.** `node scripts/build-bank.js --check source/bank/<file>.md` says
+   what the builder would refuse in the file. It checks the file against
+   itself, not against the book or the medicine. (`tools/study-file-check.js`,
+   which said what Memorizer's import would drop or flag, went with Memorizer.)
 3. **Review.** Read every question: the key, the explanation, and the reason
    each wrong option is wrong. Fix or delete what is wrong. Keep the numbers
    of the questions you keep.
