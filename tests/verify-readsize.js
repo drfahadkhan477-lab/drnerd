@@ -244,6 +244,60 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
       return { id, drawn: Math.round(r.width) + 'x' + Math.round(r.height), w: reach(-1, 0) + reach(1, 0), h: reach(0, -1) + reach(0, 1) };
     }));
     ok('More and Send are drawn at 40 px, and a tap lands on them across 44: nothing lies over them', hit.every(x => x.drawn === '40x40' && x.w >= 43.5 && x.h >= 43.5), JSON.stringify(hit));
+
+    /* HOW WIDE AN ANSWER READS (28 October 2026). apex.css capped the answer at 72ch and nobody checked what that came
+       to: `ch` is the advance of the ZERO glyph, 11.00px in DM Sans at 16px, while the average character of running
+       text is 7.40px — so the cap was 792px and let 107 characters onto a line. In the portrait sheet, which docks at
+       the full width of the iPad, every answer ran at 95 characters by the lowercase measure, against the 50-75 that
+       reads comfortably and the 80 WCAG 1.4.8 names. Measured in characters, not in the unit the stylesheet happens to
+       use, because the unit was the bug. */
+    await page.evaluate(() => { const k = S.questions && S.questions.length ? S.questions[S.qIdx].id : '_general';
+      CHATS[k] = [{ role: 'assistant', content: 'The invented finding starts a clock and the agent has to be given inside the window, after which the benefit in the synthetic trial disappears entirely and the course is not started at all.' }];
+      buildAI(); });
+    await quiet(page);
+    const measure = await page.evaluate(() => {
+      const p = document.querySelector('.ai-body .msg.bot p') || document.querySelector('.ai-body .msg.bot');
+      if (!p) return null;
+      const cs = getComputedStyle(p), probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:' + cs.font;
+      /* The line the eye travels, in the characters it is made of: a sentence of this page's own prose, not a run of
+         one letter and not the digit the `ch` unit measures. */
+      probe.textContent = 'the invented finding starts a clock and the agent has to be given inside the window';
+      p.appendChild(probe);
+      const per = probe.getBoundingClientRect().width / probe.textContent.length;
+      probe.remove();
+      const w = p.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return { chars: Math.round(w / per), px: Math.round(w), per: +per.toFixed(2) };
+    });
+    ok('an answer reads between 50 and 75 characters to the line',
+       !!measure && measure.chars >= 50 && measure.chars <= 75,
+       measure ? `${measure.chars} characters across ${measure.px}px at ${measure.per}px each` : 'no answer on screen');
+    /* The sentence that says Apex can be wrong about something that changes care was set at 9px, the smallest type in
+       the app. 11 is the floor; it is set at 12. */
+    const fine = await page.evaluate(() => ['ai-disclaim', 'ai-powered'].map(c => {
+      const el = document.querySelector('.' + c); return { c, px: el ? parseFloat(getComputedStyle(el).fontSize) : 0 }; }));
+    ok('the safety line and the model line are at least 11 px', fine.every(f => f.px >= 11), JSON.stringify(fine));
+
+    /* THE COMPOSER DOES NOT KEEP WHAT IT HAS ALREADY SENT. buildAI() reads the panel through apexPanelState() and
+       writes it back through apexPanelRestore(), so a draft survives a rebuild mid-typing — and so did the question
+       that had just gone, which then sat under the next one. A chip fires its own text, and a half-typed draft beside
+       it is somebody's thought: that one stays. */
+    await page.route('**/generativelanguage.googleapis.com/**', r => r.fulfill({ status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+      body: 'data: ' + JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Noted.' }], role: 'model' } }] }) + '\n\n'
+          + 'data: ' + JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '' }], role: 'model' } }] }) + '\n\n' }));
+    const composer = await page.evaluate(async () => {
+      const ta = document.getElementById('aiIn'), done = () => new Promise(r => { const t0 = performance.now();
+        const f = () => (!aiBusy || performance.now() - t0 > 8000) ? r() : setTimeout(f, 40); f(); });
+      ta.value = 'why do I keep missing these'; fire(ta.value); await done();
+      const afterSend = document.getElementById('aiIn').value;
+      document.getElementById('aiIn').value = 'half a thought, still being typed';
+      fire('Quiz me back'); await done();
+      return { afterSend, afterChip: document.getElementById('aiIn').value };
+    });
+    await page.unroute('**/generativelanguage.googleapis.com/**');
+    ok('the composer is empty once the question has gone', composer.afterSend === '', JSON.stringify(composer.afterSend));
+    ok('and a chip does not throw away what was half typed beside it', composer.afterChip === 'half a thought, still being typed', JSON.stringify(composer.afterChip));
     const railBefore = await page.evaluate(() => { const r = document.getElementById('rail'); return !!r && r.offsetWidth > 0; });
     await page.evaluate(() => toggleApexFull());
     const full = await page.evaluate(() => ({ full: document.getElementById('shell').classList.contains('ai-full'), rail: (() => { const r = document.getElementById('rail'); return !!r && r.offsetWidth === 0; })() }));

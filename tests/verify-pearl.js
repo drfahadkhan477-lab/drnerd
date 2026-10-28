@@ -608,6 +608,37 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{ const w=document.getElementById('pearlBody'); w.innerHTML='<p>A short teaching cue.</p>'; pearlFit(); });
   const shortCue=await page.evaluate(()=>{const w=document.getElementById('pearlBody');return {over:w.scrollHeight-w.clientHeight,fade:document.getElementById('pearlCard').classList.contains('pearl-more'),hidden:document.getElementById('pearlMore').hidden};});
   ok('where a short cue fits, nothing is faded and nothing offers more',shortCue.over<=4&&!shortCue.fade&&shortCue.hidden,JSON.stringify(shortCue));
+  /* THE CARD IS SHORT BEFORE IT IS ANYTHING ELSE (28 October 2026). On an 11-inch iPad in portrait, 744x1133, the card
+     is 480px and the figure's flex-basis was a rigid 145px it could not give back; .pearl-main's overflow:hidden took
+     the difference out of the pearl itself, which rendered 40px tall with 411px hidden. What the reader saw was the
+     numeral 1, the words CORE IDEA, and a fade — the sentence the card exists to carry was entirely behind Show all,
+     and verify-pearl was green through all of it, because nothing here had ever asked whether the body was VISIBLE.
+     Measured at the sizes an iPad actually is: the card's height comes from the grid row, and the row from the
+     viewport, so a size that is not driven is a size that is not checked. */
+  head('the pearl is readable at every size an iPad is');
+  for (const [name, vw, vh] of [['iPad portrait', 1024, 1366], ['iPad landscape', 1366, 1024],
+                                ['iPad mini portrait', 744, 1133], ['Split View', 507, 1024]]) {
+    await page.setViewportSize({ width: vw, height: vh });
+    await page.evaluate(() => { S.screen = 'home'; render(); });
+    await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: name + ': the pearl' });
+    await page.evaluate(() => pearlFit());
+    const m = await page.evaluate(() => {
+      const wrap = document.getElementById('pearlBody'), fig = document.getElementById('pearlFig');
+      /* Four lines of the step's OWN type, not of the wrapper's: the two differ, and the wrapper's is the one the
+         floor is written in, so measuring that would only restate the stylesheet back to itself. */
+      const step = document.querySelector('#pearlBody .pearl-txt') || wrap;
+      const line = parseFloat(getComputedStyle(step).lineHeight) || 24;
+      return { visible: wrap.clientHeight, line: +line.toFixed(1), lines: +(wrap.clientHeight / line).toFixed(2),
+               figShown: !!fig && fig.offsetHeight > 0, figCut: fig ? fig.scrollHeight - fig.clientHeight : 0 };
+    });
+    ok(name + ': four lines of the pearl are on screen', m.lines >= 4, `${m.visible}px of body, ${m.lines} lines of ${m.line}px`);
+    /* A figure cut through its own caption is worse than no figure: the caption is the half that says what the picture
+       shows. Either the panel is whole or the card is too short for it and pearlFit() has put it away. */
+    ok(name + ': the figure panel is whole, or it is not shown at all', !m.figShown || m.figCut <= 1,
+       m.figShown ? `${m.figCut}px of the panel hidden` : 'too short for a figure, and none is drawn');
+  }
+  await page.setViewportSize({ width: 1100, height: 1100 });
+
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
      the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
   await page.setViewportSize({ width: 390, height: 844 });

@@ -270,7 +270,13 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
 @media(max-width:480px){.rate-row{grid-template-columns:repeat(2,1fr)}}
 
 /* AI panel: real provenance */
-.ai-powered{font-size:9px;color:var(--muted);text-align:center;padding:3px 0 8px;letter-spacing:.02em}
+/* Up a step from --t-micro. These two lines carry the warning that Apex can
+   be wrong about something that changes care, and at 9px they were the least
+   readable text in the app — the wrong sentence to set in the smallest type on
+   the screen. Steps on the ladder, per the note below: the safety line takes
+   --t-meta and the provenance line --t-tiny, which also puts them in the order
+   they matter rather than drawing both the same. */
+.ai-powered{font-size:var(--t-tiny);color:var(--muted);text-align:center;padding:3px 0 8px;letter-spacing:.02em}
 /* Never --dim: it fails AA at every theme, which is what contrastfix-patch.js
    existed to settle. A disclaimer nobody can read is not a disclaimer.
    Sizes are steps on the type ladder, not round numbers — verify-type.js
@@ -280,7 +286,7 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
    the accessibility tree and silence the announcement entirely. */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
   overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.ai-disclaim{font-size:var(--t-micro);line-height:1.5;color:var(--muted);text-align:center;
+.ai-disclaim{font-size:var(--t-meta);line-height:1.5;color:var(--muted);text-align:center;
   padding:6px 14px 0;letter-spacing:.01em}
 .app-disclaim{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);
   margin:10px 0 0;max-width:60ch}
