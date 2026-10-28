@@ -213,6 +213,56 @@ async function heapAfterBoot(page, url) {
   await page.close();
   }
 
+  head('the scanned heart is on the home screen, with its credit');
+  /* "Realistic Human Heart" by neshallads is CC BY 4.0: the credit is the
+     condition of using it, so the scan on screen without the credit is a
+     licensing failure, not a cosmetic one. The split build ships it beside the
+     app and the hero loads it after the first paint (heroLoadScan). */
+  {
+    const sw = await (await fetch(new URL('sw.js', target).href)).text();
+    const files = ['heart-scan.json', 'heart-scan.bin', 'base.webp', 'normal.webp', 'mr.webp'];
+    ok('the service worker keeps the scan for offline use', files.every(f => sw.includes(`'heart-scan/${f}'`) || sw.includes(`"heart-scan/${f}"`)),
+       files.filter(f => !sw.includes(`heart-scan/${f}`)).join(', ') || 'all five');
+    const man = await (await fetch(new URL('heart-scan/heart-scan.json', target).href)).json().catch(() => null);
+    ok('its manifest is served and names a CC BY licence and an author',
+       !!man && /CC-BY/i.test(man.credit && man.credit.license || '') && !!(man.credit && man.credit.author),
+       man ? `${man.credit && man.credit.author}; ${man.credit && man.credit.license}` : 'not served');
+    const page = watch(await browser.newPage({ viewport: { width: 1180, height: 820 } }), events, 'scanned heart', errors);
+    await page.goto(target, { waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+    /* Polled, not waited for: whether the scan arrives is the claim. */
+    const model = await page.evaluate(() => new Promise(r => {
+      const t0 = Date.now();
+      (function poll() {
+        const m = typeof heroHeart3d !== 'undefined' && heroHeart3d ? heroHeart3d.model() : 'no heart';
+        if (m === 'scan' || Date.now() - t0 > 45000) return r(m);
+        setTimeout(poll, 250);
+      })();
+    }));
+    ok('the hero draws the scan', model === 'scan', model);
+    const credit = await page.evaluate(() => {
+      const el = document.getElementById('heroScanCredit');
+      if (!el) return null;
+      const b = el.getBoundingClientRect(), hero = document.querySelector('.hero-live').getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { text: el.textContent.replace(/\s+/g, ' ').trim(), hidden: el.hidden,
+               seen: b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0.5 &&
+                     b.top >= hero.top && b.bottom <= hero.bottom && b.left >= hero.left && b.right <= hero.right,
+               links: [...el.querySelectorAll('a')].map(a => a.getAttribute('href')) };
+    });
+    ok('the credit is on screen, inside the hero', !!credit && !credit.hidden && credit.seen, credit ? credit.text : 'no #heroScanCredit');
+    ok('it names the work, the author and the licence',
+       !!credit && /Realistic Human Heart/.test(credit.text) && /neshallads/.test(credit.text) && /CC BY 4\.0/.test(credit.text));
+    ok('and links the source and the licence', !!credit && !!man && credit.links.includes(man.credit.source) &&
+       credit.links.includes('https://creativecommons.org/licenses/by/4.0/'), credit ? credit.links.join(' ') : '');
+    const back = await page.evaluate(() => {
+      heroHeart3d.setModel('procedural'); paintHeroScanCredit();
+      return document.getElementById('heroScanCredit').hidden;
+    });
+    ok('the credit goes when the scan does', back === true);
+    await page.close();
+  }
+
   head('the faces the first layout uses are preloaded, and fetched once');
   /* build-pwa preloads the upright faces so the first layout has them, rather
      than asking the operating system for fallbacks and laying out again when
