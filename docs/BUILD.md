@@ -536,10 +536,13 @@ node scripts/private-layout-check.js build/systole.html [--pearls N] [--engine w
 ```
 
 It walks the first pearls at a set of iPad windows, portrait and landscape, and
-reports, per window, how many pearls make Home scroll and by how much, and
-whether Brain or Labs scroll; then how the pearl headings were found. It
+reports, per window, how many pearls make Home scroll and by how much,
+whether Brain or Labs scroll, how many pearls are cut inside their card, and
+how many figures folded to a thumbnail; then how the pearl headings were found
+and how often each step name (Mechanism, Cause, Key number…) was given. It
 prints counts and pixels only, never a word of a note, and exits 1 when
-anything scrolls or a comma-fragment heading survives.
+anything scrolls, a pearl is cut inside its card, or a comma-fragment heading
+survives.
 
 ### When a screen overflows
 

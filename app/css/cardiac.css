@@ -477,7 +477,7 @@
    Larger than the box the old mini heart had — clamp(92px…) to clamp(124px…).
    At the old size the conduction tree was three yellow pixels. A drawing has
    to be big enough to be read or it is only texture. */
-.hero-heart-plate,.hero-heart-3d{
+.hero-heart-plate,.hero-heart-3d,.hero-heart-hit{
   position:absolute;right:clamp(10px,2.4vw,22px);top:clamp(6px,1.6vw,16px);
   width:clamp(124px,15vw,168px);height:clamp(132px,16vw,178px);z-index:1}
 .hero-heart-plate{
@@ -552,7 +552,7 @@ body{background-image:
   background:color-mix(in srgb,var(--hero-accent) 6%,transparent);color:rgba(255,255,255,.76);font-size:11px}
 @supports not (color:color-mix(in srgb,red,blue)){.hero-line .hl-item{background:rgba(255,255,255,.06)}}
 .hero-line .hl-dot{display:none}
-.hero-heart-plate,.hero-heart-3d{width:clamp(136px,17vw,200px);height:clamp(148px,18vw,218px);
+.hero-heart-plate,.hero-heart-3d,.hero-heart-hit{width:clamp(136px,17vw,200px);height:clamp(148px,18vw,218px);
   right:10px;top:28px}
 .hero-heart-3d{filter:drop-shadow(0 14px 22px rgba(3,10,20,.5)) drop-shadow(0 0 12px rgba(94,234,212,.14))}
 .hero-live-status{position:absolute;right:24px;bottom:20px;z-index:2;display:flex;align-items:center;gap:6px;
@@ -583,7 +583,7 @@ body{background-image:
 .scroll-reveal.is-visible{opacity:1;translate:0 0;transition:opacity .6s var(--glide),translate .6s var(--glide)}
 @supports not (translate:0 1px){.scroll-reveal{opacity:1}}
 @media(max-width:520px){.hero-description{font-size:13px;max-width:calc(100% - 112px)}
-  .hero-live-status{right:16px;bottom:14px}.hero-heart-plate,.hero-heart-3d{right:0;top:28px}}
+  .hero-live-status{right:16px;bottom:14px}.hero-heart-plate,.hero-heart-3d,.hero-heart-hit{right:0;top:28px}}
 @media(min-width:1024px) and (orientation:landscape){
   .hero-live{padding-top:16px}
   .hero-h1{font-size:clamp(42px,4vw,58px)}
@@ -730,7 +730,7 @@ html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;-
 .hero-live{min-height:320px;}
 .hero-h1{font-size:clamp(44px,4.5vw,64px);margin-bottom:10px}
 .hero-description{font-size:13px;color:rgba(255,255,255,.7);margin-bottom:16px}
-.hero-heart-plate,.hero-heart-3d{width:clamp(150px,19vw,228px);height:clamp(164px,20.5vw,246px);
+.hero-heart-plate,.hero-heart-3d,.hero-heart-hit{width:clamp(150px,19vw,228px);height:clamp(164px,20.5vw,246px);
   right:8px;top:20px}
 .hero-orbit{right:-6px;top:0;width:260px;height:280px}
 .hero-live-status{bottom:14px;right:18px;font-size:var(--t-micro)}
@@ -775,7 +775,7 @@ html[data-palette="contrast"] .door{background:var(--card)}
 }
 @media(max-width:520px){
   .hero-live{min-height:342px;padding-top:24px}
-  .hero-heart-plate,.hero-heart-3d{top:42px;right:2px;width:160px;height:184px}
+  .hero-heart-plate,.hero-heart-3d,.hero-heart-hit{top:42px;right:2px;width:160px;height:184px}
   .hero-greet{max-width:calc(100% - 96px);font-size:9px}
   .hero-orbit{right:-26px;top:28px;width:222px;height:250px}
   .pearl-main{padding:20px}

@@ -186,7 +186,28 @@ ok('the matching second figure replaces the unrelated first one', figurePearl.fi
 ok('an unrelated image is omitted', !P.harvest([{id:'no-match',body:rule+'\n\n![Blue syndrome](refimg://blue.png)'}])[0].figKey);
 ok('baked and live lessons have the same concept and figure', J(P.harvest([figNote],P.bake([figNote]))) === J(P.harvest([figNote])));
 const blocks=P.lesson(rule+' '+exception);
-ok('whole sentences separate the idea from its caveat', blocks.length === 2 && blocks[0].label === 'Core idea' && blocks[1].label === 'Caveat' && /not required/.test(blocks[1].text));
+ok('whole sentences separate the idea from its caveat', blocks.length === 2 && blocks[0].label !== 'Caveat' && blocks[1].label === 'Caveat' && /not required/.test(blocks[1].text));
+/* Each step is named for what its own words say. The cue is the word, so each case is a sentence with one cue in it. */
+{
+  const named = [
+    ['Nodal block gives a narrow escape at 40-60 beats/min.', 'Key number'],
+    ['Verapamil blocks the L-type calcium channel.', 'Mechanism'],
+    ['Aortic stenosis is most commonly due to calcific degeneration.', 'Cause'],
+    ['Severe regurgitation leads to ventricular dilation.', 'Result'],
+    ['Beta-blockers are first-line therapy for stable angina.', 'Treatment'],
+    ['Nitrates should not be given within a day of sildenafil.', 'Avoid'],
+    ['Each QRS is preceded by a His potential.', 'Finding'],
+    ['Acquired complete block is usually infra-Hisian.', 'Typical'],
+    ['A low ejection fraction predicts mortality.', 'Risk']];
+  const miss = named.filter(([t, want]) => P.lesson(t)[0].label !== want).map(([t, want]) => want + ' → ' + P.lesson(t)[0].label);
+  ok('a step is named for its own words: number, mechanism, cause, result, treatment, avoid, finding, typical, risk', miss.length === 0, miss.join('; ') || named.length + ' names');
+  ok('"heart block" is a block, not a mechanism', P.lesson('In complete heart block, atria and ventricles beat independently.')[0].label === 'Key point');
+  ok('a step that names nothing is a Key point first and a Key fact after',
+     J(P.lesson('The atria beat on their own. The ventricles follow their own pacemaker.').map(s => s.label)) === J(['Key point', 'Key fact']));
+  ok('the joint a step opens with outranks its words: a caveat about a dose is a caveat', P.lesson('Give 5 mg daily. However, avoid 10 mg in the elderly.')[1].label === 'Caveat');
+  const fams = Object.keys(P.FAMILY);
+  ok('every name has one of the six step colours', fams.length === 14 && fams.every(k => /^(core|detail|why|condition|contrast|caveat)$/.test(P.FAMILY[k])), J(P.FAMILY));
+}
 const headed = (body) => P.harvest([{id:'heading',title:'Unit — Section',body}])[0];
 const instruction = headed('### Amber syndrome\n\nAmber syndrome treatment **should be avoided** within 24 hours when the initial invented scan remains uncertain.');
 ok('an emphasized instruction cannot displace the section topic', instruction && instruction.concept === 'Amber syndrome');

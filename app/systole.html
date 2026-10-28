@@ -6650,6 +6650,7 @@ function pearlFit(){
      card's height from the grid row — under 700px the card is sized by its
      own content and this would be a ResizeObserver loop. */
   const fig=document.getElementById('pearlFig');
+  card.classList.remove('pearl-figthumb');
   if(fig&&matchMedia('(min-width:700px)').matches&&!card.classList.contains('pearl-all')){
     card.classList.remove('pearl-nofig');
     card.classList.toggle('pearl-nofig',fig.scrollHeight-fig.clientHeight>1);
@@ -6657,15 +6658,51 @@ function pearlFit(){
   /* Measured as if the button were not there: it takes its own height from the column, so a pearl that fits without it
      runs past the card with it, and once shown (while the steps rise in, everything runs past) it would stay for good,
      offering a sliver. */
+  /* The scale is chosen with the Show all button out of the way: left up from the last measure, it took the room the
+     steps were being fitted to, and a pearl that fitted was scaled as if it did not, then drawn past its card. */
   const btn=document.getElementById('pearlMore');
+  if(btn&&!card.classList.contains('pearl-all')) btn.hidden=true;
+  pearlScale(card,wrap);
   const room=btn&&!btn.hidden?btn.offsetHeight+(parseFloat(getComputedStyle(btn).marginTop)||0):0;
-  const all=card.classList.contains('pearl-all'), over=!wrap.hidden&&wrap.scrollHeight-wrap.clientHeight-room>4;
-  card.classList.toggle('pearl-more',!all&&over&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
+  /* The steps' layout height, not the column's scrollHeight: a step still rising in counts its transform towards
+     scrollHeight, which read as overflow for the length of the entrance and put up a Show all that took the room the
+     scale had just been fitted to. */
+  const tall=wrap.firstElementChild?wrap.firstElementChild.offsetHeight:wrap.scrollHeight;
+  const all=card.classList.contains('pearl-all'), over=!wrap.hidden&&tall-wrap.clientHeight-room>4;
+  card.classList.toggle('pearl-more',!all&&over&&tall-wrap.clientHeight-wrap.scrollTop>4);
   if(btn){
     btn.hidden=wrap.hidden||!(all||over);
     btn.setAttribute('aria-expanded',String(all));
     btn.lastElementChild.textContent=all?'Show less':'Show all';
   }
+}
+/* The largest text scale at which the pearl fits its card, so a short pearl fills the card and a long one still needs
+   no scroll. Measured from the layout box (offsetHeight), which a step's entrance transform does not change, so the
+   steps rising in cannot make the pearl look longer than it is. Only where the card's height is set by the grid
+   (700px and wider); a narrower card is as tall as its content. It stops 4px short of the edge: a scale chosen to the
+   exact pixel was a pixel over once the figure's image or a rounding settled. Under the floor the pearl keeps the
+   floor and the Show all button. */
+function pearlScale(card,wrap){
+  if(!matchMedia('(min-width:700px)').matches||card.classList.contains('pearl-all')||wrap.hidden||!wrap.firstElementChild){
+    card.style.removeProperty('--pz'); return; }
+  const fig=card.classList.contains('has-fig')&&!card.classList.contains('pearl-nofig');
+  const fits=z=>{ card.style.setProperty('--pz',String(z)); return wrap.firstElementChild.offsetHeight<=wrap.clientHeight-4; };
+  /* A figure gives way before the text does: two fifths of the card, then less, until the steps fit at the floor. */
+  if(fig){
+    const shares=[44,40,36,32,28,24];
+    const at=z=>shares.find(pf=>{ card.style.setProperty('--pf',String(pf)); return fits(z); });
+    if(at(1)===undefined&&at(0.84)===undefined) card.style.setProperty('--pf','24');
+  }
+  else card.style.removeProperty('--pf');
+  let lo=0.84, hi=fig?1.12:1.6;
+  if(fits(hi)) return;
+  /* Last, the figure folds to a thumbnail in the card's corner (a tap still enlarges it), rather than the steps being
+     cut off under a Show all. */
+  if(!fits(lo)&&fig){ card.classList.add('pearl-figthumb'); card.style.removeProperty('--pf'); hi=1.6; if(fits(hi)) return; }
+  if(!fits(lo)) return;
+  for(let i=0;i<7;i++){ const m=(lo+hi)/2; if(fits(m)) lo=m; else hi=m; }
+  /* The value that was measured to fit, not a rounding of it: rounded up, it crossed the point where a line wraps. */
+  fits(lo);
 }
 function pearlWatch(){
   if(pearlRO){ pearlRO.disconnect(); pearlRO=null; }
@@ -6965,11 +7002,12 @@ function pearlMark(escaped){
 /* One sentence, broken where it already bends. A single step means the
    sentence had no joint worth cutting — it is then set as prose rather than as
    a ladder of one, which would be a numbered list with nothing to order. */
-/* Each step wears the relationship Pearl.lesson names for it, in a colour of its own, so the shape of the argument (the
-   idea, the detail under it, the contrast, the caveat) is seen before a word is read. The label is text, not only colour. */
-const PEARL_KINDS={'Core idea':['core',icon('target','icon-sm')],'Detail':['detail',icon('book','icon-sm')],
-  'Contrast':['contrast',icon('repeat','icon-sm')],'Caveat':['caveat',icon('alert','icon-sm')],
-  'Why it matters':['why',icon('zap','icon-sm')],'Condition':['condition',icon('flag','icon-sm')]};
+/* Each step wears the name Pearl.lesson gives it from its own words (Mechanism, Cause, Result, Treatment, Key number…),
+   with an icon, in its family's colour (Pearl.FAMILY), so the shape of the argument is seen before a word is read. The
+   label is text, not only colour. */
+const PEARL_KINDS={'Key point':icon('target','icon-sm'),'Finding':icon('stethoscope','icon-sm'),'Key number':icon('bar-chart','icon-sm'),'Key fact':icon('check-circle','icon-sm'),
+  'Typical':icon('repeat','icon-sm'),'Mechanism':icon('settings','icon-sm'),'Cause':icon('zap','icon-sm'),'Result':icon('arrow-right','icon-sm'),'Condition':icon('flag','icon-sm'),'Treatment':icon('heart-pulse','icon-sm'),
+  'Contrast':icon('layers','icon-sm'),'Risk':icon('trending-up','icon-sm'),'Caveat':icon('alert','icon-sm'),'Avoid':icon('x-circle','icon-sm')};
 let pearlAsWritten=false;
 function pearlLadder(p){
   if(pearlAsWritten) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
@@ -6977,9 +7015,9 @@ function pearlLadder(p){
   try{ steps=(typeof Pearl!=='undefined')?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
   if(steps.length<2) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
   return `<ol class="pearl-steps pearl-in">${steps.map((s,i)=>{
-    const k=PEARL_KINDS[s.label]||PEARL_KINDS.Detail;
-    return `<li class="pearl-step" data-kind="${k[0]}" style="--i:${i}"><span class="pearl-n">${i+1}</span>
-      <span class="pearl-txt"><span class="pearl-role">${k[1]}${e(s.label||'Detail')}</span>
+    const label=PEARL_KINDS[s.label]?s.label:(i?'Key fact':'Key point');
+    return `<li class="pearl-step" data-kind="${Pearl.FAMILY[label]}" data-label="${e(label)}" style="--i:${i}"><span class="pearl-n">${i+1}</span>
+      <span class="pearl-txt"><span class="pearl-role">${PEARL_KINDS[label]}${e(label)}</span>
       ${s.lead?`<em class="pearl-lead">${e(s.lead)}</em> `:''}${pearlMark(e(s.text))}</span></li>`; }).join('')}</ol>`;
 }
 /* The paragraph retains the full statement and punctuation. Switching views
@@ -7209,32 +7247,34 @@ function buildHome(){
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner">
         ${atlasPearl?`<div class="hero-h1">${greet()}</div>`:`<div class="hero-greet">${greet()}</div><h1 class="hero-h1">Make one idea stick.</h1><button class="btn" onclick="goRefs()">Open notes</button>`}
-        <div class="hero-line">
+        <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
+        <div class="hero-line hero-stats-row">
           <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>
           <span class="hl-dot"></span>
           <span class="hl-item"><b>${covered}%</b> started</span>
           <span class="hl-dot"></span>
           <span class="hl-item"><b>${today.a}</b> today</span>
+          ${dueN?`<button class="hl-item hl-due" id="atlasNext" onclick="startQuiz(null,'due',dueQuestions())"><b>${dueN}</b> due ${icon('arrow-right','icon-sm')}</button>`:''}
         </div>
-        <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
-        <button class="atlas-next" id="atlasNext" onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?`Review ${dueN} due`:'Explore chapters'} ${icon('arrow-right','icon-sm')}</button>
       </div>
       <div class="hero-heart-plate" id="heroHeart" aria-hidden="true">
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
-      <div class="hero-tools">
-        <button class="hero-tool hero-credit-btn" id="heroCreditBtn" onclick="toggleHeroCredit()" hidden
-          aria-label="3D model credit" aria-expanded="false" aria-controls="heroScanCredit" title="3D model credit">${icon('info','icon-sm')}</button>
+      <button class="hero-heart-hit" id="heroHeartBtn" onclick="toggleHeroMenu(undefined,event)" aria-label="Heart model: motion, chambers and credit"
+        aria-expanded="false" aria-controls="heroMenu" title="Heart model"></button>
+      <div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>
         <button class="hero-tool hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleHeroMechanics()"
-          aria-label="Show heart chambers, valves, and blood flow" aria-pressed="${heroCutaway}" title="Show heart chambers, valves, and blood flow">${icon('layers','icon-sm')}</button>
-        <button class="hero-tool atlas-pause" id="atlasPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}" title="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
+          aria-pressed="${heroCutaway}">${icon('layers','icon-sm')}<span>Chambers and flow</span></button>
+        <button class="hero-tool atlas-pause" id="atlasPause" onclick="toggleAtlasMotion()" aria-pressed="${atlasPaused}">${icon(atlasPaused?'play':'pause','icon-sm')}<span>${atlasPaused?'Play motion':'Pause motion'}</span></button>
+        <button class="hero-tool hero-credit-btn" id="heroCreditBtn" onclick="toggleHeroCredit()" hidden
+          aria-expanded="false" aria-controls="heroScanCredit">${icon('info','icon-sm')}<span>Model credit</span></button>
+        <p class="hero-scan-credit" id="heroScanCredit" hidden></p>
       </div>
-      <p class="hero-scan-credit" id="heroScanCredit" hidden></p>
     </div>
 
     ${(()=>{ const p=pearlNow(); if(!p) return '';
-      return `<div class="pearl-card" id="pearlCard">
+      return `<div class="pearl-card${pearlFigure(p)?' has-fig':''}" id="pearlCard">
         <canvas id="pearlCurrent" class="pearl-current" aria-hidden="true"></canvas>
         <div class="pearl-rule"></div>
         <div class="pearl-main">
@@ -7284,8 +7324,6 @@ function buildHome(){
       <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" onclick="homeGo(1)">${icon('brain','icon-sm')}<span>Brain</span></button>
       <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" onclick="homeGo(2)">${icon('activity','icon-sm')}<span>Labs</span></button>
     </div>
-    <button class="home-rail-link" id="homeEchoLink" onclick="goEcho()" title="Echo Studio"
-      aria-label="Echo Studio — views, findings and calculations">${icon('echo','icon-sm')}<span>Echo</span></button>
   </div>`;
 }
 
@@ -7300,9 +7338,26 @@ function toggleAtlasMotion(){
   atlasPaused=!atlasPaused;
   document.getElementById('homePages')?.classList.toggle('atlas-paused',atlasPaused);
   const b=document.getElementById('atlasPause');
-  if(b){const l=atlasPaused?'Play animation':'Pause animation';b.innerHTML=icon(atlasPaused?'play':'pause','icon-sm');b.setAttribute('aria-label',l);b.title=l;}
+  if(b){b.innerHTML=icon(atlasPaused?'play':'pause','icon-sm')+'<span>'+(atlasPaused?'Play motion':'Pause motion')+'</span>';b.setAttribute('aria-pressed',String(atlasPaused));}
   syncHomeMotion();
 }
+/* The heart is the hero's one control: a tap opens its menu (motion, the chambers, the model's credit), where three
+   round tools used to stand beside it. Closed by a second tap, by Escape, or by a tap anywhere else. */
+function toggleHeroMenu(force,ev){
+  const menu=document.getElementById('heroMenu'), btn=document.getElementById('heroHeartBtn'); if(!menu||!btn) return;
+  const open=typeof force==='boolean'?force:menu.hidden;
+  menu.hidden=!open; btn.setAttribute('aria-expanded',String(open));
+  /* Opened from the keyboard (a click with no pointer behind it), focus goes into the menu; a tap leaves it be. */
+  if(open&&ev&&ev.detail===0){ const first=menu.querySelector('button:not([hidden])'); if(first) first.focus({preventScroll:true}); }
+}
+document.addEventListener('pointerdown',ev=>{
+  const menu=document.getElementById('heroMenu');
+  if(menu&&!menu.hidden&&!menu.contains(ev.target)&&ev.target.id!=='heroHeartBtn') toggleHeroMenu(false);
+},true);
+document.addEventListener('keydown',ev=>{
+  const menu=document.getElementById('heroMenu');
+  if(ev.key==='Escape'&&menu&&!menu.hidden){ toggleHeroMenu(false); document.getElementById('heroHeartBtn')?.focus({preventScroll:true}); }
+});
 let homePage=0, homeRaf=0, homeTween=0, homeSized=false, homeLastGo=null;   /* homeLastGo: the last tab move, and whether it glided (the suite reads it) */
 function buildBrain(dueN,seenN,covered,masteryPct,today){
   const ret=avgRetention();
