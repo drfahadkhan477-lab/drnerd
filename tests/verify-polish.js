@@ -412,11 +412,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the app says what it is, in a structure a screen reader can navigate');
   {
+    await page.evaluate(()=>{homePage=0;goHome();render();});
+    await settled(page,()=>S.screen==='home'&&!!document.getElementById('homePage0')&&!window.__vtLive,{label:'Home semantics'});
     const doc = await page.evaluate(() => {
-      goHome(); render();
-      const h1s = document.querySelectorAll('h1');
+      const h1s = document.querySelectorAll('.home-page:not([inert]) h1');
       const mains = document.querySelectorAll('main');
-      const hero = document.querySelector('.hero-h1');
+      const hero = document.querySelector('#pearlConcept')||document.querySelector('#homePage0 .hero-h1');
       const cs = hero ? getComputedStyle(hero) : null;
       const heroWeight = cs ? cs.fontWeight : null;
       const heroMarginTop = cs ? cs.marginTop : null;
@@ -425,7 +426,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return {
         h1Count: h1s.length,
         h1Text: h1s.length ? h1s[0].textContent.trim() : null,
-        h1IsHero: !!hero && hero.tagName === 'H1',
+        h1IsHero: !!hero && hero.tagName === 'H1' && h1s[0]===hero,
+        expectedTitle: pearlCurrent?(pearlCurrent.concept||pearlCurrent.title):'Make one idea stick.',
         mainCount: mains.length,
         mainIsApp: mains.length ? mains[0].id : null,
         heroWeight, heroMarginTop,
@@ -440,14 +442,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : h;
     };
 
-    ok('the page has exactly one <h1>', doc.h1Count === 1, String(doc.h1Count));
-    ok('and it is the hero title, not something incidental',
-       doc.h1IsHero && doc.h1Text === 'Systole', JSON.stringify({ text: doc.h1Text, isHero: doc.h1IsHero }));
+    ok('the active page has exactly one <h1>', doc.h1Count === 1, String(doc.h1Count));
+    ok('and it names the current pearl or empty-library prompt',
+       doc.h1IsHero && doc.h1Text === doc.expectedTitle, JSON.stringify({ isPageTitle: doc.h1IsHero }));
     ok('the page has exactly one <main> landmark', doc.mainCount === 1, String(doc.mainCount));
     ok('and it is the app region itself', doc.mainIsApp === 'app', String(doc.mainIsApp));
     /* The tag swap must not be a visual change: a bare <h1> would inherit the
        user agent's bold and .67em top margin. */
-    ok('promoting the hero to <h1> did not let the UA styles through',
+    ok('the active heading does not inherit UA weight or top margin',
        doc.heroWeight === '400' && doc.heroMarginTop === '0px',
        JSON.stringify({ weight: doc.heroWeight, marginTop: doc.heroMarginTop }));
 

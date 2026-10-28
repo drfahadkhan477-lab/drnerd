@@ -414,9 +414,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('long captions remain keyboard readable');
   await page.evaluate(()=>{homePage=0;S.screen='home';pearlCurrent=pearlAll().find(p=>p.figKey&&refImgSrc(p.figKey));render();});
   await still('caption reading');
-  await page.evaluate(()=>{document.querySelector('#pearlFig figcaption').textContent='Long caption for keyboard scrolling. '.repeat(60);});
-  await page.locator('#pearlFig').focus();
-  await page.keyboard.press('End');
+  const compactHidden=await page.evaluate(()=>{const f=document.getElementById('pearlFig');f.querySelector('figcaption').textContent='Long caption for keyboard scrolling. '.repeat(60);pearlFit();return getComputedStyle(f).display==='none';});
+  await page.evaluate(()=>pearlToggleAll());
+  await still('expanded caption reading');
+  const expandedFigure=await page.evaluate(()=>getComputedStyle(document.getElementById('pearlFig')).display!=='none');
+  ok('Show all restores a figure hidden by the compact layout',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
+  if(expandedFigure){await page.locator('#pearlFig').focus();await page.keyboard.press('End');}
   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
   const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});
   ok('a long figure caption can be scrolled with the keyboard',captionScroll.overflow>0&&captionScroll.scroll>0,JSON.stringify(captionScroll));

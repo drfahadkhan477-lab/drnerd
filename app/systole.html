@@ -6620,7 +6620,7 @@ function pearlFit(){
   if(fig&&matchMedia('(min-width:700px)').matches&&!card.classList.contains('pearl-all')){
     card.classList.remove('pearl-nofig');
     card.classList.toggle('pearl-nofig',fig.scrollHeight-fig.clientHeight>1);
-  }
+  }else card.classList.remove('pearl-nofig');
   /* Measured as if the button were not there: it takes its own height from the column, so a pearl that fits without it
      runs past the card with it, and once shown (while the steps rise in, everything runs past) it would stay for good,
      offering a sliver. */
