@@ -270,7 +270,18 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
 @media(max-width:480px){.rate-row{grid-template-columns:repeat(2,1fr)}}
 
 /* AI panel: real provenance */
-.ai-powered{font-size:9px;color:var(--muted);text-align:center;padding:3px 0 8px;letter-spacing:.02em}
+/* Up a step from --t-micro. These two lines carry the warning that Apex can
+   be wrong about something that changes care, and at 9px they were the least
+   readable text in the app — the wrong sentence to set in the smallest type on
+   the screen. --t-tiny and not --t-meta, which looks like the braver choice
+   and is not: at 13px the safety line wraps to two lines in a 535px panel and
+   the footer grows from 111px to 140px, taking the room out of the thread
+   above it (verify-chat holds the thread to four fifths of the panel, and it
+   was at 81% with one point of slack). At 11px the sentence fits one line, so
+   it is 22% larger than it was AND in a shorter box. The padding either side
+   is chrome, and went with it: the thread now has 81.1%, a shade more than
+   before this change rather than less. */
+.ai-powered{font-size:var(--t-tiny);color:var(--muted);text-align:center;padding:0 0 4px;letter-spacing:.02em}
 /* Never --dim: it fails AA at every theme, which is what contrastfix-patch.js
    existed to settle. A disclaimer nobody can read is not a disclaimer.
    Sizes are steps on the type ladder, not round numbers — verify-type.js
@@ -280,8 +291,8 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
    the accessibility tree and silence the announcement entirely. */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
   overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.ai-disclaim{font-size:var(--t-micro);line-height:1.5;color:var(--muted);text-align:center;
-  padding:6px 14px 0;letter-spacing:.01em}
+.ai-disclaim{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);text-align:center;
+  padding:2px 14px 0;letter-spacing:.01em}
 .app-disclaim{font-size:var(--t-tiny);line-height:1.5;color:var(--muted);
   margin:10px 0 0;max-width:60ch}
 .ai-powered b{color:var(--teal-ink);font-weight:700}
