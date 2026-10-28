@@ -54,7 +54,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('a skip is recoverable, an answer is not');
   {
     const r = await page.evaluate(async () => {
-      startQuiz(CHAPTERS[0], 'all');
+      (S.resume = {}, startQuiz)(CHAPTERS[0], 'all');
       const q0 = S.questions[0];
       /* Deliberately the WRONG option where one exists, so "the restored
          selection matches" is a real assertion rather than one that would
@@ -119,7 +119,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
          does NOT advance — there is nowhere to go — so a session of one makes
          "and advances to the next question" untestable rather than false. */
       mkDue(qa); mkDue(POOL[1]);
-      startQuiz(null, 'due');
+      (S.resume = {}, startQuiz)(null, 'due');
       let at = S.questions.findIndex(q => q.id === qa.id);
       if (at < 0 || S.questions.length < 2) return { found: false };
       /* startQuiz shuffles the due queue, so this question's position is a
@@ -168,7 +168,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the button itself, clicked rather than called');
   {
-    await page.evaluate(() => startQuiz(CHAPTERS[0], 'all'));
+    await page.evaluate(() => (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'));
     await page.waitForTimeout(250);
     const atStart = await page.locator('.btn-prev').count();
     await page.locator('.opt').first().click();

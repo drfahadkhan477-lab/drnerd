@@ -562,7 +562,7 @@ async function heapAfterBoot(page, url) {
     /* Go to a question that actually has figures and confirm one renders. */
     const shown = await page.evaluate(async () => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
-      startQuiz(q.ch);
+      (S.resume = {}, startQuiz)(q.ch);
       S.questions = [q]; S.qIdx = 0; render();
       await new Promise(r => setTimeout(r, 1200));
       const img = document.querySelector('.fig-img');
@@ -630,7 +630,7 @@ async function heapAfterBoot(page, url) {
     await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 30000 });
     const figId = await page.evaluate(() => {
       const q = ALL_Q.find(x => x.img > 0 && !x.bad);
-      startQuiz(q.ch); S.questions = [q]; S.qIdx = 0; render();
+      (S.resume = {}, startQuiz)(q.ch); S.questions = [q]; S.qIdx = 0; render();
       return q.id;
     });
     /* The fixture must have reached Cache Storage before the outage. A
@@ -656,7 +656,7 @@ async function heapAfterBoot(page, url) {
 
     await page.evaluate(id => {
       const q = ALL_Q.find(x => x.id === id);
-      startQuiz(q.ch); S.questions = [q]; S.qIdx = 0; render();
+      (S.resume = {}, startQuiz)(q.ch); S.questions = [q]; S.qIdx = 0; render();
     }, figId);
     const decoded = await page.waitForFunction(() => {
       const img = document.querySelector('.fig-img');

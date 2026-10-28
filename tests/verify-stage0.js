@@ -227,7 +227,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('observers are released');
   const leak = await page.evaluate(async () => {
-    startQuiz('Arrhythmias');
+    (S.resume = {}, startQuiz)('Arrhythmias');
     await new Promise(r => setTimeout(r, 200));
     const m0 = window.__made, g0 = window.__gone;
     for (let i = 0; i < 40; i++) render();
@@ -248,7 +248,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await booted(page);
   await page.waitForTimeout(1200);
   const practice = await page.evaluate(() => {
-    startQuiz('Pericardial Disease');
+    (S.resume = {}, startQuiz)('Pericardial Disease');
     const q = S.questions[0];
     selectOpt(q.ci);
     return { srs: Object.keys(S.srs).length, practiced: Object.keys(S.practice).length,
@@ -263,7 +263,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('started count includes practice', practice.started === 1);
 
   const review = await page.evaluate(() => {
-    startQuiz(null, 'due');
+    (S.resume = {}, startQuiz)(null, 'due');
     const q = S.questions[0];
     selectOpt(q.ci);
     const before = LOG.length;

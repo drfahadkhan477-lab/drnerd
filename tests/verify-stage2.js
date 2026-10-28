@@ -60,7 +60,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the actual bug: four buttons on a brand-new card, in the real rate-row UI');
   const firstReview = await page.evaluate(() => {
-    startQuiz(null, 'due');
+    (S.resume = {}, startQuiz)(null, 'due');
     const q = S.questions[0];
     selectOpt(q.ci);
     const scheds = [...document.querySelectorAll('.rate-btn .rate-sched')].map(el => el.textContent);
@@ -79,7 +79,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      })());
 
   const monotonic = await page.evaluate(() => {
-    startQuiz(null, 'due');
+    (S.resume = {}, startQuiz)(null, 'due');
     const q = S.questions[0];
     selectOpt(q.ci);
     return [1, 2, 3, 4].map(g => fsrsPreview(S.srs[q.id], g).ivl);
@@ -90,7 +90,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('rating actually schedules the card via FSRS');
   const rated = await page.evaluate(() => {
-    startQuiz(null, 'due');
+    (S.resume = {}, startQuiz)(null, 'due');
     const q = S.questions[0];
     selectOpt(q.ci);
     const beforeLog = LOG.length;
@@ -104,7 +104,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('log entry counts Good as recalled (ok=1)', rated.logEntry.ok === 1);
 
   const againOk = await page.evaluate(() => {
-    startQuiz(null, 'due');
+    (S.resume = {}, startQuiz)(null, 'due');
     const q = S.questions[0];
     selectOpt(q.ci);
     const beforeLog = LOG.length;
@@ -186,7 +186,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     S.srs = {}; S.practice = {};                  // in-memory reset, see note above
     goHome(); render();
     const home = !!document.querySelector('.hero-h1');
-    startQuiz('Arrhythmias');
+    (S.resume = {}, startQuiz)('Arrhythmias');
     const q = S.questions[0];
     selectOpt(q.ci);
     const practiceOk = S.answered && !S.srs[q.id];   // practice still never touches SRS
