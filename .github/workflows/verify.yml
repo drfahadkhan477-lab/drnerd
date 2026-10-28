@@ -41,11 +41,11 @@
 #
 # What runs here needs no source file, and is genuinely worth having on every
 # push. Most of it needs no browser either; the public-browser job drives the
-# code-only deploy's loader and the result cache's browser trace in Chromium,
-# WebKit and Firefox, the synthetic-browser job drives this app in Chromium,
+# code-only deploy's loader and the result cache's browser trace in Chromium
+# and WebKit, the synthetic-browser job drives this app in Chromium,
 # synthetic-webkit drives a chosen set of its suites in WebKit, the iPad's
-# engine, and split-build serves the split build made from it to Chromium and
-# WebKit:
+# engine, both in four shards on one synthetic build, and split-build serves
+# the split build made from it to Chromium and WebKit:
 #
 #   syntax       every .js and .py file in the repo parses, and the two
 #                listing commands (which patch chain steps exist, which test
@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 76 suites that are pure Node with no Playwright and no
+#   logic        the 77 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -108,7 +108,9 @@
 #
 #   synthetic-browser  the app's own browser suites, on the real app built
 #                around an invented bank; see the job for which suites and
-#                why the rest are left out.
+#                why the rest are left out. synthetic-build makes that build
+#                once; synthetic-browser and synthetic-webkit each run in four
+#                shards that download it (scripts/shard.js splits them).
 #
 #   split-build  the split build a release ships, made from that same
 #                invented bank, served over HTTP and checked by `verify.js
@@ -118,6 +120,10 @@
 #                needs; scripts/ci-changes.js. A job it skips shows as
 #                skipped, not passed. split-build follows the synthetic
 #                answer. Master and manual runs get both.
+#
+#   browser-done the one check to require in branch protection: it passes
+#                only when every browser job passed, or was skipped because
+#                `changes` said so; scripts/browser-done.js.
 #
 # Adding the other 230 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
@@ -361,6 +367,8 @@ jobs:
         run: node tests/verify-suitecache-pure.js
       - name: a pull request skips a browser job only when none of its files can reach it (60 checks)
         run: node tests/verify-cichanges-pure.js
+      - name: every suite of a sharded browser job runs in exactly one shard, each step only in its own, and browser-done fails on a failed, cancelled or unexplained skipped job (53 checks)
+        run: node tests/verify-shard-pure.js
       - name: the counts record is written only from a run where every registered suite ran and passed, and keeps nothing that is no longer a suite (31 checks)
         run: node tests/verify-record-pure.js
       - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (53 checks)
@@ -382,9 +390,11 @@ jobs:
   #
   # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
   # WebKit. Every suite here launches through tests/_engine.js, so the engine
-  # is SYSTOLE_ENGINE and nothing else changes between the three entries.
+  # is SYSTOLE_ENGINE and nothing else changes between the two entries.
   # fail-fast is off: an engine failure must not cancel
-  # the other engines. Firefox uses the same suites and assertions. Each
+  # the other engine. Firefox is no longer run here, to save a runner on every
+  # push; it is still an engine (`--engine firefox`, SYSTOLE_ENGINE=firefox)
+  # for a run by hand. Each
   # suite runs even when the one before it failed (!cancelled()), so one run
   # shows every failure on an engine, not only the first; the job is still red.
   #
@@ -405,8 +415,9 @@ jobs:
     # Browser/system packages are already present, avoiding the runner's slow APT mirror.
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
-      # GitHub's mounted Home belongs to UID 1001. Firefox refuses a root
-      # process using someone else's Home; keep the process and directory owner aligned.
+      # GitHub's mounted Home belongs to UID 1001. Firefox, when it ran here,
+      # refused a root process using someone else's Home; the process and the
+      # directory keep one owner, so it can run here again unchanged.
       options: --user 1001 --ipc=host
     timeout-minutes: 45
     strategy:
@@ -417,8 +428,6 @@ jobs:
             label: Chromium
           - engine: webkit
             label: WebKit
-          - engine: firefox
-            label: Firefox
     env:
       SYSTOLE_ENGINE: ${{ matrix.engine }}
     steps:
@@ -449,6 +458,35 @@ jobs:
         name: the result cache's view of the browser — every file a page loads from disk is reported in the engines the cache traces, and the cache stays off for an engine that reports none (20 checks)
         run: node tests/verify-suitecache.js
 
+  # ── the synthetic build, made once ─────────────────────────────────────────
+  #
+  # The build every shard of synthetic-browser and synthetic-webkit tests,
+  # made here once and handed to them as an artifact instead of being made
+  # again on each of eight runners. The commands are the ones npm test runs
+  # first (scripts/test-public.js reads them from this job).
+  synthetic-build:
+    name: synthetic-build — the app, built once around an invented bank, for the browser shards
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: build the app from app/systole.html around the synthetic export
+        run: |
+          node scripts/synthetic-export.js build/synthetic/export.html
+          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
+      - name: hand it to the shards
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-build
+          path: build/synthetic/
+          if-no-files-found: error
+          retention-days: 1
+
   # ── the app itself, built around an invented bank ───────────────────────────
   #
   # The real app cannot be built here: its bank is the licensed export. Since
@@ -475,14 +513,26 @@ jobs:
   # The build is marked synthetic, and scripts/verify.js will not write
   # tests/test-stats.json for a marked build: these numbers are never the
   # record. Chromium only: WebKit takes minutes to parse even this build.
+  #
+  # IN FOUR SHARDS, on the build synthetic-build made. Every shard holds every
+  # suite's step; scripts/shard.js gives each shard its list, balanced by the
+  # seconds the record holds, and a step runs only in the shard whose list
+  # names its suite. So each suite runs once, in one shard, and a suite added
+  # here lands in one the same day. tests/verify-shard-pure.js holds that.
+  # browser-done, below, is the one check to require.
   synthetic-browser:
-    name: synthetic-browser — the real app, built around an invented bank, in Chromium
+    name: synthetic-browser — the real app, built around an invented bank, in Chromium, shard ${{ matrix.shard }}
     # Skipped only when the `changes` job says the pull request cannot reach
-    # it; fails open the same way as public-browser.
-    needs: changes
+    # it; fails open the same way as public-browser. A synthetic-build that
+    # failed leaves no build to download, so each shard fails, not skips.
+    needs: [changes, synthetic-build]
     if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -493,227 +543,231 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           python3 -m pip install Pillow==12.3.0 numpy==2.4.6
-      - name: build the app from app/systole.html around the synthetic export
-        run: |
-          node scripts/synthetic-export.js build/synthetic/export.html
-          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - name: the synthetic build, made once by synthetic-build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: synthetic-build
+          path: build/synthetic
+      - id: shard
+        name: which of the job's suites this shard runs, by the record's times
+        run: node scripts/shard.js ${{ github.job }} ${{ matrix.shard }} ${{ strategy.job-total }} --github-output
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage0,') }}
         name: the single-file build is stable and works offline (29 checks)
         run: node tests/verify-stage0.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-apex,') }}
         name: the tutor, its tools, and the 3D heart it sits beside (44 checks)
         run: node tests/verify-apex.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage2,') }}
         name: FSRS-5 scheduling replaces SM-2 (25 checks)
         run: node tests/verify-stage2.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage3,') }}
         name: Apex can read figures and remembers who it teaches (31 checks)
         run: node tests/verify-stage3.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-polish,') }}
         name: Pencil feel, the hero heart, the rhythm library (79 checks)
         run: node tests/verify-polish.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-braunwald,') }}
         name: grounded mode answers only from your references (28 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-bankname,') }}
         name: the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP's data cannot back (18 checks)
         run: node tests/verify-bankname.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-leads,') }}
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-physio,') }}
         name: the cardiac cycle is computed, not drawn, and keeps its own clock (58 checks)
         run: node tests/verify-physio.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-theme,') }}
         name: nine palettes, two axes, unthemed semantics (41 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-homepager,') }}
         name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (57 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lab,') }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-home,') }}
         name: the welcome bar, the progress bar, three layouts (67 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-splash-heart,') }}
         name: the photographed heart paints before the app parses (14 checks)
         run: node tests/verify-splash-heart.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-crisp,') }}
         name: every canvas backs itself at high device-pixel density (8 checks)
         run: node tests/verify-crisp.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-type,') }}
         name: one modular type scale and one spacing scale, still held (12 checks)
         run: node tests/verify-type.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-references,') }}
         name: the worked reference notes obey the guide, and are retrievable (39 checks)
         run: node tests/verify-references.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-gemini,') }}
         name: a free provider with real vision, wired to its own wire shape (62 checks)
         run: node tests/verify-gemini.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-memory,') }}
         name: Apex still knows you next time, and you can see what it kept (51 checks)
         run: node tests/verify-memory.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-assets,') }}
         name: an imported chapter brings its figures, and keeps them (38 checks)
         run: node tests/verify-assets.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chatfigs,') }}
         name: the figure Apex is reasoning from is one you can see (43 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-pearl,') }}
         name: the home screen opens with something worth knowing (96 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-boundary,') }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chat,') }}
         name: the panel keeps what you typed, and sends a window not an archive (32 checks)
         run: node tests/verify-chat.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-store,') }}
         name: the big stores live in a database, and nothing is ever in neither place (39 checks)
         run: node tests/verify-store.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quiznav,') }}
         name: going back never re-grades a question or re-schedules a card (24 checks)
         run: node tests/verify-quiznav.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quietquiz,') }}
         name: answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to (25 checks)
         run: node tests/verify-quietquiz.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-planscreen,') }}
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-mockscreen,') }}
         name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (172 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-flags,') }}
         name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (173 checks)
         run: node tests/verify-flags.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-reflist,') }}
         name: the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages (20 checks)
         run: node tests/verify-reflist.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-apexask,') }}
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
         name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (72 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-voicescreen,') }}
         name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (43 checks)
         run: node tests/verify-voicescreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-examdate,') }}
         name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (22 checks)
         run: node tests/verify-examdate.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-studyvisuals,') }}
         name: the Study cards draw the app's own numbers, every icon resolves, and the voice dock runs and stops a session (26 checks)
         run: node tests/verify-studyvisuals.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chapters,') }}
         name: the chapter grid staggers in, and its bar fills instead of arriving drawn (21 checks)
         run: node tests/verify-chapters.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-failsafe,') }}
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
         name: a restored backup appears now, not only after the next launch (138 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)
         run: node tests/verify-backup-ids.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-windows,') }}
         name: a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone (40 checks)
         run: node tests/verify-windows.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-tokens,') }}
         name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
         run: node tests/verify-tokens.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-calibrate,') }}
         name: confidence is an option not a gate, and a tagged miss updates one row (29 checks)
         run: node tests/verify-calibrate.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figzoom,') }}
         name: a figure can be examined, and still has four ways out (67 checks)
         run: node tests/verify-figzoom.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lazyink,') }}
         name: a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host (11 checks)
         run: node tests/verify-lazyink.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-inkpaint,') }}
         name: a move of the pen paints the segments it added and not every stroke on the canvas again, and the picture is the one a full repaint draws (12 checks)
         run: node tests/verify-inkpaint.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-inksave,') }}
         name: the ink is written to the database when the pen has been still and not at every pen-up, at once when the page is hidden or exported and asked for at once when it is closed, and an eraser sweep or a run of undos is one write (13 checks)
         run: node tests/verify-inksave.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-loops,') }}
         name: no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere (17 checks)
         run: node tests/verify-loops.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-focus,') }}
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-taps,') }}
         name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (24 checks)
         run: node tests/verify-taps.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-floor,') }}
         name: with the features that have a fallback made unknown to the engine, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have (15 checks)
         run: node tests/verify-floor.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-schema,') }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-selftest,') }}
         name: the on-device self-test reports honestly, and can actually fail (27 checks)
         run: node tests/verify-selftest.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-layout,') }}
         name: every screen fits, at every frame a real device produces (26 checks)
         run: node tests/verify-layout.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figreview,') }}
         name: the review sheet records the box in original pixels, not preview pixels (35 checks)
         run: node tests/verify-figreview.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-render,') }}
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-csp,') }}
         name: the policy contains an injection without breaking anything the app does (28 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-echo,') }}
         name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
         run: node tests/verify-echo.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figprobe,') }}
         name: a figure that never rendered is told apart from one that rendered invisibly (10 checks)
         run: node tests/verify-figprobe.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-coronaryview,') }}
         name: the Coronary view draws the left bed collapsing in systole, on one scale (8 checks)
         run: node tests/verify-coronaryview.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ambient,') }}
         name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (31 checks)
         run: node tests/verify-ambient.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-glass,') }}
         name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
         run: node tests/verify-glass.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-notesearch,') }}
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-searchwarm,') }}
         name: the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it (10 checks)
         run: node tests/verify-searchwarm.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-heroart,') }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-apexpage,') }}
         name: Apex can take the whole page, and a numbered list stays numbered (22 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-resume,') }}
         name: a chapter you left is the chapter you come back to (33 checks)
         run: node tests/verify-resume.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figsharp,') }}
         name: no figure is drawn wider than the pixels it has (9 checks)
         run: node tests/verify-figsharp.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-heartreuse,') }}
         name: navigating the app does not spend WebGL contexts (30 checks)
         run: node tests/verify-heartreuse.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-flushguard,') }}
         name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)
         run: node tests/verify-flushguard.js build/synthetic/systole.html
 
@@ -789,11 +843,15 @@ jobs:
   # not Safari on iPadOS: it shares the engine, the JavaScript core and
   # IndexedDB, and it is not a substitute for opening the app on the iPad.
   synthetic-webkit:
-    name: synthetic-webkit — the real app, built around an invented bank, in WebKit, the engine the iPad runs
-    needs: changes
+    name: synthetic-webkit — the real app, built around an invented bank, in WebKit, the engine the iPad runs, shard ${{ matrix.shard }}
+    needs: [changes, synthetic-build]
     if: ${{ !cancelled() && needs.changes.outputs.synthetic != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       SYSTOLE_ENGINE: webkit
     steps:
@@ -815,218 +873,222 @@ jobs:
         run: npx playwright install --with-deps webkit || (sleep 20 && npx playwright install --with-deps webkit)
       - name: install what verify-figreview needs
         run: python3 -m pip install Pillow==12.3.0 numpy==2.4.6
-      - name: build the app from app/systole.html around the synthetic export
-        run: |
-          node scripts/synthetic-export.js build/synthetic/export.html
-          node scripts/assemble-app.js build/synthetic/export.html --refs build/synthetic/refs --ref-images build/synthetic/refs-images --out build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - name: the synthetic build, made once by synthetic-build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: synthetic-build
+          path: build/synthetic
+      - id: shard
+        name: which of the job's suites this shard runs, by the record's times
+        run: node scripts/shard.js ${{ github.job }} ${{ matrix.shard }} ${{ strategy.job-total }} --github-output
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage0,') }}
         name: the single-file build is stable and works offline (29 checks)
         run: node tests/verify-stage0.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage2,') }}
         name: FSRS-5 scheduling replaces SM-2 (25 checks)
         run: node tests/verify-stage2.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage3,') }}
         name: Apex can read figures and remembers who it teaches (31 checks)
         run: node tests/verify-stage3.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-polish,') }}
         name: Pencil feel, the hero heart, the rhythm library (79 checks)
         run: node tests/verify-polish.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-braunwald,') }}
         name: grounded mode answers only from your references (28 checks)
         run: node tests/verify-braunwald.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-bankname,') }}
         name: the app calls the bank what the bank calls itself, and claims nothing a bank without ACCSAP's data cannot back (18 checks)
         run: node tests/verify-bankname.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-leads,') }}
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-theme,') }}
         name: nine palettes, two axes, unthemed semantics (41 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-homepager,') }}
         name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (57 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lab,') }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-home,') }}
         name: the welcome bar, the progress bar, three layouts (67 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-splash-heart,') }}
         name: the photographed heart paints before the app parses (14 checks)
         run: node tests/verify-splash-heart.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-crisp,') }}
         name: every canvas backs itself at high device-pixel density (8 checks)
         run: node tests/verify-crisp.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-type,') }}
         name: one modular type scale and one spacing scale, still held (12 checks)
         run: node tests/verify-type.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-references,') }}
         name: the worked reference notes obey the guide, and are retrievable (39 checks)
         run: node tests/verify-references.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-gemini,') }}
         name: a free provider with real vision, wired to its own wire shape (62 checks)
         run: node tests/verify-gemini.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-memory,') }}
         name: Apex still knows you next time, and you can see what it kept (51 checks)
         run: node tests/verify-memory.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-assets,') }}
         name: an imported chapter brings its figures, and keeps them (38 checks)
         run: node tests/verify-assets.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chatfigs,') }}
         name: the figure Apex is reasoning from is one you can see (43 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-pearl,') }}
         name: the home screen opens with something worth knowing (96 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-boundary,') }}
         name: a retrieved note is material to teach from, never an instruction (54 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chat,') }}
         name: the panel keeps what you typed, and sends a window not an archive (32 checks)
         run: node tests/verify-chat.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-store,') }}
         name: the big stores live in a database, and nothing is ever in neither place (39 checks)
         run: node tests/verify-store.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quiznav,') }}
         name: going back never re-grades a question or re-schedules a card (24 checks)
         run: node tests/verify-quiznav.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quietquiz,') }}
         name: answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to (25 checks)
         run: node tests/verify-quietquiz.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-planscreen,') }}
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-mockscreen,') }}
         name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (172 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-flags,') }}
         name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (173 checks)
         run: node tests/verify-flags.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-reflist,') }}
         name: the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages (20 checks)
         run: node tests/verify-reflist.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-apexask,') }}
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
         name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (72 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-voicescreen,') }}
         name: the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave (43 checks)
         run: node tests/verify-voicescreen.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-examdate,') }}
         name: the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day (22 checks)
         run: node tests/verify-examdate.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-studyvisuals,') }}
         name: the Study cards draw the app's own numbers, every icon resolves, and the voice dock runs and stops a session (26 checks)
         run: node tests/verify-studyvisuals.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chapters,') }}
         name: the chapter grid staggers in, and its bar fills instead of arriving drawn (21 checks)
         run: node tests/verify-chapters.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-failsafe,') }}
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
         name: a restored backup appears now, not only after the next launch (138 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)
         run: node tests/verify-backup-ids.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-windows,') }}
         name: a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone (40 checks)
         run: node tests/verify-windows.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-tokens,') }}
         name: the semantic colour names alias the legacy hue names, not just resemble them (119 checks)
         run: node tests/verify-tokens.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-calibrate,') }}
         name: confidence is an option not a gate, and a tagged miss updates one row (29 checks)
         run: node tests/verify-calibrate.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figzoom,') }}
         name: a figure can be examined, and still has four ways out (67 checks)
         run: node tests/verify-figzoom.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lazyink,') }}
         name: a question has no ink canvas until there is ink to show or a pen to draw with, and then has one that takes a stroke, shows the strokes and follows its host (11 checks)
         run: node tests/verify-lazyink.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-inkpaint,') }}
         name: a move of the pen paints the segments it added and not every stroke on the canvas again, and the picture is the one a full repaint draws (12 checks)
         run: node tests/verify-inkpaint.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-inksave,') }}
         name: the ink is written to the database when the pen has been still and not at every pen-up, at once when the page is hidden or exported and asked for at once when it is closed, and an eraser sweep or a run of undos is one write (13 checks)
         run: node tests/verify-inksave.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-loops,') }}
         name: no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere (17 checks)
         run: node tests/verify-loops.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-focus,') }}
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-taps,') }}
         name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (24 checks)
         run: node tests/verify-taps.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-floor,') }}
         name: with the features that have a fallback made unknown to the engine, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have (15 checks)
         run: node tests/verify-floor.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-schema,') }}
         name: an older copy of the app cannot silently eat a newer one’s saved data (17 checks)
         run: node tests/verify-schema.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-selftest,') }}
         name: the on-device self-test reports honestly, and can actually fail (27 checks)
         run: node tests/verify-selftest.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figreview,') }}
         name: the review sheet records the box in original pixels, not preview pixels (35 checks)
         run: node tests/verify-figreview.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-render,') }}
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-csp,') }}
         name: the policy contains an injection without breaking anything the app does (28 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-echo,') }}
         name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
         run: node tests/verify-echo.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figprobe,') }}
         name: a figure that never rendered is told apart from one that rendered invisibly (10 checks)
         run: node tests/verify-figprobe.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-coronaryview,') }}
         name: the Coronary view draws the left bed collapsing in systole, on one scale (8 checks)
         run: node tests/verify-coronaryview.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ambient,') }}
         name: the Living Diagram waits, stays off the quiz, wakes without a click-through, frees its GL (31 checks)
         run: node tests/verify-ambient.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-glass,') }}
         name: neutral controls turn to glass, colours that mean something do not, and High contrast and reduced motion are left alone (31 checks)
         run: node tests/verify-glass.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-notesearch,') }}
         name: the notes search opens, keeps the caret, and opens a note with its figures (16 checks)
         run: node tests/verify-notesearch.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-searchwarm,') }}
         name: the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it (10 checks)
         run: node tests/verify-searchwarm.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-heroart,') }}
         name: the home hero beats on the rhythm, and the home screen spends no WebGL (33 checks)
         run: node tests/verify-heroart.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-apexpage,') }}
         name: Apex can take the whole page, and a numbered list stays numbered (22 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-resume,') }}
         name: a chapter you left is the chapter you come back to (33 checks)
         run: node tests/verify-resume.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figsharp,') }}
         name: no figure is drawn wider than the pixels it has (9 checks)
         run: node tests/verify-figsharp.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-heartreuse,') }}
         name: navigating the app does not spend WebGL contexts (30 checks)
         run: node tests/verify-heartreuse.js build/synthetic/systole.html
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-flushguard,') }}
         name: a reply can be stopped, and the last chunk is painted however the stream ends (27 checks)
         run: node tests/verify-flushguard.js build/synthetic/systole.html
 
@@ -1090,6 +1152,29 @@ jobs:
         run: node scripts/extract-content.js build/synthetic/systole.html
       - name: build the split build, serve it, and check it over HTTP
         run: node scripts/verify.js build/synthetic/systole.html --pwa --only pwa
+
+  # ── the one required check for the browser jobs ────────────────────────────
+  #
+  # Branch protection should require this, not the per-shard checks: a
+  # skipped matrix job reports one check under its unexpanded name, so a
+  # required per-shard name would wait forever on a pull request that skipped
+  # it. It runs whatever happened before it (always()), and passes only when
+  # every browser job passed, or was skipped because `changes` said so.
+  browser-done:
+    name: browser-done — every browser job passed, or was skipped for a change it cannot see
+    needs: [changes, public-browser, synthetic-build, synthetic-browser, synthetic-webkit, split-build]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: every browser job passed, or was skipped because changes said so
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/browser-done.js
 
   build-guard:
     name: build-guard — refuses to run without the licensed source

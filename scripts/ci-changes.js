@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * Which of the two browser jobs in verify.yml a pull request needs.
+ * Which of the two kinds of browser job in verify.yml a pull request needs:
+ * public-browser (`public`), and the synthetic ones (`synthetic`):
+ * synthetic-build, the shards of synthetic-browser and synthetic-webkit that
+ * test its build, and split-build. browser-done reads both answers to tell a
+ * skip asked for here from one that is not (scripts/browser-done.js).
  *
  *   node scripts/ci-changes.js        (in the workflow's `changes` job)
  *

@@ -35,17 +35,15 @@ mkdir -p source && cp ~/Downloads/ACCSAP*.html source/       # dropped in source
   ```bash
   npm ci                                     # playwright 1.63.0, ts-fsrs 5.4.2, axe-core 4.10.2, from the lockfile
   npx playwright install chromium webkit     # the engines the full run uses
-  npx playwright install firefox             # also, to reproduce CI's public-browser job
+  npx playwright install firefox             # optional: only for a run by hand with --engine firefox
   ```
 
   Pinned rather than ranged, and with `package-lock.json` committed, because a
   suite that measures a browser is measuring a *specific* browser — `^1.63.0`
   would make a green run mean "green on whatever shipped this week".
 
-  Firefox is required by CI's `public-browser` job (Chromium, WebKit and
-  Firefox each run verify-bankstore and verify-suitecache), so install all
-  three engines to reproduce that job locally. The full `scripts/verify.js` run in CI uses
-  Chromium and WebKit only. `--engine firefox` works wherever Firefox is
+  CI runs Chromium and WebKit only; it no longer runs Firefox, which stays
+  an engine for a run by hand. `--engine firefox` works wherever Firefox is
   installed; `scripts/verify.js` checks the executable exists and tells
   you how to install it before it spawns a single suite, rather than failing
   fifty-four times identically.
@@ -684,8 +682,11 @@ node scripts/verify.js --engine webkit     # or firefox; chromium is the default
 ```
 
 The target device is an iPad, so WebKit validation matters. CI runs the
-public-browser job in Chromium, WebKit and Firefox, and the synthetic app job also
-has a WebKit counterpart with explicit exclusions. `verify-engine` enforces
+public-browser job in Chromium and WebKit, and the synthetic app job also
+has a WebKit counterpart with explicit exclusions. Both synthetic jobs run in
+four shards on one build made by `synthetic-build` (`scripts/shard.js` splits
+them by the record's times), and `browser-done` is the one check that says
+whether every browser job passed. `verify-engine` enforces
 the shared launcher so suites cannot silently select a different engine.
 
 The section on prepared reader libraries above records local measurements from before Memorizer moved out.
@@ -883,7 +884,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        155 suites · 76 need no browser · + pwa
+tests/        155 suites · 77 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 

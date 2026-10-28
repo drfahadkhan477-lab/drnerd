@@ -354,6 +354,9 @@ const SUITES = [
   /* scripts/ci-changes.js: a pull request skips a browser job only when every
      changed file is known not to reach it, and anything doubtful runs both. */
   ['cichanges-pure', 'a pull request skips a browser job only when none of its files can reach it, and a failed decision runs both'],
+  /* scripts/shard.js and scripts/browser-done.js: the browser jobs' shards run
+     every suite once, and the one required check fails on any shard that did not pass. */
+  ['shard-pure', 'every suite of a sharded browser job runs in exactly one shard, each step only in its own, and browser-done fails on a failed, cancelled or unexplained skipped job'],
   ['record-pure',    'the counts record is written only from a run where every registered suite ran and passed, and keeps nothing that is no longer a suite'],
   ['suitetime-pure', 'a suite that runs far past its recorded time is stopped and named with the section it was in, and every section is timed'],
   /* The browser half of floor-css-pure. It makes the features that have a fallback unknown to the engine, the way an older Safari does not know
@@ -481,7 +484,8 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+/* shard-pure: added with the browser shards, after the last record. */
+const PENDING_RECORD = ['shard-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

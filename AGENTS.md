@@ -70,7 +70,8 @@ from measured ones as you keep the record apart from observed results, and do
 not shorten it to "all passed". `npm run test:plan` says what
 would run and why, and runs nothing. `npm run test:fresh` measures every suite:
 use it for a release, a doubt, or a change to the cache or to Playwright or a
-browser. CI always measures, and Firefox is not cached. Do not run the whole
+browser. CI always measures. CI no longer runs Firefox; it stays runnable by hand
+(`--engine firefox`) and is not cached. Do not run the whole
 browser suite to establish a baseline: CI measured the base commit, so read its
 result and measure your change.
 
