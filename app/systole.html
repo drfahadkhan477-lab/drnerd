@@ -6662,7 +6662,10 @@ function pearlFit(){
      card's height from the grid row — under 700px the card is sized by its
      own content and this would be a ResizeObserver loop. */
   const fig=document.getElementById('pearlFig');
-  card.classList.remove('pearl-figthumb');
+  /* Every measure starts from the same card: no scale, no figure share, no thumbnail. Measured from what the last call
+     left, the caption check below read the figure at the last call's text size, hid it, and the call after that showed
+     it again: in WebKit the card flipped between the two for as long as the page was open. */
+  card.classList.remove('pearl-figthumb'); card.style.removeProperty('--pz'); card.style.removeProperty('--pf');
   if(fig&&matchMedia('(min-width:700px)').matches&&!card.classList.contains('pearl-all')){
     card.classList.remove('pearl-nofig');
     card.classList.toggle('pearl-nofig',fig.scrollHeight-fig.clientHeight>1);

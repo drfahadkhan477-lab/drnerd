@@ -647,7 +647,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      inside its card, a pearl with no figure is set large enough to fill the card, and a pearl with a figure gives it room
      (a band, or where the card is too short, a thumbnail in the corner) and keeps its text compact. pearlScale() finds the
      scale; this walks sixteen pearls at five iPad windows and measures what it chose. */
-  for (const [vw, vh] of [[1024, 1366], [1366, 1024], [834, 1194], [1194, 834], [744, 1000]]) {
+  /* The last pass has Reduce Motion on, as an iPad can: figures.css then gives every transition .001ms rather than none,
+     and WebKit started one on each size the search tried, so it read the old size and chose a scale it never measured. */
+  for (const [vw, vh, reduce] of [[1024, 1366], [1366, 1024], [834, 1194], [1194, 834], [744, 1000], [834, 1194, true]]) {
+    await page.emulateMedia({ reducedMotion: reduce ? 'reduce' : 'no-preference' });
     await page.setViewportSize({ width: vw, height: vh });
     /* The everyday Home: the first-day welcome card takes a row of its own until it is dismissed, and Show all is how a
        pearl is read in the short card that leaves. */
@@ -662,6 +665,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         pearlCurrent = p; render();
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         pearlFit();
+        /* Measured once the page has drawn what pearlFit chose, not straight after it: in WebKit a size read in the same
+           task as the change could be the old one, so a check reading there agreed with whatever pearlFit had read. */
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         const card = document.getElementById('pearlCard'), wrap = document.getElementById('pearlBody'), fig = document.getElementById('pearlFig');
         const content = wrap.firstElementChild.offsetHeight, room = wrap.clientHeight;
         const pz = parseFloat(card.style.getPropertyValue('--pz')) || 1;
@@ -674,7 +680,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return { tried: out.tried, over: out.over.slice(0, 3), overN: out.over.length, figs: out.figs, figGone: out.figGone,
         pzFig: med(out.pzFig), bands: out.pzFig.length, pzText: med(out.pzText), texts: out.pzText.length, leastFill: Math.min(...out.textFill) };
     });
-    const at = `${vw}x${vh}`;
+    const at = `${vw}x${vh}${reduce ? ', Reduce Motion' : ''}`;
     ok(`${at}: no pearl runs past its card`, w.tried >= 12 && w.overN === 0, `${w.overN}/${w.tried} over ${w.over.join(', ')}`);
     ok(`${at}: every pearl with a figure shows it, as a band or a thumbnail`, w.figs > 0 && w.figGone === 0, `${w.figGone}/${w.figs} hidden`);
     /* Where every figure has folded to a thumbnail, the text has the card either way and there is no band to compare. */
@@ -683,6 +689,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok(`${at}: and fills its card: steps take at least 80% of the room, or the scale is at its ceiling`, w.texts > 0 && w.leastFill >= 0.8,
        `least ${(+w.leastFill).toFixed(2)} of ${w.texts}`);
   }
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 1100, height: 1100 });
 
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps

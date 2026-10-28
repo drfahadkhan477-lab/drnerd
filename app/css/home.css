@@ -580,6 +580,12 @@ body.on-home .nav-title{line-height:1.1}
    fifths of the card and keeps its text compact. */
 @media(min-width:700px){
   #app[data-screen="home"] #homePage0 .pearl-card{--pz:1}
+  /* No transitions on what the scale sizes. Every element has transition:all 0s by default, and WebKit starts a
+     transition of zero length on each change: until it is done, a size read straight after a change is the old one, so
+     pearlScale measured the steps at a scale they were not drawn at, the card overflowed once it was, and the observer
+     ran the search again, for as long as the page was open. */
+  #app[data-screen="home"] #homePage0 .pearl-concept,#app[data-screen="home"] #homePage0 .pearl-bodywrap,
+  #app[data-screen="home"] #homePage0 .pearl-bodywrap *,#app[data-screen="home"] #homePage0 .pearl-fig{transition:none}
   #app[data-screen="home"] #homePage0 .pearl-main{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
   #app[data-screen="home"] #homePage0 .pearl-bodywrap{flex:1 1 auto;min-height:0}
   #app[data-screen="home"] #homePage0 .pearl-card.pearl-all .pearl-main{overflow:visible}
