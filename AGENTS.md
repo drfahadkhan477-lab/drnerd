@@ -29,6 +29,15 @@ must work with synthetic fixtures; the licensed question bank stays private.
    `npm ci`; use repository Playwright browsers, not global packages.
 4. State the intended behavior and choose a bounded change. Keep refactors
    separate from bug fixes unless they are needed for the fix.
+5. One session per task. When the prompt names files and tests, start there:
+   search for the exact symbol before reading, and read only the parts needed.
+6. Use `npm test`, which reuses unchanged suites; keep `npm run test:fresh` for
+   the cases listed below.
+7. End with a handoff note of five lines or fewer: task, outcome, files
+   changed, checks run (measured vs reused), and the next step.
+
+Keep this guide short: it is loaded in full every session. Remove a rule when
+the code stops needing it, and put long explanations in `docs/`.
 
 ## Validate changes
 
