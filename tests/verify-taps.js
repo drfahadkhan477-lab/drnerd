@@ -79,7 +79,7 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     /* Measured on Study, where the bar carries all four: on a tablet's Home,
        Echo moves into the rail, and is measured there below. */
     await page.evaluate(() => { goStudy(); render(); });
-    await onScreen(page, 'study');
+    await onScreen(page, 'study', { marker: '.ch-tile' });
     await settled(page, () => !window.__vtLive, { label: 'the view transition to Study to finish' });
     await quiet(page);
     const btns = await under('.nav .icon-btn', 21, 21), brand = await under('.nav-brand', 21, 21);
