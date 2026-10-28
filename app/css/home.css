@@ -654,9 +654,9 @@ body.on-home .nav-title{line-height:1.1}
 .nav-logo{width:38px;height:38px;border-radius:12px;background:var(--teal-ink);background-image:none;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -3px 8px rgba(0,0,0,.2),0 8px 18px -10px var(--teal-ink)}
 .nav-logo .icon{width:22px;height:22px;color:var(--white)}
-.nav-title,body.on-home .nav-title{font-family:'DM Serif Display',Georgia,serif;font-size:22px;font-weight:400;
+.nav-title,body.on-home .nav-title{font-family:'DM Serif Display',Georgia,serif;font-size:23px;font-weight:400;
   letter-spacing:-.01em;line-height:1.05;color:var(--text)}
-.nav-sub,body.on-home .nav-sub{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:10px;font-weight:700;
+.nav-sub,body.on-home .nav-sub{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:11px;font-weight:700;
   letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .nav-count{padding:1px 7px;border-radius:999px;background:var(--teal4);color:var(--teal-ink);font-weight:750;letter-spacing:.04em}
 

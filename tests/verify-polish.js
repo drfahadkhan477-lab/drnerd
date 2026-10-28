@@ -152,7 +152,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('pencil: an old stroke (no sz, no tilt) renders exactly as before, through the real ink layer');
   const legacyStroke = await page.evaluate(() => {
-    startQuiz('Arrhythmias');
+    S.resume = {}; startQuiz('Arrhythmias');
     const q = S.questions[0];
     const key = q.id + ':q';
     INK[key] = [{ t: 'pen', c: '#EF4444', p: [[0.1, 0.1, 0.6], [0.3, 0.3, 0.8], [0.5, 0.2, 0.4]] }];
@@ -169,7 +169,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('pencil: size picker in the real rail UI');
   const sizePicker = await page.evaluate(() => {
-    startQuiz('Arrhythmias');
+    S.resume = {}; startQuiz('Arrhythmias');
     render();
     railMin(false);
     const dots = [...document.querySelectorAll('.size-dot')].map(d => d.dataset.sz);
@@ -358,7 +358,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       window.__vibes = [];
       navigator.vibrate = p => { window.__vibes.push(p); return true; };
       goHome(); render();
-      startQuiz('Arrhythmias');
+      S.resume = {}; startQuiz('Arrhythmias');
       const q = S.questions[0];
       selectOpt(q.ci);
       return window.__vibes.slice();
@@ -370,7 +370,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       window.__vibes = [];
       navigator.vibrate = p => { window.__vibes.push(p); return true; };
       goHome(); render();
-      startQuiz('Arrhythmias');
+      S.resume = {}; startQuiz('Arrhythmias');
       const q = S.questions[0];
       selectOpt((q.ci + 1) % q.o.length);
       return window.__vibes.slice();
@@ -388,7 +388,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const underReduced = await reducedPage.evaluate(() => {
       window.__vibes = [];
       navigator.vibrate = p => { window.__vibes.push(p); return true; };
-      startQuiz('Arrhythmias');
+      S.resume = {}; startQuiz('Arrhythmias');
       selectOpt(S.questions[0].ci);
       return window.__vibes.length;
     });
@@ -402,7 +402,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await noVibratePage.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(noVibratePage);
     const noThrow = await noVibratePage.evaluate(() => {
-      try { startQuiz('Arrhythmias'); selectOpt(S.questions[0].ci); return 'ok'; }
+      try { S.resume = {}; startQuiz('Arrhythmias'); selectOpt(S.questions[0].ci); return 'ok'; }
       catch (e) { return 'threw: ' + e.message; }
     });
     ok('answering never throws where the Vibration API does not exist — iOS Safari\'s real case',
@@ -513,7 +513,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('a11y: aria-pressed reports what the user chose, not what was correct');
   const pressed = await page.evaluate(() => {
     goHome(); render();
-    startQuiz(CHAPTERS[0], 'all');
+    S.resume = {}; startQuiz(CHAPTERS[0], 'all');
     const q = S.questions[S.qIdx];
     const wrongIdx = (q.ci + 1) % q.o.length;
     selectOpt(wrongIdx);
@@ -537,7 +537,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      in both states, empty first. */
   const live = await page.evaluate(() => {
     goHome(); render();
-    startQuiz(CHAPTERS[0], 'all');
+    S.resume = {}; startQuiz(CHAPTERS[0], 'all');
     const before = document.querySelector('[aria-live]');
     const beforeText = before ? before.textContent.trim() : null;
     const q = S.questions[S.qIdx];
@@ -557,7 +557,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('a11y: focus follows the reading order through the quiz');
   const focus = await page.evaluate(() => {
     goHome(); render();
-    startQuiz(CHAPTERS[0], 'all');
+    S.resume = {}; startQuiz(CHAPTERS[0], 'all');
     const q = S.questions[S.qIdx];
     selectOpt(q.ci);
     const afterAnswer = document.activeElement ? document.activeElement.className : null;
@@ -571,7 +571,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('keyboard: Previous has a key, the way Next has two');
   const keys = await page.evaluate(async () => {
     goHome(); render();
-    startQuiz(CHAPTERS[0], 'all');
+    S.resume = {}; startQuiz(CHAPTERS[0], 'all');
     nextQ(); nextQ();
     const start = S.qIdx;
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
@@ -595,7 +595,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      to compare against their own choice. */
   const pct = await page.evaluate(() => {
     goHome(); render();
-    startQuiz(CHAPTERS[0], 'all');
+    S.resume = {}; startQuiz(CHAPTERS[0], 'all');
     const q = S.questions[S.qIdx];
     const chose = (q.ci + 1) % q.o.length;
     selectOpt(chose);
@@ -716,7 +716,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        precondition of that check and not what it asserts (it asserts that
        preventDefault was called), so it takes settled(): its standard
        timeout, and a failure that names the wait. */
-    await touchPage.evaluate(() => { startQuiz(CHAPTERS[0], 'all'); });
+    await touchPage.evaluate(() => { S.resume = {}; startQuiz(CHAPTERS[0], 'all'); });
     await settled(touchPage, () => !!document.querySelector('.opt'), { label: 'the first quiz option, for the double tap' });
     const touch = await touchPage.evaluate(async (onPlainSurface) => {
       const optEl = document.querySelector('.opt');
@@ -779,7 +779,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     /* render() goes through a view transition on a screen change, so the quiz
        DOM is not present synchronously — reading it straight away returns the
        home screen and the check passes or fails for the wrong reason. */
-    startQuiz(CHAPTERS[0], 'all');
+    S.resume = {}; startQuiz(CHAPTERS[0], 'all');
     for (let i = 0; i < 60 && !document.querySelector('.q-card'); i++) await wait(50);
     const card = document.querySelector('.q-card');
     const id = card ? card.getAttribute('aria-labelledby') : null;
@@ -793,7 +793,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const reg = await page.evaluate(() => {
     goHome(); render();
     const home = !!document.querySelector('.hero-h1');
-    startQuiz('Arrhythmias');
+    S.resume = {}; startQuiz('Arrhythmias');
     const q = S.questions[0];
     selectOpt(q.ci);
     goLab(); render();
