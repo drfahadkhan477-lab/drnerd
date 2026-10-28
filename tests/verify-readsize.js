@@ -134,13 +134,13 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     const page = await open({ width: 820, height: 1180 });
     await quiz(page);
     await page.evaluate(() => toggleThemeMenu());
-    await page.waitForFunction(() => document.getElementById('themeMenu').classList.contains('open'), null, { timeout: 4000 }).catch(() => {});
+    await page.waitForFunction(() => document.getElementById('generalSettings').open, null, { timeout: 4000 }).catch(() => {});
     await quiet(page);
-    const items = await page.evaluate(() => [...document.querySelectorAll('#themeMenu .read-opt')].map(b => ({ label: b.getAttribute('aria-label'), role: b.getAttribute('role'), checked: b.getAttribute('aria-checked') })));
-    ok('four items in the theme menu, named, Standard checked', items.length === 4 && items.map(i => i.label).join() === 'Standard,Large,Larger,Largest' && items.every(i => i.role === 'menuitemradio') && items.map(i => i.checked).join() === 'true,false,false,false', JSON.stringify(items));
-    await page.click('#themeMenu .read-opt[data-read="3"]', { timeout: 4000 }).catch(() => {});   // a control that is not there is named above, not by a throw
-    const after = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-read'), open: document.getElementById('themeMenu').classList.contains('open'),
-      checked: [...document.querySelectorAll('#themeMenu .read-opt')].map(b => b.getAttribute('aria-checked')).join(), live: (document.getElementById('srLive') || {}).textContent }));
+    const items = await page.evaluate(() => [...document.querySelectorAll('#generalSettings .read-opt')].map(b => ({ label: b.getAttribute('aria-label'), role: b.getAttribute('role'), checked: b.getAttribute('aria-checked') })));
+    ok('four items in the theme menu, named, Standard checked', items.length === 4 && items.map(i => i.label).join() === 'Standard,Large,Larger,Largest' && items.every(i => i.role === 'radio') && items.map(i => i.checked).join() === 'true,false,false,false', JSON.stringify(items));
+    await page.click('#generalSettings .read-opt[data-read="3"]', { timeout: 4000 }).catch(() => {});   // a control that is not there is named above, not by a throw
+    const after = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-read'), open: document.getElementById('generalSettings').open,
+      checked: [...document.querySelectorAll('#generalSettings .read-opt')].map(b => b.getAttribute('aria-checked')).join(), live: (document.getElementById('srLive') || {}).textContent }));
     ok('a tap on Largest chooses it, says so, and leaves the menu open', after.attr === '3' && after.open && after.checked === 'false,false,false,true' && after.live === 'Text size: Largest.', JSON.stringify(after));
     const stored = await page.evaluate(() => ({ own: localStorage.getItem('accsap12.readsize'), record: Object.keys(JSON.parse(localStorage.getItem('accsap12.v2') || '{}')).filter(k => /read/i.test(k)) }));
     ok('kept under its own key on this device, and not in the saved record', stored.own === '3' && stored.record.length === 0, JSON.stringify(stored));
@@ -162,7 +162,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
       ok('a stored "' + junk + '" is Standard', n.attr === null && n.size === 0, JSON.stringify(n));
     }
     /* Storage that refuses the write: the page and the menu stay where they were, and what is announced is what is kept. */
-    await page.evaluate(() => { localStorage.removeItem('accsap12.readsize'); applyReadSize(); });
+    await page.evaluate(() => { localStorage.removeItem('accsap12.readsize'); applyReadSize(); openSettings(); });
     const refused = await page.evaluate(() => { const real = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error('quota'); };
       try { setReadSize(2); } finally { Storage.prototype.setItem = real; }
       return { attr: document.documentElement.getAttribute('data-read'), checked: [...document.querySelectorAll('.read-opt')].map(b => b.getAttribute('aria-checked')).join(), live: (document.getElementById('srLive') || {}).textContent }; });
@@ -177,9 +177,9 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
   {
     const page = await open({ width: 667, height: 375 }, { hasTouch: true, isMobile: true });
     await page.evaluate(() => toggleThemeMenu());
-    await page.waitForFunction(() => document.getElementById('themeMenu').classList.contains('open'), null, { timeout: 4000 }).catch(() => {});
+    await page.waitForFunction(() => document.getElementById('generalSettings').open, null, { timeout: 4000 }).catch(() => {});
     await quiet(page);
-    const m = await page.evaluate(() => { const menu = document.getElementById('themeMenu'), b = menu.querySelector('.read-opt[data-read="3"]');
+    const m = await page.evaluate(() => { const menu = document.getElementById('generalSettings'), b = menu.querySelector('.read-opt[data-read="3"]');
       if (!b) return { missing: true };
       const fits = menu.getBoundingClientRect().bottom <= innerHeight;
       b.scrollIntoView({ block: 'nearest' });
@@ -226,9 +226,9 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     ok('Ask Apex why is 44 px tall', ask >= 44, String(ask));
     await page.evaluate(() => toggleThemeMenu());
     await quiet(page);
-    const menu = await page.evaluate(() => ({ themes: [...document.querySelectorAll('#themeMenu .theme-opt')].map(b => b.offsetHeight), sizes: [...document.querySelectorAll('#themeMenu .read-opt')].map(b => b.offsetHeight) }));
+    const menu = await page.evaluate(() => ({ themes: [...document.querySelectorAll('#generalSettings .theme-opt')].map(b => b.offsetHeight), sizes: [...document.querySelectorAll('#generalSettings .read-opt')].map(b => b.offsetHeight) }));
     ok('every theme option and every text-size item is 44 px tall', menu.themes.length > 0 && menu.themes.every(x => x >= 44) && menu.sizes.length === 4 && menu.sizes.every(x => x >= 44), JSON.stringify(menu));
-    await page.evaluate(() => { closeThemeMenu(); AI.provider = 'gemini'; AI.gemini = { key: 'test-key', model: 'gemini-2.5-flash' }; toggleAI(); });
+    await page.evaluate(() => { closeSettings(); AI.provider = 'gemini'; AI.gemini = { key: 'test-key', model: 'gemini-2.5-flash' }; toggleAI(); });
     await page.waitForFunction(() => !!document.getElementById('aiSend') && !!document.getElementById('aiMore'), null, { timeout: 6000 }).catch(() => {});
     await quiet(page);
     /* Precondition: taps reach the page. While a view transition runs, the engine hit-tests the root, and every point

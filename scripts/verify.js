@@ -92,6 +92,7 @@ const SUITES = [
   ['flags',        'a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block\'s flags join the list when it is handed in'],
   ['reflist',      'the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages'],
   ['apexask',      'every answer keeps the option chosen; Apex is told what the fellow chose and how they miss, through the real panel; the miss row, chips and results button ask it; its tools answer from the page; a mock block puts it away'],
+  ['settings',     'unified reading, appearance and Apex settings; device preferences and credential safety'],
   ['readsize',     'a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil\'s rail clear of Apex in each way it opens'],
   ['topicrunscreen', 'the Topic runs card asks three to five questions about one thing, from what you missed, each holding the words it says they share'],
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
@@ -516,7 +517,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['settings'];
 
 /* ── suites deleted since their half of the record was last written ─────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

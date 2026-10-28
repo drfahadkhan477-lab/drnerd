@@ -143,8 +143,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const menu = await page.evaluate(async () => {
     toggleThemeMenu();
     await new Promise(r => setTimeout(r, 60));
-    const m = document.getElementById('themeMenu');
-    const openNow = m.classList.contains('open');
+    const m = document.getElementById('generalSettings');
+    const openNow = m.open;
     const opts = m.querySelectorAll('.theme-opt').length;
     const checked = m.querySelector('.theme-opt.on .tk')?.textContent;
     return { openNow, opts, checked };
@@ -157,20 +157,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     document.querySelector('[onclick="setTheme(\'nocturne\')"]').click();
     await new Promise(r => setTimeout(r, 60));
     return { theme: S.theme, attr: document.documentElement.getAttribute('data-palette'),
-             menuOpen: document.getElementById('themeMenu').classList.contains('open') };
+             menuOpen: !!document.getElementById('generalSettings')?.open };
   });
   ok('clicking an option applies that theme', picked.theme === 'nocturne' && picked.attr === 'nocturne');
-  ok('and closes the menu', picked.menuOpen === false);
+  ok('and keeps Settings open', picked.menuOpen === true);
 
   const dismiss = await page.evaluate(async () => {
-    toggleThemeMenu();
+    openSettings();
     await new Promise(r => setTimeout(r, 60));
-    const wasOpen = document.getElementById('themeMenu').classList.contains('open');
-    document.body.click();
+    const wasOpen = document.getElementById('generalSettings').open;
+    document.getElementById('generalSettings').dispatchEvent(new Event('cancel',{cancelable:true}));
     await new Promise(r => setTimeout(r, 60));
-    return { wasOpen, nowOpen: document.getElementById('themeMenu').classList.contains('open') };
+    return { wasOpen, nowOpen: !!document.getElementById('generalSettings')?.open };
   });
-  ok('an outside click dismisses the menu', dismiss.wasOpen && dismiss.nowOpen === false);
+  ok('Escape dismisses Settings', dismiss.wasOpen && dismiss.nowOpen === false);
 
   head('it persists, and old preferences still resolve');
   const persisted = await page.evaluate(() => {
