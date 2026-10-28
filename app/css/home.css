@@ -500,10 +500,11 @@ body.on-home .nav-title{line-height:1.1}
 
 /* The empty library has one teaching panel; reserve a separate column for the live heart. */
 #homePage0 [data-pearl-empty="true"] .hero-inner{max-width:52%}
-#homePage0 [data-pearl-empty="true"] .hero-h1{font-family:'DM Serif Display',Georgia,serif;font-size:clamp(var(--t-h2),4vw,var(--t-hero));line-height:1.1}
+#homePage0 [data-pearl-empty="true"] .hero-h1{font-family:'DM Serif Display',Georgia,serif;font-size:var(--t-h2);line-height:1.1}
 #homePage0 [data-pearl-empty="true"] .hero-description,#homePage0 [data-pearl-empty="true"] .hero-greet{max-width:none}
 #homePage0 .hero-live-status{left:24px;right:auto;bottom:68px}
 @media(min-width:700px){
+  #homePage0 [data-pearl-empty="true"] .hero-h1{font-size:var(--t-display)}
   #app[data-screen="home"] #homePage0 .home-wrap[data-pearl-empty="true"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"hero" "session" "hello"}
   #homePage0 [data-pearl-empty="true"] .hero-heart-plate,#homePage0 [data-pearl-empty="true"] .hero-heart-3d{left:auto;right:22px;top:8%;width:42%;height:80%}
 }
