@@ -78,3 +78,19 @@ The latest capture includes Pause/Play. Private screenshots and full logs stay
 outside Git. The portrait fix passed all 97 licensed pearl checks on 818a02d.
 The full Chromium Systole/PWA run now targets 0e88344; focused WebKit and PWA
 checks are queued. No complete release pass or deployment is claimed.
+
+## Reference-faithful Home checkpoint
+
+The owner explicitly requested the supplied composition on 2026-10-28. The
+landing now uses the large Make one idea stick heading, Observe/Explain/Recall
+steps, visible search, a generated anatomical illustration, and the next-session
+strip. Begin recall opens the existing real pearl reader; Read note opens its
+source. The physiological 3D heart remains accessible through Explore in 3D.
+
+This supersedes the earlier layout comparison. The initial Chromium full run
+was stopped for this new scope, and its partial passes do not validate this
+redesign. New focused checks exposed hidden-reader assumptions and a short
+portrait reading-space issue; corrections and interaction tests are in progress.
+The generated illustration is decorative and labeled illustrative anatomy.
+No private files or raw logs are included in the checkpoint. Full validation,
+negative evidence for new assertions, WebKit and final comparison remain open.

@@ -117,6 +117,9 @@
 
 <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5.2C12 3.9 10.9 3 9.6 3 8.2 3 7.2 4 7.1 5.2 5.5 5.5 4.4 6.9 4.7 8.5 3.5 9.3 3.1 10.9 3.7 12.1 3.1 13.4 3.3 15 4.4 15.9 4.3 17.6 5.5 19 7.2 19.1 7.8 20.3 8.9 21 10.2 21 11.3 21 12 20.2 12 19.1Z"/><path d="M12 5.2C12 3.9 13.1 3 14.4 3 15.8 3 16.8 4 16.9 5.2 18.5 5.5 19.6 6.9 19.3 8.5 20.5 9.3 20.9 10.9 20.3 12.1 20.9 13.4 20.7 15 19.6 15.9 19.7 17.6 18.5 19 16.8 19.1 16.2 20.3 15.1 21 13.8 21 12.7 21 12 20.2 12 19.1Z"/><path d="M12 5.2v13.9M8.2 9c1.1 0 1.9.8 1.9 1.9M15.8 9c-1.1 0-1.9.8-1.9 1.9M8.3 15.2c1 0 1.8-.6 1.8-1.6M15.7 15.2c-1 0-1.8-.6-1.8-1.6"/></symbol>
 
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+  <circle cx="12" cy="12" r="3" /></symbol>
+<symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /></symbol>
 <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
 
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C4 4.4 5 4 6.5 4H12v15H6.5C5 19 4 18.6 4 17.5Z"/><path d="M20 5.5C20 4.4 19 4 17.5 4H12v15h5.5c1.5 0 2.5-.4 2.5-1.5Z"/></symbol>
@@ -6411,7 +6414,7 @@ function buildNav(){
       <div class="nav-logo">${icon("heart-pulse")}</div>
       <div>
         <div class="nav-title">Systole</div>
-        <div class="nav-sub">Board Review · ${TOTAL_Q} Q</div>
+        <div class="nav-sub">${S.screen==='home'?'Cardiology, in motion.':`Board Review · ${TOTAL_Q} Q`}</div>
       </div>
     </div>
     <div class="nav-right">
@@ -6421,14 +6424,15 @@ function buildNav(){
         <span style="opacity:.6">·</span>
         <span style="color:${col}">${p}%</span>
       </div>`:''}
-      <button class="icon-btn" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}</button>
+      <button class="icon-btn${S.screen==='home'?' atlas-search':''}" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}${S.screen==='home'?'<span>Search questions, topics, or figures…</span>':''}</button>
       ${S.screen==='quiz'?`<button class="icon-btn" onclick="toggleFocusMode()" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
-      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
+      <button class="icon-btn atlas-secondary" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
-      <button class="icon-btn" onclick="goEcho()" title="Echo Studio"
+      <button class="icon-btn atlas-secondary" onclick="goEcho()" title="Echo Studio"
         aria-label="Echo Studio — views, findings and calculations">${icon('zap')}</button>
+      ${S.screen==='home'?`<button class="icon-btn" onclick="setTheme(themeIsDark()?'daylight':'midnight')" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
       <div class="theme-wrap">
         <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
           aria-haspopup="menu" id="themeBtn">${icon('palette')}</button>
@@ -7077,6 +7081,7 @@ function buildHome(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
   const dueN=dueQuestions().length, seenN=startedCount();
   const atlasPearl=pearlNow();
+  if(!atlasPearl)atlasReading=false;
   const today=S.daily[todayISO()]||{a:0,c:0};
   const covered=Math.round(seenN/TOTAL_Q*100);
   /* Mastery is FSRS's own recall estimate, summed over the whole bank — the
@@ -7088,13 +7093,25 @@ function buildHome(){
   return `<div class="home-pages${atlasPaused?' atlas-paused':''}" id="homePages">
     <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
     <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
-    <div class="home-wrap anim-fade" data-home="${S.homeLayout}">
-    <div class="hero-live">
+    <div class="home-wrap anim-fade${atlasReading?' atlas-reading':''}" data-home="${S.homeLayout}">
+    <section class="atlas-intro" id="atlasIntro"${atlasReading?' hidden':''} aria-labelledby="atlasTitle">
+      <div class="atlas-eyebrow">${icon('sun')} <span>Daily pearl</span></div>
+      <h1 id="atlasTitle">Make one<br>idea stick.</h1>
+      <p class="atlas-description">Explain the mechanism in your own words.<br>Then reveal the note and compare.</p>
+      <ol class="atlas-steps">
+        <li><span class="atlas-step-icon">${icon('eye')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Observe</strong><span>Study the figure<br>and prompt.</span></li>
+        <li><span class="atlas-step-icon">${icon('message-circle')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Explain</strong><span>Put it in your<br>own words.</span></li>
+        <li><span class="atlas-step-icon">${icon('clipboard')}</span><strong>Recall</strong><span>Reveal the note<br>and compare.</span></li>
+      </ol>
+      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="${atlasPearl?'atlasBegin()':'goRefs()'}">${atlasPearl?'Begin recall':'Open notes'} ${icon('arrow-right')}</button><button class="atlas-note" onclick="${atlasPearl?'pearlOpen()':'goRefs()'}">${icon('note')} Read note</button></div>
+    </section>
+    <div class="hero-live${atlas3D?' atlas-3d':''}">
+      <img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
-      <div class="hero-inner">
+      <div class="hero-inner atlas-hero-summary">
         <div class="hero-greet">${greet()}</div>
-        ${atlasPearl?'<div class="hero-h1">Systole</div>':'<h1 class="hero-h1">Make one idea stick.</h1>'}
+        <div class="hero-h1">Systole</div>
         ${atlasPearl?'':'<button class="btn" onclick="goRefs()">Open notes</button>'}
         <p class="hero-description">Cardiology, in motion.</p>
         <div class="hero-line">
@@ -7110,14 +7127,14 @@ function buildHome(){
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
-      <span class="hero-live-status"><i aria-hidden="true"></i> Live cardiac cycle</span>
-      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleHeroMechanics()"
-        aria-label="Show heart chambers, valves, and blood flow" aria-pressed="${heroCutaway}" title="Show heart chambers, valves, and blood flow">${icon('layers','icon-sm')} Mechanics</button>
+      <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
+      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleAtlas3D()"
+        aria-label="Explore heart in 3D" aria-pressed="${atlas3D}" title="Explore heart in 3D">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
       <button class="atlas-pause" id="atlasPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${atlasPaused?'Play':'Pause'}</button>
     </div>
 
     ${(()=>{ const p=pearlNow(); if(!p) return '';
-      return `<div class="pearl-card" id="pearlCard">
+      return `<div class="pearl-card" id="pearlCard"${atlasReading?'':' hidden'}>
         <canvas id="pearlCurrent" class="pearl-current" aria-hidden="true"></canvas>
         <div class="pearl-rule"></div>
         <div class="pearl-main">
@@ -7127,7 +7144,8 @@ function buildHome(){
             <button class="pearl-next" onclick="pearlNext()"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
-          <h1 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h1>
+          <button class="atlas-back" onclick="atlasClose()">${icon('arrow-left','icon-sm')} Back to Home</button>
+          <h1 class="pearl-concept" id="pearlConcept" tabindex="-1">${e(p.concept||p.title)}</h1>
           <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlFit()">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
@@ -7147,7 +7165,7 @@ function buildHome(){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
-    <div class="atlas-session"><div><small>Your next session</small><strong>${dueN?`${dueN} questions ready`:'Build your next idea'}</strong></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Start review':'Explore chapters'} ${icon('arrow-right','icon-sm')}</button></div>
+    <div class="atlas-session"><span class="atlas-session-icon" aria-hidden="true">${icon('clipboard')}</span><div><small>Your next session</small><strong>${dueN?`${dueN} questions ready`:'Build your next idea'}</strong><p>Continue building your understanding, one idea at a time.</p></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Start review':'Explore chapters'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">
@@ -7177,7 +7195,39 @@ function buildHome(){
    time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
    the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
    was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
-let atlasPaused=false;
+let atlasPaused=false, atlasReading=false, atlas3D=false;
+function toggleAtlas3D(){
+  atlas3D=!atlas3D;
+  const hero=document.querySelector('#homePage0 .hero-live');
+  if(hero)hero.classList.toggle('atlas-3d',atlas3D);
+  const button=document.getElementById('heroMechanics');
+  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
+  const label=document.querySelector('.hero-live-status');
+  if(label)label.textContent=atlas3D?'Live cardiac cycle':'Illustrative anatomy';
+  syncHomeMotion();
+}
+
+function atlasBegin(recall=true){
+  const card=document.getElementById('pearlCard');
+  if(!card){goRefs();return;}
+  atlasReading=true;
+  document.getElementById('atlasIntro').hidden=true;
+  card.hidden=false;
+  card.closest('.home-wrap').classList.add('atlas-reading');
+  if(recall&&!card.classList.contains('is-recalling'))pearlRecall();
+  pearlFit();
+  syncHomeMotion();
+  document.getElementById('pearlConcept').focus();
+}
+function atlasClose(){
+  atlasReading=false;
+  const card=document.getElementById('pearlCard');
+  if(card){card.hidden=true;card.classList.remove('pearl-all');}
+  const intro=document.getElementById('atlasIntro');
+  if(intro){intro.hidden=false;intro.closest('.home-wrap').classList.remove('atlas-reading','pearl-all-open');intro.querySelector('button').focus();}
+  syncHomeMotion();
+}
+
 function toggleAtlasMotion(){
   atlasPaused=!atlasPaused;
   document.getElementById('homePages')?.classList.toggle('atlas-paused',atlasPaused);
@@ -7488,8 +7538,8 @@ function homeMark(){
 function syncHomeMotion(){
   const on=!atlasPaused&&S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
   if(heroMon) on?heroMon.start():heroMon.stop();
-  if(heroHeart3d) on?heroHeart3d.start():heroHeart3d.stop();
-  if(pearlTrace) on?pearlTrace.resume():pearlTrace.pause();
+  if(heroHeart3d) on&&atlas3D?heroHeart3d.start():heroHeart3d.stop();
+  if(pearlTrace) on&&atlasReading?pearlTrace.resume():pearlTrace.pause();
   if(!on&&heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
   else if(on&&heroMon&&!heroRotateTimer) heroRotateTimer=startHeroRotation();
 }

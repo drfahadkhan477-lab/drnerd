@@ -68,6 +68,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await page.evaluate(() => { homePage = 0; S.screen = 'home'; render(); });
   await still('first render');
+  head('the selected Home invitation');
+  await require('./_atlas-landing')(page,ok,settled);
+  await still('after invitation actions');
 
   head('three pages, each with its own things');
   const parts = await page.evaluate(() => {
@@ -116,12 +119,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       await page.evaluate(i=>homeGo(i,false),i); await still('tablet landing page');
       const g=await page.evaluate(i=>{const e=document.getElementById('homePage'+i);return {height:e.clientHeight,content:e.scrollHeight,width:e.clientWidth,contentWidth:e.scrollWidth};},i);
       ok(`${size.width}×${size.height}: landing page ${i} fits without clipping or page scrolling`,g.height>0&&g.content<=g.height+1&&g.contentWidth<=g.width+1,JSON.stringify(g));
-      const headings=await page.evaluate(()=>[...document.querySelectorAll('.home-page:not([inert]) h1')].length);
+      const headings=await page.evaluate(()=>[...document.querySelectorAll('.home-page:not([inert]) h1')].filter(h=>h.getClientRects().length).length);
       ok(`${size.width}×${size.height}: active landing page ${i} has one H1`,headings===1,String(headings));
     }
   }
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after tablet sizes');
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
+  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
 
 
   head('a swipe');

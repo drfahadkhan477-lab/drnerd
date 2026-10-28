@@ -54,6 +54,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
   await page.waitForTimeout(900);
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
   head('what counts as a pearl');
   const rules = await page.evaluate(() => {
@@ -639,7 +641,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   await settled(page,()=>!window.__vtLive && !!document.querySelector('.hero-h1'),{label:'empty library Home'});
   const empty=await page.evaluate(()=>({gone:!document.getElementById('pearlCard'),
-    heading:document.querySelector('#homePage0 h1')?.textContent,
+    heading:document.querySelector('#atlasTitle')?.textContent.replace(/\s+/g,' ').replace('oneidea','one idea'),
     open:[...document.querySelectorAll('#homePage0 button')].some(b=>b.textContent==='Open notes')}));
   ok('no notes means no card, rather than an empty one',empty.gone);
   ok('and nothing throws',errors.length===0);
@@ -651,6 +653,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('empty Home Open notes opens the reference library',await page.evaluate(()=>S.screen==='refs'));
   await page.evaluate(()=>{REF.push(...window.__atlasKeptRefs);delete window.__atlasKeptRefs;invalidateIndex();pearlCurrent=null;goHome();});
   await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
   head('regression');
   head('a pearl is a whole thought now');
