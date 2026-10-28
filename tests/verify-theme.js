@@ -131,7 +131,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     setTheme('cathlab');
     const cs = getComputedStyle(document.documentElement);
     const hero = cs.getPropertyValue('--hero-accent').trim().toLowerCase();
-    const greet = getComputedStyle(document.querySelector('.hero-greet')).color;
+    /* The greeting is the hero's heading when a pearl is showing, and a line
+       of its own above the empty-library prompt. */
+    const greet = getComputedStyle(document.querySelector('.hero-greet') || document.querySelector('#homePage0 .hero-h1')).color;
     return { hero, greet };
   });
   ok('the cath-lab hero accent is amber', /fbbf24|f59e0b|fb|f5/i.test(heroCohesion.hero), heroCohesion.hero);

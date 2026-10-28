@@ -145,6 +145,9 @@ fs.writeFileSync(OUT, SCAFFOLD
   await page.waitForFunction(() => typeof goNoteSearch === 'function', null, { timeout: 10000 });
 
   head('a way in');
+  /* Read off Home: on Home, Echo sits in the rail (app/css/home.css), and the
+     navbar carries it on every other screen. */
+  await page.evaluate(() => { S.screen = 'echo'; render(); });
   const btn = await page.evaluate(() => {
     const b = document.querySelector('.nav [onclick="goNoteSearch()"]');
     return b ? { label: b.getAttribute('aria-label'), icon: (b.querySelector('[data-icon]') || {}).getAttribute

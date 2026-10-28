@@ -123,7 +123,7 @@ try {
   pieces = {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
       '/* ══════════ Search your notes — see src/core/notesearch.js').replace(/@@SLOT\[asset:(assets\/echo\/[^\]]+)\]@@/g, (_, file) => fs.readFileSync(path.join(ROOT, file)).toString('base64')),
-    door: cut('app/systole.html', '      <button class="icon-btn" onclick="goEcho()" title="Echo Studio"',
+    door: cut('app/systole.html', "      ${S.screen!=='home'?`<button class=\"icon-btn nav-echo\" onclick=\"goEcho()\" title=\"Echo Studio\"",
       '      <div class="theme-wrap">'),
     css: cutStylesheet('.echo-studio{', '.ns-screen{'),
   };

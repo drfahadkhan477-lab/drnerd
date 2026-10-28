@@ -76,8 +76,11 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
 
   head('the bar every screen carries');
   {
-    await page.evaluate(() => { goHome(); render(); });
-    await onScreen(page, 'home', { marker: '.hero-h1' });
+    /* Measured on Study, where the bar carries all four: on a tablet's Home,
+       Echo moves into the rail, and is measured there below. */
+    await page.evaluate(() => { goStudy(); render(); });
+    await onScreen(page, 'study', { marker: '.ch-tile' });
+    await settled(page, () => !window.__vtLive, { label: 'the view transition to Study to finish' });
     await quiet(page);
     const btns = await under('.nav .icon-btn', 21, 21), brand = await under('.nav-brand', 21, 21);
     ok('the bar has icon buttons, and a brand, to measure', btns.length >= 4 && brand.length === 1, `${btns.length} buttons`);
@@ -86,6 +89,17 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     ok('they are still drawn at the size they were: nothing in the bar moved', btns.every(b => b.w === 36 && b.h === 36) && brand[0].h === 42, JSON.stringify([btns.map(b => b.w + 'x' + b.h), brand[0].h]));
     const gap = await page.evaluate(() => { const b = [...document.querySelectorAll('.nav .icon-btn')].map(e => e.getBoundingClientRect()).sort((a, c) => a.left - c.left); return b.slice(1).map((r, i) => Math.round(r.left - b[i].right)); });
     ok('and the buttons are far enough apart that the slops meet and do not cross', gap.every(g => g >= 8), JSON.stringify(gap));
+  }
+  {
+    await page.evaluate(() => { goHome(); render(); });
+    await onScreen(page, 'home', { marker: '.hero-h1' });
+    await settled(page, () => !window.__vtLive, { label: 'the view transition to Home to finish' });
+    await quiet(page);
+    const rail = await under('#homeEchoLink', 21, 21);
+    ok('on Home, Echo is in the rail, and takes a press anywhere within 21 px of its centre',
+       rail.length === 1 && rail[0].w >= 44 && rail[0].h >= 44 && rail[0].wrong === 0, JSON.stringify(rail));
+    const home = await page.evaluate(() => [...document.querySelectorAll('.nav .icon-btn')].map(b => b.getAttribute('onclick') || b.id));
+    ok('and not in the bar there as well', !home.some(c => /goEcho/.test(c)), JSON.stringify(home));
   }
 
   /* The welcome card is for someone who has answered nothing: the first question answered takes it away for good. Its fit on a

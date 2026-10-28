@@ -706,6 +706,30 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{REF.push(...window.__atlasKeptRefs);delete window.__atlasKeptRefs;invalidateIndex();pearlCurrent=null;goHome();});
   await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
 
+  head('headings and text the notes left behind');
+  /* Invented prose in the shape of the owner's notes (no licensed text). */
+  const left = await page.evaluate(() => {
+    const run = 'At 5 years the benefit of an early invasive strategy over a selective approach was gone, in part because of crossover in the latter group.17 Thus an invasive strategy is recommended in patients with NSTE-ACS who have troponin elevation on admission, or in whom these invented markers rise over the next 24 hours.';
+    const ctx = h => Pearl.passageContext('## ' + h + '\n\n' + run, run, 'Invented Unit — ' + h).concept;
+    return {
+      fragment: ctx('Outweigh, uncommon'),
+      kept: ctx('Invented valve disease'),
+      subject: Pearl.subject(run),
+      cite: Pearl.clean('crossover in the latter group.17 Thus an invasive'),
+      split: Pearl.sentences(Pearl.plain(run)).length,
+      decimal: Pearl.clean('Fig. 54.1 shows 2.5 mg.'),
+      steps: Pearl.lesson(Pearl.clean(run)).map(s => s.label + ':' + ((s.lead ? s.lead + ' ' : '') + s.text).slice(0, 12)),
+    };
+  });
+  ok('a heading that is two words and a comma is passed over for the passage\'s own subject', left.fragment === 'Invasive strategy in NSTE-ACS', left.fragment);
+  ok('a heading that names a topic is kept', left.kept === 'Invented valve disease', left.kept);
+  ok('the subject is the commonest modifier and head noun, with the abbreviation it is about', left.subject === 'Invasive strategy in NSTE-ACS', left.subject);
+  ok('a reference number after a full stop is removed', left.cite === 'crossover in the latter group. Thus an invasive', left.cite);
+  ok('and the sentence boundary it hid is found', left.split === 2, String(left.split));
+  ok('a decimal and a figure number are left alone', left.decimal === 'Fig. 54.1 shows 2.5 mg.', left.decimal);
+  ok('"or in whom" stays in the clause it continues, not a Contrast step of its own',
+     !left.steps.some(s => /^Contrast:/.test(s)) && !left.steps.some(s => /:Or in whom/i.test(s)), JSON.stringify(left.steps));
+
   head('regression');
   head('a pearl is a whole thought now');
   {
