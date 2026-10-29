@@ -103,6 +103,18 @@ ok('and nothing outside the modules changes', r.code.startsWith('var pre = 0;\n'
 let refused; try { stripEmbedded('x;\nlet = = ;\n', [['bad.js', 'let = = ;\n']]); refused = 'shipped'; } catch (e) { refused = e.message; }
 ok('a module that will not compile once stripped stops the build', /bad\.js no longer compiles/.test(refused), refused.slice(0, 70));
 
+head('optional horizontal whitespace compaction');
+const compactSource = '  const  a = "two  spaces";\n\tconst b = `line  one\n  two ${ 1  +  2 }`;\n  const r = /a  b/;\n  function f(){ return\n    42; }\n  [a,b,r.source,f()]';
+const compacted = strip(compactSource, true);
+ok('compaction removes indentation and repeated horizontal separators',
+   compacted.startsWith('const a =') && compacted.includes('${ 1 + 2 }'));
+ok('compaction preserves literal whitespace and automatic semicolon insertion',
+   JSON.stringify(vm.runInNewContext(compacted)) === JSON.stringify(vm.runInNewContext(compactSource)) &&
+   compacted.includes('return\n'));
+ok('compaction preserves CRLF and separates tokens around comments',
+   strip('  let  x=1;\r\n  x/* gap */  +  +x', true) === 'let x=1;\r\nx + +x');
+ok('compaction is optional and idempotent', strip('  let  x=1;') === '  let  x=1;' && strip(compacted, true) === compacted);
+
 head('build-pwa runs it');
 const PWA = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'build-pwa.js'), 'utf8'));
 ok('build-pwa passes app.js and src/\'s modules through stripEmbedded',

@@ -948,9 +948,10 @@ step('ship src/\'s modules without their comments', () => {
 });
 
 // App-shell handlers have grown alongside src modules. Strip their comments
-// too, without removing source documentation or relaxing the transfer budget.
+// too, and compact horizontal whitespace outside literals. Keep line breaks
+// for automatic semicolon insertion; source and the transfer budget stay intact.
 step('ship application handlers without comments', () => {
-  const lean = require('./strip-comments.js').strip(appCode);
+  const lean = require('./strip-comments.js').strip(appCode, true);
   new (require('vm').Script)(lean, { filename: 'app.js' });
   appCode = lean;
 });

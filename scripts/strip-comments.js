@@ -30,13 +30,15 @@
  * line break, so automatic semicolon insertion sees what it saw before; any
  * other comment becomes one space, so `a/**\/b` cannot become `ab`. A line
  * left with nothing but whitespace by the removal is dropped whole. Nothing
- * inside a string, template or regex is ever touched.
+ * inside a string, template or regex is ever touched. Optional compact mode
+ * removes indentation and collapses horizontal separators outside literals;
+ * line terminators remain intact for automatic semicolon insertion.
  */
 
 const KEYWORD_BEFORE_REGEX = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete',
   'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
 
-function strip(src) {
+function strip(src, compact = false) {
   const s = String(src), n = s.length;
   let out = '', i = 0;
   let last = '';            // the last significant token's kind: 'id' | 'num' | 'close' | 'punct' | ''
@@ -113,6 +115,11 @@ function strip(src) {
     if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(d))) {
       let j = i + 1; while (j < n && /[\w.]/.test(s[j])) j++;
       out += s.slice(i, j); i = j; last = 'num'; continue;
+    }
+    // Only horizontal whitespace outside literals: keep every line terminator for ASI.
+    if (compact && (c === ' ' || c === '\t')) {
+      if (out.length > lineStart && !/[ \t]$/.test(out)) out += ' ';
+      i++; continue;
     }
     if (c === ' ' || c === '\t' || c === '\r') { out += c; i++; continue; }
     /* a++ / 2 — a postfix ++ or -- ends an operand, so a / after it divides */
