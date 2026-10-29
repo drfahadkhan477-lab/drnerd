@@ -5292,12 +5292,12 @@ function paintTune(){
 }
 function tuneHtml(){
   const t=readTune();
-  const row=(k,ic)=>`<label class="tune-row" for="tune-${k}"><span class="tune-l">${icon(ic,'icon-sm')}${TUNE[k].label}</span>
+  const row=(k,ic)=>`<label class="tune-row" for="tune-${k}"><span class="tune-l">${ic}${TUNE[k].label}</span>
       <output class="tune-v" id="tune-${k}-v" for="tune-${k}">${t[k]}%</output>
       <input class="tune-in" type="range" id="tune-${k}" min="${TUNE[k].min}" max="${TUNE[k].max}" step="5" value="${t[k]}"
         aria-valuetext="${t[k]}%" oninput="setTune('${k}',this.value)"></label>`;
   return `<div class="tune" role="group" aria-labelledby="tuneH"><div class="theme-menu-h" id="tuneH">Brightness and contrast</div>
-    ${row('b','sun')}${row('c','sun-moon')}
+    ${row('b',icon('sun','icon-sm'))}${row('c',icon('sun-moon','icon-sm'))}
     <button class="tune-reset" id="tuneReset" type="button" onclick="resetTune()"${t.b===100&&t.c===100?' disabled':''}>Reset to 100%</button></div>`;
 }
 function themeOptHtml(t){
