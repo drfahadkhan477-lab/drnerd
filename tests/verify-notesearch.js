@@ -152,11 +152,11 @@ fs.writeFileSync(OUT, SCAFFOLD
     const b = document.querySelector('.nav [onclick="goNoteSearch()"]');
     return b ? { label: b.getAttribute('aria-label'), icon: (b.querySelector('[data-icon]') || {}).getAttribute
       ? b.querySelector('[data-icon]').getAttribute('data-icon') : null,
-      beforeEcho: !!(b.nextElementSibling && /goEcho/.test(b.nextElementSibling.getAttribute('onclick') || '')) } : null;
+      noEcho: !!document.querySelector('.nav') && !document.querySelector('.nav [onclick="goEcho()"]') } : null;
   });
   ok('the nav has a Search-your-notes button', !!btn && btn.label === 'Search your notes', btn ? btn.label : 'missing');
   ok('with the book glyph, evaluated rather than left as text', !!btn && btn.icon === 'book', btn ? String(btn.icon) : '');
-  ok('beside Echo\'s', !!btn && btn.beforeEcho);
+  ok('and Echo is not in the bar beside it: Labs has it', !!btn && btn.noEcho);
   await page.click('.nav [onclick="goNoteSearch()"]');
   const screen = await page.evaluate(() => ({ s: S.screen, field: !!document.querySelector('[data-ns-q]'),
     hint: (document.querySelector('.ns-hint') || {}).textContent || '' }));

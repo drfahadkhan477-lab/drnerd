@@ -29,7 +29,7 @@
     "validation": "WebKit: build, 121 PWA checks, 15 Pages checks and 10 cache-bucket checks passed before subsequent caption fix; final release recheck pending."
   },
   "privateContent": "Original export and library retained; raw logs and screenshots outside Git.",
-  "deployment": "Not performed; Cloudflare connector again requires reauthentication.",
+  "deployment": "Not performed; validation pending.",
   "fullChromiumFirstRun": {
     "selectedSuites": 157,
     "passedSuites": 151,
@@ -54,15 +54,18 @@
     "polish": 79
   },
   "latestMasterIntegration": {
-    "master": "5126783d0e306a568e3400d8d133a7edf9c10df4",
-    "status": "merged and pushed; portrait reader and summary-overlap fixes under validation",
+    "master": "71f8843",
+    "status": "Resolved merge; combined source builds; focused validation and PWA recheck running.",
     "preserved": [
       "Latest Apex rail placement; Echo available from Labs",
       "scanned heart with attribution/menu",
       "pearl subject and sizing fixes",
       "chapter resume and reading width",
       "CI sharding",
-      "upstream Memorizer removal"
+      "upstream Memorizer removal",
+      "Display settings with brightness and contrast",
+      "Mock and voice sessions in Labs",
+      "Required CI job names guard"
     ],
     "note": "Earlier focused/private results do not certify this combined source.",
     "checkpointCommit": "1a0aa63",
@@ -74,7 +77,7 @@
     },
     "visualReview": "Fresh landscape/portrait captures reviewed; all three landing pages fit checked viewports. Differences documented in design-qa.md.",
     "pwaShellGzipKB": 279,
-    "fullValidation": "Fresh full Chromium/PWA run is in progress, followed automatically by full WebKit/PWA. Focused passes do not certify the release.",
+    "fullValidation": "Previous source passed 7113 checks across all 156 app suites; PWA failed two scanned-heart menu checks. PWA test now enters Explore in 3D before inspecting that menu. New master integration still requires full validation.",
     "privateInputIntegrity": {
       "files": 774,
       "mismatches": 0

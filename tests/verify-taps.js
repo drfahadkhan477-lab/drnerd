@@ -76,17 +76,17 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
 
   head('the bar every screen carries');
   {
-    /* Measured on Study, where the bar carries all four: on a tablet's Home the bar has no Echo (it is on the Labs page),
+    /* Measured on Study, where the bar carries search, notes and the Display panel: Echo is on the Labs page, never in the bar,
        and Apex is in the rail, measured there below. */
     await page.evaluate(() => { goStudy(); render(); });
     await onScreen(page, 'study', { marker: '.ch-tile' });
     await settled(page, () => !window.__vtLive, { label: 'the view transition to Study to finish' });
     await quiet(page);
     const btns = await under('.nav .icon-btn', 21, 21), brand = await under('.nav-brand', 21, 21);
-    ok('the bar has icon buttons, and a brand, to measure', btns.length === 4 && brand.length === 1, `${btns.length} buttons`);
+    ok('the bar has icon buttons, and a brand, to measure', btns.length === 3 && brand.length === 1, `${btns.length} buttons`);
     ok('every icon button takes a press anywhere within 21 px of its centre: corners, edges and middle', btns.every(b => b.wrong === 0), JSON.stringify(btns.filter(b => b.wrong)));
     ok('and the brand takes one anywhere within 21 px of its centre', brand.every(b => b.wrong === 0), JSON.stringify(brand));
-    ok('Study retains four compact controls and the brand hit area', btns.every(b => b.w === 36 && b.h === 36) && brand[0].h === 42, JSON.stringify([btns.map(b => b.w + 'x' + b.h), brand[0].h]));
+    ok('Study retains three compact controls and the brand hit area', btns.every(b => b.w === 36 && b.h === 36) && brand[0].h === 42, JSON.stringify([btns.map(b => b.w + 'x' + b.h), brand[0].h]));
     const gap = await page.evaluate(() => { const b = [...document.querySelectorAll('.nav .icon-btn')].map(e => e.getBoundingClientRect()).sort((a, c) => a.left - c.left); return b.slice(1).map((r, i) => Math.round(r.left - b[i].right)); });
     ok('and the buttons are far enough apart that the slops meet and do not cross', gap.every(g => g >= 8), JSON.stringify(gap));
   }

@@ -123,9 +123,9 @@ try {
   pieces = {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
       '/* ══════════ Search your notes — see src/core/notesearch.js').replace(/@@SLOT\[asset:(assets\/echo\/[^\]]+)\]@@/g, (_, file) => fs.readFileSync(path.join(ROOT, file)).toString('base64')),
-    door: cut('app/systole.html', '      <button class="icon-btn nav-echo" onclick="goEcho()" title="Echo Studio"',
-      '      <!-- Study shortcuts end -->'),
-
+    /* The way in is the Labs card (the bar lost its Echo button); here it is put in the scaffold's bar. */
+    door: cut('app/systole.html', '      <button class="lab-card lab-echo" onclick="goEcho()">',
+      '      <button class="lab-card lab-practice" onclick="goPractice()">'),
     css: cutStylesheet('.echo-studio{', '.ns-screen{'),
   };
 } catch (e) { cutError = e.message; }
@@ -173,11 +173,11 @@ const MARK = 'echomark';
      await page.evaluate(() => [typeof window.Echo, typeof window.EchoUI].join('/')));
 
   head('the way in');
-  ok('the nav carries the button the patch inserted',
+  ok('the Labs card that leads to Echo is there',
      await page.evaluate(() => !!document.querySelector('.nav [onclick="goEcho()"]')),
      await page.evaluate(() => {
        const b = document.querySelector('.nav [onclick="goEcho()"]');
-       return b ? 'title=' + b.getAttribute('title') : 'absent';
+       return b ? b.textContent.trim().replace(/\s+/g, ' ') : 'absent';
      }));
   ok('and its glyph was interpolated rather than printed',
      await page.evaluate(() => {
