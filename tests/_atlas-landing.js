@@ -14,6 +14,16 @@ module.exports = async function atlasLanding(page, ok, settled) {
     name:e.querySelector('.lab-txt b')?.textContent,paint:getComputedStyle(e).backgroundImage
   })));
   ok('every Labs card has a painted surface behind its white labels',labSurfaces.length>0&&labSurfaces.every(c=>c.paint!=='none'),JSON.stringify(labSurfaces));
+  const reduced=await page.evaluate(()=>matchMedia('(prefers-reduced-motion:reduce)').matches);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.evaluate(()=>homeGo(2,false));
+  await settled(page,()=>homePage===2&&!homeTween,{label:'Labs icon entrance'});
+  const motion=await page.evaluate(()=>[...document.querySelectorAll('#homePage2 .door-ic .icon')].map(e=>e.getAnimations().some(a=>a.animationName==='door-greet'&&a.effect.getTiming().iterations===1)));
+  ok('study-tool icons animate once when Labs opens',motion.length===6&&motion.every(Boolean));
+  await page.emulateMedia({reducedMotion:'reduce'});
+  ok('study-tool icons stop for reduced motion',await page.evaluate(()=>[...document.querySelectorAll('#homePage2 .door-ic .icon')].every(e=>getComputedStyle(e).animationName==='none'&&e.getAnimations().length===0)));
+  await page.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});
+  await page.evaluate(()=>homeGo(0,false));
   const viewport=page.viewportSize();
   for(const width of [744,834]){
     await page.setViewportSize({width,height:1000});

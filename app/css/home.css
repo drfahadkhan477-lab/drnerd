@@ -822,3 +822,16 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
   background:var(--card);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .tune-reset:disabled{opacity:.45;cursor:default}
 .tune-reset:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
+
+/* Study-tool icons greet once when Labs opens; interaction adds a small lift. */
+.door-ic .icon{transition:transform .2s ease;transform-origin:center}
+.door-ic [data-icon="book"]{--door-turn:-10deg}
+.door-ic [data-icon="search"]{--door-turn:10deg}
+.door-ic [data-icon="folder"]{--door-turn:-8deg}
+.door-ic [data-icon="highlighter"]{--door-turn:12deg}
+#homePage2:not([aria-hidden="true"]) .door-ic .icon{animation:door-greet .65s ease}
+.door:focus-visible .door-ic .icon{transform:translateY(-3px) rotate(var(--door-turn,0deg))}
+@media(hover:hover){.door:hover .door-ic .icon{transform:translateY(-3px) rotate(var(--door-turn,0deg))}}
+.door:active .door-ic .icon{transform:scale(.92)}
+@keyframes door-greet{0%,100%{transform:none}45%{transform:translateY(-4px) rotate(var(--door-turn,0deg)) scale(1.12)}}
+@media(prefers-reduced-motion:reduce){#homePage2 .door-ic .icon{animation:none!important;transition:none;transform:none!important}}

@@ -114,6 +114,28 @@
       "homepagerBeforeSessionsRegression": 101
     },
     "sessionsCardFix": "Restored a dark painted surface behind white labels. New Labs surface assertion failed before the fix and passed after it.",
-    "pwaRecheck": "Regenerating extracted content after merge; stale-content guard correctly rejected the previous extraction."
+    "pwaRecheck": "Regenerating extracted content after merge; stale-content guard correctly rejected the previous extraction.",
+    "master71FocusedWebKit": {
+      "readsize": 99,
+      "mockscreen": 174,
+      "voicescreen": 43,
+      "taps": 27,
+      "studyvisuals": 26,
+      "echo": 35,
+      "notesearch": 16,
+      "homepager": 102
+    }
+  },
+  "iconMotion": {
+    "behavior": "Study-tool icons animate once on entering Labs, lift on hover/focus and respond to presses; reduced motion disables movement.",
+    "measured": "Direct Chromium and WebKit landing checks pass. Motion and reduced-motion checks each failed with the corresponding behavior deliberately disabled.",
+    "cssChecks": {
+      "whitespaceCompaction": 16,
+      "hoverGuards": 21,
+      "cssFloor": 142
+    },
+    "shellBytesGzip": 286564,
+    "shellBudgetBytes": 286720,
+    "releaseValidation": "PWA rechecks in progress; no completed release claimed."
   }
 }

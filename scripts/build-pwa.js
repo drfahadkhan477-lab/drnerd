@@ -990,7 +990,7 @@ step('lift the base64 fonts out of the stylesheet', () => {
 step('ship stylesheet rules without whitespace-delimited documentation', () => {
   const { stripCssDocs } = require('./css-docs.js');
   html = html.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_, open, css, close) => open + stripCssDocs(css) + close);
+    (_, open, css, close) => open + stripCssDocs(css, true) + close);
 });
 
 /* PRELOADED, SO THE FIRST LAYOUT HAS THEM. Lifted out, the faces are only
