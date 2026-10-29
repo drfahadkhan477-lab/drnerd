@@ -787,8 +787,8 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await fresh();
     await page.evaluate(ids => { const real = MockExam.build; MockExam.build = () => ids.slice(); _mockCfg.sec = 0; _mockCfg.n = 20; _mockCfg.ch = ''; try { startMock(); } finally { MockExam.build = real; } mockStopTicker(); }, [q0, q1, q2, q3]);
     await reached('mock');
-    await page.evaluate(() => { MockExam.go(S.mock, 0); mockFlag(); MockExam.go(S.mock, 2); mockFlag(); goStudy(); });
-    await onScreen(page, 'study', { marker: '#mockDiscard' }); await settle();
+    await page.evaluate(() => { MockExam.go(S.mock, 0); mockFlag(); MockExam.go(S.mock, 2); mockFlag(); goSessions(); });
+    await onScreen(page, 'sessions', { marker: '#mockDiscard' }); await settle();
     await page.click('#mockDiscard'); await drawn('#mockDiscard.arm'); await page.click('#mockDiscard');
     await page.waitForFunction(() => !S.mock, null, { timeout: 4000 }).catch(() => {});
     const thrown = await page.evaluate(() => ({ block: !!S.mock, flagged: S.flagged.size, saved: (JSON.parse(localStorage.getItem('accsap12.v2')).flagged || []).length }));
