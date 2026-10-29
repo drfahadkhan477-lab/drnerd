@@ -383,6 +383,30 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
     ok('and nothing threw on the way', bootErrors.length === 0, bootErrors.slice(0, 2).join(' | '));
   }
 
+  head('local study actions do not need a provider');
+  const local = await page.evaluate(async () => {
+    AI.gemini.key=''; S.screen='home'; buildAI();
+    const group=document.querySelector('[aria-label="On this device — no AI request"]');
+    const visible=!!group&&group.querySelectorAll('button').length===4;
+    const oldFetch=window.fetch; let calls=0;
+    window.fetch=()=>{calls++;return Promise.reject(new Error('Unexpected provider request'));};
+    const destinations=[];
+    try{
+      for(const action of ['notes','bank','progress']){
+        if(typeof apexLocalAction==='function') apexLocalAction(action);
+        destinations.push(S.screen);
+      }
+      aiBusy=true;
+      if(typeof apexLocalAction==='function') apexLocalAction('bank');
+      const busyBlocked=S.screen==='stats'; aiBusy=false;
+      return {visible,destinations,calls,busyBlocked};
+    }finally{window.fetch=oldFetch;aiBusy=false;}
+  });
+  ok('local actions are available without a key',local.visible);
+  ok('notes, question search and progress open without provider calls',
+    local.destinations.join(',')==='notesearch,search,stats'&&local.calls===0);
+  ok('local navigation cannot interrupt an active answer',local.busyBlocked);
+
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 2).join(' | '));
 
   await browser.close();

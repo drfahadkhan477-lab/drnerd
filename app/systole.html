@@ -3921,6 +3921,21 @@ function apexPanelRestore(st){
    move someone who is reading something further up. */
 function apexStick(body){ if(body && apexAtBottom(body)) body.scrollTop=body.scrollHeight; }
 
+function apexLocalAction(action){
+  if(aiBusy||apexAway()) return;
+  if(action==='notes') goNoteSearch();
+  else if(action==='bank') openSearch();
+  else if(action==='progress') goStats();
+  else if(action==='review'&&dueQuestions().length) startQuiz(null,'due');
+}
+function apexLocalHtml(){
+  const due=dueQuestions().length;
+  return `<div class="src-strip" role="group" aria-label="On this device — no AI request">
+    <span class="src-lbl">On this device · no AI request</span>
+    ${[['notes','Find notes'],['bank','Find questions'],['progress','My progress'],['review',due?'Review due cards ('+due+')':'No cards due']].map(([action,label])=>
+      `<button type="button" class="src-pill" onclick="apexLocalAction('${action}')" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
+  </div>`;
+}
 function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
@@ -3949,7 +3964,7 @@ function buildAI(){
   /* Hosted Gemini needs nothing typed, so the setup screen would be a door
      with no lock on it. Every other provider still asks. */
   if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
-    wrap.innerHTML=head+setupHtml()+`<div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div>`; bindSetup(); mountApexAvatar(); return; }
+    wrap.innerHTML=head+apexLocalHtml()+setupHtml()+`<div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div>`; bindSetup(); mountApexAvatar(); return; }
   const msgs=hist.length
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
@@ -3985,7 +4000,7 @@ function buildAI(){
       title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}" loading="lazy">
       <figcaption>${e(clip(f.caption,150))}<span class="ai-fig-src">${e(clip(f.noteTitle,44))}</span></figcaption></figure>`).join('')}</div></div>`:'';
   wrap.innerHTML=head+
-    `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
+    `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${apexLocalHtml()}${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
      ${srcStrip}
      ${figStrip}
      <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>(!c[2]||c[2](q))?`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`:'').join('')}
