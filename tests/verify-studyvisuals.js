@@ -57,6 +57,8 @@ const STUB = () => {
 
   const inDays = n => page.evaluate(n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }, n);
   const toStudy = async () => { await page.evaluate(() => goStudy()); await onScreen(page, 'study', { marker: '#planCard' }); await quiet(page); };
+  /* The Voice card moved to the Sessions screen in Labs, with the mock exam. */
+  const toSessions = async () => { await page.evaluate(() => goSessions()); await onScreen(page, 'sessions', { marker: '#voiceCard' }); await quiet(page); };
   /* 60 seen, a quarter of them missed (so runs form), thirty answers a day for a week (so there is a pace). */
   const seed = (perDay) => page.evaluate(perDay => {
     /* Last reviewed twenty days ago, so recall today is well short of 100% and the inner ring has something to show. */
@@ -128,6 +130,7 @@ const STUB = () => {
   ok('runs of five and four draw five and four pips', saved >= 9 && JSON.stringify(pips) === '[5,4]', JSON.stringify(pips));
 
   head('the voice dock');
+  await toSessions();
   await page.click('#voiceStart');
   await onScreen(page, 'quiz', { marker: '.q-card' });
   await page.waitForFunction(() => window.__listens >= 1, null, { timeout: 15000 });
@@ -157,18 +160,24 @@ const STUB = () => {
 
   head('reduced motion, and a narrow phone');
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  const animOf = sels => page.evaluate(sels => sels.map(s => { const el = document.querySelector(s); return [s, el ? getComputedStyle(el).animationName : 'absent']; }), sels);
   await toStudy();
-  const anim = await page.evaluate(() => ['.voice-wave i', '#planGauge .pg-seen', '.mr-arc', '.vo-ring', '.plan-card > .fc-glow']
-    .map(s => { const el = document.querySelector(s); return [s, el ? getComputedStyle(el).animationName : 'absent']; }));
+  const anim = await animOf(['#planGauge .pg-seen', '.mr-arc', '.plan-card > .fc-glow']);
+  await toSessions();
+  anim.push(...await animOf(['.voice-wave i', '.vo-ring']));
   ok('with reduced motion asked for, the rings, wave, ripple and glow do not animate', anim.every(([, a]) => a === 'none'), JSON.stringify(anim));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 360, height: 900 });
-  await toStudy();
   /* The cards clip what overflows them, so the page never widens: each element is measured against its own card. */
-  const wide = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth,
-    spill: ['planCard', 'runCard', 'voiceCard'].flatMap(id => { const c = document.getElementById(id), cr = c.getBoundingClientRect();
+  const spillOf = ids => page.evaluate(ids => ({ sw: document.documentElement.scrollWidth,
+    spill: ids.flatMap(id => { const c = document.getElementById(id), cr = c.getBoundingClientRect();
       return [...c.querySelectorAll('*')].filter(el => { const r = el.getBoundingClientRect(); return r.width && (r.right > cr.right + 1 || r.left < cr.left - 1) && !el.closest('.fc-glow') && !el.matches('.fc-glow'); })
-        .map(el => id + ' ' + el.tagName.toLowerCase() + '.' + [...el.classList].join('.')); }) }));
+        .map(el => id + ' ' + el.tagName.toLowerCase() + '.' + [...el.classList].join('.')); }) }), ids);
+  await toStudy();
+  const wide = await spillOf(['planCard', 'runCard']);
+  await toSessions();
+  const wide2 = await spillOf(['mockCard', 'voiceCard']);
+  wide.sw = Math.max(wide.sw, wide2.sw); wide.spill.push(...wide2.spill);
   ok('at 360 px nothing scrolls sideways, and nothing spills out of its card', wide.sw <= 360 && wide.spill.length === 0, JSON.stringify({ sw: wide.sw, spill: wide.spill.slice(0, 6) }));
 
   ok('nothing threw throughout', errors.length === 0, errors.join(' | '));

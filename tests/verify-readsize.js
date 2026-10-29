@@ -416,6 +416,57 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     await page.context().close();
   }
 
+  head('brightness and contrast');
+  /* A filter on the root element, which the spec exempts from holding fixed elements: so Apex's button stays on the screen. */
+  {
+    const page = await open({ width: 1024, height: 768 });
+    const tune = () => page.evaluate(() => ({ filter: document.documentElement.style.filter, own: localStorage.getItem('systole.tune'),
+      b: (document.getElementById('tune-b-v') || {}).textContent, reset: (document.getElementById('tuneReset') || {}).disabled }));
+    ok('by default nothing filters the page', (await tune()).filter === '', JSON.stringify(await tune()));
+    await page.evaluate(() => toggleThemeMenu());
+    await page.waitForFunction(() => document.getElementById('themeMenu').classList.contains('open'), null, { timeout: 4000 }).catch(() => {});
+    const ctl = await page.evaluate(() => ['tune-b', 'tune-c'].map(id => { const i = document.getElementById(id); return i ? { type: i.type, min: +i.min, max: +i.max, h: i.getBoundingClientRect().height, name: i.closest('label') && i.closest('label').textContent.trim().split(/\s+/)[0] } : null; }));
+    ok('two sliders in the Display panel, named Brightness and Contrast, each 44px tall', ctl.every(Boolean) && ctl.map(c => c.name).join() === 'Brightness,Contrast' && ctl.every(c => c.type === 'range' && c.h >= 44), JSON.stringify(ctl));
+    await page.evaluate(() => { const i = document.getElementById('tune-b'); i.value = '120'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+    const up = await tune();
+    ok('moving Brightness to 120% brightens the page, says 120%, enables Reset and is kept', /brightness\(1\.2\)/.test(up.filter) && up.b === '120%' && up.reset === false && JSON.parse(up.own || '{}').b === 120, JSON.stringify(up));
+    await page.evaluate(() => setTune('c', 500));
+    ok('a contrast beyond the range stops at its end, 140%', /contrast\(1\.4\)/.test((await tune()).filter), (await tune()).filter);
+    await page.reload({ waitUntil: 'load' }); await booted(page);
+    ok('after a reload the page is still brightened', /brightness\(1\.2\)/.test((await tune()).filter), (await tune()).filter);
+    await page.evaluate(() => goStudy());
+    await onScreen(page, 'study', { marker: '#planCard' });
+    const fab = async () => page.evaluate(() => { const f = document.querySelector('.ai-fab'); const r = f.getBoundingClientRect(); return { bottom: Math.round(r.bottom), vh: innerHeight, y: Math.round(scrollY) }; });
+    const before = await fab();
+    await page.evaluate(() => { const m = document.scrollingElement; m.scrollTop = m.scrollHeight; window.scrollTo(0, document.body.scrollHeight); });
+    await page.waitForTimeout(200);
+    const after = await fab();
+    ok('with the filter on, Apex\'s button stays fixed to the screen as the page scrolls', after.y > 0 && after.bottom === before.bottom && after.bottom <= after.vh, JSON.stringify({ before, after }));
+    await page.evaluate(() => resetTune());
+    const back = await tune();
+    const said = await page.evaluate(() => (document.getElementById('srLive') || {}).textContent);
+    ok('Reset takes the filter off, forgets it, and says so', back.filter === '' && back.own === null && said === 'Brightness and contrast reset.', JSON.stringify([back, said]));
+    for (const junk of ['{"b":5}', '{"b":"x","c":99999}', 'not json']) {
+      await page.evaluate(v => { localStorage.setItem('systole.tune', v); applyTune(); }, junk);
+      ok('a stored ' + junk + ' filters nothing', (await tune()).filter === '', (await tune()).filter);
+    }
+    await page.context().close();
+  }
+
+  head('the bar has no Echo button');
+  /* Echo is reached from Labs; it was in the bar on every screen but Home. */
+  {
+    const page = await open({ width: 1024, height: 768 });
+    const seen = [];
+    for (const [go, screen] of [['goStudy', 'study'], ['goNoteSearch', 'notesearch'], ['goEcho', 'echo']]) {
+      await page.evaluate(g => window[g](), go);
+      await onScreen(page, screen, { marker: '#navbar .nav' });
+      seen.push(await page.evaluate(() => S.screen + ':' + document.querySelectorAll('#navbar [onclick="goEcho()"]').length));
+    }
+    ok('on Study, note search and Echo itself, the bar offers no Echo button', seen.every(x => /:0$/.test(x)) && seen.length === 3, seen.join());
+    await page.context().close();
+  }
+
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));
 
