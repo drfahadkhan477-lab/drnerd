@@ -4032,9 +4032,9 @@ function visionBadge(q){
     ? ` · sees ${n} figure${plural}`
     : ` · ${n} figure${plural}, not visible to this model`;
 }
-function setupHtml(){
-  const p=AI.provider, meta=PROVIDERS.find(x=>x[0]===p);
-  const models=MODELS[p], active=cur();
+function setupHtml(p=AI.provider){
+  const meta=PROVIDERS.find(x=>x[0]===p);
+  const models=MODELS[p], active=AI[p];
   const onSite=location.protocol!=='file:';
   return `<div class="setup">
     <div class="setup-hero">
@@ -4047,11 +4047,12 @@ function setupHtml(){
          <span class="pp-name">${e(name)}</span><span class="pp-tag">${e(tag)}</span>
        </button>`).join('')}</div>
     <div class="key-row">
-      <input id="aiKey" type="password" placeholder="${KEY_PREFIX[p]?(Array.isArray(KEY_PREFIX[p])?KEY_PREFIX[p][0]:KEY_PREFIX[p])+'...':'Paste your key'}" autocomplete="off"
+      <input id="aiKey" aria-label="API key" type="password" placeholder="${KEY_PREFIX[p]?(Array.isArray(KEY_PREFIX[p])?KEY_PREFIX[p][0]:KEY_PREFIX[p])+'...':'Paste your key'}" autocomplete="off"
         spellcheck="false" autocapitalize="off" inputmode="text" value="${e(active.key)}">
       <button class="key-paste" id="aiPaste" title="Paste from clipboard">${icon("clipboard","icon-sm")}</button>
     </div>
-    <div id="keyMsg" class="key-msg"></div>
+    <button type="button" class="btn" id="aiKeyVisibility" aria-pressed="false">Show key</button>
+    <div id="keyMsg" class="key-msg" role="status"></div>
     <select id="aiModel" aria-label="Model">${models.map(m=>`<option value="${m[0]}"${active.model===m[0]?' selected':''}>${m[1]}</option>`).join('')}</select>
     <button class="btn btn-next" id="aiSave" style="width:100%;margin-top:10px">Connect</button>
     <div class="note" id="setupNote">${meta[3]} Stored only in this device's storage, sent only to the provider you picked, never written into this file.</div>
@@ -4077,10 +4078,13 @@ const DISCOVER={
     askMsg:'Asking Google which models this key can use…', vendor:'Google',
     hint:'A key made with <b>Get API key</b> in Google AI Studio gets the free tier without any billing account — try creating a fresh one there.'},
 };
-function bindSetup(){
-  const btn=document.getElementById('aiSave'), inp=document.getElementById('aiKey');
-  const paste=document.getElementById('aiPaste');
-  document.querySelectorAll('[data-prov]').forEach(b=>b.onclick=()=>switchProvider(b.dataset.prov));
+function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvider, connected=()=>buildAI()){
+  const find=id=>root.querySelector('#'+id);
+  const btn=find('aiSave'), inp=find('aiKey'), paste=find('aiPaste');
+  const keyMsg=(text,cls)=>{const el=find('keyMsg');if(el){for(const key of [inp?.value,...Object.values(AI).map(v=>v&&v.key)].filter(k=>typeof k==='string'&&k.length>4)){text=String(text).split(key).join('[redacted]').split(e(key)).join('[redacted]');}el.className='key-msg '+(cls||'');el.innerHTML=text;}};
+  const visibility=find('aiKeyVisibility');
+  if(visibility) visibility.onclick=()=>{const show=inp.type==='password';inp.type=show?'text':'password';visibility.textContent=show?'Hide key':'Show key';visibility.setAttribute('aria-pressed',String(show));};
+  root.querySelectorAll('[data-prov]').forEach(b=>b.onclick=()=>switched(b.dataset.prov));
   if(inp){
     inp.addEventListener('paste',()=>setTimeout(()=>{ inp.value=cleanKey(inp.value); },0));
     inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault();btn.click();} });
@@ -4091,7 +4095,7 @@ function bindSetup(){
   };
   if(!btn)return;
   btn.onclick=async()=>{
-    const p=AI.provider, name=(PROVIDERS.find(x=>x[0]===p)||['',p])[1];
+    const p=provider(), name=(PROVIDERS.find(x=>x[0]===p)||['',p])[1];
     const k=cleanKey(inp.value);
     if(!k){ keyMsg('Paste your key first.','warn'); return; }
     const validPrefixes=[].concat(KEY_PREFIX[p]);
@@ -4100,7 +4104,7 @@ function bindSetup(){
       return;
     }
     btn.disabled=true; btn.textContent='Checking…'; keyMsg(`Verifying with ${name}…`,'');
-    let model=document.getElementById('aiModel').value;
+    let model=find('aiModel').value;
     try{
       if(DISCOVER[p]){
         const d=DISCOVER[p];
@@ -4119,22 +4123,24 @@ function bindSetup(){
                 +' '+d.hint,'bad');
           btn.disabled=false; btn.textContent='Connect'; return;
         }
+        if(!btn.isConnected)return;
         MODELS[p]=found.models;
         try{ localStorage.setItem(d.cacheKey,JSON.stringify(found.models)); }catch(_){}
         const asked=model, have=found.models.some(m=>m[0]===asked);
         if(!have) model=d.pickDefault(found.models);
-        AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+        AI.provider=p; AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
         const label=(found.models.find(m=>m[0]===model)||[model,model])[1];
         keyMsg(icon('check','icon-sm')+' Connected — '+e(label)
               +(have?'':' <span class="err-raw">(the model you picked is not on this key)</span>'),'good');
-        setTimeout(()=>buildAI(),700);
+        setTimeout(()=>{if(btn.isConnected)connected();},700);
         return;
       }
       const r=await validateKey(p,k,model);
       if(!r.ok){ keyMsg(await apiError(r,p),'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
-      AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+      if(!btn.isConnected)return;
+      AI.provider=p; AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
       keyMsg(icon('check','icon-sm')+' Connected','good');
-      setTimeout(()=>buildAI(),450);
+      setTimeout(()=>{if(btn.isConnected)connected();},450);
     }catch(err){
       keyMsg(networkErrorMsg(err,name),'bad');
       btn.disabled=false; btn.textContent='Connect';
@@ -4256,19 +4262,7 @@ function geminiDefaultModel(models){
   return (plain||anyFlash||models[0])[0];
 }
 
-function aiSettings(){
-  const wrap=document.getElementById('ai');
-  wrap.innerHTML=`<div class="ai-head"><div class="ai-avatar">${icon("settings")}</div>
-      <div style="flex:1"><div class="ai-title">Tutor settings</div></div>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)" aria-label="Close" onclick="buildAI()">${icon("x")}</button></div>`+
-    setupHtml()+
-    `<div class="setup" style="padding-top:0">
-       <button class="btn" style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-         onclick="goMemory()">${icon('book','icon-sm')} Memory — ${typeof Memory!=='undefined'?Memory.count():0} thing${(typeof Memory!=='undefined'?Memory.count():0)===1?'':'s'} Apex remembers</button>
-       <button class="btn" style="width:100%;margin-top:8px;background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-         onclick="AI[AI.provider].key='';saveJSON('${AI_CFG}',AI);buildAI()">Remove this key</button></div>`;
-  bindSetup();
-}
+function aiSettings(){ openSettings('apex'); }
 function bindChat(q){
   const ta=document.getElementById('aiIn'), send=document.getElementById('aiSend');
   if(ta){
@@ -5186,7 +5180,9 @@ function watchSystemTheme(){
 }
 function setTheme(id){
   S.theme=id; applyTheme(); save();
-  closeThemeMenu(); render(); notifyThemeRenderers();
+  if(document.getElementById('generalSettings')) refreshSettingsThemes();
+  else {closeThemeMenu(); render();}
+  notifyThemeRenderers();
 }
 /* Kept so anything still calling it (or a keyboard shortcut) advances sensibly
    through the presets rather than throwing. */
@@ -5210,12 +5206,13 @@ function applyReadSize(){
 }
 function setReadSize(n){
   if(!(Number.isInteger(n)&&n>=0&&n<READ_SIZES.length)) return;
+  const restore=readingAnchor();
   try{ if(n) localStorage.setItem(READ_KEY,String(n)); else localStorage.removeItem(READ_KEY); }catch(_){}
-  applyReadSize();
+  applyReadSize(); applyDisplaySettings();restore();
   /* What is shown is what was kept: storage that refused the write leaves the size, and the menu, as they were. */
   const kept=readSize();
   /* Painted in place: a render would close the menu the fellow is choosing in, and the question would move under them. */
-  document.querySelectorAll('.read-opt').forEach(b=>{ const on=+b.dataset.read===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false'); });
+  document.querySelectorAll('.read-opt').forEach(b=>{ const on=+b.dataset.read===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false');b.tabIndex=on?0:-1; });
   const live=document.getElementById('srLive');
   if(live){ live.textContent=''; live.textContent='Text size: '+READ_SIZES[kept]+'.'; }
 }
@@ -5235,10 +5232,11 @@ function readWidth(){
 function applyReadWidth(){ document.documentElement.setAttribute('data-width',String(readWidth())); }
 function setReadWidth(n){
   if(!(Number.isInteger(n)&&n>=0&&n<READ_WIDTHS.length)) return;
+  const restore=readingAnchor();
   try{ if(n===WIDTH_DEFAULT) localStorage.removeItem(WIDTH_KEY); else localStorage.setItem(WIDTH_KEY,String(n)); }catch(_){}
-  applyReadWidth();
+  applyReadWidth();applyDisplaySettings();restore();
   const kept=readWidth();
-  document.querySelectorAll('.width-opt').forEach(b=>{ const on=+b.dataset.width===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false'); });
+  document.querySelectorAll('.width-opt').forEach(b=>{ const on=+b.dataset.width===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false');b.tabIndex=on?0:-1; });
   const live=document.getElementById('srLive');
   if(live){ live.textContent=''; live.textContent='Reading width: '+READ_WIDTHS[kept]+'.'; }
 }
@@ -5246,24 +5244,25 @@ function readWidthHtml(){
   const cur=readWidth();
   return `<div class="theme-menu-h" id="readWidthH">Reading width</div>
     <div class="read-row" role="group" aria-labelledby="readWidthH">${READ_WIDTHS.map((label,i)=>
-      `<button class="width-opt${i===cur?' on':''}" type="button" role="menuitemradio" aria-checked="${i===cur}" data-width="${i}"
+      `<button class="width-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-width="${i}"
         aria-label="${label}" title="${label}" onclick="setReadWidth(${i})"><span class="width-glyph" style="width:${[8,12,16,20][i]}px"></span></button>`).join('')}</div>`;
 }
 function readSizeHtml(){
   const cur=readSize();
   return `<div class="theme-menu-h" id="readSizeH">Text size</div>
     <div class="read-row" role="group" aria-labelledby="readSizeH">${READ_SIZES.map((label,i)=>
-      `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" aria-checked="${i===cur}" data-read="${i}"
+      `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-read="${i}"
         aria-label="${label}" title="${label}" onclick="setReadSize(${i})"><span style="font-size:${[13,16,19,23][i]}px">A</span></button>`).join('')}</div>`;
 }
 /* Brightness and contrast, per device (round seven). A filter on the root element: the one element whose filter does not
    become the containing block for fixed-position descendants, so the bars, the rail and Apex stay where they are. At
    100% each the filter is removed, not set to 1, so the default page is drawn exactly as before. */
 const TUNE_KEY='systole.tune';
-const TUNE={b:{min:70,max:130,label:'Brightness'},c:{min:80,max:140,label:'Contrast'}};
+const TUNE={b:{min:50,max:130,label:'Brightness'},c:{min:80,max:140,label:'Contrast'}};
 function readTune(){
   const out={b:100,c:100};
-  try{ const t=JSON.parse(localStorage.getItem(TUNE_KEY)||'{}');
+  try{ const saved=localStorage.getItem(TUNE_KEY);
+    const t=saved?JSON.parse(saved):{b:(JSON.parse(localStorage.getItem('systole.display')||'{}')||{}).brightness};
     for(const k of ['b','c']){ const v=Number(t&&t[k]); if(Number.isFinite(v)&&v>=TUNE[k].min&&v<=TUNE[k].max) out[k]=Math.round(v); } }catch(_){}
   return out;
 }
@@ -5276,10 +5275,17 @@ function setTune(k,v){
   const t=readTune(); v=Math.round(Number(v));
   if(!TUNE[k]||!Number.isFinite(v)) return;
   t[k]=Math.min(TUNE[k].max,Math.max(TUNE[k].min,v));
+  clearLegacyBrightness();
   try{ if(t.b===100&&t.c===100) localStorage.removeItem(TUNE_KEY); else localStorage.setItem(TUNE_KEY,JSON.stringify(t)); }catch(_){}
   applyTune(); paintTune();
 }
-function resetTune(){ try{ localStorage.removeItem(TUNE_KEY); }catch(_){} applyTune(); paintTune();
+function clearLegacyBrightness(){
+  try{
+    const legacy=JSON.parse(localStorage.getItem('systole.display')||'{}');
+    if(legacy&&typeof legacy==='object'&&'brightness' in legacy){delete legacy.brightness;localStorage.setItem('systole.display',JSON.stringify(legacy));}
+  }catch(_){}
+}
+function resetTune(){ clearLegacyBrightness();try{ localStorage.removeItem(TUNE_KEY); }catch(_){} applyTune(); paintTune();
   const live=document.getElementById('srLive'); if(live){ live.textContent=''; live.textContent='Brightness and contrast reset.'; } }
 function paintTune(){
   const t=readTune();
@@ -5302,29 +5308,138 @@ function tuneHtml(){
 }
 function themeOptHtml(t){
   const on=themeDef().id===t.id;
-  return `<button class="theme-opt${on?' on':''}" role="menuitemradio" aria-checked="${on}"
+  return `<button class="theme-opt${on?' on':''}" role="menuitemradio" tabindex="${on?0:-1}" aria-checked="${on}"
     onclick="setTheme('${t.id}')">
     <span class="theme-sw" style="background:linear-gradient(135deg,${t.bg} 0 55%,${t.ac} 55% 100%)"></span>
     <span class="tk">${e(t.name)}</span>
     <span class="tc">${icon('check')}</span></button>`;
 }
 let __themeMenuOpen=false, __themeMenuOff=null;
-function toggleThemeMenu(ev){
-  if(ev) ev.stopPropagation();
-  __themeMenuOpen ? closeThemeMenu() : openThemeMenu();
-}
-function openThemeMenu(){
-  const m=document.getElementById('themeMenu'); if(!m) return;
-  m.classList.add('open'); __themeMenuOpen=true;
-  /* one-shot: the next click anywhere outside dismisses it */
-  __themeMenuOff=ev=>{ if(!m.contains(ev.target)&&ev.target.id!=='themeBtn') closeThemeMenu(); };
-  setTimeout(()=>document.addEventListener('click',__themeMenuOff,{once:false}),0);
-}
+function toggleThemeMenu(){ if(document.getElementById('generalSettings'))closeSettings();else openSettings(); }
+function openThemeMenu(){openSettings();}
 function closeThemeMenu(){
   const m=document.getElementById('themeMenu'); if(m) m.classList.remove('open');
   __themeMenuOpen=false;
   if(__themeMenuOff){ document.removeEventListener('click',__themeMenuOff); __themeMenuOff=null; }
 }
+
+
+/* Device display preferences deliberately stay outside the study record. */
+const DISPLAY_KEY='systole.display';
+function readingAnchor(){
+  const candidates=[...document.querySelectorAll('.q-card,.opt,.exp-text p,.exp-text,.msg,.pearl-step')];
+  const el=candidates.find(x=>{const r=x.getBoundingClientRect();return r.bottom>80&&r.top<innerHeight;});
+  if(!el)return ()=>{};
+  const top=el.getBoundingClientRect().top;
+  let parent=el.parentElement;
+  while(parent&&parent!==document.body){if(/auto|scroll/.test(getComputedStyle(parent).overflowY)&&parent.scrollHeight>parent.clientHeight)break;parent=parent.parentElement;}
+  return ()=>{if(!el.isConnected)return;const delta=el.getBoundingClientRect().top-top;if(parent&&parent!==document.body)parent.scrollTop+=delta;else window.scrollBy(0,delta);};
+}
+function displaySettings(){
+  let v={};try{v=JSON.parse(localStorage.getItem(DISPLAY_KEY)||'{}')||{};}catch(_){}
+  return {layout:v.layout==='split'?'split':'focused',width:['narrow','standard','wide','full'][readWidth()],brightness:readTune().b};
+}
+function applyDisplaySettings(){
+  const v=displaySettings(),h=document.documentElement;
+  h.dataset.readingWidth=v.width;
+  applyTune();
+  const app=document.getElementById('app'),card=document.querySelector('.q-card');
+  const size=card?parseFloat(getComputedStyle(card).fontSize):16;
+  if(app){app.classList.toggle('reading-wide-layout',v.layout==='split'&&!!document.querySelector('.reveal-card'));app.classList.toggle('reading-split',v.layout==='split'&&!!document.querySelector('.reveal-card')&&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);}
+}
+function updateDisplaySetting(key,value){
+  if(key==='width'){setReadWidth(['narrow','standard','wide','full'].indexOf(value));return;}
+  if(key==='brightness'){setTune('b',value);return;}
+  const restore=readingAnchor(),v=displaySettings();setTune('b',v.brightness);v[key]=value;delete v.width;delete v.brightness;
+  try{localStorage.setItem(DISPLAY_KEY,JSON.stringify(v));}catch(_){}
+  applyDisplaySettings();restore();syncSettingsControls();
+}
+function syncSettingsControls(){
+  const box=document.getElementById('generalSettings');if(!box)return;
+  const v=displaySettings();
+  box.querySelector('[name="layout"]').value=v.layout;
+  paintTune();
+}
+function refreshSettingsThemes(){
+  const box=document.getElementById('settingsThemes');if(!box)return;
+  const focused=box.contains(document.activeElement);
+  box.innerHTML=THEMES.map(t=>themeOptHtml(t).replace('role="menuitemradio"','role="radio"')).join('');
+  if(focused)box.querySelector('[aria-checked="true"]')?.focus();
+}
+let settingsReturnFocus=null, settingsProvider=null;
+function closeSettings(){
+  const box=document.getElementById('generalSettings');if(!box)return;
+  if(typeof box.close==='function')box.close();box.remove();document.getElementById('settingsBackdrop')?.remove();
+  document.querySelectorAll('[data-settings-inert]').forEach(el=>{el.inert=false;el.removeAttribute('data-settings-inert');const hidden=el.getAttribute('data-settings-hidden');if(hidden==='missing')el.removeAttribute('aria-hidden');else if(hidden!==null)el.setAttribute('aria-hidden',hidden);el.removeAttribute('data-settings-hidden');});settingsProvider=null;
+  const target=settingsReturnFocus?.isConnected&&settingsReturnFocus!==document.body?settingsReturnFocus:document.getElementById('settingsBtn');target?.focus();
+}
+function settingsApex(p=AI.provider){
+  const box=document.getElementById('settingsApex');if(!box)return;
+  settingsProvider=p;
+  box.innerHTML=setupHtml(p)+`<p role="status">${AI[p].key?'A personal key is saved on this device.':p==='gemini'&&apexHosted()?'Using the site connection.':'No personal key saved.'}</p>
+    <button type="button" class="btn" id="removeApexKey">Remove saved key</button>
+    <div id="removeApexConfirm" hidden><p>Remove this provider's saved key from this device?</p>
+      <button type="button" class="btn" id="confirmRemoveApexKey">Remove key</button>
+      <button type="button" class="btn" id="cancelRemoveApexKey">Cancel</button></div>
+    <button type="button" class="btn" onclick="closeSettings();goMemory()">Apex memory</button>`;
+  bindSetup(box,()=>settingsProvider,settingsApex,()=>{if(document.getElementById('settingsApex'))settingsApex(AI.provider);});
+  const remove=box.querySelector('#removeApexKey'),confirmation=box.querySelector('#removeApexConfirm');
+  const cancel=box.querySelector('#cancelRemoveApexKey');
+  remove.onclick=()=>{confirmation.hidden=false;cancel.focus();};
+  cancel.onclick=()=>{confirmation.hidden=true;remove.focus();};
+  box.querySelector('#confirmRemoveApexKey').onclick=()=>{
+    AI[p].key='';saveJSON(AI_CFG,AI);settingsApex(p);
+    document.getElementById('removeApexKey')?.focus();
+  };
+}
+function resetDisplaySettings(){
+  try{localStorage.removeItem(DISPLAY_KEY);localStorage.removeItem(READ_KEY);}catch(_){}
+  resetTune();S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();
+}
+function openSettings(section='reading'){
+  if(document.getElementById('generalSettings')){document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle')?.focus();return;}
+  closeThemeMenu();settingsReturnFocus=document.activeElement;
+  const box=document.createElement('dialog');box.id='generalSettings';box.setAttribute('aria-labelledby','settingsTitle');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
+  box.innerHTML=`<header><h2 id="settingsTitle" tabindex="-1">Settings</h2><button type="button" class="icon-btn" onclick="closeSettings()" aria-label="Close settings">${icon('x')}</button></header>
+    <section aria-labelledby="readingSettingsHeading"><h3 id="readingSettingsHeading">Reading</h3>
+      <label>Question layout<select name="layout" onchange="updateDisplaySetting('layout',this.value)"><option value="focused">Focused</option><option value="split">Side by side</option></select></label>
+      <p>Side by side appears after answering when both columns have room to read comfortably.</p>
+      ${readSizeHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}
+      ${readWidthHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}</section>
+    <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading">Appearance</h3><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
+      ${tuneHtml()}
+      <p>Brightness and contrast affect Systole only; device brightness is unchanged.</p>
+      <button type="button" class="btn" onclick="resetDisplaySettings()">Reset display settings</button></section>
+    <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>`;
+  document.body.append(box);syncSettingsControls();refreshSettingsThemes();settingsApex();
+  box.addEventListener('cancel',ev=>{ev.preventDefault();closeSettings();});
+  box.addEventListener('click',ev=>{if(ev.target===box){const r=box.getBoundingClientRect();if(ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom)closeSettings();}});
+  box.addEventListener('keydown',ev=>{
+    // Settings owns its keys; quiz shortcuts must never receive them.
+    ev.stopPropagation();
+    if(ev.key==='Escape'){ev.preventDefault();ev.stopPropagation();closeSettings();return;}
+    if(ev.key==='Tab'){
+      const items=[...box.querySelectorAll('button,input,select,[tabindex="0"]')].filter(el=>!el.disabled&&el.getClientRects().length);
+      const first=items[0],last=items[items.length-1];
+      if(ev.shiftKey&&(document.activeElement===first||!items.includes(document.activeElement))){ev.preventDefault();last?.focus();}
+      else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first?.focus();}
+    }
+    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(ev.key)||ev.target.getAttribute('role')!=='radio')return;
+    const group=ev.target.closest('[role="radiogroup"]');if(!group)return;
+    const radios=[...group.querySelectorAll('[role="radio"]')],i=radios.indexOf(ev.target);
+    const n=ev.key==='Home'?0:ev.key==='End'?radios.length-1:(i+(['ArrowLeft','ArrowUp'].includes(ev.key)?-1:1)+radios.length)%radios.length;
+    ev.preventDefault();radios[n].click();group.querySelectorAll('[role="radio"]')[n]?.focus();
+  });
+  if(typeof box.showModal==='function')box.showModal();
+  else {
+    const backdrop=document.createElement('div');backdrop.id='settingsBackdrop';backdrop.onclick=closeSettings;document.body.insertBefore(backdrop,box);
+    for(const el of document.body.children){if(el!==box&&el!==backdrop&&!el.inert){el.inert=true;el.setAttribute('data-settings-inert','');el.setAttribute('data-settings-hidden',el.getAttribute('aria-hidden')??'missing');el.setAttribute('aria-hidden','true');}}
+    box.setAttribute('open','');
+  }
+  document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle').focus();
+}
+window.addEventListener('resize',applyDisplaySettings);
+if(document.getElementById('shell'))new MutationObserver(()=>applyDisplaySettings()).observe(document.getElementById('shell'),{attributes:true,attributeFilter:['class']});
 
 function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
@@ -6423,6 +6538,7 @@ function renderNow(){
   app.dataset.screen=S.screen;
   app.innerHTML=withScreenTitle(buildScreen());
   app.classList.toggle('again',again);
+  applyDisplaySettings();
   /* The Apex button is outside #app; on Home it shares the foot of the screen with the pages' tab bar (home.css). */
   document.body.classList.toggle('on-home',S.screen==='home');
   document.body.classList.toggle('rating-active',
@@ -6524,23 +6640,8 @@ function buildNav(){
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
       <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
-      <div class="theme-wrap">
-        <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
-          aria-haspopup="menu" id="themeBtn">${icon('palette')}</button>
-        <div class="theme-menu" id="themeMenu" role="dialog" aria-label="Display settings">
-          <div class="dp-head"><span class="dp-title">${icon('palette','icon-sm')} Display</span>
-            <button class="dp-close" type="button" onclick="closeThemeMenu()" aria-label="Close display settings">${icon('x','icon-sm')}</button></div>
-          <div role="menu" aria-label="Theme, text size and reading width">
-            <section class="dp-sec"><div class="theme-menu-h">Light</div>
-              <div class="dp-grid">${THEMES.filter(t=>t.group==='light').map(themeOptHtml).join('')}</div></section>
-            <section class="dp-sec"><div class="theme-menu-h">Dark</div>
-              <div class="dp-grid">${THEMES.filter(t=>t.group==='dark').map(themeOptHtml).join('')}</div></section>
-            <section class="dp-sec">${readSizeHtml()}</section>
-            <section class="dp-sec">${readWidthHtml()}</section>
-          </div>
-          <section class="dp-sec">${tuneHtml()}</section>
-        </div>
-      </div>
+      <button class="icon-btn" onclick="openSettings()" title="Settings" aria-label="Settings"
+        aria-haspopup="dialog" id="settingsBtn">${icon('settings')}</button>
     </div>
   </nav>`;
 }
@@ -7987,7 +8088,7 @@ function goStudy(){ S.screen='study'; render(); toTop(); }
 /* Sessions (round seven): the timed mock block and the voice drill, out of Study and into Labs, with the other things
    you do rather than read. */
 function goSessions(){ S.screen='sessions'; render(); toTop(); }
-function goLabs(){ goHome(); requestAnimationFrame(()=>{ try{ homeGo(2); }catch(_){} }); }
+function goLabs(){ homePage=2; goHome(); }
 function voiceCardHtml(){
   return voiceAvailable()?`<div class="feed-card voice-card" id="voiceCard" role="group" aria-label="Voice session">
     <div class="fc-top"><span class="fc-badge">${icon('mic')} VOICE</span></div>
@@ -8102,7 +8203,7 @@ function buildQuiz(){
       <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>
       <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:''}</div>
     </div>
-    ${figHtml}
+    <div class="reading-columns"><div class="reading-question">${figHtml}
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}
         <span class="src-badge flag-badge" id="qFlagBadge"${flagOn?'':' hidden'}>${icon('flag','icon-sm')} flagged</span>
@@ -8113,8 +8214,8 @@ function buildQuiz(){
     </div>
     ${cfRowHtml()}
     <div class="opts">${opts}</div>
-    ${kbHint}
-    ${revealHtml}
+    ${kbHint}</div>
+    <div class="reading-explanation">${revealHtml}</div></div>
     ${rateRow}
     <div class="actions">${actions}</div>
   </div>`;
