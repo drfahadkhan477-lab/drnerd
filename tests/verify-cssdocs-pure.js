@@ -16,6 +16,12 @@ const cases = [
   ['documentation touching a token', '/* keep */.a{} /* omit */ ', '/* keep */.a{}  '],
 ];
 for (const [label, input, expected] of cases) ok(label, stripCssDocs(input) === expected);
+ok('optional compaction collapses token whitespace without joining selectors or calc terms',
+  stripCssDocs('.a   .b { width:calc(1px  +  2px); }', true) === '.a .b { width:calc(1px + 2px); }');
+ok('compaction preserves strings, URLs, escapes and inline comments',
+  stripCssDocs('.a { content:"a  b";background:url("a  b");color:re/**/d }', true) === '.a { content:"a  b";background:url("a  b");color:re/**/d }');
+ok('compaction preserves hexadecimal escape terminators and a following descendant space',
+  stripCssDocs(String.raw`.\31  .b { color:red }`, true) === String.raw`.\31  .b { color:red }`);
 for (const input of ['/* incomplete', '.a{content:"incomplete', '.a{background:url(incomplete']) {
   let threw = false; try { stripCssDocs(input); } catch (_) { threw = true; }
   ok('malformed CSS is refused: ' + input.split('{')[0], threw);

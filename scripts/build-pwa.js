@@ -657,6 +657,15 @@ step('pull the heart image out of the splash', () => {
   if (!heroRe.test(appCode)) throw new Error('the hero heart <img> with an inline data: URI was not found in the app code');
   appCode = appCode.replace(heroRe, (mm, a, b) => a + url + b);
 
+  const atlasRe = /(<img class="atlas-anatomy" data-atlas-heart="img" src=")data:image\/webp;base64,([A-Za-z0-9+/=]+)(")/;
+  const atlas = atlasRe.exec(appCode);
+  if (!atlas) throw new Error('the Atlas anatomy image was not found');
+  const atlasBytes = Buffer.from(atlas[2], 'base64');
+  if (atlasBytes.slice(0,4).toString('ascii') !== 'RIFF' || atlasBytes.slice(8,12).toString('ascii') !== 'WEBP') throw new Error('invalid Atlas WebP');
+  const atlasName = splashHeartName(atlasBytes);
+  splashAssets.push([atlasName, atlasBytes]);
+  appCode = appCode.replace(atlas[0], atlas[1] + 'content/splash-heart/' + atlasName + atlas[3]);
+
   /* Neither copy may survive as base64. Checked rather than assumed: this is
      a size regression that no test screen would show and no feature would
      break — it would just be slower, forever. */
@@ -981,7 +990,7 @@ step('lift the base64 fonts out of the stylesheet', () => {
 step('ship stylesheet rules without whitespace-delimited documentation', () => {
   const { stripCssDocs } = require('./css-docs.js');
   html = html.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_, open, css, close) => open + stripCssDocs(css) + close);
+    (_, open, css, close) => open + stripCssDocs(css, true) + close);
 });
 
 /* PRELOADED, SO THE FIRST LAYOUT HAS THEM. Lifted out, the faces are only

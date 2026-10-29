@@ -137,7 +137,7 @@ body.on-home .ai-fab{bottom:max(14px,var(--sab))}
 .lab-rhythm{--lab-bg:linear-gradient(140deg,var(--navy) 0%,#0F4C5C 55%,#0F766E 100%);--lab-glow:#0F766E}
 .lab-echo{--lab-bg:linear-gradient(140deg,var(--navy) 0%,#3B1D7A 55%,#6D28D9 100%);--lab-glow:#6D28D9}
 .lab-practice{--lab-bg:linear-gradient(140deg,var(--navy) 0%,#881337 55%,#BE123C 100%);--lab-glow:#BE123C}
-.lab-sessions{--lab-bg:linear-gradient(140deg,var(--navy) 0%,#7C2D12 55%,#C2410C 100%);--lab-glow:#C2410C}
+.lab-sessions{--lab-bg:linear-gradient(140deg,var(--navy) 0%,#78350F 55%,#92400E 100%);--lab-glow:#92400E}
 .lab-card::after{content:'';position:absolute;top:0;left:-70%;width:45%;height:100%;pointer-events:none;
   background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.16),rgba(255,255,255,0));
   transform:skewX(-18deg);animation:labShine 6s ease-in-out infinite}
@@ -474,6 +474,7 @@ body.on-home .nav .icon-btn{color:var(--text);border-color:var(--border2);backgr
      minmax(0,1fr) lets the image shrink; the caption keeps its own height. */
   #homePage0 .pearl-card .pearl-fig{grid-template-rows:auto minmax(0,1fr);overflow:hidden}
   #homePage0 .pearl-card .pearl-fig img{max-height:100%;min-height:0;width:auto;object-fit:contain;padding:0;box-shadow:none}
+
   #homePage0 .pearl-card .pearl-fig figcaption{padding-top:4px}
 }
 
@@ -493,6 +494,7 @@ body.on-home .nav-title{line-height:1.1}
 /* Pause the heart and decorative loops, including the canvas fallback.
    Entrance effects must finish when a paused Home is mounted again. */
 .atlas-paused .h-beat,.atlas-paused .hero-orbit span,.atlas-paused .hero-live::before,.atlas-paused .hero-live::after,.atlas-paused .hero-heart-plate::before{animation-play-state:paused!important}
+
 .atlas-pause{position:absolute;z-index:5;right:16px;bottom:14px;min-width:64px;min-height:44px;border:1px solid var(--border2);border-radius:999px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
 @media(min-width:700px) and (max-height:1100px) and (orientation:portrait){#homePage0 .hero-mechanics{right:96px}}
 /* Captions and enlarged controls remain reachable within their constrained cards. */
@@ -675,6 +677,118 @@ body.on-home .nav-title{line-height:1.1}
 .tool-rail.mini .rail-open:focus-visible{outline:2.5px solid var(--teal);outline-offset:3px}
 @media(hover:hover){.tool-rail.mini .rail-open:hover{transform:translateY(-1px) scale(1.04)}}
 
+/* Quiet Atlas landing: the invitation and the real pearl share one reading
+   position. Begin recall reveals the full existing reader without losing it. */
+#homePage0 [hidden]{display:none!important}
+.atlas-intro{grid-area:pearl;align-self:center;padding:12px 0 12px 8px;color:var(--text);min-width:0}
+.atlas-eyebrow{display:flex;align-items:center;gap:12px;color:var(--teal-ink);font-size:var(--t-tiny);font-weight:700;letter-spacing:.25em;text-transform:uppercase}
+.atlas-eyebrow::after{content:'';width:36px;height:1px;background:var(--teal3)}
+.atlas-intro h1{font-family:'DM Serif Display',Georgia,serif;font-size:clamp(48px,3rem + 3vw,88px);font-weight:400;line-height:.98;letter-spacing:-.045em;margin:18px 0 22px}
+.atlas-intro h1::after{content:'';display:block;width:38%;height:4px;border-radius:50%;background:var(--teal2);opacity:.6;margin-top:12px;transform:rotate(-2deg)}
+.atlas-description{font-size:var(--t-body);line-height:1.6;color:var(--muted);margin:0 0 18px}
+.atlas-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;list-style:none;padding:0;margin:0 0 22px}
+.atlas-steps li{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.atlas-step-icon{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--teal4);color:var(--teal-ink);margin-bottom:5px}
+.atlas-step-icon .icon{width:30px;height:30px}
+.atlas-steps li:last-child .atlas-step-icon{background:var(--card);color:var(--text)}
+.atlas-steps strong{font-family:'DM Serif Display',Georgia,serif;font-size:var(--t-h4);font-weight:400}
+.atlas-steps li>span:last-child{font-size:var(--t-tiny);line-height:1.4;color:var(--muted)}
+.atlas-intro-actions{display:flex;gap:12px;align-items:center}
+.atlas-primary,.atlas-note,.atlas-back{display:inline-flex;align-items:center;justify-content:center;gap:12px;font:inherit;cursor:pointer;min-height:44px}
+.atlas-primary{padding:12px 24px;border:0;border-radius:999px;background:var(--teal-ink);color:var(--white)}
+.atlas-note{padding:12px 20px;border:1px solid var(--border2);border-radius:999px;background:var(--card);color:var(--text)}
+.atlas-back{padding:4px 0;border:0;background:transparent;color:var(--teal-ink);font-size:var(--t-tiny);justify-content:flex-start}
+.atlas-session-icon{display:flex;align-items:center;justify-content:center;flex:0 0 64px;height:64px;border:6px solid var(--teal3);border-top-color:var(--teal-ink);border-radius:50%;color:var(--teal-ink)}
+.atlas-session>div{flex:1;min-width:0}
+.atlas-session small{font-size:var(--t-micro);font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--teal-ink)}
+.atlas-session p{margin:4px 0 0;font-size:var(--t-tiny);color:var(--muted)}
+#app[data-screen="home"] #homePage0 .atlas-hero-summary{display:none}
+#homePage0 .hero-live{border:0;background:transparent;box-shadow:none}
+#homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d{top:0;left:0;right:0;width:100%;height:88%;max-width:none}
+#homePage0 .hero-ecg{opacity:.1}
+#homePage0 .hero-live-status{bottom:22px;left:12px;background:transparent;font-family:Georgia,serif;font-style:italic}
+#homePage0 .hero-mechanics{bottom:14px;left:auto;right:88px;background:var(--card)}
+body.on-home .nav .atlas-search{width:auto;gap:10px;padding:0 16px}
+.atlas-search span{font-size:var(--t-tiny);color:var(--muted)}
+@media(min-width:1000px){
+ body.on-home .nav{padding-left:104px}
+ body.on-home .nav-brand>div:last-child{display:flex;align-items:center;gap:16px}
+ body.on-home .nav-sub{padding-left:16px;border-left:1px solid var(--border2);font-family:Georgia,serif;font-style:italic}
+ body.on-home .nav .atlas-search{min-width:280px}
+}
+@media(min-width:700px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap:not(.atlas-reading){grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"pearl hero" "session session" "hello hello"}
+ .atlas-intro h1{font-size:clamp(40px,2.5rem + 1vw,64px)}
+ .atlas-steps{gap:12px}
+ .atlas-step-icon{width:48px;height:48px}
+ .atlas-steps strong{font-size:var(--t-body)}
+ .atlas-intro-actions{flex-wrap:wrap}
+ #homePage0 .hero-heart-plate,#homePage0 .hero-heart-3d{top:12%;height:66%;width:100%;right:0}
+ #homePage0 .hero-live-status{bottom:72px}
+ #homePage0 .hero-mechanics{right:80px;padding:8px;font-size:var(--t-tiny)}
+}
+@media(max-width:699px){
+ .atlas-intro{padding:20px 8px}
+ .atlas-intro h1{font-size:clamp(48px,3rem + 2vw,72px)}
+ #homePage0 .hero-live{min-height:320px}
+ .atlas-session{flex-wrap:wrap}
+ .atlas-session-icon{display:none}
+ .atlas-session button{width:100%}
+ .atlas-search span{display:none}
+ body.on-home .nav .atlas-search{width:40px;padding:0}
+ .atlas-intro-actions{flex-wrap:wrap}
+}
+@media(min-width:700px) and (max-height:760px) and (orientation:landscape){
+ .atlas-intro h1{font-size:clamp(42px,2.5rem + 2vw,64px);margin:12px 0}
+ .atlas-description{margin-bottom:12px}
+ .atlas-step-icon{width:48px;height:48px}
+ .atlas-steps{margin-bottom:14px}
+ .atlas-session{padding:10px 20px}
+}
+#app[data-screen="home"] #homePage0 .home-wrap>.atlas-intro{grid-area:pearl}
+.atlas-anatomy{position:absolute;top:1%;left:1%;width:98%;height:87%;object-fit:contain;animation:atlas-breathe 6s ease-in-out infinite;transform-origin:50% 65%}
+#homePage0 .hero-live:not(.atlas-3d) .hero-heart-3d,#homePage0 .hero-live:not(.atlas-3d) .hero-heart-plate,#homePage0 .hero-live:not(.atlas-3d) .hero-ecg{visibility:hidden}
+#homePage0 .hero-live.atlas-3d .atlas-anatomy{display:none}
+@keyframes atlas-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.015)}}
+@media(prefers-reduced-motion:reduce){.atlas-anatomy{animation:none}}
+.atlas-step-arrow{position:absolute;top:22px;left:72%;color:var(--muted);opacity:.5}
+.atlas-step-arrow .icon{width:32px;height:24px}
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:150px minmax(0,1fr) auto auto}
+}
+.atlas-cutaway{position:absolute;bottom:68px;right:16px;z-index:5;min-height:44px;border:1px solid var(--border2);border-radius:999px;padding:8px 14px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+
+
+/* The selected reference retains its bottom session strip. */
+@media(min-width:700px) and (orientation:landscape){
+ #app[data-screen="home"] #homePage0 .home-wrap{grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"pearl hero" "session session" "hello hello"}
+}
+@media(min-width:700px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:240px minmax(0,1fr) auto auto;grid-template-areas:"hero" "pearl" "session" "hello"}
+}
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:150px minmax(0,1fr) auto auto}
+}
+.atlas-paused .atlas-anatomy{animation-play-state:paused!important}
+#homePage0 .hero-live:not(.atlas-3d) .hero-tools,#homePage0 .hero-live:not(.atlas-3d) .hero-scan-credit{display:none}
+
+
+#homePage0 .hero-live:not(.atlas-3d) .hero-heart-hit,#homePage0 .hero-live:not(.atlas-3d) .hero-menu{display:none}
+body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform:none;letter-spacing:0;font-weight:400}
+
+/* The focused reader uses the room occupied by the landing session strip. */
+#homePage0 .atlas-reading .atlas-session,#homePage0 .atlas-reading .pearl-tag{display:none}
+@media(min-width:700px) and (orientation:landscape){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:minmax(0,1fr) auto;grid-template-areas:"pearl hero" "hello hello"}
+}
+@media(min-width:700px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:208px minmax(0,1fr) auto;grid-template-areas:"hero" "pearl" "hello"}
+}
+
+/* On a short portrait tablet, keep the illustration secondary while reading. */
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:96px minmax(0,1fr) auto}
+}
 
 /* Round seven. Four labs in a row on a wide window, two by two in portrait. */
 @media(min-width:700px) and (orientation:portrait){.labs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -708,3 +822,16 @@ body.on-home .nav-title{line-height:1.1}
   background:var(--card);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .tune-reset:disabled{opacity:.45;cursor:default}
 .tune-reset:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
+
+/* Study-tool icons greet once when Labs opens; interaction adds a small lift. */
+.door-ic .icon{transition:transform .2s ease;transform-origin:center}
+.door-ic [data-icon="book"]{--door-turn:-10deg}
+.door-ic [data-icon="search"]{--door-turn:10deg}
+.door-ic [data-icon="folder"]{--door-turn:-8deg}
+.door-ic [data-icon="highlighter"]{--door-turn:12deg}
+#homePage2:not([aria-hidden="true"]) .door-ic .icon{animation:door-greet .65s ease}
+.door:focus-visible .door-ic .icon{transform:translateY(-3px) rotate(var(--door-turn,0deg))}
+@media(hover:hover){.door:hover .door-ic .icon{transform:translateY(-3px) rotate(var(--door-turn,0deg))}}
+.door:active .door-ic .icon{transform:scale(.92)}
+@keyframes door-greet{0%,100%{transform:none}45%{transform:translateY(-4px) rotate(var(--door-turn,0deg)) scale(1.12)}}
+@media(prefers-reduced-motion:reduce){#homePage2 .door-ic .icon{animation:none!important;transition:none;transform:none!important}}

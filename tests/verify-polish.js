@@ -415,19 +415,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await page.evaluate(()=>{homePage=0;goHome();render();});
     await settled(page,()=>S.screen==='home'&&!!document.getElementById('homePage0')&&!window.__vtLive,{label:'Home semantics'});
     const doc = await page.evaluate(() => {
-      const h1s = document.querySelectorAll('.home-page:not([inert]) h1');
+      goHome(); render();
+      const h1s = [...document.querySelectorAll('h1')].filter(h=>!h.closest('[inert],[hidden]')&&h.getClientRects().length);
       const mains = document.querySelectorAll('main');
-      const hero = document.querySelector('#pearlConcept')||document.querySelector('#homePage0 .hero-h1');
+      const hero = document.getElementById('atlasTitle');
+
       const cs = hero ? getComputedStyle(hero) : null;
       const heroWeight = cs ? cs.fontWeight : null;
       const heroMarginTop = cs ? cs.marginTop : null;
+      const h1Text=h1s.length?h1s[0].innerText.replace(/\s+/g,' ').trim():null;
       goStats(); render();
       const hd = document.querySelector('.app-disclaim');
       return {
         h1Count: h1s.length,
-        h1Text: h1s.length ? h1s[0].textContent.trim() : null,
-        h1IsHero: !!hero && hero.tagName === 'H1' && h1s[0]===hero,
-        expectedTitle: pearlCurrent?(pearlCurrent.concept||pearlCurrent.title):'Make one idea stick.',
+        h1Text,
+        h1IsHero: !!hero && hero.tagName === 'H1',
+
         mainCount: mains.length,
         mainIsApp: mains.length ? mains[0].id : null,
         heroWeight, heroMarginTop,
@@ -442,15 +445,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : h;
     };
 
-    ok('the active page has exactly one <h1>', doc.h1Count === 1, String(doc.h1Count));
-    ok('and it names the current pearl or empty-library prompt',
-       doc.h1IsHero && doc.h1Text === doc.expectedTitle, JSON.stringify({ isPageTitle: doc.h1IsHero }));
+    ok('the active page exposes exactly one visible <h1>', doc.h1Count === 1, String(doc.h1Count));
+    ok('and it is the selected Home invitation title',
+       doc.h1IsHero && doc.h1Text === 'Make one idea stick.', JSON.stringify({ text: doc.h1Text, isHero: doc.h1IsHero }));
+
     ok('the page has exactly one <main> landmark', doc.mainCount === 1, String(doc.mainCount));
     ok('and it is the app region itself', doc.mainIsApp === 'app', String(doc.mainIsApp));
     /* The tag swap must not be a visual change: a bare <h1> would inherit the
        user agent's bold and .67em top margin. */
-    ok('the active heading does not inherit UA weight or top margin',
-       doc.heroWeight === '400' && doc.heroMarginTop === '0px',
+    ok('the invitation uses its intended serif weight and spacing',
+       doc.heroWeight === '400' && doc.heroMarginTop === '18px',
+
        JSON.stringify({ weight: doc.heroWeight, marginTop: doc.heroMarginTop }));
 
     ok('the Progress screen carries a disclaimer', !!doc.disclaimText && /education|board preparation/i.test(doc.disclaimText),
