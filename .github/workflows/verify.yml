@@ -666,6 +666,9 @@ jobs:
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
         name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (72 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
+        name: unified Settings preserves reading preferences, credentials and drafts (23 checks)
+        run: node tests/verify-settings.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html
@@ -990,6 +993,9 @@ jobs:
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
         name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (72 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
+        name: unified Settings preserves reading preferences, credentials and drafts (23 checks)
+        run: node tests/verify-settings.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
         run: node tests/verify-topicrunscreen.js build/synthetic/systole.html

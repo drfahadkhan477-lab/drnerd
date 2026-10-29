@@ -1,0 +1,153 @@
+{
+  "status": "checkpoint; full release validation pending",
+  "runtimeBaseCommit": "0f51e9e",
+  "scope": "Reference-led Home redesign integrated with current master; upstream Memorizer removal preserved",
+  "observedChromium": {
+    "home": 67,
+    "homepager": 86,
+    "pearl": 99
+  },
+  "observedWebKit": {
+    "home": 67,
+    "homepager": 86,
+    "pearl": 99,
+    "a11y": 19,
+    "type": 12,
+    "tokens": 119,
+    "floor": 15,
+    "tapsAfterHeaderFix": 24
+  },
+  "measurementNote": "Focused runs, not one complete release run. Source subsequently changed to fix header controls; full validation still required.",
+  "negativeEvidence": [
+    "All six new landing checks fail with their corresponding injected defect and pass without it.",
+    "Header control count and visible-search size checks fail with an extra control and collapsed search.",
+    "Duplicate heading, incorrect invitation title and altered type styles each fail the revised polish assertions."
+  ],
+  "pwa": {
+    "shellGzipKB": 272,
+    "budgetKB": 280,
+    "validation": "WebKit: build, 121 PWA checks, 15 Pages checks and 10 cache-bucket checks passed before subsequent caption fix; final release recheck pending."
+  },
+  "privateContent": "Original export and library retained; raw logs and screenshots outside Git.",
+  "deployment": "Not performed; validation pending.",
+  "fullChromiumFirstRun": {
+    "selectedSuites": 157,
+    "passedSuites": 151,
+    "reportedChecks": 6978,
+    "status": "failed",
+    "failingSuites": [
+      "homepager",
+      "polish",
+      "echo",
+      "notesearch",
+      "heroart",
+      "heartreuse"
+    ],
+    "fixes": "Deterministic caption Home/End; visible heading semantics; correct extraction boundaries for nav fixtures; enter Explore in 3D before pixel/lifecycle checks."
+  },
+  "postFixFocused": {
+    "homepager": 86,
+    "echo": 35,
+    "notesearch": 16,
+    "heroart": 33,
+    "heartreuse": 30,
+    "polish": 79
+  },
+  "latestMasterIntegration": {
+    "master": "71f8843",
+    "status": "Merged and pushed; targeted Chromium suites pass; PWA and WebKit rechecks pending.",
+    "preserved": [
+      "Latest Apex rail placement; Echo available from Labs",
+      "scanned heart with attribution/menu",
+      "pearl subject and sizing fixes",
+      "chapter resume and reading width",
+      "CI sharding",
+      "upstream Memorizer removal",
+      "Display settings with brightness and contrast",
+      "Mock and voice sessions in Labs",
+      "Required CI job names guard"
+    ],
+    "note": "Earlier focused/private results do not certify this combined source.",
+    "checkpointCommit": "1a0aa63",
+    "pullRequest": "https://github.com/drfahadkhan477-lab/drnerd/pull/318",
+    "focusedChromium": {
+      "pearl": 142,
+      "homepagerBeforePortraitRegression": 99,
+      "taps": 27
+    },
+    "visualReview": "Fresh landscape/portrait captures reviewed; all three landing pages fit checked viewports. Differences documented in design-qa.md.",
+    "pwaShellGzipKB": 279,
+    "fullValidation": "Previous source passed 7113 checks across all 156 app suites; PWA failed two scanned-heart menu checks. PWA test now enters Explore in 3D before inspecting that menu. New master integration still requires full validation.",
+    "privateInputIntegrity": {
+      "files": 774,
+      "mismatches": 0
+    },
+    "negativeEvidence": [
+      "Disabling first-letter capitalization triggers the capitalization assertion FAIL.",
+      "The existing layout check reported the animated heart escaping its container by 3 pixels before the inset fix.",
+      "Showing the legacy hero summary deliberately triggers both new portrait assertions (744 and 834 widths)."
+    ],
+    "focusedChromiumAfterInset": {
+      "pearl": 142,
+      "layout": 26,
+      "homepager": 101,
+      "taps": 27,
+      "total": 296
+    },
+    "focusedWebKitAfterPortraitFix": {
+      "pearl": 142,
+      "homepager": 101,
+      "floor": 15,
+      "taps": 27,
+      "home": 68,
+      "total": 353
+    },
+    "pureSuitesOnPush": 77,
+    "master71FocusedChromium": {
+      "readsize": 99,
+      "mockscreen": 174,
+      "voicescreen": 43,
+      "taps": 27,
+      "studyvisuals": 26,
+      "echo": 35,
+      "notesearch": 16,
+      "homepagerBeforeSessionsRegression": 101
+    },
+    "sessionsCardFix": "Restored a dark painted surface behind white labels. New Labs surface assertion failed before the fix and passed after it.",
+    "pwaRecheck": "Regenerated content; PWA, Pages and cache checks green in both engines after menu-entry and shell-size fixes.",
+    "master71FocusedWebKit": {
+      "readsize": 99,
+      "mockscreen": 174,
+      "voicescreen": 43,
+      "taps": 27,
+      "studyvisuals": 26,
+      "echo": 35,
+      "notesearch": 16,
+      "homepager": 102
+    }
+  },
+  "iconMotion": {
+    "behavior": "Study-tool icons animate once on entering Labs, lift on hover/focus and respond to presses; reduced motion disables movement.",
+    "measured": "Direct Chromium and WebKit landing checks pass. Motion and reduced-motion checks each failed with the corresponding behavior deliberately disabled.",
+    "cssChecks": {
+      "whitespaceCompaction": 16,
+      "hoverGuards": 21,
+      "cssFloor": 142
+    },
+    "shellBytesGzip": 286564,
+    "shellBudgetBytes": 286720,
+    "releaseValidation": "Focused Home plus PWA/Pages/cache checks green in Chromium and WebKit; fresh full app runs pending.",
+    "chromium": {
+      "homepager": 104,
+      "pwa": 130,
+      "pages": 15,
+      "cachebuckets": 10
+    },
+    "webkit": {
+      "homepager": 104,
+      "pwa": 129,
+      "pages": 15,
+      "cachebuckets": 10
+    }
+  }
+}

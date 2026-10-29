@@ -102,7 +102,7 @@
     "checksAfterFix": {
       "cssFloorPassed": 144
     },
-    "fullSuiteRerun": "pending"
+    "fullSuiteRerun": "97 pearl checks passed on 818a02d; full application validation pending on newer 0e88344"
   },
   "pending": [
     "Complete Chromium Systole validation after fix",
@@ -112,5 +112,36 @@
     "Update PR review status; no production deployment performed"
   ],
   "rawLogs": "Not committed: may contain licensed content",
-  "generatedTestStats": "Not edited"
+  "generatedTestStats": "Not edited",
+  "latestCheckpoint": {
+    "commit": "0e88344b1168072d231efaf3961201ff38153150",
+    "privateBuildRegenerated": true,
+    "pwaBuildId": "0ba58cd94b4fdd37",
+    "inputHashesVerified": 774,
+    "inputHashMismatches": 0,
+    "portraitFixValidation": {
+      "commit": "818a02d",
+      "engine": "chromium",
+      "suite": "pearl",
+      "passed": 97,
+      "failed": 0
+    },
+    "tabletGeometry": {
+      "viewports": [
+        "1180x820",
+        "834x1194",
+        "1024x768"
+      ],
+      "pages": [
+        "Home",
+        "Brain",
+        "Labs"
+      ],
+      "overflowCases": 0,
+      "measuredCases": 9
+    },
+    "fullChromium": "running: 157 Systole suites, followed by PWA",
+    "webkit": "queued: Home, homepager, pearl, accessibility, typography, tokens, taps, floor and PWA",
+    "production": "unchanged"
+  }
 }

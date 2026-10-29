@@ -215,7 +215,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       opts: document.querySelectorAll('.mock-opt').length, keys: QBYID[S.mock.ids[0]].o.length,
     }));
     ok('pressing Start opens the block on the first question, of the size asked for', r.screen === 'mock' && r.n === 12 && /Question 1 of 12/.test(r.header), r.header.replace(/\n/g, ' '));
-    ok('the top bar has no search, no notes search and no Echo; only the theme menu is left', !r.nav.some(x => /openSearch|goNoteSearch|goEcho/.test(x)) && r.nav.some(x => /toggleThemeMenu/.test(x)), r.nav.join('|'));
+    ok('the top bar has no search, no notes search and no Echo; only Settings is left', !r.nav.some(x => /openSearch|goNoteSearch|goEcho/.test(x)) && r.nav.some(x => /openSettings/.test(x)), r.nav.join('|'));
     ok('the Apex button and panel are gone, and the panel is shut', r.fab === 'none' && r.panel === 'none' && !/ai-open|ai-full/.test(r.shell), r.fab + '/' + r.panel);
     ok('the pen and note tools are put away too', r.rail === true);
     ok('the chapter is not on the screen: not as a badge, not in the words (read as drawn, where the stylesheet capitals them)', !r.badge && !r.text.toLowerCase().includes(r.ch.toLowerCase()), r.ch);

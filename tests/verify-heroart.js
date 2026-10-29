@@ -86,6 +86,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const tMain = Date.now();
   await page.waitForFunction(() => !!document.getElementById('heroHeart'), null, { timeout: 60000 });
   events.push(`main page hero after ${Math.round((Date.now() - tMain) / 1000)}s`);
+  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
   /* Wait for a mounted instance rather than a duration — the mesh is built by
      surface nets at mount and how long that takes is a property of the machine
      this happens to run on. Bounded, so a mount that never happens fails

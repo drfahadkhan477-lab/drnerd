@@ -117,6 +117,9 @@
 
 <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5.2C12 3.9 10.9 3 9.6 3 8.2 3 7.2 4 7.1 5.2 5.5 5.5 4.4 6.9 4.7 8.5 3.5 9.3 3.1 10.9 3.7 12.1 3.1 13.4 3.3 15 4.4 15.9 4.3 17.6 5.5 19 7.2 19.1 7.8 20.3 8.9 21 10.2 21 11.3 21 12 20.2 12 19.1Z"/><path d="M12 5.2C12 3.9 13.1 3 14.4 3 15.8 3 16.8 4 16.9 5.2 18.5 5.5 19.6 6.9 19.3 8.5 20.5 9.3 20.9 10.9 20.3 12.1 20.9 13.4 20.7 15 19.6 15.9 19.7 17.6 18.5 19 16.8 19.1 16.2 20.3 15.1 21 13.8 21 12.7 21 12 20.2 12 19.1Z"/><path d="M12 5.2v13.9M8.2 9c1.1 0 1.9.8 1.9 1.9M15.8 9c-1.1 0-1.9.8-1.9 1.9M8.3 15.2c1 0 1.8-.6 1.8-1.6M15.7 15.2c-1 0-1.8-.6-1.8-1.6"/></symbol>
 
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+  <circle cx="12" cy="12" r="3" /></symbol>
+<symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /></symbol>
 <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
 
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C4 4.4 5 4 6.5 4H12v15H6.5C5 19 4 18.6 4 17.5Z"/><path d="M20 5.5C20 4.4 19 4 17.5 4H12v15h5.5c1.5 0 2.5-.4 2.5-1.5Z"/></symbol>
@@ -1587,9 +1590,8 @@ ${head}
 ${refSafe(body)}
 <<</${label}-${F}>>>`;
 }
-function groundedContext(userText,q){
-  const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{limit:40})
-              .filter(h=>h.meta.kind==='r').slice(0,6);
+function groundedContext(userText,q,limit=6){
+  const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{kind:'r',limit});
   if(!hits.length){
     return {text:'\n\nTHE FELLOW\u2019S REFERENCE LIBRARY RETURNED NOTHING for this question. Tell them their notes do not cover it — do not answer from your own knowledge.\n', hits:[]};
   }
@@ -1597,7 +1599,7 @@ function groundedContext(userText,q){
   for(const h of hits){
     const r=REF.find(x=>x.id===h.meta.id); if(!r) continue;
     const block=refBlock('NOTE',
-      `title: ${refSafe(r.title||'Untitled')}${r.source?'\n    source: '+refSafe(r.source):''}${r.tags?'\n    tags: '+refSafe(r.tags):''}`,
+      `title: ${refSafe(r.title||'Untitled')}${r.source?'\n    source: '+refSafe(r.source):''}${r.tags?'\n    tags: '+refSafe(r.tags):''}${String(r.body||'').length>4000?'\n    excerpt: truncated; additional text is not supplied':''}`,
       clip(r.body,4000));
     if(used+block.length>CTX_BUDGET*3) break;
     used+=block.length; parts.push(block); kept.push(h.meta);
@@ -2596,14 +2598,17 @@ function runTool(name,input){
     input=input||{};
     if(name==='search_question_bank'){
       const n=Math.min(Math.max(input.limit||4,1),6);
-      /* Grounded mode leaves the bank out of this door as groundedContext()
-         does: a bank item carries its answer and commentary, the key that mode
-         withholds. Notes only, searched as wide as groundedContext() searches. */
-      let hits=search(String(input.query||''),{limit:AI_GROUNDED?40:n});
-      if(AI_GROUNDED) hits=hits.filter(h=>h.meta.kind==='r').slice(0,n);
-      if(!hits.length) return {result:AI_GROUNDED
-        ? 'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.'
-        : 'No matching items in the bank.'};
+      const query=String(input.query||'');
+      /* Follow-up searches carry the same provenance, excerpt size, fences and
+         total evidence budget as the initial grounded context. Cite only notes
+         actually included within that budget. */
+      if(AI_GROUNDED){
+        const context=groundedContext(query,null,n);
+        return {result:context.hits.length?context.text:
+          'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.',cite:context.hits};
+      }
+      const hits=search(query,{limit:n});
+      if(!hits.length) return {result:'No matching items in the bank.'};
       const byId=Object.fromEntries(ALL_Q.map(x=>[x.id,x]));
       const rows=hits.map(h=>{
         if(h.meta.kind==='r'){
@@ -4032,9 +4037,9 @@ function visionBadge(q){
     ? ` · sees ${n} figure${plural}`
     : ` · ${n} figure${plural}, not visible to this model`;
 }
-function setupHtml(){
-  const p=AI.provider, meta=PROVIDERS.find(x=>x[0]===p);
-  const models=MODELS[p], active=cur();
+function setupHtml(p=AI.provider){
+  const meta=PROVIDERS.find(x=>x[0]===p);
+  const models=MODELS[p], active=AI[p];
   const onSite=location.protocol!=='file:';
   return `<div class="setup">
     <div class="setup-hero">
@@ -4047,11 +4052,12 @@ function setupHtml(){
          <span class="pp-name">${e(name)}</span><span class="pp-tag">${e(tag)}</span>
        </button>`).join('')}</div>
     <div class="key-row">
-      <input id="aiKey" type="password" placeholder="${KEY_PREFIX[p]?(Array.isArray(KEY_PREFIX[p])?KEY_PREFIX[p][0]:KEY_PREFIX[p])+'...':'Paste your key'}" autocomplete="off"
+      <input id="aiKey" aria-label="API key" type="password" placeholder="${KEY_PREFIX[p]?(Array.isArray(KEY_PREFIX[p])?KEY_PREFIX[p][0]:KEY_PREFIX[p])+'...':'Paste your key'}" autocomplete="off"
         spellcheck="false" autocapitalize="off" inputmode="text" value="${e(active.key)}">
       <button class="key-paste" id="aiPaste" title="Paste from clipboard">${icon("clipboard","icon-sm")}</button>
     </div>
-    <div id="keyMsg" class="key-msg"></div>
+    <button type="button" class="btn" id="aiKeyVisibility" aria-pressed="false">Show key</button>
+    <div id="keyMsg" class="key-msg" role="status"></div>
     <select id="aiModel" aria-label="Model">${models.map(m=>`<option value="${m[0]}"${active.model===m[0]?' selected':''}>${m[1]}</option>`).join('')}</select>
     <button class="btn btn-next" id="aiSave" style="width:100%;margin-top:10px">Connect</button>
     <div class="note" id="setupNote">${meta[3]} Stored only in this device's storage, sent only to the provider you picked, never written into this file.</div>
@@ -4077,10 +4083,13 @@ const DISCOVER={
     askMsg:'Asking Google which models this key can use…', vendor:'Google',
     hint:'A key made with <b>Get API key</b> in Google AI Studio gets the free tier without any billing account — try creating a fresh one there.'},
 };
-function bindSetup(){
-  const btn=document.getElementById('aiSave'), inp=document.getElementById('aiKey');
-  const paste=document.getElementById('aiPaste');
-  document.querySelectorAll('[data-prov]').forEach(b=>b.onclick=()=>switchProvider(b.dataset.prov));
+function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvider, connected=()=>buildAI()){
+  const find=id=>root.querySelector('#'+id);
+  const btn=find('aiSave'), inp=find('aiKey'), paste=find('aiPaste');
+  const keyMsg=(text,cls)=>{const el=find('keyMsg');if(el){for(const key of [inp?.value,...Object.values(AI).map(v=>v&&v.key)].filter(k=>typeof k==='string'&&k.length>4)){text=String(text).split(key).join('[redacted]').split(e(key)).join('[redacted]');}el.className='key-msg '+(cls||'');el.innerHTML=text;}};
+  const visibility=find('aiKeyVisibility');
+  if(visibility) visibility.onclick=()=>{const show=inp.type==='password';inp.type=show?'text':'password';visibility.textContent=show?'Hide key':'Show key';visibility.setAttribute('aria-pressed',String(show));};
+  root.querySelectorAll('[data-prov]').forEach(b=>b.onclick=()=>switched(b.dataset.prov));
   if(inp){
     inp.addEventListener('paste',()=>setTimeout(()=>{ inp.value=cleanKey(inp.value); },0));
     inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault();btn.click();} });
@@ -4091,7 +4100,7 @@ function bindSetup(){
   };
   if(!btn)return;
   btn.onclick=async()=>{
-    const p=AI.provider, name=(PROVIDERS.find(x=>x[0]===p)||['',p])[1];
+    const p=provider(), name=(PROVIDERS.find(x=>x[0]===p)||['',p])[1];
     const k=cleanKey(inp.value);
     if(!k){ keyMsg('Paste your key first.','warn'); return; }
     const validPrefixes=[].concat(KEY_PREFIX[p]);
@@ -4100,7 +4109,7 @@ function bindSetup(){
       return;
     }
     btn.disabled=true; btn.textContent='Checking…'; keyMsg(`Verifying with ${name}…`,'');
-    let model=document.getElementById('aiModel').value;
+    let model=find('aiModel').value;
     try{
       if(DISCOVER[p]){
         const d=DISCOVER[p];
@@ -4119,22 +4128,24 @@ function bindSetup(){
                 +' '+d.hint,'bad');
           btn.disabled=false; btn.textContent='Connect'; return;
         }
+        if(!btn.isConnected)return;
         MODELS[p]=found.models;
         try{ localStorage.setItem(d.cacheKey,JSON.stringify(found.models)); }catch(_){}
         const asked=model, have=found.models.some(m=>m[0]===asked);
         if(!have) model=d.pickDefault(found.models);
-        AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+        AI.provider=p; AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
         const label=(found.models.find(m=>m[0]===model)||[model,model])[1];
         keyMsg(icon('check','icon-sm')+' Connected — '+e(label)
               +(have?'':' <span class="err-raw">(the model you picked is not on this key)</span>'),'good');
-        setTimeout(()=>buildAI(),700);
+        setTimeout(()=>{if(btn.isConnected)connected();},700);
         return;
       }
       const r=await validateKey(p,k,model);
       if(!r.ok){ keyMsg(await apiError(r,p),'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
-      AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
+      if(!btn.isConnected)return;
+      AI.provider=p; AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
       keyMsg(icon('check','icon-sm')+' Connected','good');
-      setTimeout(()=>buildAI(),450);
+      setTimeout(()=>{if(btn.isConnected)connected();},450);
     }catch(err){
       keyMsg(networkErrorMsg(err,name),'bad');
       btn.disabled=false; btn.textContent='Connect';
@@ -4256,19 +4267,7 @@ function geminiDefaultModel(models){
   return (plain||anyFlash||models[0])[0];
 }
 
-function aiSettings(){
-  const wrap=document.getElementById('ai');
-  wrap.innerHTML=`<div class="ai-head"><div class="ai-avatar">${icon("settings")}</div>
-      <div style="flex:1"><div class="ai-title">Tutor settings</div></div>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)" aria-label="Close" onclick="buildAI()">${icon("x")}</button></div>`+
-    setupHtml()+
-    `<div class="setup" style="padding-top:0">
-       <button class="btn" style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-         onclick="goMemory()">${icon('book','icon-sm')} Memory — ${typeof Memory!=='undefined'?Memory.count():0} thing${(typeof Memory!=='undefined'?Memory.count():0)===1?'':'s'} Apex remembers</button>
-       <button class="btn" style="width:100%;margin-top:8px;background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-         onclick="AI[AI.provider].key='';saveJSON('${AI_CFG}',AI);buildAI()">Remove this key</button></div>`;
-  bindSetup();
-}
+function aiSettings(){ openSettings('apex'); }
 function bindChat(q){
   const ta=document.getElementById('aiIn'), send=document.getElementById('aiSend');
   if(ta){
@@ -4405,7 +4404,11 @@ async function streamReply(q,hist,extra){
         const out=runTool(c.name,c.input);
         if(out.cite) lastHits=(lastHits||[]).concat(out.cite).slice(-6);
         toolTrace.push({kind:'call',name:c.name,input:c.input});
-        return {id:c.id, name:c.name, content:String(out.result).slice(0,9000)};
+        // Grounded search already budgets whole fenced notes. A second character
+        // cut here could remove a qualification and leave its fence unclosed.
+        const content=String(out.result);
+        return {id:c.id, name:c.name, content:AI_GROUNDED&&c.name==='search_question_bank'
+          ?content:content.slice(0,9000)};
       });
       pushToolExchange(wire,turn,results);      // provider-shaped, see below
       buildAI();                                // show the tool chips as they run
@@ -5186,7 +5189,9 @@ function watchSystemTheme(){
 }
 function setTheme(id){
   S.theme=id; applyTheme(); save();
-  closeThemeMenu(); render(); notifyThemeRenderers();
+  if(document.getElementById('generalSettings')) refreshSettingsThemes();
+  else {closeThemeMenu(); render();}
+  notifyThemeRenderers();
 }
 /* Kept so anything still calling it (or a keyboard shortcut) advances sensibly
    through the presets rather than throwing. */
@@ -5210,12 +5215,13 @@ function applyReadSize(){
 }
 function setReadSize(n){
   if(!(Number.isInteger(n)&&n>=0&&n<READ_SIZES.length)) return;
+  const restore=readingAnchor();
   try{ if(n) localStorage.setItem(READ_KEY,String(n)); else localStorage.removeItem(READ_KEY); }catch(_){}
-  applyReadSize();
+  applyReadSize(); applyDisplaySettings();restore();
   /* What is shown is what was kept: storage that refused the write leaves the size, and the menu, as they were. */
   const kept=readSize();
   /* Painted in place: a render would close the menu the fellow is choosing in, and the question would move under them. */
-  document.querySelectorAll('.read-opt').forEach(b=>{ const on=+b.dataset.read===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false'); });
+  document.querySelectorAll('.read-opt').forEach(b=>{ const on=+b.dataset.read===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false');b.tabIndex=on?0:-1; });
   const live=document.getElementById('srLive');
   if(live){ live.textContent=''; live.textContent='Text size: '+READ_SIZES[kept]+'.'; }
 }
@@ -5235,10 +5241,11 @@ function readWidth(){
 function applyReadWidth(){ document.documentElement.setAttribute('data-width',String(readWidth())); }
 function setReadWidth(n){
   if(!(Number.isInteger(n)&&n>=0&&n<READ_WIDTHS.length)) return;
+  const restore=readingAnchor();
   try{ if(n===WIDTH_DEFAULT) localStorage.removeItem(WIDTH_KEY); else localStorage.setItem(WIDTH_KEY,String(n)); }catch(_){}
-  applyReadWidth();
+  applyReadWidth();applyDisplaySettings();restore();
   const kept=readWidth();
-  document.querySelectorAll('.width-opt').forEach(b=>{ const on=+b.dataset.width===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false'); });
+  document.querySelectorAll('.width-opt').forEach(b=>{ const on=+b.dataset.width===kept; b.classList.toggle('on',on); b.setAttribute('aria-checked',on?'true':'false');b.tabIndex=on?0:-1; });
   const live=document.getElementById('srLive');
   if(live){ live.textContent=''; live.textContent='Reading width: '+READ_WIDTHS[kept]+'.'; }
 }
@@ -5246,24 +5253,25 @@ function readWidthHtml(){
   const cur=readWidth();
   return `<div class="theme-menu-h" id="readWidthH">Reading width</div>
     <div class="read-row" role="group" aria-labelledby="readWidthH">${READ_WIDTHS.map((label,i)=>
-      `<button class="width-opt${i===cur?' on':''}" type="button" role="menuitemradio" aria-checked="${i===cur}" data-width="${i}"
+      `<button class="width-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-width="${i}"
         aria-label="${label}" title="${label}" onclick="setReadWidth(${i})"><span class="width-glyph" style="width:${[8,12,16,20][i]}px"></span></button>`).join('')}</div>`;
 }
 function readSizeHtml(){
   const cur=readSize();
   return `<div class="theme-menu-h" id="readSizeH">Text size</div>
     <div class="read-row" role="group" aria-labelledby="readSizeH">${READ_SIZES.map((label,i)=>
-      `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" aria-checked="${i===cur}" data-read="${i}"
+      `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-read="${i}"
         aria-label="${label}" title="${label}" onclick="setReadSize(${i})"><span style="font-size:${[13,16,19,23][i]}px">A</span></button>`).join('')}</div>`;
 }
 /* Brightness and contrast, per device (round seven). A filter on the root element: the one element whose filter does not
    become the containing block for fixed-position descendants, so the bars, the rail and Apex stay where they are. At
    100% each the filter is removed, not set to 1, so the default page is drawn exactly as before. */
 const TUNE_KEY='systole.tune';
-const TUNE={b:{min:70,max:130,label:'Brightness'},c:{min:80,max:140,label:'Contrast'}};
+const TUNE={b:{min:50,max:130,label:'Brightness'},c:{min:80,max:140,label:'Contrast'}};
 function readTune(){
   const out={b:100,c:100};
-  try{ const t=JSON.parse(localStorage.getItem(TUNE_KEY)||'{}');
+  try{ const saved=localStorage.getItem(TUNE_KEY);
+    const t=saved?JSON.parse(saved):{b:(JSON.parse(localStorage.getItem('systole.display')||'{}')||{}).brightness};
     for(const k of ['b','c']){ const v=Number(t&&t[k]); if(Number.isFinite(v)&&v>=TUNE[k].min&&v<=TUNE[k].max) out[k]=Math.round(v); } }catch(_){}
   return out;
 }
@@ -5276,10 +5284,17 @@ function setTune(k,v){
   const t=readTune(); v=Math.round(Number(v));
   if(!TUNE[k]||!Number.isFinite(v)) return;
   t[k]=Math.min(TUNE[k].max,Math.max(TUNE[k].min,v));
+  clearLegacyBrightness();
   try{ if(t.b===100&&t.c===100) localStorage.removeItem(TUNE_KEY); else localStorage.setItem(TUNE_KEY,JSON.stringify(t)); }catch(_){}
   applyTune(); paintTune();
 }
-function resetTune(){ try{ localStorage.removeItem(TUNE_KEY); }catch(_){} applyTune(); paintTune();
+function clearLegacyBrightness(){
+  try{
+    const legacy=JSON.parse(localStorage.getItem('systole.display')||'{}');
+    if(legacy&&typeof legacy==='object'&&'brightness' in legacy){delete legacy.brightness;localStorage.setItem('systole.display',JSON.stringify(legacy));}
+  }catch(_){}
+}
+function resetTune(){ clearLegacyBrightness();try{ localStorage.removeItem(TUNE_KEY); }catch(_){} applyTune(); paintTune();
   const live=document.getElementById('srLive'); if(live){ live.textContent=''; live.textContent='Brightness and contrast reset.'; } }
 function paintTune(){
   const t=readTune();
@@ -5302,29 +5317,138 @@ function tuneHtml(){
 }
 function themeOptHtml(t){
   const on=themeDef().id===t.id;
-  return `<button class="theme-opt${on?' on':''}" role="menuitemradio" aria-checked="${on}"
+  return `<button class="theme-opt${on?' on':''}" role="menuitemradio" tabindex="${on?0:-1}" aria-checked="${on}"
     onclick="setTheme('${t.id}')">
     <span class="theme-sw" style="background:linear-gradient(135deg,${t.bg} 0 55%,${t.ac} 55% 100%)"></span>
     <span class="tk">${e(t.name)}</span>
     <span class="tc">${icon('check')}</span></button>`;
 }
 let __themeMenuOpen=false, __themeMenuOff=null;
-function toggleThemeMenu(ev){
-  if(ev) ev.stopPropagation();
-  __themeMenuOpen ? closeThemeMenu() : openThemeMenu();
-}
-function openThemeMenu(){
-  const m=document.getElementById('themeMenu'); if(!m) return;
-  m.classList.add('open'); __themeMenuOpen=true;
-  /* one-shot: the next click anywhere outside dismisses it */
-  __themeMenuOff=ev=>{ if(!m.contains(ev.target)&&ev.target.id!=='themeBtn') closeThemeMenu(); };
-  setTimeout(()=>document.addEventListener('click',__themeMenuOff,{once:false}),0);
-}
+function toggleThemeMenu(){ if(document.getElementById('generalSettings'))closeSettings();else openSettings(); }
+function openThemeMenu(){openSettings();}
 function closeThemeMenu(){
   const m=document.getElementById('themeMenu'); if(m) m.classList.remove('open');
   __themeMenuOpen=false;
   if(__themeMenuOff){ document.removeEventListener('click',__themeMenuOff); __themeMenuOff=null; }
 }
+
+
+/* Device display preferences deliberately stay outside the study record. */
+const DISPLAY_KEY='systole.display';
+function readingAnchor(){
+  const candidates=[...document.querySelectorAll('.q-card,.opt,.exp-text p,.exp-text,.msg,.pearl-step')];
+  const el=candidates.find(x=>{const r=x.getBoundingClientRect();return r.bottom>80&&r.top<innerHeight;});
+  if(!el)return ()=>{};
+  const top=el.getBoundingClientRect().top;
+  let parent=el.parentElement;
+  while(parent&&parent!==document.body){if(/auto|scroll/.test(getComputedStyle(parent).overflowY)&&parent.scrollHeight>parent.clientHeight)break;parent=parent.parentElement;}
+  return ()=>{if(!el.isConnected)return;const delta=el.getBoundingClientRect().top-top;if(parent&&parent!==document.body)parent.scrollTop+=delta;else window.scrollBy(0,delta);};
+}
+function displaySettings(){
+  let v={};try{v=JSON.parse(localStorage.getItem(DISPLAY_KEY)||'{}')||{};}catch(_){}
+  return {layout:v.layout==='split'?'split':'focused',width:['narrow','standard','wide','full'][readWidth()],brightness:readTune().b};
+}
+function applyDisplaySettings(){
+  const v=displaySettings(),h=document.documentElement;
+  h.dataset.readingWidth=v.width;
+  applyTune();
+  const app=document.getElementById('app'),card=document.querySelector('.q-card');
+  const size=card?parseFloat(getComputedStyle(card).fontSize):16;
+  if(app){app.classList.toggle('reading-wide-layout',v.layout==='split'&&!!document.querySelector('.reveal-card'));app.classList.toggle('reading-split',v.layout==='split'&&!!document.querySelector('.reveal-card')&&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);}
+}
+function updateDisplaySetting(key,value){
+  if(key==='width'){setReadWidth(['narrow','standard','wide','full'].indexOf(value));return;}
+  if(key==='brightness'){setTune('b',value);return;}
+  const restore=readingAnchor(),v=displaySettings();setTune('b',v.brightness);v[key]=value;delete v.width;delete v.brightness;
+  try{localStorage.setItem(DISPLAY_KEY,JSON.stringify(v));}catch(_){}
+  applyDisplaySettings();restore();syncSettingsControls();
+}
+function syncSettingsControls(){
+  const box=document.getElementById('generalSettings');if(!box)return;
+  const v=displaySettings();
+  box.querySelector('[name="layout"]').value=v.layout;
+  paintTune();
+}
+function refreshSettingsThemes(){
+  const box=document.getElementById('settingsThemes');if(!box)return;
+  const focused=box.contains(document.activeElement);
+  box.innerHTML=THEMES.map(t=>themeOptHtml(t).replace('role="menuitemradio"','role="radio"')).join('');
+  if(focused)box.querySelector('[aria-checked="true"]')?.focus();
+}
+let settingsReturnFocus=null, settingsProvider=null;
+function closeSettings(){
+  const box=document.getElementById('generalSettings');if(!box)return;
+  if(typeof box.close==='function')box.close();box.remove();document.getElementById('settingsBackdrop')?.remove();
+  document.querySelectorAll('[data-settings-inert]').forEach(el=>{el.inert=false;el.removeAttribute('data-settings-inert');const hidden=el.getAttribute('data-settings-hidden');if(hidden==='missing')el.removeAttribute('aria-hidden');else if(hidden!==null)el.setAttribute('aria-hidden',hidden);el.removeAttribute('data-settings-hidden');});settingsProvider=null;
+  const target=settingsReturnFocus?.isConnected&&settingsReturnFocus!==document.body?settingsReturnFocus:document.getElementById('settingsBtn');target?.focus();
+}
+function settingsApex(p=AI.provider){
+  const box=document.getElementById('settingsApex');if(!box)return;
+  settingsProvider=p;
+  box.innerHTML=setupHtml(p)+`<p role="status">${AI[p].key?'A personal key is saved on this device.':p==='gemini'&&apexHosted()?'Using the site connection.':'No personal key saved.'}</p>
+    <button type="button" class="btn" id="removeApexKey">Remove saved key</button>
+    <div id="removeApexConfirm" hidden><p>Remove this provider's saved key from this device?</p>
+      <button type="button" class="btn" id="confirmRemoveApexKey">Remove key</button>
+      <button type="button" class="btn" id="cancelRemoveApexKey">Cancel</button></div>
+    <button type="button" class="btn" onclick="closeSettings();goMemory()">Apex memory</button>`;
+  bindSetup(box,()=>settingsProvider,settingsApex,()=>{if(document.getElementById('settingsApex'))settingsApex(AI.provider);});
+  const remove=box.querySelector('#removeApexKey'),confirmation=box.querySelector('#removeApexConfirm');
+  const cancel=box.querySelector('#cancelRemoveApexKey');
+  remove.onclick=()=>{confirmation.hidden=false;cancel.focus();};
+  cancel.onclick=()=>{confirmation.hidden=true;remove.focus();};
+  box.querySelector('#confirmRemoveApexKey').onclick=()=>{
+    AI[p].key='';saveJSON(AI_CFG,AI);settingsApex(p);
+    document.getElementById('removeApexKey')?.focus();
+  };
+}
+function resetDisplaySettings(){
+  try{localStorage.removeItem(DISPLAY_KEY);localStorage.removeItem(READ_KEY);}catch(_){}
+  resetTune();S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();
+}
+function openSettings(section='reading'){
+  if(document.getElementById('generalSettings')){document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle')?.focus();return;}
+  closeThemeMenu();settingsReturnFocus=document.activeElement;
+  const box=document.createElement('dialog');box.id='generalSettings';box.setAttribute('aria-labelledby','settingsTitle');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
+  box.innerHTML=`<header><h2 id="settingsTitle" tabindex="-1">Settings</h2><button type="button" class="icon-btn" onclick="closeSettings()" aria-label="Close settings">${icon('x')}</button></header>
+    <section aria-labelledby="readingSettingsHeading"><h3 id="readingSettingsHeading">Reading</h3>
+      <label>Question layout<select name="layout" onchange="updateDisplaySetting('layout',this.value)"><option value="focused">Focused</option><option value="split">Side by side</option></select></label>
+      <p>Side by side appears after answering when both columns have room to read comfortably.</p>
+      ${readSizeHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}
+      ${readWidthHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}</section>
+    <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading">Appearance</h3><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
+      ${tuneHtml()}
+      <p>Brightness and contrast affect Systole only; device brightness is unchanged.</p>
+      <button type="button" class="btn" onclick="resetDisplaySettings()">Reset display settings</button></section>
+    <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>`;
+  document.body.append(box);syncSettingsControls();refreshSettingsThemes();settingsApex();
+  box.addEventListener('cancel',ev=>{ev.preventDefault();closeSettings();});
+  box.addEventListener('click',ev=>{if(ev.target===box){const r=box.getBoundingClientRect();if(ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom)closeSettings();}});
+  box.addEventListener('keydown',ev=>{
+    // Settings owns its keys; quiz shortcuts must never receive them.
+    ev.stopPropagation();
+    if(ev.key==='Escape'){ev.preventDefault();ev.stopPropagation();closeSettings();return;}
+    if(ev.key==='Tab'){
+      const items=[...box.querySelectorAll('button,input,select,[tabindex="0"]')].filter(el=>!el.disabled&&el.getClientRects().length);
+      const first=items[0],last=items[items.length-1];
+      if(ev.shiftKey&&(document.activeElement===first||!items.includes(document.activeElement))){ev.preventDefault();last?.focus();}
+      else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first?.focus();}
+    }
+    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(ev.key)||ev.target.getAttribute('role')!=='radio')return;
+    const group=ev.target.closest('[role="radiogroup"]');if(!group)return;
+    const radios=[...group.querySelectorAll('[role="radio"]')],i=radios.indexOf(ev.target);
+    const n=ev.key==='Home'?0:ev.key==='End'?radios.length-1:(i+(['ArrowLeft','ArrowUp'].includes(ev.key)?-1:1)+radios.length)%radios.length;
+    ev.preventDefault();radios[n].click();group.querySelectorAll('[role="radio"]')[n]?.focus();
+  });
+  if(typeof box.showModal==='function')box.showModal();
+  else {
+    const backdrop=document.createElement('div');backdrop.id='settingsBackdrop';backdrop.onclick=closeSettings;document.body.insertBefore(backdrop,box);
+    for(const el of document.body.children){if(el!==box&&el!==backdrop&&!el.inert){el.inert=true;el.setAttribute('data-settings-inert','');el.setAttribute('data-settings-hidden',el.getAttribute('aria-hidden')??'missing');el.setAttribute('aria-hidden','true');}}
+    box.setAttribute('open','');
+  }
+  document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle').focus();
+}
+window.addEventListener('resize',applyDisplaySettings);
+if(document.getElementById('shell'))new MutationObserver(()=>applyDisplaySettings()).observe(document.getElementById('shell'),{attributes:true,attributeFilter:['class']});
 
 function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
@@ -6423,6 +6547,7 @@ function renderNow(){
   app.dataset.screen=S.screen;
   app.innerHTML=withScreenTitle(buildScreen());
   app.classList.toggle('again',again);
+  applyDisplaySettings();
   /* The Apex button is outside #app; on Home it shares the foot of the screen with the pages' tab bar (home.css). */
   document.body.classList.toggle('on-home',S.screen==='home');
   document.body.classList.toggle('rating-active',
@@ -6508,7 +6633,8 @@ function buildNav(){
       <div class="nav-logo">${icon("heart-pulse")}</div>
       <div>
         <div class="nav-title">Systole</div>
-        <div class="nav-sub"><span>Board review</span><b class="nav-count">${TOTAL_Q} Q</b></div>
+        <div class="nav-sub">${S.screen==='home'?'Cardiology, in motion.':`<span>Board review</span><b class="nav-count">${TOTAL_Q} Q</b>`}</div>
+
       </div>
     </div>
     <div class="nav-right">
@@ -6518,29 +6644,18 @@ function buildNav(){
         <span style="opacity:.6">·</span>
         <span style="color:${col}">${p}%</span>
       </div>`:''}
-      <button class="icon-btn" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}</button>
+      <button class="icon-btn${S.screen==='home'?' atlas-search':''}" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}${S.screen==='home'?'<span>Search questions, topics, or figures…</span>':''}</button>
       ${S.screen==='quiz'?`<button class="icon-btn" onclick="toggleFocusMode()" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
+      ${S.screen!=='home'?`
       <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
-      <div class="theme-wrap">
-        <button class="icon-btn" onclick="toggleThemeMenu(event)" title="Theme" aria-label="Choose a theme"
-          aria-haspopup="menu" id="themeBtn">${icon('palette')}</button>
-        <div class="theme-menu" id="themeMenu" role="dialog" aria-label="Display settings">
-          <div class="dp-head"><span class="dp-title">${icon('palette','icon-sm')} Display</span>
-            <button class="dp-close" type="button" onclick="closeThemeMenu()" aria-label="Close display settings">${icon('x','icon-sm')}</button></div>
-          <div role="menu" aria-label="Theme, text size and reading width">
-            <section class="dp-sec"><div class="theme-menu-h">Light</div>
-              <div class="dp-grid">${THEMES.filter(t=>t.group==='light').map(themeOptHtml).join('')}</div></section>
-            <section class="dp-sec"><div class="theme-menu-h">Dark</div>
-              <div class="dp-grid">${THEMES.filter(t=>t.group==='dark').map(themeOptHtml).join('')}</div></section>
-            <section class="dp-sec">${readSizeHtml()}</section>
-            <section class="dp-sec">${readWidthHtml()}</section>
-          </div>
-          <section class="dp-sec">${tuneHtml()}</section>
-        </div>
-      </div>
+      <!-- Study shortcuts end -->
+      `:''}
+      ${S.screen==='home'?`<button class="icon-btn" onclick="setTheme(themeIsDark()?'daylight':'midnight')" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
+      <button class="icon-btn" onclick="openSettings()" title="Settings" aria-label="Settings"
+        aria-haspopup="dialog" id="settingsBtn">${icon('settings')}</button>
     </div>
   </nav>`;
 }
@@ -7038,6 +7153,7 @@ function pearlFigureKey(ev,figure){
     ev.key==='PageDown'?figure.scrollTop+figure.clientHeight:ev.key==='PageUp'?figure.scrollTop-figure.clientHeight:null;
   if(next===null) return;
   ev.preventDefault();ev.stopPropagation();figure.scrollTop=next;
+
 }
 function pearlFigure(p){
   if(!p||!p.figKey) return '';
@@ -7305,6 +7421,8 @@ function buildHome(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
   const dueN=dueQuestions().length, seenN=startedCount();
   const atlasPearl=pearlNow();
+  if(!atlasPearl)atlasReading=false;
+
   const today=S.daily[todayISO()]||{a:0,c:0};
   const covered=Math.round(seenN/TOTAL_Q*100);
   /* Mastery is FSRS's own recall estimate, summed over the whole bank — the
@@ -7316,14 +7434,31 @@ function buildHome(){
   return `<div class="home-pages${atlasPaused?' atlas-paused':''}" id="homePages">
     <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
     <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
-    <div class="home-wrap anim-fade" data-home="${S.homeLayout}" data-pearl-empty="${!atlasPearl}">
-    <div class="hero-live">
+    <div class="home-wrap anim-fade${atlasReading?' atlas-reading':''}" data-home="${S.homeLayout}">
+    <section class="atlas-intro" id="atlasIntro"${atlasReading?' hidden':''} aria-labelledby="atlasTitle">
+      <div class="atlas-eyebrow">${icon('sun')} <span>Daily pearl</span></div>
+      <h1 id="atlasTitle">Make one<br>idea stick.</h1>
+      <p class="atlas-description">Explain the mechanism in your own words.<br>Then reveal the note and compare.</p>
+      <ol class="atlas-steps">
+        <li><span class="atlas-step-icon">${icon('eye')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Observe</strong><span>Study the figure<br>and prompt.</span></li>
+        <li><span class="atlas-step-icon">${icon('message-circle')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Explain</strong><span>Put it in your<br>own words.</span></li>
+        <li><span class="atlas-step-icon">${icon('clipboard')}</span><strong>Recall</strong><span>Reveal the note<br>and compare.</span></li>
+      </ol>
+      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="${atlasPearl?'atlasBegin()':'goRefs()'}">${atlasPearl?'Begin recall':'Open notes'} ${icon('arrow-right')}</button><button class="atlas-note" onclick="${atlasPearl?'pearlOpen()':'goRefs()'}">${icon('note')} Read note</button></div>
+    </section>
+    <div class="hero-live${atlas3D?' atlas-3d':''}">
+      <img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
-      <div class="hero-inner">
-        ${atlasPearl?`<div class="hero-h1">${greet()}</div>`:`<div class="hero-greet">${greet()}</div><h1 class="hero-h1">Make one idea stick.</h1><button class="btn" onclick="goRefs()">Open notes</button>`}
+      <div class="hero-inner atlas-hero-summary">
+        <div class="hero-greet">${greet()}</div>
+        <div class="hero-h1">Systole</div>
+        ${atlasPearl?'':'<button class="btn" onclick="goRefs()">Open notes</button>'}
+        <p class="hero-description">Cardiology, in motion.</p>
+
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
         <div class="hero-line hero-stats-row">
+
           <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>
           <span class="hl-dot"></span>
           <span class="hl-item"><b>${covered}%</b> started</span>
@@ -7336,6 +7471,10 @@ function buildHome(){
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
+      <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
+      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" onclick="toggleAtlas3D()"
+        aria-label="Explore heart in 3D" aria-pressed="${atlas3D}" title="Explore heart in 3D">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
+      <button class="atlas-pause" id="atlasLandingPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
       <button class="hero-heart-hit" id="heroHeartBtn" onclick="toggleHeroMenu(undefined,event)" aria-label="Heart model: motion, chambers and credit"
         aria-expanded="false" aria-controls="heroMenu" title="Heart model"></button>
       <div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>
@@ -7349,17 +7488,21 @@ function buildHome(){
     </div>
 
     ${(()=>{ const p=pearlNow(); if(!p) return '';
-      return `<div class="pearl-card${pearlFigure(p)?' has-fig':''}" id="pearlCard">
+      return `<div class="pearl-card${pearlFigure(p)?' has-fig':''}" id="pearlCard"${atlasReading?'':' hidden'}>
+
         <canvas id="pearlCurrent" class="pearl-current" aria-hidden="true"></canvas>
         <div class="pearl-rule"></div>
         <div class="pearl-main">
           <div class="pearl-head">
+          <button class="atlas-back" onclick="atlasClose()">${icon('arrow-left','icon-sm')} Back to Home</button>
+
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
             <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
             <button class="pearl-next" onclick="pearlNext()"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
-          <h1 class="pearl-concept" id="pearlConcept">${e(p.concept||p.title)}</h1>
+          <h1 class="pearl-concept" id="pearlConcept" tabindex="-1">${e(p.concept||p.title)}</h1>
+
           <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlFit()">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
@@ -7379,6 +7522,7 @@ function buildHome(){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
+    <div class="atlas-session"><span class="atlas-session-icon" aria-hidden="true">${icon('clipboard')}</span><div><small>Your next session</small><strong>${dueN?`${dueN} questions ready`:'Build your next idea'}</strong><p>Continue building your understanding, one idea at a time.</p></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Start review':'Explore chapters'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">
@@ -7408,12 +7552,50 @@ function buildHome(){
    time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
    the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
    was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
-let atlasPaused=false;
+let atlasPaused=false, atlasReading=false, atlas3D=false;
+function toggleAtlas3D(){
+  atlas3D=!atlas3D;
+  const hero=document.querySelector('#homePage0 .hero-live');
+  if(hero)hero.classList.toggle('atlas-3d',atlas3D);
+  const button=document.getElementById('atlasExplore');
+  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
+  const label=document.querySelector('.hero-live-status');
+  if(label)label.textContent=atlas3D?'Live cardiac cycle':'Illustrative anatomy';
+  const cutaway=document.getElementById('heroMechanics');if(cutaway)cutaway.hidden=!atlas3D;
+  if(!atlas3D)toggleHeroMenu(false);
+  syncHomeMotion();
+}
+
+function atlasBegin(recall=true){
+  const card=document.getElementById('pearlCard');
+  if(!card){goRefs();return;}
+  atlasReading=true;
+  document.getElementById('atlasIntro').hidden=true;
+  card.hidden=false;
+  card.closest('.home-wrap').classList.add('atlas-reading');
+  if(recall&&!card.classList.contains('is-recalling'))pearlRecall();
+  pearlFit();
+  syncHomeMotion();
+  document.getElementById('pearlConcept').focus();
+}
+function atlasClose(){
+  atlasReading=false;
+  const card=document.getElementById('pearlCard');
+  if(card){card.hidden=true;card.classList.remove('pearl-all');}
+  const intro=document.getElementById('atlasIntro');
+  if(intro){intro.hidden=false;intro.closest('.home-wrap').classList.remove('atlas-reading','pearl-all-open');intro.querySelector('button').focus();}
+  syncHomeMotion();
+}
+
+
 function toggleAtlasMotion(){
   atlasPaused=!atlasPaused;
   document.getElementById('homePages')?.classList.toggle('atlas-paused',atlasPaused);
   const b=document.getElementById('atlasPause');
   if(b){b.innerHTML=icon(atlasPaused?'play':'pause','icon-sm')+'<span>'+(atlasPaused?'Play motion':'Pause motion')+'</span>';b.setAttribute('aria-pressed',String(atlasPaused));}
+  const landing=document.getElementById('atlasLandingPause');
+  if(landing){landing.innerHTML=icon(atlasPaused?'play':'pause','icon-sm');landing.setAttribute('aria-label',atlasPaused?'Play animation':'Pause animation');}
+
   syncHomeMotion();
 }
 /* The heart is the hero's one control: a tap opens its menu (motion, the chambers, the model's credit), where three
@@ -7733,6 +7915,7 @@ function homeMark(){
      so the two cannot drift apart unnoticed. */
   const tabs=root.querySelector('.home-tabs');
   if(tabs) tabs.setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
+
   for(let i=0;i<3;i++){
     const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
     if(tab){ tab.setAttribute('aria-selected',String(i===homePage)); tab.tabIndex=i===homePage?0:-1; }
@@ -7747,8 +7930,8 @@ function homeMark(){
 function syncHomeMotion(){
   const on=!atlasPaused&&S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
   if(heroMon) on?heroMon.start():heroMon.stop();
-  if(heroHeart3d) on?heroHeart3d.start():heroHeart3d.stop();
-  if(pearlTrace) on?pearlTrace.resume():pearlTrace.pause();
+  if(heroHeart3d) on&&atlas3D?heroHeart3d.start():heroHeart3d.stop();
+  if(pearlTrace) on&&atlasReading?pearlTrace.resume():pearlTrace.pause();
   if(!on&&heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
   else if(on&&heroMon&&!heroRotateTimer) heroRotateTimer=startHeroRotation();
 }
@@ -7987,7 +8170,7 @@ function goStudy(){ S.screen='study'; render(); toTop(); }
 /* Sessions (round seven): the timed mock block and the voice drill, out of Study and into Labs, with the other things
    you do rather than read. */
 function goSessions(){ S.screen='sessions'; render(); toTop(); }
-function goLabs(){ goHome(); requestAnimationFrame(()=>{ try{ homeGo(2); }catch(_){} }); }
+function goLabs(){ homePage=2; goHome(); }
 function voiceCardHtml(){
   return voiceAvailable()?`<div class="feed-card voice-card" id="voiceCard" role="group" aria-label="Voice session">
     <div class="fc-top"><span class="fc-badge">${icon('mic')} VOICE</span></div>
@@ -8102,7 +8285,7 @@ function buildQuiz(){
       <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>
       <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:''}</div>
     </div>
-    ${figHtml}
+    <div class="reading-columns"><div class="reading-question">${figHtml}
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}
         <span class="src-badge flag-badge" id="qFlagBadge"${flagOn?'':' hidden'}>${icon('flag','icon-sm')} flagged</span>
@@ -8113,8 +8296,8 @@ function buildQuiz(){
     </div>
     ${cfRowHtml()}
     <div class="opts">${opts}</div>
-    ${kbHint}
-    ${revealHtml}
+    ${kbHint}</div>
+    <div class="reading-explanation">${revealHtml}</div></div>
     ${rateRow}
     <div class="actions">${actions}</div>
   </div>`;
