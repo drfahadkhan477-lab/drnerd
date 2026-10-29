@@ -4401,7 +4401,11 @@ async function streamReply(q,hist,extra){
         const out=runTool(c.name,c.input);
         if(out.cite) lastHits=(lastHits||[]).concat(out.cite).slice(-6);
         toolTrace.push({kind:'call',name:c.name,input:c.input});
-        return {id:c.id, name:c.name, content:String(out.result).slice(0,9000)};
+        // Grounded search already budgets whole fenced notes. A second character
+        // cut here could remove a qualification and leave its fence unclosed.
+        const content=String(out.result);
+        return {id:c.id, name:c.name, content:AI_GROUNDED&&c.name==='search_question_bank'
+          ?content:content.slice(0,9000)};
       });
       pushToolExchange(wire,turn,results);      // provider-shaped, see below
       buildAI();                                // show the tool chips as they run
