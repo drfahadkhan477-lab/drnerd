@@ -54,6 +54,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
   await page.waitForTimeout(900);
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
   head('what counts as a pearl');
   const rules = await page.evaluate(() => {
@@ -443,8 +445,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return {kept, restored:b.getAttribute('aria-pressed') === 'false' && !!document.querySelector('#pearlBody .pearl-step')};
   });
   ok('another pearl keeps paragraph mode, and switching back restores the steps', !!proseNext && proseNext.kept && proseNext.restored);
-  const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source}));
-  ok('the heading names the selected concept', await page.locator('#pearlConcept').textContent() === current.concept);
+  const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source,heading:document.getElementById('pearlConcept').textContent}));
+  ok('the heading names the selected concept', current.heading === current.concept);
   await page.locator('#pearlRecall').click();
   const hidden = await page.evaluate(() => ({body:document.getElementById('pearlBody').hidden,
     prompt:!document.getElementById('pearlPrompt').hidden,expanded:document.getElementById('pearlRecall').getAttribute('aria-expanded'),
@@ -493,6 +495,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const all = pearlAll();
     const fams = p => new Set(Pearl.lesson(p.text).map(s => Pearl.FAMILY[s.label])).size;
     pearlCurrent = all.find(p => p.figKey && refImgSrc(p.figKey) && fams(p) >= 2) || all.find(p => fams(p) >= 2) || all[0];
+    // A controlled lower-case heading makes the CSS capitalization measurable regardless of the selected note.
+    pearlCurrent={...pearlCurrent,concept:'mitral regurgitation'};
     S.screen = 'home'; render();
   });
   await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'a pearl with steps on the home screen' });
@@ -514,30 +518,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       first: (() => {
         const h = document.getElementById('pearlConcept'), text = h.textContent;
         if (!/^[a-z]/.test(text)) return 'UNMEASURED: the concept "' + text.slice(0, 1) + '…" does not start in lower case';
-        const r = document.createRange(); r.selectNodeContents(h);
-        /* The first letter is a box of its own, so the text is two rectangles on one line: measured from the first's left
-           to the last's right, and only when they share a line. */
-        const rects = [...r.getClientRects()];
-        if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
-        /* ONE GLYPH AGAINST ONE GLYPH, not one string against a nearly identical string. This compared the whole
-           heading's width with the whole word capitalised and the whole word as stored, and that stopped working the
-           day the concept took a serif face (Quiet Atlas, app/css/home.css). In DM Serif Display a capital is barely
-           a different width from its lower case — over "pulmonary embolism" the two spellings came to 207.8px and
-           209.5px, and the drawn heading landed between them at 208.7px, so the check could not say which it was and
-           reported a failure against a heading that was correctly capitalised. At some sizes the gap falls to 0.4px,
-           under this measurement's own 0.5px floor.
-           ::first-letter is a box of its own, so rects[0] IS the drawn first letter: comparing that against the two
-           single characters moves the signal from under a pixel to about 3.5px in both engines, and it does not shrink
-           as the word gets longer. If the browser ever stops giving the first letter its own box the comparison has
-           nothing to stand on, so that says UNMEASURED rather than guessing. */
-        if (rects.length < 2) return 'UNMEASURED: the first letter is not a box of its own';
-        const cs = getComputedStyle(h), probe = document.createElement('span');
-        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
-        document.body.appendChild(probe);
-        probe.textContent = text[0]; const lower = probe.getBoundingClientRect().width;
-        probe.textContent = text[0].toUpperCase(); const upper = probe.getBoundingClientRect().width;
-        probe.remove();
-        const w = rects[0].width;
+        // Measure the real heading under the same inherited typography and first-letter formatting.
+        const width = () => {
+          const range = document.createRange(); range.selectNodeContents(h);
+          const rects = [...range.getClientRects()];
+          return Math.max(...rects.map(r => r.right)) - Math.min(...rects.map(r => r.left));
+        };
+        const w = width(), override = document.createElement('style');
+        document.head.appendChild(override);
+        override.textContent = '#pearlConcept::first-letter{text-transform:none!important}';
+        const lower = width();
+        override.textContent = '#pearlConcept::first-letter{text-transform:uppercase!important}';
+        const upper = width();
+        override.remove();
+
         return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
           : `first letter ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
       })(),
@@ -638,7 +632,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   for (const [name, vw, vh] of [['iPad portrait', 1024, 1366], ['iPad landscape', 1366, 1024],
                                 ['iPad mini portrait', 744, 1133], ['Split View', 507, 1024]]) {
     await page.setViewportSize({ width: vw, height: vh });
-    await page.evaluate(() => { S.screen = 'home'; render(); });
+    await page.evaluate(() => {
+      // The preceding auto-fit check may select a prose-only note; this section measures a stepped pearl.
+      pearlCurrent=pearlAll().find(p=>Pearl.lesson(p.text).length>1); pearlPicked=null;
+      S.screen = 'home'; render();
+    });
     await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: name + ': the pearl' });
     await page.evaluate(() => pearlFit());
     const m = await page.evaluate(() => {
@@ -708,6 +706,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 1100, height: 1100 });
 
+
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
      the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
   await page.setViewportSize({ width: 390, height: 844 });
@@ -750,7 +749,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   await settled(page,()=>!window.__vtLive && !!document.querySelector('.hero-h1'),{label:'empty library Home'});
   const empty=await page.evaluate(()=>({gone:!document.getElementById('pearlCard'),
-    heading:document.querySelector('#homePage0 h1')?.textContent,
+    heading:document.querySelector('#atlasTitle')?.textContent.replace(/\s+/g,' ').replace('oneidea','one idea'),
+
     open:[...document.querySelectorAll('#homePage0 button')].some(b=>b.textContent==='Open notes')}));
   ok('no notes means no card, rather than an empty one',empty.gone);
   ok('and nothing throws',errors.length===0);
@@ -763,10 +763,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       const range=document.createRange();range.selectNodeContents(h);
       const clear=[...range.getClientRects()].every(r=>r.right<=heart.left||r.left>=heart.right||r.bottom<=heart.top||r.top>=heart.bottom);
       const wrap=document.querySelector('#homePage0 .home-wrap').getBoundingClientRect(),hero=document.querySelector('#homePage0 .hero-live').getBoundingClientRect();
-      return {clear,fullPanel:Math.abs(wrap.width-hero.width)<=1};
+      const intro=document.getElementById('atlasIntro').getBoundingClientRect();
+      return {clear,fullPanel:intro.width>0&&hero.width>0&&Math.min(intro.left,hero.left)>=wrap.left-1&&Math.max(intro.right,hero.right)<=wrap.right+1};
     });
     ok(`${size.width}×${size.height}: empty Home gives its prompt and heart separate space`,room.clear&&room.fullPanel,JSON.stringify(room));
   }
+
   if(empty.open){
     await page.getByRole('button',{name:'Open notes',exact:true}).click();
     await settled(page,()=>!window.__vtLive,{label:'Open notes transition'});
@@ -774,6 +776,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('empty Home Open notes opens the reference library',await page.evaluate(()=>S.screen==='refs'));
   await page.evaluate(()=>{REF.push(...window.__atlasKeptRefs);delete window.__atlasKeptRefs;invalidateIndex();pearlCurrent=null;goHome();});
   await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
   head('headings and text the notes left behind');
   /* Invented prose in the shape of the owner's notes (no licensed text). */
@@ -798,6 +802,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a decimal and a figure number are left alone', left.decimal === 'Fig. 54.1 shows 2.5 mg.', left.decimal);
   ok('"or in whom" stays in the clause it continues, not a Contrast step of its own',
      !left.steps.some(s => /^Contrast:/.test(s)) && !left.steps.some(s => /:Or in whom/i.test(s)), JSON.stringify(left.steps));
+
 
   head('regression');
   head('a pearl is a whole thought now');

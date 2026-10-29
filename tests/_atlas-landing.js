@@ -1,0 +1,31 @@
+'use strict';
+// Exercise the invitation through its real controls, then return to Home.
+module.exports = async function atlasLanding(page, ok, settled) {
+  const landing=await page.evaluate(()=>({
+    title:document.getElementById('atlasTitle')?.innerText.replace(/\s+/g,' '),
+    steps:[...document.querySelectorAll('.atlas-steps strong')].map(e=>e.textContent).join(','),
+    image:(()=>{const i=document.querySelector('.atlas-anatomy');return !!i&&i.complete&&i.naturalWidth>0&&i.getBoundingClientRect().height>200;})(),
+    intro:!document.getElementById('atlasIntro')?.hidden,
+    reader:document.getElementById('pearlCard')?.hidden
+  }));
+  ok('Home opens with the selected invitation and three learning steps',landing.title==='Make one idea stick.'&&landing.steps==='Observe,Explain,Recall'&&landing.intro&&landing.reader,JSON.stringify(landing));
+  ok('the anatomical illustration is decoded and visibly sized',landing.image);
+  const viewport=page.viewportSize();
+  for(const width of [744,834]){
+    await page.setViewportSize({width,height:1000});
+    ok(`portrait ${width}: legacy hero copy stays hidden behind the illustration`,await page.evaluate(()=>getComputedStyle(document.querySelector('.atlas-hero-summary')).display==='none'));
+  }
+  await page.setViewportSize(viewport);
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  const recall=await page.evaluate(()=>({intro:document.getElementById('atlasIntro').hidden,card:document.getElementById('pearlCard').hidden,answer:document.getElementById('pearlBody').hidden,prompt:document.getElementById('pearlPrompt').hidden}));
+  ok('Begin recall opens the real pearl with its answer concealed',recall.intro&&!recall.card&&recall.answer&&!recall.prompt,JSON.stringify(recall));
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
+  ok('Reveal shows the note-derived pearl answer',await page.evaluate(()=>!document.getElementById('pearlBody').hidden&&document.getElementById('pearlBody').textContent.trim().length>0));
+  await page.getByRole('button',{name:'Back to Home',exact:true}).click();
+  ok('Back restores the invitation and returns keyboard focus',await page.evaluate(()=>!document.getElementById('atlasIntro').hidden&&document.getElementById('pearlCard').hidden&&document.activeElement.textContent.includes('Begin recall')));
+  await page.getByRole('button',{name:'Read note',exact:true}).click();
+  await settled(page,()=>!window.__vtLive,{label:'reference opened from invitation'});
+  ok('Read note opens the reference library',await page.evaluate(()=>S.screen==='refs'));
+  await page.evaluate(()=>goHome());
+  await settled(page,()=>!window.__vtLive&&!!document.getElementById('atlasIntro'),{label:'return to invitation'});
+};

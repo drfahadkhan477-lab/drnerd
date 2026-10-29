@@ -1,59 +1,71 @@
-# Quiet Atlas design review
+# Quiet Atlas design comparison
 
-final result: blocked
+final result: pass with documented visual differences
 
-The implementation is available for code review. This is not a declaration of
-production readiness or pixel-matched fidelity.
+This is the visual-composition review, not a declaration of release readiness.
+Full application validation is tracked separately in the validation checkpoints.
 
-## Evidence
+## Reference and captures
 
-- Source visual truth: the owner's selected Quiet Atlas screenshot in the task
-  conversation. Its original image file is not available in this checkout for
-  a normalized, combined comparison artifact.
-- Implementation captures: ignored `build/atlas-qa/1180-0.png`, with matching
-  Brain and Labs captures and portrait captures alongside it. Browser viewport
-  dimensions are encoded in the filenames; capture density is one CSS pixel
-  per image pixel.
-- States: synthetic bank, light theme, Home/Brain/Labs. Browser suites also
-  exercise dark-theme accessibility, keyboard navigation, motion preferences,
-  swipe navigation and rotation.
-- Full-view and focused source/implementation comparison: not completed as a
-  combined image; do not claim exact reproduction.
+The visual target is the owner's attached ivory Quiet Atlas Home, including the
+large “Make one idea stick.” heading, three learning steps, anatomical heart,
+left navigation and bottom session strip. The black letterboxing is outside the
+app. The final Home capture uses a 1312×910 viewport matching that app region.
+The source was inspected in the conversation; a source-image file is not stored
+in this repository. Captures remain private under
+`build/private-validation/atlas-release/1312-0.png` and the corresponding tablet
+viewport files. No combined source/capture image is committed.
 
-## Findings and changes
+## Reviewed steps
 
-- Typography: reused local DM Serif Display for the pearl and page headings.
-  Replaced newly introduced fixed text sizes with the existing type ladder.
-- Layout: moved tablet controls to a left rail, put the pearl before the heart
-  in landscape, and compacted the Brain chapter grid and Labs launchers.
-  Browser checks cover page overflow; long pearl reading can still expand.
-- Color: warm paper and teal apply to the default light Home surface;
-  alternative palettes and dark mode remain available. Fixed score contrast
-  on the new light header.
-- Images: reused the existing interactive physiological heart and source
-  figures. The heart differs from the static anatomical illustration in the
-  selected reference. No replacement medical imagery was generated.
-- Content: retained real pearl rendering and provenance. Added a next-session
-  action driven by due questions, with Chapters as the empty-queue route.
-- Accessibility: named and keyboard-enabled the pearl scroll region; updated
-  tab orientation on resize and added vertical arrow navigation.
+1. **Home invitation — visually healthy.** The serif heading, ivory/teal colors,
+   horizontal Observe → Explain → Recall flow, prominent heart, search and
+   session strip now follow the reference composition. Session counts come from
+   the real deck; the empty queue opens Chapters rather than claiming 12 due.
+2. **Begin recall / Reveal / Back — functional.** The invitation opens the real
+   pearl reader, hides the answer, reveals it on request, and restores focus on
+   return. Read note opens its source. Long text keeps scrolling access.
+3. **Brain — visually healthy.** Chapter progress and the existing brain remain
+   accessible in the compact tablet layout.
+4. **Labs — visually healthy.** Rhythm, Echo and Practice remain visible with
+   their study-tool entry points.
 
-## Review history
+All three landing pages fit the measured 1180×820, 834×1194 and 1024×768
+viewports without page overflow. These geometry observations are recorded in the
+private capture log; they do not mean long reading content never scrolls.
 
-Initial captures showed a vertically centered rail and blue header. The rail
-now fills the left edge and the default light header follows the paper palette.
-Tests caught a hidden pearl animation, stale orientation after resizing to a
-phone, off-scale text sizes and low-contrast header scores. Those issues were
-fixed and affected checks rerun. Raw reports remain outside Git.
+## Accessibility and motion
 
-## Release gates still open
+Focused Chromium and desktop WebKit checks cover the landing interactions,
+keyboard rail navigation, typography, accessibility, alternate themes and touch
+areas. The new illustration respects reduced motion and Pause. Explore in 3D
+retains the physiological model and a separate Chambers & flow control. A
+subsequent full run exposed native caption-scroll timing; Home/End now explicitly
+move within the caption region, with the existing regression retained.
 
-- Compare the original source image and final captures in one normalized
-  visual review; decide whether further heart framing and visual refinement
-  are wanted.
-- The licensed library is now recovered and hash-verified. The initial full
-  run found a short-portrait pearl-reading defect; the hero has been compacted
-  to preserve reading room. The focused probe passes, but the full app and
-  regenerated PWA still need validation. See the private-checkpoint JSON.
-- Review CI results and the remaining affected theme/layout coverage before
-  merging or deploying. Desktop WebKit does not constitute a physical iPad run.
+## Remaining visual differences and limits
+
+- The heart is an original generated illustration, not the exact reference
+  image. Its decorative anatomy is labeled as illustrative; reference callouts
+  are not reproduced. The interactive physiological model remains separate.
+- The existing logo, selected-rail colors and theme controls are retained with
+  minor differences from the mockup. Paper texture is not reproduced.
+- Portrait adapts to the taller viewport; phone and enlarged reading content
+  may scroll. Desktop WebKit is not a physical iPad measurement.
+- Production has not been updated. A full green application run is still a
+  separate release gate; do not infer it from this visual review.
+
+
+## Latest-master integration
+
+Integrated origin/master through 5126783, including the Apex rail placement
+(Echo remains in Labs), scanned-model attribution/menu, pearl sizing/readability,
+chapter resume and CI changes. Fresh captures confirm the invitation, heart and
+session strip on the combined source. Portrait review caught the legacy hero
+summary leaking through a more-specific upstream rule; the corrected selector
+keeps that copy hidden. Geometry checks at 1312×910, 834×1194 and 744×1000 show
+Home, Brain and Labs fitting their page viewport. The focused reader reclaims
+the session strip's space and uses a compact hero on short portrait tablets.
+
+The visual comparison passes with the differences listed above. Full private
+Chromium and WebKit/PWA validation remains a separate, pending release gate.

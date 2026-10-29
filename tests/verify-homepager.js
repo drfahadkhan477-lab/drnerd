@@ -68,6 +68,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await page.evaluate(() => { homePage = 0; S.screen = 'home'; render(); });
   await still('first render');
+  head('the selected Home invitation');
+  await require('./_atlas-landing')(page,ok,settled);
+  await still('after invitation actions');
 
   head('three pages, each with its own things');
   const parts = await page.evaluate(() => {
@@ -110,6 +113,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
           : pager.bottom<=tabs.top && Math.abs(innerHeight-12-tabs.bottom)<=1,
         orientation: document.querySelector('.home-tabs').getAttribute('aria-orientation'),
         wanted: besidePages?'vertical':'horizontal',
+
         fabClear:buttons.every(t=>fab.right<=t.left||fab.left>=t.right||fab.bottom<=t.top||fab.top>=t.bottom) };
     });
     ok(`${label}: the screen does not scroll, the pages do`,g.doc<=g.vh+1,JSON.stringify(g));
@@ -127,18 +131,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after the breakpoint pair');
+
   for (const size of [{width:1180,height:820},{width:834,height:1194},{width:1024,height:768}]) {
     await page.setViewportSize(size);
     for(let i=0;i<3;i++) {
       await page.evaluate(i=>homeGo(i,false),i); await still('tablet landing page');
       const g=await page.evaluate(i=>{const e=document.getElementById('homePage'+i);return {height:e.clientHeight,content:e.scrollHeight,width:e.clientWidth,contentWidth:e.scrollWidth};},i);
       ok(`${size.width}×${size.height}: landing page ${i} fits without clipping or page scrolling`,g.height>0&&g.content<=g.height+1&&g.contentWidth<=g.width+1,JSON.stringify(g));
-      const headings=await page.evaluate(()=>[...document.querySelectorAll('.home-page:not([inert]) h1')].length);
+      const headings=await page.evaluate(()=>[...document.querySelectorAll('.home-page:not([inert]) h1')].filter(h=>h.getClientRects().length).length);
+
       ok(`${size.width}×${size.height}: active landing page ${i} has one H1`,headings===1,String(headings));
     }
   }
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after tablet sizes');
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
+  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
+
 
 
   head('a swipe');
@@ -332,9 +342,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>render());
   await still('paused Home remounted');
   await settled(page,()=>!document.getAnimations().some(a=>a.playState==='running'&&a.effect&&Number.isFinite(a.effect.getTiming().iterations)),{label:'Home entrance effects finished'});
-  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('.hero-h1')).opacity,
+  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('#pearlConcept')).opacity,
     label:document.getElementById('atlasPause')?.textContent.trim()}));
   ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play motion',JSON.stringify(pausedRemount));
+
   const resumed = await page.evaluate(async () => {
     document.getElementById('atlasPause')?.click();
     return {...await __homeWork(),label:document.getElementById('atlasPause')?.textContent.trim(),
@@ -420,6 +431,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const expandedFigure=await page.evaluate(()=>getComputedStyle(document.getElementById('pearlFig')).display!=='none');
   ok('Show all restores a figure hidden by the compact layout',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
   if(expandedFigure){await page.locator('#pearlFig').focus();await page.keyboard.press('End');}
+
   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
   const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});
   ok('a long figure caption can be scrolled with the keyboard',captionScroll.overflow>0&&captionScroll.scroll>0,JSON.stringify(captionScroll));
@@ -433,11 +445,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const r=s=>{const e=document.querySelector(s);return e?e.getBoundingClientRect():null;};
     const rhythm=r('#homePage0 .hero-rhythm-label'), stats=r('#homePage0 .hero-stats-row'), live=r('#homePage0 .hero-live');
     const loose=[...document.querySelectorAll('#homePage0 .hero-tool')].filter(b=>!b.closest('#heroMenu')&&b.offsetWidth>0).length;
-    return {explore:[...document.querySelectorAll('#homePage0 button')].some(b=>/explore/i.test(b.textContent)),
+    const entry=r('#atlasExplore');
+    return {entry:!!entry&&entry.width>=44&&entry.height>=44,
       below:!!(rhythm&&stats)&&stats.top>=rhythm.bottom-1, inside:!!(stats&&live)&&stats.bottom<=live.bottom+1&&stats.top>=live.top,
       loose, menuHidden:document.getElementById('heroMenu')?.hidden};
   });
-  ok('no Explore button, and the numbers sit under the rhythm, inside the hero',!hero.explore&&hero.below&&hero.inside,JSON.stringify(hero));
+  ok('the selected design keeps a touch-sized explicit 3D entry',hero.entry,JSON.stringify(hero));
   ok('no round tool stands beside the heart; they are in its menu, closed',hero.loose===0&&hero.menuHidden===true,JSON.stringify(hero));
   await page.locator('#heroHeartBtn').click();
   const opened=await page.evaluate(()=>{const m=document.getElementById('heroMenu'),b=document.getElementById('heroHeartBtn');
@@ -453,15 +466,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and a tap anywhere else closes it',await page.evaluate(()=>document.getElementById('heroMenu').hidden===true));
 
   head('next session uses the actual due deck');
+  await page.getByRole('button',{name:'Back to Home',exact:true}).click();
   await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
   await still('empty due deck');
-  /* Round five: the Explore button went; with nothing due the hero ends in its numbers, and there is no action. */
-  const noDue=await page.evaluate(()=>({action:!!document.getElementById('atlasNext'),stats:document.querySelectorAll('#homePage0 .hero-stats-row .hl-item').length}));
-  ok('with no due cards the hero offers no action, only its three numbers',!noDue.action&&noDue.stats===3,JSON.stringify(noDue));
+  await page.locator('.atlas-session button').click();
+
+  await settled(page,()=>!window.__vtLive,{label:'chapter action'});
+  ok('with no due cards the next-session action opens Chapters',await page.evaluate(()=>S.screen==='study'));
+
   const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
     homePage=0;S.screen='home';render();return dueQuestions().map(q=>q.id);});
   await still('two due cards');
-  await page.locator('#atlasNext').click();
+  await page.locator('.atlas-session button').click();
+
   await settled(page,()=>!window.__vtLive,{label:'due action'});
   const actual=await page.evaluate(()=>({screen:S.screen,ids:S.questions.map(q=>q.id),mode:S.mode}));
   ok('the next-session review opens only the cards actually due',wanted.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&JSON.stringify(actual.ids)===JSON.stringify(wanted),JSON.stringify({count:actual.ids.length}));

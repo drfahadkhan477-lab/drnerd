@@ -68,6 +68,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
 
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
   /* Seed a realistic spread of progress so the gauge and the numbers are testable
      and mastery lands strictly below coverage. */
@@ -297,6 +299,9 @@ onDeath(() => ({ section, checks: passed + failed, errors,
   }));
   ok('the persisted state itself survives a cold load', afterReload.state === 'focus', afterReload.state);
   ok('and the home screen wears the restored layout too', afterReload.attr === 'focus', afterReload.attr);
+
+  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
+  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
   head('the home screen fills the iPad it is on');
   {

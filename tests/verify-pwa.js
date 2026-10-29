@@ -230,6 +230,8 @@ async function heapAfterBoot(page, url) {
     const page = watch(await browser.newPage({ viewport: { width: 1180, height: 820 } }), events, 'scanned heart', errors);
     await page.goto(target, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
+    // The reference-led Home starts with the illustration; enter the real 3D view before testing its menu.
+    await page.locator('#atlasExplore').click();
     /* Polled, not waited for: whether the scan arrives is the claim. */
     const model = await page.evaluate(() => new Promise(r => {
       const t0 = Date.now();

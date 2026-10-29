@@ -60,10 +60,10 @@ suite pass. Rebuild the PWA and complete the listed validation gates before
 merging or deploying. Raw logs remain under the ignored
 `build/private-validation/atlas-release/` directory in the current workspace.
 
-## Continuation review
 
-The follow-up source incorporates the merged pearl-reading and Apex fixes. Its
-measured results and remaining release gates are in the pull request, not here:
-AGENTS.md keeps unguarded counts out of the repository. The earlier checkpoint
-above is retained as history. No historical run should be presented as
-validation of the current source.
+The owner subsequently asked for faithful reproduction of the selected Home
+composition. See `docs/validation/quiet-atlas-home-redesign.json`: the introductory
+landing and real pearl reader now have separate states, and Explore in 3D keeps
+the existing model accessible beside an original decorative anatomical asset.
+Begin recall and Reveal are the entry points for reader-specific browser checks.
+Do not interpret earlier full-run partial results as validating this redesign.
