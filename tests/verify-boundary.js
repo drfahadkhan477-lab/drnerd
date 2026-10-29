@@ -265,6 +265,30 @@ Recovery is usually complete within weeks.
        /asking to be remembered/.test(sys2) && /save a new note/.test(sys2));
   }
 
+  head('long conflicting evidence survives the real tool-result wire');
+  {
+    const saved = await page.evaluate(() => REF.slice());
+    await page.evaluate(() => {
+      REF.length = 0;
+      for (let i = 0; i < 3; i++) REF.push({id:'wire-'+i,title:'Invented omega source '+i,
+        source:'Invented appendix '+i,body:'Omega protocol. '+('Background explanation. '.repeat(140))+
+          (i===2?'CONFLICT-END: do not use the fictional blue protocol.':'Use the fictional blue protocol.')});
+      invalidateIndex();
+    });
+    captured.length = 0; queued.length = 0;
+    queued.push('data: '+JSON.stringify({candidates:[{content:{role:'model',parts:[{functionCall:{
+      name:'search_question_bank',args:{query:'omega',limit:3}}}]}}]})+'\n\n',SSE);
+    await page.evaluate(() => fire('Compare the invented omega sources.'));
+    await page.waitForFunction(() => !aiBusy, null, {timeout:30000});
+    const body = toolResults(captured[1]).join('\n');
+    ok('all supplied note boundaries survive the actual grounded tool request',
+      body.length > 9000 && (body.match(/<<<NOTE-[A-Z0-9]{12}>>>/g)||[]).length===3 &&
+      (body.match(/<<<\/NOTE-[A-Z0-9]{12}>>>/g)||[]).length===3);
+    ok('the conflicting statement at the end of the evidence reaches the model',
+      body.includes('CONFLICT-END: do not use the fictional blue protocol.'));
+    await page.evaluate(notes => {REF.length=0;REF.push(...notes);invalidateIndex();},saved);
+  }
+
   head('a failed request is not something Apex said');
   {
     captured.length = 0;

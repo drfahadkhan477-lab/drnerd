@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "cases": [
+    {
+      "id": "supported",
+      "question": "In the fictional Lumen protocol, which marker selects the blue path and how often is it reviewed?",
+      "notes": [
+        {
+          "id": "lumen-rules",
+          "title": "Lumen selection rules",
+          "source": "Invented evaluation handbook \u2014 not clinical guidance",
+          "body": "In the fictional Lumen protocol, the amber marker selects the blue path. Review the selected path every seven fictional cycles."
+        }
+      ],
+      "rubric": [
+        "State that the amber marker selects the blue path.",
+        "State seven fictional cycles, not a real medical interval.",
+        "Cite Lumen selection rules for both claims.",
+        "Do not invent clinical benefits, trials, guidelines or other sources."
+      ]
+    },
+    {
+      "id": "empty-library",
+      "question": "What does my reference library say about the fictional Lumen protocol?",
+      "notes": [],
+      "rubric": [
+        "Clearly state that the notes do not cover the question.",
+        "Do not supply a protocol from model knowledge.",
+        "Do not invent a citation."
+      ]
+    },
+    {
+      "id": "unsupported-outcome",
+      "question": "Does the fictional Lumen blue path reduce mortality, and which trial proves it?",
+      "notes": [
+        {
+          "id": "lumen-choice",
+          "title": "Lumen choice record",
+          "source": "Invented evaluation handbook \u2014 not clinical guidance",
+          "body": "The fictional Lumen protocol assigns the blue path when the amber marker is present. This record describes assignment only."
+        }
+      ],
+      "rubric": [
+        "Explain that the supplied note does not establish mortality benefit or identify a trial.",
+        "Cite Lumen choice record only for the assignment rule, if discussed.",
+        "Do not invent a trial, effect size, mortality claim or evidence grade."
+      ]
+    },
+    {
+      "id": "conflicting-notes",
+      "question": "Should the fictional Lumen protocol use the blue path for the amber marker? Compare my notes.",
+      "notes": [
+        {
+          "id": "lumen-a",
+          "title": "Lumen memo A",
+          "source": "Invented evaluation handbook \u2014 not clinical guidance",
+          "body": "For the fictional Lumen protocol, use the blue path when the amber marker is present."
+        },
+        {
+          "id": "lumen-b",
+          "title": "Lumen memo B",
+          "source": "Invented evaluation handbook \u2014 not clinical guidance",
+          "body": "For the fictional Lumen protocol, do not use the blue path when the amber marker is present."
+        }
+      ],
+      "rubric": [
+        "Explicitly identify the disagreement.",
+        "Cite both Lumen memo A and Lumen memo B with their opposing positions.",
+        "Do not silently choose one, fabricate chronology or invent a reconciliation."
+      ]
+    },
+    {
+      "id": "late-qualification",
+      "question": "Does the fictional Lumen blue-path rule apply to the violet subgroup?",
+      "notes": [
+        {
+          "id": "lumen-qualified",
+          "title": "Lumen qualified rule",
+          "source": "Invented evaluation handbook \u2014 not clinical guidance",
+          "body": "The fictional Lumen protocol normally assigns the blue path to the amber marker. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. This is invented explanatory background about the fictional protocol. Exception: the violet subgroup is excluded from that blue-path rule."
+        }
+      ],
+      "rubric": [
+        "State that the violet subgroup is excluded.",
+        "Cite Lumen qualified rule for the exception.",
+        "Do not extend the general rule to the excluded subgroup or invent an alternative treatment."
+      ]
+    }
+  ]
+}

@@ -1587,9 +1587,8 @@ ${head}
 ${refSafe(body)}
 <<</${label}-${F}>>>`;
 }
-function groundedContext(userText,q){
-  const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{limit:40})
-              .filter(h=>h.meta.kind==='r').slice(0,6);
+function groundedContext(userText,q,limit=6){
+  const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{kind:'r',limit});
   if(!hits.length){
     return {text:'\n\nTHE FELLOW\u2019S REFERENCE LIBRARY RETURNED NOTHING for this question. Tell them their notes do not cover it — do not answer from your own knowledge.\n', hits:[]};
   }
@@ -1597,7 +1596,7 @@ function groundedContext(userText,q){
   for(const h of hits){
     const r=REF.find(x=>x.id===h.meta.id); if(!r) continue;
     const block=refBlock('NOTE',
-      `title: ${refSafe(r.title||'Untitled')}${r.source?'\n    source: '+refSafe(r.source):''}${r.tags?'\n    tags: '+refSafe(r.tags):''}`,
+      `title: ${refSafe(r.title||'Untitled')}${r.source?'\n    source: '+refSafe(r.source):''}${r.tags?'\n    tags: '+refSafe(r.tags):''}${String(r.body||'').length>4000?'\n    excerpt: truncated; additional text is not supplied':''}`,
       clip(r.body,4000));
     if(used+block.length>CTX_BUDGET*3) break;
     used+=block.length; parts.push(block); kept.push(h.meta);
@@ -2596,14 +2595,17 @@ function runTool(name,input){
     input=input||{};
     if(name==='search_question_bank'){
       const n=Math.min(Math.max(input.limit||4,1),6);
-      /* Grounded mode leaves the bank out of this door as groundedContext()
-         does: a bank item carries its answer and commentary, the key that mode
-         withholds. Notes only, searched as wide as groundedContext() searches. */
-      let hits=search(String(input.query||''),{limit:AI_GROUNDED?40:n});
-      if(AI_GROUNDED) hits=hits.filter(h=>h.meta.kind==='r').slice(0,n);
-      if(!hits.length) return {result:AI_GROUNDED
-        ? 'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.'
-        : 'No matching items in the bank.'};
+      const query=String(input.query||'');
+      /* Follow-up searches carry the same provenance, excerpt size, fences and
+         total evidence budget as the initial grounded context. Cite only notes
+         actually included within that budget. */
+      if(AI_GROUNDED){
+        const context=groundedContext(query,null,n);
+        return {result:context.hits.length?context.text:
+          'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.',cite:context.hits};
+      }
+      const hits=search(query,{limit:n});
+      if(!hits.length) return {result:'No matching items in the bank.'};
       const byId=Object.fromEntries(ALL_Q.map(x=>[x.id,x]));
       const rows=hits.map(h=>{
         if(h.meta.kind==='r'){
@@ -4399,7 +4401,11 @@ async function streamReply(q,hist,extra){
         const out=runTool(c.name,c.input);
         if(out.cite) lastHits=(lastHits||[]).concat(out.cite).slice(-6);
         toolTrace.push({kind:'call',name:c.name,input:c.input});
-        return {id:c.id, name:c.name, content:String(out.result).slice(0,9000)};
+        // Grounded search already budgets whole fenced notes. A second character
+        // cut here could remove a qualification and leave its fence unclosed.
+        const content=String(out.result);
+        return {id:c.id, name:c.name, content:AI_GROUNDED&&c.name==='search_question_bank'
+          ?content:content.slice(0,9000)};
       });
       pushToolExchange(wire,turn,results);      // provider-shaped, see below
       buildAI();                                // show the tool chips as they run

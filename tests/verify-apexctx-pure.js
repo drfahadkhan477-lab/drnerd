@@ -215,6 +215,66 @@ head('get_performance, plan_session and start_quiz');
   ok('with nothing flagged no quiz is built', (() => { const x = world({ flagged: [] }); const r = text(x, 'start_quiz', { flagged_only: true }); return /No questions matched/.test(r) && x.pendingNav === null; })());
 }
 
+head('grounded retrieval ranks notes before bank results can crowd them out');
+{
+  const w = world({ grounded: true });
+  const query = 'alpha beta gamma delta epsilon zeta theta kappa';
+  w.ALL_Q = Array.from({ length: 60 }, (_, i) => ({ ...q, id: 'CROWD_' + i,
+    s: (query + ' ').repeat(8), ex: 'BANK-ONLY-ANSWER-SENTINEL' }));
+  w.ALL_Q.push(...Array.from({ length: 300 }, (_, i) => ({ ...other, id: 'FILL_' + i,
+    s: 'Unrelated invented background', ex: 'Background detail.' })));
+  w.REF.push({ id: 'note-alpha', title: 'Alpha reference', source: 'Invented source',
+    body: 'Alpha is the topic of this invented note. ' + 'Unrelated filler detail. '.repeat(100) });
+  // Fixture precondition, not a passing product check: mixed ranking must lose the note,
+  // while the actual notes-only ranker must still find it. No mocked search implementation.
+  if (w.search(query, { limit: 40 }).some(h => h.meta.kind === 'r') ||
+      w.search(query, { kind: 'r', limit: 6 })[0]?.meta.id !== 'note-alpha') {
+    throw new Error('The invented bank must crowd out the note only in mixed ranking');
+  }
+  const context = w.groundedContext(query, null);
+  ok('grounded context retains a relevant note despite higher ranked bank items',
+    context.hits.length === 1 && context.hits[0].id === 'note-alpha' &&
+    context.text.includes('Alpha is the topic') && !context.text.includes('BANK-ONLY-ANSWER-SENTINEL'));
+  const result = w.runTool('search_question_bank', { query, limit: 2 });
+  ok('grounded search tool retains the note and cites only the material it returns',
+    result.cite?.length === 1 && result.cite[0].kind === 'r' && result.cite[0].id === 'note-alpha' &&
+    result.result.includes('Alpha is the topic') && !result.result.includes('BANK-ONLY-ANSWER-SENTINEL'));
+}
+
+head('grounded tool evidence preserves source details and long-note qualifications');
+{
+  const w = world({ grounded: true });
+  const qualifier = 'EXCEPTION: this invented recommendation excludes the amber subgroup.';
+  w.REF.push({ id: 'qualified-note', title: 'Invented alpha recommendation', source: 'Invented review, section Q',
+    body: 'Alpha recommendation. ' + 'Background explanation. '.repeat(55) + qualifier });
+  const result = w.runTool('search_question_bank', { query: 'alpha recommendation', limit: 1 });
+  ok('grounded tool preserves a qualification beyond the old short excerpt',
+    result.result.includes(qualifier) && result.cite?.[0]?.id === 'qualified-note');
+  ok('grounded tool includes the source that supports its title citation',
+    result.result.includes('source: Invented review, section Q'));
+  w.REF.push({ id: 'long-note', title: 'Invented omega reference', source: 'Invented appendix',
+    body: 'Omega evidence. ' + 'Extended explanation. '.repeat(300) });
+  w.invalidateIndex();
+  const long = w.runTool('search_question_bank', { query: 'omega', limit: 1 });
+  ok('grounded tool explicitly marks a clipped note as incomplete evidence',
+    long.result.includes('excerpt: truncated; additional text is not supplied') && long.result.length < 5000);
+}
+
+head('grounded tool limits and citations follow the supplied evidence');
+{
+  const w = world({ grounded: true });
+  w.REF.push(...Array.from({ length: 6 }, (_, i) => ({ id: 'budget-' + i,
+    title: 'Invented budget note ' + i, body: 'Omega evidence. ' + 'Background detail. '.repeat(300) })));
+  const one = w.runTool('search_question_bank', { query: 'omega', limit: 1 });
+  ok('grounded tool respects the requested note limit', one.cite?.length === 1);
+  const many = w.runTool('search_question_bank', { query: 'omega', limit: 6 });
+  const blocks = many.result.match(/<<<NOTE-[A-Z0-9]+>>>[\s\S]*?<<<\/NOTE-[A-Z0-9]+>>>/g) || [];
+  ok('grounded tool keeps its evidence budget and cites exactly the included notes',
+    blocks.length > 1 && blocks.length < 6 && blocks.join('').length <= 15600 &&
+    many.cite?.length === blocks.length && many.cite.every(h =>
+      blocks.filter(b => b.includes('title: ' + h.title + '\n')).length === 1));
+}
+
 head('a mock block is open: every tool refuses, and nothing queued opens');
 {
   const w = world({ block: true, flagged: [q] });
