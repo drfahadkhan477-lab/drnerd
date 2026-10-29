@@ -111,8 +111,8 @@ const STUB = () => {
     await onScreen(page, 'home', { marker: '.hero-h1' });
   };
   const toStudy = async (page) => {
-    await page.evaluate(() => goStudy());
-    await onScreen(page, 'study', { marker: '#planCard' });
+    await page.evaluate(() => goSessions());
+    await onScreen(page, 'sessions', { marker: '#sessionsPage' });
     await quiet(page);
   };
   const waitFor = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 15000 });
@@ -123,9 +123,9 @@ const STUB = () => {
     /* The scripted voice is set aside and put back: the same page, without speech. */
     await page.evaluate(() => { window.__stubSynth = window.speechSynthesis; Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: undefined }); });
     await toStudy(page);
-    const r = await page.evaluate(() => ({ voice: !!document.getElementById('voiceCard'), plan: !!document.getElementById('planCard') }));
+    const r = await page.evaluate(() => ({ voice: !!document.getElementById('voiceCard'), plan: !!document.getElementById('mockCard') }));
     ok('no Voice card without speech APIs', r.voice === false, JSON.stringify(r));
-    ok('the plan card is still there', r.plan === true);
+    ok('the mock card is still there', r.plan === true);
     await page.evaluate(() => { Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: window.__stubSynth }); });
   }
 
