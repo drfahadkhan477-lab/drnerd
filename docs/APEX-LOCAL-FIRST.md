@@ -16,7 +16,7 @@ without a configured key.
 
 Next increments: reduce ordinary explanations to a single evidence-backed
 request where appropriate; classify provider failures with actionable cooldowns;
-and evaluate source-versioned explanation caching. Those changes need separate
+and evaluate persistent, source-versioned explanation caching. Those changes need separate
 coverage of grounded evidence, state-changing tools and invalidation. No cloud
 fallback provider or browser model is introduced by this increment.
 
@@ -46,4 +46,26 @@ retries still apply to transient refusals before streaming. It still consumes
 cloud allowance. Normal Send retains study tools and multi-step conversations;
 no language heuristic silently changes the user's intended operation. Prompt
 and transport tests do not establish live medical answer quality or a measured
-reduction in billing. Source-versioned caching remains future work.
+reduction in billing. Persistent caching remains future work; session reuse is described below.
+
+
+## Session explanation reuse
+
+Completed Explain draft responses can be reused for fifteen minutes, with at
+most eight entries held only in memory. A reused answer is labeled in the
+conversation. Reloading the app clears the cache. Normal Send bypasses it.
+
+The SHA-256 identity includes the exact outgoing context/history/figures, full
+reference library, model, grounding mode and credential route/identity. Only
+the per-turn note and memory fence nonces are normalized; source wording is
+not normalized. Changed conversation context therefore usually requires a new
+request, even when the latest question has identical wording. This favors
+correctness over a high hit rate. Credentials and private input text are not
+stored in cache keys or new persistent storage.
+
+Only a nonempty response ending with the provider's STOP finish reason and no
+tool calls is admitted. Truncation, errors and cancellation are excluded.
+Large inputs or unavailable browser cryptography bypass caching; large replies
+are not retained. This is reuse of a previous model answer, not independent
+verification of its correctness, and it does not establish measured savings
+for real study sessions.

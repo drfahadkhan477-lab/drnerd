@@ -625,6 +625,35 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('explanation retains retrieved note evidence and grounding instruction',JSON.stringify(explanation.first).includes('Omega protocol uses an amber marker.')&&JSON.stringify(explanation.first).includes('supplied evidence is insufficient'));
   ok('unexpected tool calls cannot act or cause follow-up requests in explanation mode',explanation.count===2&&explanation.actions===0&&explanation.notice);
 
+  head('session explanation reuse is exact and complete');
+  const reuse=await page.evaluate(async()=>{
+    const saved=window.fetch, results={};let calls=0,finish='STOP';
+    if(typeof apexExplanationCache!=='undefined') apexExplanationCache.clear();
+    window.fetch=async()=>{calls++;return new Response('data: '+JSON.stringify({candidates:[{finishReason:finish,content:{parts:[{text:'Synthetic complete explanation'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});};
+    aiAbort=new AbortController();lastHits=[];
+    const wire=[{role:'user',content:'Explain the fictional marker'}];
+    const ask=async(normal=false)=>{refFenceRoll();return oneTurnGemini(null,wire,refBlock('NOTE','title: synthetic','Amber marker'),!normal);};
+    try{
+      await ask();const repeated=await ask();results.hit=calls===1&&repeated.reused===true;
+      REF.push({id:'cache-change',title:'Changed evidence',body:'New qualification'});
+      await ask();results.source=calls===2;REF.pop();
+      const model=cur().model;cur().model=model+'-different';await ask();results.model=calls===3;cur().model=model;
+      await ask(true);await ask(true);results.normal=calls===5;
+      wire[0].content='Another explanation';finish='MAX_TOKENS';await ask();await ask();results.incomplete=calls===7;
+      if(typeof apexExplanationCache!=='undefined'){
+        for(const entry of apexExplanationCache.values()) entry.at=Date.now()-16*60*1000;
+        wire[0].content='Explain the fictional marker';finish='STOP';await ask();results.expired=calls===8;
+      }
+      return results;
+    }finally{window.fetch=saved;aiAbort=null;if(typeof apexExplanationCache!=='undefined')apexExplanationCache.clear();}
+  });
+  ok('identical explanations reuse despite fresh evidence fences',reuse.hit);
+  ok('source changes invalidate explanation reuse',reuse.hit&&reuse.source);
+  ok('model changes invalidate explanation reuse',reuse.hit&&reuse.model);
+  ok('normal Send bypasses explanation reuse',reuse.hit&&reuse.normal);
+  ok('incomplete answers are never reused',reuse.hit&&reuse.incomplete);
+  ok('expired explanations require a new provider request',reuse.expired);
+
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

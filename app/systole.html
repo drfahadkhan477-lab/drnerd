@@ -3968,7 +3968,7 @@ function buildAI(){
   const msgs=hist.length
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
-        : `<div class="msg bot">${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
+        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
     : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
   /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
   const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
@@ -4412,7 +4412,7 @@ async function streamReply(q,hist,extra,explainOnly=false){
       const turn=await oneTurn(q,wire,extra,explainOnly);
       if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
-        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text});
+        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{})});
         saveJSON(AI_CHAT,CHATS);
       }
       /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
@@ -4633,19 +4633,40 @@ function toGeminiContents(wire){
   return wire.map(m=>m.parts ? {role:m.role,parts:m.parts}
                               : {role:m.role==='assistant'?'model':'user',parts:geminiParts(m.content)});
 }
+// Session-only: never persist additional private content or credentials.
+const apexExplanationCache=new Map();
+async function explanationKey(body){
+  try{
+    if(!crypto.subtle) return null;
+    let normalized=body;
+    for(const label of ['NOTE','MEMORY']) for(const close of ['', '/']){
+      normalized=normalized.split('<<<'+close+label+'-'+refFence()+'>>>').join('<<<'+close+label+'-SESSION>>>');
+    }
+    const identity=JSON.stringify([normalized,REF,AI_GROUNDED,AI.provider,cur().model,cur().key,apexHosted()]);
+    if(identity.length>1000000) return null;
+    const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity));
+    return Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
+  }catch(_){return null;}
+}
 async function oneTurnGemini(q,wire,extra,explainOnly=false){
   const model=cur().model;
   const contents=toGeminiContents(Vision.withImages(
     Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
     refImagesForHits(lastHits), AI.provider));
-  const r=await geminiFetch(gemUrl('stream',model,cur().key),{
-    method:'POST', signal:aiAbort.signal,
-    headers:gemHeaders(cur().key,true),
-    body:JSON.stringify({
+  const requestBody=JSON.stringify({
       systemInstruction:{parts:[{text:systemPrompt()+'\n\n'+aiCtx(q)+(extra||'')+(explainOnly?'\nExplain the supplied context concisely. No tools are available in this mode. Do not claim to search, save or change study state. If the supplied evidence is insufficient, say so.':'')}]},
       ...(explainOnly?{}:{tools:[{functionDeclarations:toGeminiTools(TOOLS)}]}),
       generationConfig:{maxOutputTokens:2000},
-      contents})
+      contents});
+  const cacheKey=explainOnly?await explanationKey(requestBody):null;
+  if(aiAbort.signal.aborted) throw new DOMException('Stopped','AbortError');
+  const cached=cacheKey&&apexExplanationCache.get(cacheKey);
+  if(cached&&Date.now()-cached.at<15*60*1000){
+    return {text:cached.text,raw:[],calls:[],reused:true};
+  }
+  const r=await geminiFetch(gemUrl('stream',model,cur().key),{
+    method:'POST', signal:aiAbort.signal,
+    headers:gemHeaders(cur().key,true),body:requestBody
   },attempt=>{
     const live=document.getElementById('aiLive');
     if(live) live.textContent='Gemini is busy. Retrying ('+attempt+'/2)…';
@@ -4661,7 +4682,7 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
      the way oneTurnGroq's callMap has to). raw keeps every part in the order
      it arrived, so a turn that starts talking and then calls a tool pushes
      back exactly what it did, not a reconstruction of it. */
-  let buf='', text='', raw=[];
+  let buf='', text='', raw=[], finishReason='';
   const painter=makeStreamPainter(live,body,()=>text);
   try{
   while(true){
@@ -4674,6 +4695,7 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
       let j; try{ j=JSON.parse(p); }catch(_){ continue; }
       if(j.error) throw new Error(j.error.message||'stream error');
       const cand=j.candidates&&j.candidates[0]; if(!cand)continue;
+      if(cand.finishReason) finishReason=cand.finishReason;
       for(const part of (cand.content&&cand.content.parts)||[]){
         /* THE SIGNATURE TRAVELS WITH THE PART, AND HAS TO GO BACK WITH IT.
            Gemini 3 signs the parts of a turn that involved thinking, and
@@ -4706,6 +4728,11 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
   const calls=raw.filter(p=>p.functionCall).map(p=>({
     id:'call_'+Math.random().toString(36).slice(2),
     name:p.functionCall.name, input:p.functionCall.args||{}}));
+  if(cacheKey&&finishReason==='STOP'&&text.length<=50000&&text.trim()&&!calls.length&&!aiAbort.signal.aborted){
+    apexExplanationCache.delete(cacheKey);
+    while(apexExplanationCache.size>=8) apexExplanationCache.delete(apexExplanationCache.keys().next().value);
+    apexExplanationCache.set(cacheKey,{text,at:Date.now()});
+  }
   return {text, raw, calls};
 }
 /* Gemini says {error:{message}}. The other shapes — {message} or {detail} at
