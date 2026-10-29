@@ -19,3 +19,15 @@ request where appropriate; classify provider failures with actionable cooldowns;
 and evaluate source-versioned explanation caching. Those changes need separate
 coverage of grounded evidence, state-changing tools and invalidation. No cloud
 fallback provider or browser model is introduced by this increment.
+
+## Provider failure guidance
+
+Apex distinguishes project permissions, daily quotas, provider retry delays,
+payment requirements, hosted relay configuration and the site's own throttle.
+Structured quota and retry details are interpreted locally; this adds no model
+request and does not retain raw responses. A retry delay is guidance, not a
+live countdown or an enforcement mechanism. Unknown quota errors do not claim
+a daily reset. Existing bounded retries and partial-stream safeguards remain.
+
+Actual project allowance, billing and key validity still require Google's
+account information; error classification is not an account health check.

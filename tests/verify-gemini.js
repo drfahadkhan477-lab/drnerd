@@ -520,6 +520,29 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a retired model points at Connect, not at the model menu',
      /Connect/.test(goneMsg) && !/pick a different one in settings/i.test(goneMsg), goneMsg);
 
+  head('actionable quota and permission guidance');
+  const guidance=await page.evaluate(async()=>{
+    const get=async(status,message,details=[],hosted=false)=>{
+      const r=new Response(JSON.stringify({error:{message,details}}),{status});
+      if(hosted) Object.defineProperty(r,'url',{value:'https://study.example/api/apex/gemini/stream'});
+      return apiError(r,'gemini');
+    };
+    return {
+      permission:await get(403,'Permission denied'),
+      daily:await get(429,'Quota exceeded',[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:'GenerateRequestsPerDay'}]}]),
+      wait:await get(429,'Quota exceeded',[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'45s'}]),
+      credit:await get(402,'Payment required'),
+      relay:await get(503,'This deployment has no GEMINI_API_KEY set.',[],true),
+      site:await get(429,'Too many requests in a minute — wait a moment and try again.',[],true)
+    };
+  });
+  ok('permission failures explain project restrictions rather than reject every key',/restrictions/.test(guidance.permission)&&!/key was rejected/.test(guidance.permission));
+  ok('structured daily quotas explain Pacific reset and shared project allowance',/midnight Pacific/.test(guidance.daily)&&/same project/.test(guidance.daily));
+  ok('provider retry delay is preserved in the guidance',/45 seconds/.test(guidance.wait));
+  ok('payment failures explain balance and spending limits',/prepaid balance/.test(guidance.credit)&&/spending limits/.test(guidance.credit));
+  ok('relay configuration failures identify the hosted service',/relay needs attention/.test(guidance.relay)&&!/temporarily unavailable/.test(guidance.relay));
+  ok('site throttling is distinct from Google quota',/site’s request limit/.test(guidance.site));
+
   head('transient overload recovery without replaying a stream');
   const retryCases = await page.evaluate(async () => {
     const saved = window.fetch, results = {};

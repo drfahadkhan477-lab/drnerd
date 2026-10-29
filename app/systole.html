@@ -4730,14 +4730,35 @@ const RELAY_OK_KEY='accsap12.relayok';
 function relayAnswered(r){ if(r&&r.ok&&viaRelay(r)){ try{ localStorage.setItem(RELAY_OK_KEY,'1'); }catch(_){} } }
 function relayKnown(){ try{ return localStorage.getItem(RELAY_OK_KEY)==='1'; }catch(_){ return false; } }
 async function apiError(r,provider){
-  let d=''; try{ d=errMsg(await r.json()); }catch(_){}
+  let j=null; try{ j=await r.json(); }catch(_){}
+  const d=errMsg(j), detail=JSON.stringify(j&&j.error&&j.error.details||[]);
   const name='Gemini';
+  const account=viaRelay(r)?'the hosted key’s project':'your key’s project';
   if((r.status===401||r.status===403)&&viaRelay(r)) return `This site refused to pass the request to Gemini${d?': '+e(d):'.'}`;
   if(r.status===401) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
-  if(r.status===403&&provider==='gemini') return 'Your API key was rejected. Tap the settings icon to re-enter it.';
+  if(r.status===403&&provider==='gemini'){
+    if(/api key not valid|key.*(?:blocked|leaked|revoked)/i.test(d)) return 'Your API key was rejected or blocked. Check its status in Google AI Studio and replace it if necessary.';
+    return 'Google denied permission. Check the project’s API access, key restrictions and free-tier eligibility in Google AI Studio. A new key in the same project may not resolve this.';
+  }
   if(r.status===400&&provider==='gemini'&&/api key not valid/i.test(d)) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
-  if(r.status===429&&provider==='gemini'&&/quota/i.test(d)) return "Gemini's quota limit was reached. Check your plan and quota in Google AI Studio, or choose another available model in Apex settings. The reset time depends on the limit.";
-  if(r.status===429) return 'Rate limited — wait a few seconds and try again.';
+  if(r.status===402) return `Check billing, prepaid balance and spending limits for ${account} in Google AI Studio. Repeated retries will not restore credit.`;
+  if(r.status===429){
+    const evidence=d+' '+detail;
+    if(/per.?day|daily/i.test(evidence)) return `Gemini's daily quota was reached for ${account}. Daily request quotas reset at midnight Pacific time. Check the affected model’s limits in Google AI Studio; creating another key in the same project does not reset them.`;
+    if(/billing|credit|balance|limit:\s*0\b/i.test(evidence)) return `Gemini has no available allowance for ${account}. Check billing, balance and the model’s active quota in Google AI Studio before retrying.`;
+    let seconds=null;
+    const h=r.headers&&r.headers.get('retry-after');
+    if(h!==null&&h!==undefined){const n=Number(h);seconds=Number.isFinite(n)?n:(Date.parse(h)-Date.now())/1000;}
+    if(seconds===null){
+      const info=j&&j.error&&Array.isArray(j.error.details)&&j.error.details.find(x=>/RetryInfo$/.test(x&&x['@type']||''));
+      const m=info&&String(info.retryDelay||'').match(/^(\d+(?:\.\d+)?)s$/);
+      if(m) seconds=Number(m[1]);
+    }
+    const wait=Number.isFinite(seconds)&&seconds>0?` Wait at least ${Math.ceil(seconds)} seconds before trying again.`:' Check the active limit before retrying; its reset time depends on the limit.';
+    if(viaRelay(r)&&/Too many requests in a minute/i.test(d)) return 'This site’s request limit was reached. Pause before asking again; replacing your Gemini key will not fix this site limit.';
+    return `Gemini’s quota or rate limit was reached for ${account}.`+wait+' Multiple keys in one project share quota.';
+  }
+  if(r.status>=500&&viaRelay(r)&&/GEMINI_API_KEY|ACCESS_AUD|ACCESS_TEAM_DOMAIN|APEX_MODELS|signing keys/i.test(d)) return 'This site’s Apex relay needs attention. Ask the site owner to check its Gemini secret, Access configuration and model settings. Re-entering a personal key is not required to repair the hosted service.';
   if(r.status===400&&/credit|balance/i.test(d)) return `Your ${name} account is out of credit.`;
   /* Pointing at the model menu is useless when every name in it is stale —
      which is the normal case once Google retires a generation. Pressing
