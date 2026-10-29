@@ -89,6 +89,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('Brain holds the gauge and a row for every chapter, and no doors', parts.brain.gauge && parts.brain.rows === parts.brain.chapters && parts.brain.rows > 0 && parts.brain.doors === 0,
      `${parts.brain.rows} rows for ${parts.brain.chapters} chapters, ${parts.brain.doors} doors`);
   ok('Labs holds the Rhythm Lab, Echo, the Practice Lab and Sessions', parts.labs.join('|') === 'goLab()|goEcho()|goPractice()|goSessions()', parts.labs.join(' · '));
+  /* Every card's white type sits on its own gradient: a card with none is white on the page (Sessions shipped so). */
+  const bare = await page.evaluate(() => [...document.querySelectorAll('.lab-card')].filter(c => getComputedStyle(c).backgroundImage === 'none').map(c => c.className));
+  ok('every Labs card is painted with its own gradient', bare.length === 0 && parts.labs.length === 4, bare.join(' · '));
   ok('and under them the study tools, Chapters first', parts.after && parts.labDoors[0] === 'Chapters' && ['Search', 'Progress', 'Notes', 'Memory', 'Annotations'].every(d => parts.labDoors.includes(d)),
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
