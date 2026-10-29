@@ -16,10 +16,14 @@ module.exports = async function atlasLanding(page, ok, settled) {
   ok('every Labs card has a painted surface behind its white labels',labSurfaces.length>0&&labSurfaces.every(c=>c.paint!=='none'),JSON.stringify(labSurfaces));
   const reduced=await page.evaluate(()=>matchMedia('(prefers-reduced-motion:reduce)').matches);
   await page.emulateMedia({reducedMotion:'no-preference'});
+  // Started events are counted from before Labs opens: a one-shot animation can finish before a later probe of
+  // getAnimations() runs on a slow WebKit, which reported a working entrance as missing.
+  await page.evaluate(()=>{window.__doorStarts=new Set();document.addEventListener('animationstart',e=>{if(e.animationName==='door-greet'&&e.target.matches('#homePage2 .door-ic .icon'))window.__doorStarts.add(e.target);});});
   await page.evaluate(()=>homeGo(2,false));
   await settled(page,()=>homePage===2&&!homeTween,{label:'Labs icon entrance'});
-  const motion=await page.evaluate(()=>[...document.querySelectorAll('#homePage2 .door-ic .icon')].map(e=>e.getAnimations().some(a=>a.animationName==='door-greet'&&a.effect.getTiming().iterations===1)));
-  ok('study-tool icons animate once when Labs opens',motion.length===6&&motion.every(Boolean));
+  await settled(page,()=>window.__doorStarts.size>=document.querySelectorAll('#homePage2 .door-ic .icon').length,{label:'every study-tool icon starting its entrance',timeout:8000}).catch(()=>{});
+  const motion=await page.evaluate(()=>[...document.querySelectorAll('#homePage2 .door-ic .icon')].map(e=>window.__doorStarts.has(e)&&getComputedStyle(e).animationIterationCount==='1'));
+  ok('study-tool icons animate once when Labs opens',motion.length===6&&motion.every(Boolean),JSON.stringify(motion));
   await page.emulateMedia({reducedMotion:'reduce'});
   ok('study-tool icons stop for reduced motion',await page.evaluate(()=>[...document.querySelectorAll('#homePage2 .door-ic .icon')].every(e=>getComputedStyle(e).animationName==='none'&&e.getAnimations().length===0)));
   await page.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});

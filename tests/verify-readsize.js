@@ -436,7 +436,10 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     ok('after a reload the page is still brightened', /brightness\(1\.2\)/.test((await tune()).filter), (await tune()).filter);
     await page.evaluate(() => goStudy());
     await onScreen(page, 'study', { marker: '#planCard' });
-    const fab = async () => page.evaluate(() => { const f = document.querySelector('.ai-fab'); const r = f.getBoundingClientRect(); return { bottom: Math.round(r.bottom), vh: innerHeight, y: Math.round(scrollY) }; });
+    /* Each reading waits for the button to be still: it has a transform transition, and a reading taken mid-way was off
+       by a pixel (CI WebKit, 753 then 754). The comparison stays exact. */
+    const fab = async () => { await page.waitForFunction(() => !document.querySelector('.ai-fab').getAnimations().length, null, { timeout: 8000 }).catch(() => {});
+      return page.evaluate(() => { const f = document.querySelector('.ai-fab'); const r = f.getBoundingClientRect(); return { bottom: Math.round(r.bottom), vh: innerHeight, y: Math.round(scrollY) }; }); };
     const before = await fab();
     /* The scroll is a precondition: wait until the page has moved, so a scroll WebKit has not yet applied is not measured as one. */
     await page.waitForFunction(() => { window.scrollTo(0, 99999); return scrollY > 0; }, null, { timeout: 8000, polling: 100 }).catch(() => {});
