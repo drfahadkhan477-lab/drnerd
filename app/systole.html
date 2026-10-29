@@ -1588,8 +1588,7 @@ ${refSafe(body)}
 <<</${label}-${F}>>>`;
 }
 function groundedContext(userText,q){
-  const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{limit:40})
-              .filter(h=>h.meta.kind==='r').slice(0,6);
+  const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{kind:'r',limit:6});
   if(!hits.length){
     return {text:'\n\nTHE FELLOW\u2019S REFERENCE LIBRARY RETURNED NOTHING for this question. Tell them their notes do not cover it — do not answer from your own knowledge.\n', hits:[]};
   }
@@ -2598,9 +2597,9 @@ function runTool(name,input){
       const n=Math.min(Math.max(input.limit||4,1),6);
       /* Grounded mode leaves the bank out of this door as groundedContext()
          does: a bank item carries its answer and commentary, the key that mode
-         withholds. Notes only, searched as wide as groundedContext() searches. */
-      let hits=search(String(input.query||''),{limit:AI_GROUNDED?40:n});
-      if(AI_GROUNDED) hits=hits.filter(h=>h.meta.kind==='r').slice(0,n);
+         withholds. Rank notes on their own before applying the result limit and
+         relevance cutoff, so bank hits cannot suppress matching notes. */
+      const hits=search(String(input.query||''),{kind:AI_GROUNDED?'r':null,limit:n});
       if(!hits.length) return {result:AI_GROUNDED
         ? 'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.'
         : 'No matching items in the bank.'};
