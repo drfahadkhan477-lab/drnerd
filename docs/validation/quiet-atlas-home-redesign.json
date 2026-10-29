@@ -74,14 +74,29 @@
     },
     "visualReview": "Fresh landscape/portrait captures reviewed; all three landing pages fit checked viewports. Differences documented in design-qa.md.",
     "pwaShellGzipKB": 279,
-    "fullValidation": "Fresh full Chromium/PWA run exposed animation edge clipping and a stepped-pearl fixture precondition; fixes added, final rechecks pending.",
+    "fullValidation": "Fresh full Chromium/PWA then WebKit/PWA runs queued against the corrected build. No complete release pass claimed.",
     "privateInputIntegrity": {
       "files": 774,
       "mismatches": 0
     },
     "negativeEvidence": [
       "Disabling first-letter capitalization triggers the capitalization assertion FAIL.",
-      "The existing layout check reported the animated heart escaping its container by 3 pixels before the inset fix."
-    ]
+      "The existing layout check reported the animated heart escaping its container by 3 pixels before the inset fix.",
+      "Showing the legacy hero summary deliberately triggers both new portrait assertions (744 and 834 widths)."
+    ],
+    "focusedChromiumAfterInset": {
+      "pearl": 142,
+      "layout": 26,
+      "homepager": 101,
+      "taps": 27,
+      "total": 296
+    },
+    "focusedWebKitAfterPortraitFix": {
+      "pearl": 142,
+      "homepager": 101,
+      "floor": 15,
+      "taps": 27
+    },
+    "pureSuitesOnPush": 77
   }
 }
