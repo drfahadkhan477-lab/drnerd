@@ -10,6 +10,10 @@ module.exports = async function atlasLanding(page, ok, settled) {
   }));
   ok('Home opens with the selected invitation and three learning steps',landing.title==='Make one idea stick.'&&landing.steps==='Observe,Explain,Recall'&&landing.intro&&landing.reader,JSON.stringify(landing));
   ok('the anatomical illustration is decoded and visibly sized',landing.image);
+  const labSurfaces=await page.evaluate(()=>[...document.querySelectorAll('.lab-card')].map(e=>({
+    name:e.querySelector('.lab-txt b')?.textContent,paint:getComputedStyle(e).backgroundImage
+  })));
+  ok('every Labs card has a painted surface behind its white labels',labSurfaces.length>0&&labSurfaces.every(c=>c.paint!=='none'),JSON.stringify(labSurfaces));
   const viewport=page.viewportSize();
   for(const width of [744,834]){
     await page.setViewportSize({width,height:1000});

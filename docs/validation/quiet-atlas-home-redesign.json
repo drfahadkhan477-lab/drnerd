@@ -55,7 +55,7 @@
   },
   "latestMasterIntegration": {
     "master": "71f8843",
-    "status": "Resolved merge; combined source builds; focused validation and PWA recheck running.",
+    "status": "Merged and pushed; targeted Chromium suites pass; PWA and WebKit rechecks pending.",
     "preserved": [
       "Latest Apex rail placement; Echo available from Labs",
       "scanned heart with attribution/menu",
@@ -102,6 +102,18 @@
       "home": 68,
       "total": 353
     },
-    "pureSuitesOnPush": 77
+    "pureSuitesOnPush": 77,
+    "master71FocusedChromium": {
+      "readsize": 99,
+      "mockscreen": 174,
+      "voicescreen": 43,
+      "taps": 27,
+      "studyvisuals": 26,
+      "echo": 35,
+      "notesearch": 16,
+      "homepagerBeforeSessionsRegression": 101
+    },
+    "sessionsCardFix": "Restored a dark painted surface behind white labels. New Labs surface assertion failed before the fix and passed after it.",
+    "pwaRecheck": "Regenerating extracted content after merge; stale-content guard correctly rejected the previous extraction."
   }
 }
