@@ -10,6 +10,12 @@ module.exports = async function atlasLanding(page, ok, settled) {
   }));
   ok('Home opens with the selected invitation and three learning steps',landing.title==='Make one idea stick.'&&landing.steps==='Observe,Explain,Recall'&&landing.intro&&landing.reader,JSON.stringify(landing));
   ok('the anatomical illustration is decoded and visibly sized',landing.image);
+  const viewport=page.viewportSize();
+  for(const width of [744,834]){
+    await page.setViewportSize({width,height:1000});
+    ok(`portrait ${width}: legacy hero copy stays hidden behind the illustration`,await page.evaluate(()=>getComputedStyle(document.querySelector('.atlas-hero-summary')).display==='none'));
+  }
+  await page.setViewportSize(viewport);
   await page.getByRole('button',{name:'Begin recall',exact:true}).click();
   const recall=await page.evaluate(()=>({intro:document.getElementById('atlasIntro').hidden,card:document.getElementById('pearlCard').hidden,answer:document.getElementById('pearlBody').hidden,prompt:document.getElementById('pearlPrompt').hidden}));
   ok('Begin recall opens the real pearl with its answer concealed',recall.intro&&!recall.card&&recall.answer&&!recall.prompt,JSON.stringify(recall));

@@ -83,10 +83,10 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     await settled(page, () => !window.__vtLive, { label: 'the view transition to Study to finish' });
     await quiet(page);
     const btns = await under('.nav .icon-btn', 21, 21), brand = await under('.nav-brand', 21, 21);
-    ok('the bar has icon buttons, and a brand, to measure', btns.length === 3 && brand.length === 1, `${btns.length} buttons`);
+    ok('the bar has icon buttons, and a brand, to measure', btns.length === 4 && brand.length === 1, `${btns.length} buttons`);
     ok('every icon button takes a press anywhere within 21 px of its centre: corners, edges and middle', btns.every(b => b.wrong === 0), JSON.stringify(btns.filter(b => b.wrong)));
     ok('and the brand takes one anywhere within 21 px of its centre', brand.every(b => b.wrong === 0), JSON.stringify(brand));
-    ok('Home has a visible search field and two compact theme controls', btns[0].w >= 200 && btns.every(b => b.h === 36) && btns.slice(1).every(b => b.w === 36) && brand[0].h === 42, JSON.stringify([btns.map(b => b.w + 'x' + b.h), brand[0].h]));
+    ok('Study retains four compact controls and the brand hit area', btns.every(b => b.w === 36 && b.h === 36) && brand[0].h === 42, JSON.stringify([btns.map(b => b.w + 'x' + b.h), brand[0].h]));
     const gap = await page.evaluate(() => { const b = [...document.querySelectorAll('.nav .icon-btn')].map(e => e.getBoundingClientRect()).sort((a, c) => a.left - c.left); return b.slice(1).map((r, i) => Math.round(r.left - b[i].right)); });
     ok('and the buttons are far enough apart that the slops meet and do not cross', gap.every(g => g >= 8), JSON.stringify(gap));
   }
@@ -95,6 +95,8 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await settled(page, () => !window.__vtLive, { label: 'the view transition to Home to finish' });
     await quiet(page);
+    const homeButtons=await under('.nav .icon-btn',21,21);
+    ok('Home search and theme controls retain full touch targets',homeButtons.length===3&&homeButtons[0].w>=200&&homeButtons.every(b=>b.h===36&&b.wrong===0)&&homeButtons.slice(1).every(b=>b.w===36),JSON.stringify(homeButtons));
     /* Round five: Echo left the rail (it is on the Labs page) and Apex took its place, a rail item like the tabs. */
     const rail = await under('#aiFab', 21, 21);
     const place = await page.evaluate(() => { const f = document.getElementById('aiFab').getBoundingClientRect(), t = [...document.querySelectorAll('.home-tab')].pop().getBoundingClientRect();

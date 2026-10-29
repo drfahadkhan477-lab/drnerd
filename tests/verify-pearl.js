@@ -445,8 +445,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return {kept, restored:b.getAttribute('aria-pressed') === 'false' && !!document.querySelector('#pearlBody .pearl-step')};
   });
   ok('another pearl keeps paragraph mode, and switching back restores the steps', !!proseNext && proseNext.kept && proseNext.restored);
-  const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source}));
-  ok('the heading names the selected concept', await page.locator('#pearlConcept').textContent() === current.concept);
+  const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source,heading:document.getElementById('pearlConcept').textContent}));
+  ok('the heading names the selected concept', current.heading === current.concept);
   await page.locator('#pearlRecall').click();
   const hidden = await page.evaluate(() => ({body:document.getElementById('pearlBody').hidden,
     prompt:!document.getElementById('pearlPrompt').hidden,expanded:document.getElementById('pearlRecall').getAttribute('aria-expanded'),
@@ -495,6 +495,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const all = pearlAll();
     const fams = p => new Set(Pearl.lesson(p.text).map(s => Pearl.FAMILY[s.label])).size;
     pearlCurrent = all.find(p => p.figKey && refImgSrc(p.figKey) && fams(p) >= 2) || all.find(p => fams(p) >= 2) || all[0];
+    // A controlled lower-case heading makes the CSS capitalization measurable regardless of the selected note.
+    pearlCurrent={...pearlCurrent,concept:'mitral regurgitation'};
     S.screen = 'home'; render();
   });
   await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'a pearl with steps on the home screen' });
@@ -516,30 +518,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       first: (() => {
         const h = document.getElementById('pearlConcept'), text = h.textContent;
         if (!/^[a-z]/.test(text)) return 'UNMEASURED: the concept "' + text.slice(0, 1) + '…" does not start in lower case';
-        const r = document.createRange(); r.selectNodeContents(h);
-        /* The first letter is a box of its own, so the text is two rectangles on one line: measured from the first's left
-           to the last's right, and only when they share a line. */
-        const rects = [...r.getClientRects()];
-        if (!rects.length || rects.some(x => Math.abs(x.bottom - rects[0].bottom) > 2)) return 'UNMEASURED: the heading is on more than one line';
-        /* ONE GLYPH AGAINST ONE GLYPH, not one string against a nearly identical string. This compared the whole
-           heading's width with the whole word capitalised and the whole word as stored, and that stopped working the
-           day the concept took a serif face (Quiet Atlas, app/css/home.css). In DM Serif Display a capital is barely
-           a different width from its lower case — over "pulmonary embolism" the two spellings came to 207.8px and
-           209.5px, and the drawn heading landed between them at 208.7px, so the check could not say which it was and
-           reported a failure against a heading that was correctly capitalised. At some sizes the gap falls to 0.4px,
-           under this measurement's own 0.5px floor.
-           ::first-letter is a box of its own, so rects[0] IS the drawn first letter: comparing that against the two
-           single characters moves the signal from under a pixel to about 3.5px in both engines, and it does not shrink
-           as the word gets longer. If the browser ever stops giving the first letter its own box the comparison has
-           nothing to stand on, so that says UNMEASURED rather than guessing. */
-        if (rects.length < 2) return 'UNMEASURED: the first letter is not a box of its own';
-        const cs = getComputedStyle(h), probe = document.createElement('span');
-        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:' + cs.font + ';letter-spacing:' + cs.letterSpacing + ';font-feature-settings:' + cs.fontFeatureSettings;
-        document.body.appendChild(probe);
-        probe.textContent = text[0]; const lower = probe.getBoundingClientRect().width;
-        probe.textContent = text[0].toUpperCase(); const upper = probe.getBoundingClientRect().width;
-        probe.remove();
-        const w = rects[0].width;
+        // Measure the real heading under the same inherited typography and first-letter formatting.
+        const width = () => {
+          const range = document.createRange(); range.selectNodeContents(h);
+          const rects = [...range.getClientRects()];
+          return Math.max(...rects.map(r => r.right)) - Math.min(...rects.map(r => r.left));
+        };
+        const w = width(), override = document.createElement('style');
+        document.head.appendChild(override);
+        override.textContent = '#pearlConcept::first-letter{text-transform:none!important}';
+        const lower = width();
+        override.textContent = '#pearlConcept::first-letter{text-transform:uppercase!important}';
+        const upper = width();
+        override.remove();
 
         return Math.abs(upper - lower) > 0.5 && Math.abs(w - upper) < Math.abs(w - lower) ? 'uppercase'
           : `first letter ${w.toFixed(1)}px, as stored ${lower.toFixed(1)}px, capitalised ${upper.toFixed(1)}px`;
@@ -641,7 +632,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   for (const [name, vw, vh] of [['iPad portrait', 1024, 1366], ['iPad landscape', 1366, 1024],
                                 ['iPad mini portrait', 744, 1133], ['Split View', 507, 1024]]) {
     await page.setViewportSize({ width: vw, height: vh });
-    await page.evaluate(() => { S.screen = 'home'; render(); });
+    await page.evaluate(() => {
+      // The preceding auto-fit check may select a prose-only note; this section measures a stepped pearl.
+      pearlCurrent=pearlAll().find(p=>Pearl.lesson(p.text).length>1); pearlPicked=null;
+      S.screen = 'home'; render();
+    });
     await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: name + ': the pearl' });
     await page.evaluate(() => pearlFit());
     const m = await page.evaluate(() => {

@@ -342,7 +342,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>render());
   await still('paused Home remounted');
   await settled(page,()=>!document.getAnimations().some(a=>a.playState==='running'&&a.effect&&Number.isFinite(a.effect.getTiming().iterations)),{label:'Home entrance effects finished'});
-  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('.hero-h1')).opacity,
+  const pausedRemount=await page.evaluate(async()=>({...await __homeWork(),opacity:getComputedStyle(document.querySelector('#pearlConcept')).opacity,
     label:document.getElementById('atlasPause')?.textContent.trim()}));
   ok('paused Home keeps its heading visible after remount',covered(pausedRemount)&&pausedRemount.opacity==='1'&&pausedRemount.label==='Play motion',JSON.stringify(pausedRemount));
 
@@ -466,6 +466,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and a tap anywhere else closes it',await page.evaluate(()=>document.getElementById('heroMenu').hidden===true));
 
   head('next session uses the actual due deck');
+  await page.getByRole('button',{name:'Back to Home',exact:true}).click();
   await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
   await still('empty due deck');
   await page.locator('.atlas-session button').click();

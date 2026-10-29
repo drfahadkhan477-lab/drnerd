@@ -1,7 +1,7 @@
 {
   "status": "checkpoint; full release validation pending",
   "runtimeBaseCommit": "0f51e9e",
-  "scope": "Reference-led Home redesign; Memorizer unchanged",
+  "scope": "Reference-led Home redesign integrated with current master; upstream Memorizer removal preserved",
   "observedChromium": {
     "home": 67,
     "homepager": 86,
@@ -29,7 +29,7 @@
     "validation": "WebKit: build, 121 PWA checks, 15 Pages checks and 10 cache-bucket checks passed before subsequent caption fix; final release recheck pending."
   },
   "privateContent": "Original export and library retained; raw logs and screenshots outside Git.",
-  "deployment": "Not performed",
+  "deployment": "Not performed; Cloudflare connector again requires reauthentication.",
   "fullChromiumFirstRun": {
     "selectedSuites": 157,
     "passedSuites": 151,
@@ -55,15 +55,33 @@
   },
   "latestMasterIntegration": {
     "master": "5126783d0e306a568e3400d8d133a7edf9c10df4",
-    "status": "integrated; combined validation in progress",
+    "status": "merged and pushed; portrait reader and summary-overlap fixes under validation",
     "preserved": [
-      "Echo rail",
+      "Latest Apex rail placement; Echo available from Labs",
       "scanned heart with attribution/menu",
       "pearl subject and sizing fixes",
       "chapter resume and reading width",
       "CI sharding",
       "upstream Memorizer removal"
     ],
-    "note": "Earlier focused/private results do not certify this combined source."
+    "note": "Earlier focused/private results do not certify this combined source.",
+    "checkpointCommit": "1a0aa63",
+    "pullRequest": "https://github.com/drfahadkhan477-lab/drnerd/pull/318",
+    "focusedChromium": {
+      "pearl": 142,
+      "homepagerBeforePortraitRegression": 99,
+      "taps": 27
+    },
+    "visualReview": "Fresh landscape/portrait captures reviewed; all three landing pages fit checked viewports. Differences documented in design-qa.md.",
+    "pwaShellGzipKB": 279,
+    "fullValidation": "Fresh full Chromium/PWA run exposed animation edge clipping and a stepped-pearl fixture precondition; fixes added, final rechecks pending.",
+    "privateInputIntegrity": {
+      "files": 774,
+      "mismatches": 0
+    },
+    "negativeEvidence": [
+      "Disabling first-letter capitalization triggers the capitalization assertion FAIL.",
+      "The existing layout check reported the animated heart escaping its container by 3 pixels before the inset fix."
+    ]
   }
 }

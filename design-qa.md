@@ -1,6 +1,6 @@
 # Quiet Atlas design comparison
 
-final result: blocked
+final result: pass with documented visual differences
 
 This is the visual-composition review, not a declaration of release readiness.
 Full application validation is tracked separately in the validation checkpoints.
@@ -58,8 +58,14 @@ move within the caption region, with the existing regression retained.
 
 ## Latest-master integration
 
-Integrated origin/master through 5126783, including the independent Echo rail,
-scanned-model attribution/menu, pearl sizing/readability, chapter resume and CI
-changes. The screenshot-led invitation and bottom session strip remain the
-owner's latest requested Home composition. The previous visual pass applies to
-its earlier source; the combined version needs fresh captures and validation.
+Integrated origin/master through 5126783, including the Apex rail placement
+(Echo remains in Labs), scanned-model attribution/menu, pearl sizing/readability,
+chapter resume and CI changes. Fresh captures confirm the invitation, heart and
+session strip on the combined source. Portrait review caught the legacy hero
+summary leaking through a more-specific upstream rule; the corrected selector
+keeps that copy hidden. Geometry checks at 1312×910, 834×1194 and 744×1000 show
+Home, Brain and Labs fitting their page viewport. The focused reader reclaims
+the session strip's space and uses a compact hero on short portrait tablets.
+
+The visual comparison passes with the differences listed above. Full private
+Chromium and WebKit/PWA validation remains a separate, pending release gate.

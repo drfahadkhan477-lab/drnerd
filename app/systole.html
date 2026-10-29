@@ -7341,12 +7341,13 @@ function buildHome(){
         <div class="pearl-rule"></div>
         <div class="pearl-main">
           <div class="pearl-head">
+          <button class="atlas-back" onclick="atlasClose()">${icon('arrow-left','icon-sm')} Back to Home</button>
+
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
             <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
             <button class="pearl-next" onclick="pearlNext()"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
-          <button class="atlas-back" onclick="atlasClose()">${icon('arrow-left','icon-sm')} Back to Home</button>
           <h1 class="pearl-concept" id="pearlConcept" tabindex="-1">${e(p.concept||p.title)}</h1>
 
           <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlFit()">${pearlLadder(p)}</div>
