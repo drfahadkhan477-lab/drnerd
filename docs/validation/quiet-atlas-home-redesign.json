@@ -74,7 +74,7 @@
     },
     "visualReview": "Fresh landscape/portrait captures reviewed; all three landing pages fit checked viewports. Differences documented in design-qa.md.",
     "pwaShellGzipKB": 279,
-    "fullValidation": "Fresh full Chromium/PWA then WebKit/PWA runs queued against the corrected build. No complete release pass claimed.",
+    "fullValidation": "Fresh full Chromium/PWA run is in progress, followed automatically by full WebKit/PWA. Focused passes do not certify the release.",
     "privateInputIntegrity": {
       "files": 774,
       "mismatches": 0
@@ -95,7 +95,9 @@
       "pearl": 142,
       "homepager": 101,
       "floor": 15,
-      "taps": 27
+      "taps": 27,
+      "home": 68,
+      "total": 353
     },
     "pureSuitesOnPush": 77
   }
