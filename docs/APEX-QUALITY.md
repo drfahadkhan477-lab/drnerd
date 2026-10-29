@@ -21,3 +21,16 @@ sets: citations supporting each claim, insufficient evidence, conflicting notes,
 qualifying clauses in long passages, and separation of library evidence from
 open-mode knowledge. Keep these evaluations separate from transport and UI
 checks, and never use licensed content in public fixtures or logs.
+
+Follow-up grounded searches use the same evidence formatter as the initial
+prompt: note title, source and tags travel with the excerpt inside its nonce
+fence. A clipped excerpt is marked as incomplete; Apex must not treat the
+omitted material as supplied evidence. The requested note limit and the total
+context budget still apply, and citation metadata includes only notes whose
+blocks were actually supplied. A long note is still an excerpt, not a promise
+that every qualification in the original document was retrieved.
+
+Invented-note regressions cover a qualification beyond the former tool excerpt,
+source attribution, explicit truncation, the requested note limit, and the
+match between budgeted evidence and citations. Each regression has been seen
+failing under its corresponding injected defect.
