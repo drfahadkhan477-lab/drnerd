@@ -114,7 +114,7 @@
       "homepagerBeforeSessionsRegression": 101
     },
     "sessionsCardFix": "Restored a dark painted surface behind white labels. New Labs surface assertion failed before the fix and passed after it.",
-    "pwaRecheck": "Regenerating extracted content after merge; stale-content guard correctly rejected the previous extraction.",
+    "pwaRecheck": "Regenerated content; PWA, Pages and cache checks green in both engines after menu-entry and shell-size fixes.",
     "master71FocusedWebKit": {
       "readsize": 99,
       "mockscreen": 174,
@@ -136,6 +136,18 @@
     },
     "shellBytesGzip": 286564,
     "shellBudgetBytes": 286720,
-    "releaseValidation": "PWA rechecks in progress; no completed release claimed."
+    "releaseValidation": "Focused Home plus PWA/Pages/cache checks green in Chromium and WebKit; fresh full app runs pending.",
+    "chromium": {
+      "homepager": 104,
+      "pwa": 130,
+      "pages": 15,
+      "cachebuckets": 10
+    },
+    "webkit": {
+      "homepager": 104,
+      "pwa": 129,
+      "pages": 15,
+      "cachebuckets": 10
+    }
   }
 }
