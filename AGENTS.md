@@ -154,6 +154,9 @@ The code's comments cite these rules; each was broken at least once.
 - Keep credentials out of client source, fixtures, logs, and commits.
 - Preserve offline behavior and the supported Safari floor. Use synthetic
   fixtures for public CI and browser tests.
+- Branch protection on master requires the `syntax`, `logic`, `build-guard`
+  and `browser-done` jobs by their full `name:` text in `verify.yml`. Renaming
+  one leaves every PR waiting forever; change the ruleset in the same change.
 - Do not count skipped, unavailable, or unmeasured checks as passing. Keep
   recorded test results distinct from newly observed results.
 

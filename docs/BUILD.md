@@ -686,7 +686,17 @@ public-browser job in Chromium and WebKit, and the synthetic app job also
 has a WebKit counterpart with explicit exclusions. Both synthetic jobs run in
 four shards on one build made by `synthetic-build` (`scripts/shard.js` splits
 them by the record's times), and `browser-done` is the one check that says
-whether every browser job passed. `verify-engine` enforces
+whether every browser job passed.
+
+**Required checks are matched by name.** The ruleset on master requires
+`syntax`, `logic`, `build-guard` and `browser-done` by the full text of each
+job's `name:` in `verify.yml` (for example "logic — every suite that needs no
+browser and no build"), not by the job's key. Edit one of those names and the
+ruleset waits for a check that never reports: every pull request sits at
+"Expected — waiting". So rename one only together with the ruleset
+(Settings → Rules → Rulesets → the master rule → Required status checks:
+delete the old entry, add the new one from the suggestions).
+`tests/verify-shard-pure.js` holds the four names and fails first. `verify-engine` enforces
 the shared launcher so suites cannot silently select a different engine.
 
 The section on prepared reader libraries above records local measurements from before Memorizer moved out.
