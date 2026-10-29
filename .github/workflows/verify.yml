@@ -163,8 +163,17 @@ concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# REQUIRED CHECKS. Branch protection on master (Settings > Rules > Rulesets)
+# requires four jobs BY THEIR FULL `name:` TEXT, not by their keys:
+#   syntax, logic, build-guard, browser-done
+# Editing one of those `name:` lines renames its check, and the ruleset
+# then waits forever for a check that will never report again: every pull
+# request is stuck on "Expected — waiting". If you change one, swap the old
+# name for the new one in the ruleset in the same change.
+# tests/verify-shard-pure.js holds the four names, so it fails first.
 jobs:
   syntax:
+    # REQUIRED CHECK in branch protection, by this exact name: see above `jobs:`.
     name: syntax — every file parses, both listings work
     runs-on: ubuntu-latest
     steps:
@@ -186,6 +195,7 @@ jobs:
         run: npm run suites
 
   logic:
+    # REQUIRED CHECK in branch protection, by this exact name: see above `jobs:`.
     name: logic — every suite that needs no browser and no build
     runs-on: ubuntu-latest
     steps:
@@ -367,7 +377,7 @@ jobs:
         run: node tests/verify-suitecache-pure.js
       - name: a pull request skips a browser job only when none of its files can reach it (60 checks)
         run: node tests/verify-cichanges-pure.js
-      - name: every suite of a sharded browser job runs in exactly one shard, each step only in its own, and browser-done fails on a failed, cancelled or unexplained skipped job (53 checks)
+      - name: every suite of a sharded browser job runs in exactly one shard, each step only in its own, and browser-done fails on a failed, cancelled or unexplained skipped job (57 checks)
         run: node tests/verify-shard-pure.js
       - name: the counts record is written only from a run where every registered suite ran and passed, and keeps nothing that is no longer a suite (31 checks)
         run: node tests/verify-record-pure.js
@@ -1167,6 +1177,7 @@ jobs:
   # it. It runs whatever happened before it (always()), and passes only when
   # every browser job passed, or was skipped because `changes` said so.
   browser-done:
+    # REQUIRED CHECK in branch protection, by this exact name: see above `jobs:`.
     name: browser-done — every browser job passed, or was skipped for a change it cannot see
     needs: [changes, public-browser, synthetic-build, synthetic-browser, synthetic-webkit, split-build]
     if: ${{ always() }}
@@ -1183,6 +1194,7 @@ jobs:
         run: node scripts/browser-done.js
 
   build-guard:
+    # REQUIRED CHECK in branch protection, by this exact name: see above `jobs:`.
     name: build-guard — refuses to run without the licensed source
     runs-on: ubuntu-latest
     steps:

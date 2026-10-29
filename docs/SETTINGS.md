@@ -14,9 +14,10 @@ An unanswered question never gains an explanation merely by changing layout.
 
 Text size uses the existing device preference. Reading width preserves the
 current Narrow, Medium, Wide and Full choices and the existing saved selection.
-Reading width and app brightness
-are also device preferences, outside the study backup. Brightness dims the app,
-not the physical display, and leaves Settings readable. Themes retain their
+Reading width, brightness and contrast are device preferences, outside the
+study backup. Brightness and contrast filter the app at its root, preserving
+fixed controls; they do not change the physical display. Existing Display
+panel preferences are retained. Themes retain their
 existing storage and backup behavior. Reset display settings leaves study data
 and Apex credentials untouched.
 
@@ -50,5 +51,6 @@ negative builds check incorrect radio semantics, unexpected closure on theme
 selection, and a broken dismissal handler. The separate release/deployment
 work and private inputs are outside this feature.
 
-Measured outcomes and artifact/source hashes are recorded in
-[the validation checkpoint](validation/unified-settings.json).
+The [original validation checkpoint](validation/unified-settings.json) records
+the earlier feature build. It does not certify the later integration with
+the Display panel and Sessions changes; current results belong to the PR.

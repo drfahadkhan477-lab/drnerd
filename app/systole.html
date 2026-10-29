@@ -5254,6 +5254,58 @@ function readSizeHtml(){
       `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-read="${i}"
         aria-label="${label}" title="${label}" onclick="setReadSize(${i})"><span style="font-size:${[13,16,19,23][i]}px">A</span></button>`).join('')}</div>`;
 }
+/* Brightness and contrast, per device (round seven). A filter on the root element: the one element whose filter does not
+   become the containing block for fixed-position descendants, so the bars, the rail and Apex stay where they are. At
+   100% each the filter is removed, not set to 1, so the default page is drawn exactly as before. */
+const TUNE_KEY='systole.tune';
+const TUNE={b:{min:50,max:130,label:'Brightness'},c:{min:80,max:140,label:'Contrast'}};
+function readTune(){
+  const out={b:100,c:100};
+  try{ const saved=localStorage.getItem(TUNE_KEY);
+    const t=saved?JSON.parse(saved):{b:(JSON.parse(localStorage.getItem('systole.display')||'{}')||{}).brightness};
+    for(const k of ['b','c']){ const v=Number(t&&t[k]); if(Number.isFinite(v)&&v>=TUNE[k].min&&v<=TUNE[k].max) out[k]=Math.round(v); } }catch(_){}
+  return out;
+}
+function applyTune(){
+  const t=readTune(), r=document.documentElement;
+  if(t.b===100&&t.c===100) r.style.removeProperty('filter');
+  else r.style.filter='brightness('+t.b/100+') contrast('+t.c/100+')';
+}
+function setTune(k,v){
+  const t=readTune(); v=Math.round(Number(v));
+  if(!TUNE[k]||!Number.isFinite(v)) return;
+  t[k]=Math.min(TUNE[k].max,Math.max(TUNE[k].min,v));
+  clearLegacyBrightness();
+  try{ if(t.b===100&&t.c===100) localStorage.removeItem(TUNE_KEY); else localStorage.setItem(TUNE_KEY,JSON.stringify(t)); }catch(_){}
+  applyTune(); paintTune();
+}
+function clearLegacyBrightness(){
+  try{
+    const legacy=JSON.parse(localStorage.getItem('systole.display')||'{}');
+    if(legacy&&typeof legacy==='object'&&'brightness' in legacy){delete legacy.brightness;localStorage.setItem('systole.display',JSON.stringify(legacy));}
+  }catch(_){}
+}
+function resetTune(){ clearLegacyBrightness();try{ localStorage.removeItem(TUNE_KEY); }catch(_){} applyTune(); paintTune();
+  const live=document.getElementById('srLive'); if(live){ live.textContent=''; live.textContent='Brightness and contrast reset.'; } }
+function paintTune(){
+  const t=readTune();
+  for(const k of ['b','c']){
+    const i=document.getElementById('tune-'+k), o=document.getElementById('tune-'+k+'-v');
+    if(i){ i.value=t[k]; i.setAttribute('aria-valuetext',t[k]+'%'); }
+    if(o) o.textContent=t[k]+'%';
+  }
+  const r=document.getElementById('tuneReset'); if(r) r.disabled=t.b===100&&t.c===100;
+}
+function tuneHtml(){
+  const t=readTune();
+  const row=(k,ic)=>`<label class="tune-row" for="tune-${k}"><span class="tune-l">${ic}${TUNE[k].label}</span>
+      <output class="tune-v" id="tune-${k}-v" for="tune-${k}">${t[k]}%</output>
+      <input class="tune-in" type="range" id="tune-${k}" min="${TUNE[k].min}" max="${TUNE[k].max}" step="5" value="${t[k]}"
+        aria-valuetext="${t[k]}%" oninput="setTune('${k}',this.value)"></label>`;
+  return `<div class="tune" role="group" aria-labelledby="tuneH"><div class="theme-menu-h" id="tuneH">Brightness and contrast</div>
+    ${row('b',icon('sun','icon-sm'))}${row('c',icon('sun-moon','icon-sm'))}
+    <button class="tune-reset" id="tuneReset" type="button" onclick="resetTune()"${t.b===100&&t.c===100?' disabled':''}>Reset to 100%</button></div>`;
+}
 function themeOptHtml(t){
   const on=themeDef().id===t.id;
   return `<button class="theme-opt${on?' on':''}" role="menuitemradio" tabindex="${on?0:-1}" aria-checked="${on}"
@@ -5285,21 +5337,20 @@ function readingAnchor(){
 }
 function displaySettings(){
   let v={};try{v=JSON.parse(localStorage.getItem(DISPLAY_KEY)||'{}')||{};}catch(_){}
-  return {layout:v.layout==='split'?'split':'focused',width:['narrow','standard','wide','full'][readWidth()],brightness:Number.isFinite(v.brightness)?Math.max(50,Math.min(100,v.brightness)):100};
+  return {layout:v.layout==='split'?'split':'focused',width:['narrow','standard','wide','full'][readWidth()],brightness:readTune().b};
 }
 function applyDisplaySettings(){
   const v=displaySettings(),h=document.documentElement;
   h.dataset.readingWidth=v.width;
-  let shade=document.getElementById('appDimmer');
-  if(!shade){shade=document.createElement('div');shade.id='appDimmer';shade.setAttribute('aria-hidden','true');document.body.append(shade);}
-  shade.style.opacity=String(1-v.brightness/100);shade.hidden=v.brightness===100;
+  applyTune();
   const app=document.getElementById('app'),card=document.querySelector('.q-card');
   const size=card?parseFloat(getComputedStyle(card).fontSize):16;
   if(app){app.classList.toggle('reading-wide-layout',v.layout==='split'&&!!document.querySelector('.reveal-card'));app.classList.toggle('reading-split',v.layout==='split'&&!!document.querySelector('.reveal-card')&&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);}
 }
 function updateDisplaySetting(key,value){
   if(key==='width'){setReadWidth(['narrow','standard','wide','full'].indexOf(value));return;}
-  const restore=readingAnchor(),v=displaySettings();v[key]=value;delete v.width;
+  if(key==='brightness'){setTune('b',value);return;}
+  const restore=readingAnchor(),v=displaySettings();setTune('b',v.brightness);v[key]=value;delete v.width;delete v.brightness;
   try{localStorage.setItem(DISPLAY_KEY,JSON.stringify(v));}catch(_){}
   applyDisplaySettings();restore();syncSettingsControls();
 }
@@ -5307,8 +5358,7 @@ function syncSettingsControls(){
   const box=document.getElementById('generalSettings');if(!box)return;
   const v=displaySettings();
   box.querySelector('[name="layout"]').value=v.layout;
-  box.querySelector('[name="brightness"]').value=v.brightness;
-  box.querySelector('#brightnessValue').textContent=v.brightness+'%';
+  paintTune();
 }
 function refreshSettingsThemes(){
   const box=document.getElementById('settingsThemes');if(!box)return;
@@ -5344,7 +5394,7 @@ function settingsApex(p=AI.provider){
 }
 function resetDisplaySettings(){
   try{localStorage.removeItem(DISPLAY_KEY);localStorage.removeItem(READ_KEY);}catch(_){}
-  S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();
+  resetTune();S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();
 }
 function openSettings(section='reading'){
   if(document.getElementById('generalSettings')){document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle')?.focus();return;}
@@ -5357,8 +5407,8 @@ function openSettings(section='reading'){
       ${readSizeHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}
       ${readWidthHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}</section>
     <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading">Appearance</h3><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
-      <label>App brightness <output id="brightnessValue"></output><input name="brightness" type="range" min="50" max="100" step="1" aria-describedby="brightnessHelp" oninput="updateDisplaySetting('brightness',Number(this.value))"></label>
-      <p id="brightnessHelp">Dims Systole only; device brightness is unchanged.</p>
+      ${tuneHtml()}
+      <p>Brightness and contrast affect Systole only; device brightness is unchanged.</p>
       <button type="button" class="btn" onclick="resetDisplaySettings()">Reset display settings</button></section>
     <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>`;
   document.body.append(box);syncSettingsControls();refreshSettingsThemes();settingsApex();
@@ -5998,12 +6048,12 @@ function discardMock(){
   if(!_mockArm){
     _mockArm=true;
     clearTimeout(_mockArmTimer);
-    _mockArmTimer=setTimeout(()=>{ _mockArmTimer=null; if(_mockArm){ _mockArm=false; if(S.screen==='study') render(); } },5000);
-    if(S.screen==='study'){ render(); focusEl('#mockDiscard'); } return;
+    _mockArmTimer=setTimeout(()=>{ _mockArmTimer=null; if(_mockArm){ _mockArm=false; if(S.screen==='sessions') render(); } },5000);
+    if(S.screen==='sessions'){ render(); focusEl('#mockDiscard'); } return;
   }
   clearTimeout(_mockArmTimer); _mockArmTimer=null;
   _mockArm=false; S.mock=null; mockWrite(MOCK_KEY,null);
-  if(S.screen==='study') render();
+  if(S.screen==='sessions') render();
 }
 
 /* ── the clock and what hides while a block is open ── */
@@ -6175,7 +6225,7 @@ function mockReview(which){
 function buildMock(){
   const r=S.mock, q=mockQ();
   if(!r||!q) return `<div class="mock-wrap"><div class="mock-gone"><p>No block is open.</p>
-    <button class="btn btn-next" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Back to Chapters</button></div></div>`;
+    <button class="btn btn-next" type="button" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
   if(S.mockView==='end') return buildMockEnd();
   const n=r.ids.length, st=MockExam.states(r), chosen=r.sel[r.i], lab=r.secPerQ?'left':'elapsed';
   if(r.paused) return `<div class="quiz-wrap mock-wrap"><div class="mock-paused" role="status">
@@ -6243,7 +6293,7 @@ function buildMockEnd(){
 function buildMockReport(){
   const r=S.mockLast;
   if(!r) return `<div class="mock-wrap"><div class="mock-gone"><p>No block has been handed in yet.</p>
-    <button class="btn btn-next" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Back to Chapters</button></div></div>`;
+    <button class="btn btn-next" type="button" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
   const g=MockExam.grade(r,mockLookup), p=g.pct;
   const col=p>=80?'var(--green)':p>=60?'var(--amber)':'var(--red)';
   const msg=p>=80?'Outstanding!':p>=60?'Good Progress!':'Keep Studying!', msgIcon=p>=80?'trophy':p>=60?'target':'book';
@@ -6279,7 +6329,7 @@ function buildMockReport(){
     <div class="results-btns">
       ${missed?`<button class="btn btn-next" type="button" onclick="mockReview('missed')">${icon('repeat','icon-sm')} Review the ${missed} to learn from</button>`:''}
       <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="mockReview('all')">Review all ${g.n}</button>
-      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goStudy()">${icon('arrow-left','icon-sm')} Back to Chapters</button>
+      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button>
     </div>
   </div>`;
 }
@@ -6549,7 +6599,7 @@ function mountScrollReveal(){
    drew nothing, so the crash screen's test for an empty #app still sees one. */
 const SCREEN_TITLES={study:'Study',quiz:'Quiz',results:'Results',refs:'Notes',notesearch:'Search your notes',echo:'Echo Studio',
   memory:'Memory',search:'Search questions',annotations:'Annotations',mock:'Mock exam',mockreport:'Mock exam report',
-  stats:'Statistics',lab:'Rhythm Lab'};
+  stats:'Statistics',lab:'Rhythm Lab',sessions:'Sessions'};
 function withScreenTitle(html){
   const t=SCREEN_TITLES[S.screen];
   return !html||!t||/<h1[\s>]/i.test(html)?html:`<h1 class="sr-only">${e(t)}</h1>`+html;
@@ -6564,7 +6614,7 @@ function buildScreen(){
     :S.screen==='annotations'?buildAnnotations()
     :S.screen==='mock'?buildMock():S.screen==='mockreport'?buildMockReport()
     :S.screen==='stats'?buildStats():S.screen==='lab'?buildLab()
-    :S.screen==='practice'?buildPractice():'';
+    :S.screen==='practice'?buildPractice():S.screen==='sessions'?buildSessions():'';
 }
 function buildNav(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):null;
@@ -6590,8 +6640,6 @@ function buildNav(){
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
       <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
-      ${S.screen!=='home'?`<button class="icon-btn nav-echo" onclick="goEcho()" title="Echo Studio"
-        aria-label="Echo Studio — views, findings and calculations">${icon('echo')}</button>`:''}
       <button class="icon-btn" onclick="openSettings()" title="Settings" aria-label="Settings"
         aria-haspopup="dialog" id="settingsBtn">${icon('settings')}</button>
     </div>
@@ -7554,12 +7602,18 @@ function buildLabs(dueN){
         <span class="lab-txt"><b>Practice Lab</b><i>Sounds, tracings, strips</i></span>
         <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
       </button>
+      <button class="lab-card lab-sessions" id="labSessions" onclick="goSessions()">
+        <span class="lab-art lab-art-beat" aria-hidden="true">${icon('alarm')}</span>
+        <span class="lab-ic" aria-hidden="true">${icon('alarm')}</span>
+        <span class="lab-txt"><b>Sessions</b><i>${S.mock?'A mock block is open · resume it':'Timed mock exam · voice drill'}</i></span>
+        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
+      </button>
     </div>
     <h3 class="page-h3">Study tools</h3>
     <div class="door-row lab-doors">
       <button class="door door-wide" onclick="goStudy()">
         <span class="door-ic">${icon("book")}</span>
-        <span class="door-txt"><b>Chapters</b><i>${S.mock?'A mock block is open · resume it here':`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
+        <span class="door-txt"><b>Chapters</b><i>${`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
         <span class="door-go">${icon('arrow-right','icon-sm')}</span>
       </button>
       <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
@@ -7954,17 +8008,6 @@ function buildStudy(){
       </button>`;}).join('')}</div>
   </div>`:'';
 
-  const voiceCard=voiceAvailable()?`<div class="feed-card voice-card" id="voiceCard" role="group" aria-label="Voice session">
-    <div class="fc-top"><span class="fc-badge">${icon('mic')} VOICE</span></div>
-    <div class="voice-hero">
-      <span class="voice-orb" aria-hidden="true"><span class="vo-ring"></span><span class="vo-ring r2"></span>${icon('mic')}</span>
-      <div><div class="fc-title">Hands full? Answer out loud</div>
-      <div class="fc-sub">Ten questions, read aloud. Needs the microphone.</div></div>
-    </div>
-    <div class="voice-wave" aria-hidden="true">${Array.from({length:28},(_,k)=>`<i style="--k:${k}"></i>`).join('')}</div>
-    <div class="voice-say">Say <kbd>A</kbd>–<kbd>E</kbd> <kbd>repeat</kbd> <kbd>skip</kbd> <kbd>explain</kbd> <kbd>stop</kbd></div>
-    <button class="voice-go" id="voiceStart" onclick="startVoice()">${icon('mic')}<span>Start a voice session</span></button>
-  </div>`:'';
 
   const missCard=S.missed.size>0?`<button class="feed-card miss-card" onclick="startQuiz(null,'missed')">
     <div class="fc-top"><span class="fc-badge red">WEAK SPOTS</span></div>
@@ -8022,9 +8065,7 @@ function buildStudy(){
     <div class="feed">
       ${reviewCard}
       ${planCard}
-      ${mockCard()}
       ${runCard}
-      ${voiceCard}
       ${missCard}
       ${flagCard}
       ${annoCard}
@@ -8044,6 +8085,31 @@ function buildStudy(){
    is the classic single-page-app failure, and the doors are at the bottom of
    the home screen, which is exactly where the scroll would be left. */
 function goStudy(){ S.screen='study'; render(); toTop(); }
+/* Sessions (round seven): the timed mock block and the voice drill, out of Study and into Labs, with the other things
+   you do rather than read. */
+function goSessions(){ S.screen='sessions'; render(); toTop(); }
+function goLabs(){ homePage=2; goHome(); }
+function voiceCardHtml(){
+  return voiceAvailable()?`<div class="feed-card voice-card" id="voiceCard" role="group" aria-label="Voice session">
+    <div class="fc-top"><span class="fc-badge">${icon('mic')} VOICE</span></div>
+    <div class="voice-hero">
+      <span class="voice-orb" aria-hidden="true"><span class="vo-ring"></span><span class="vo-ring r2"></span>${icon('mic')}</span>
+      <div><div class="fc-title">Hands full? Answer out loud</div>
+      <div class="fc-sub">Ten questions, read aloud. Needs the microphone.</div></div>
+    </div>
+    <div class="voice-wave" aria-hidden="true">${Array.from({length:28},(_,k)=>`<i style="--k:${k}"></i>`).join('')}</div>
+    <div class="voice-say">Say <kbd>A</kbd>–<kbd>E</kbd> <kbd>repeat</kbd> <kbd>skip</kbd> <kbd>explain</kbd> <kbd>stop</kbd></div>
+    <button class="voice-go" id="voiceStart" onclick="startVoice()">${icon('mic')}<span>Start a voice session</span></button>
+  </div>`:'';
+}
+function buildSessions(){
+  return `<div class="sessions-page" id="sessionsPage">
+    <button class="btn sb-back" type="button" onclick="goLabs()">${icon('arrow-left','icon-sm')} Labs</button>
+    <header class="page-head"><span class="page-eyebrow">${icon('alarm','icon-sm')} Sessions</span>
+      <h1 class="page-title">Practise under pressure</h1>
+      <p class="page-sub">A timed block like the real exam, or ten questions answered out loud.</p></header>
+    <div class="feed sessions-feed">${mockCard()}${voiceCardHtml()}</div></div>`;
+}
 
 function buildQuiz(){
   const {questions,qIdx,selected,answered}=S;
@@ -8266,6 +8332,7 @@ document.addEventListener('touchend',ev=>{
 applyTheme();
 applyReadSize();
 applyReadWidth();
+applyTune();
 /* After applyTheme so the first paint is already right, and before render so
    a flip during boot is not missed. */
 watchSystemTheme();

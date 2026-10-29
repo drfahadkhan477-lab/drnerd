@@ -118,7 +118,6 @@ html[data-read] .opt .opt-text{min-width:0}   /* a flex item will not shrink bel
 #generalSettings .setup-hero{display:none}
 #generalSettings .btn{white-space:normal}
 #generalSettings .theme-opt{width:100%}
-#appDimmer{position:fixed;top:0;right:0;bottom:0;left:0;background:#000;pointer-events:none;z-index:2147483646}
 html{--reading-measure:65ch}
 html[data-reading-width="wide"]{--reading-measure:80ch}
 .reading-question,.reading-explanation{min-width:0}

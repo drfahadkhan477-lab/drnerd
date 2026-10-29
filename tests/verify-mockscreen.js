@@ -52,8 +52,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   await booted(page);
 
   const toStudy = async () => {
-    await page.evaluate(() => goStudy());
-    await onScreen(page, 'study', { marker: '#planCard' });
+    await page.evaluate(() => goSessions());
+    await onScreen(page, 'sessions', { marker: '#sessionsPage' });
     await quiet(page);
   };
   const clean = keep => page.evaluate(keep => {   // a fellow with nothing done, and no block anywhere
@@ -71,7 +71,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const startWith = async (ids, sec, keep) => {
     await clean(keep); await toStudy();
     await page.evaluate(({ ids, sec }) => { window.__build = MockExam.build; MockExam.build = () => ids.slice(); _mockCfg.sec = sec; _mockCfg.n = 20; _mockCfg.ch = ''; render(); }, { ids, sec });
-    await onScreen(page, 'study', { marker: '#planCard' });
+    await onScreen(page, 'sessions', { marker: '#sessionsPage' });
     await page.waitForSelector('#mockStart', { timeout: 8000 });
     /* The card's own button is pressed in 'starting from the card'; here the block starts with Apex open, which a click on the
        button could not do: the open panel covers it. */
@@ -111,9 +111,17 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('every colour mixed in a mock exam style has a plain one before it, for Safari before 16.2', bad.length === 0, bad.join(' | '));
   }
 
-  head('the card on the Study screen');
+  head('the card on the Sessions screen');
   await clean(); await toStudy();
-  ok('the Study screen has the mock exam card', await page.evaluate(() => !!document.getElementById('mockCard')));
+  ok('the Sessions screen has the mock exam card', await page.evaluate(() => !!document.getElementById('mockCard')));
+  await page.evaluate(() => goStudy());
+  await onScreen(page, 'study', { marker: '#planCard' });
+  ok('and Study no longer has it, nor the Voice card', await page.evaluate(() => !document.getElementById('mockCard') && !document.getElementById('voiceCard')));
+  await page.evaluate(() => goLabs());
+  await page.waitForSelector('#labSessions', { timeout: 8000 }).catch(() => {});
+  await page.click('#labSessions', { timeout: 4000 }).catch(() => {});
+  await onScreen(page, 'sessions', { marker: '#mockCard' });
+  ok('the Sessions card in Labs opens it', await page.evaluate(() => S.screen === 'sessions' && !!document.getElementById('mockCard')));
   {
     const r = await page.evaluate(() => {
       const c = document.getElementById('mockCard');
@@ -123,7 +131,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         small: ctl.filter(b => b.offsetHeight < 44).map(b => b.id || b.className),
         chapters: [...c.querySelectorAll('#mockCh option')].map(o => o.value), expect: CHAPTERS.slice(),
         on: { n: +c.querySelector('[data-n].on').dataset.n, sec: +c.querySelector('[data-sec].on').dataset.sec },
-        start: document.getElementById('mockStart').textContent.trim(), pool: POOL.length,
+        start: document.getElementById('mockStart').textContent.trim(), pool: POOL.length, screen: S.screen,
         order: [...document.querySelectorAll('#app .feed-card')].map(x => x.id || x.className.split(' ')[1]),
         /* Everything but the glow, which is drawn wider than the card on purpose and clipped by it, as on the plan card. */
         spill: [...c.querySelectorAll('*')].some(x => { const b = x.getBoundingClientRect(), k = c.getBoundingClientRect(); return b.width > 0 && !x.closest('.fc-glow') && (b.right > k.right + 1 || b.left < k.left - 1); }),   // an <option> has no box
@@ -134,7 +142,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('every button and the chapter menu is at least 44 px tall', r.small.length === 0, r.small.join());
     ok('it offers every chapter and all of them', r.chapters[0] === '' && same(r.chapters.slice(1), r.expect));
     ok('it starts set to 40 questions at 90 seconds, and says what that is: an hour', r.on.n === 40 && r.on.sec === 90 && /Start a 40-question block · 1:00:00 on the clock/.test(r.start), r.start);
-    ok('it sits among the other Study cards, after the plan', r.order.indexOf('mockCard') === r.order.indexOf('planCard') + 1, r.order.join());
+    ok('it is the first card on the Sessions screen, and no longer on Study', r.order[0] === 'mockCard' && r.screen === 'sessions', r.order.join());
     ok('nothing spills out of the card', r.spill === false);
     ok('the glow behind the card is out of the flow, as on the other cards, so it can be seen at all', r.glow === 'absolute', r.glow);
   }
@@ -148,7 +156,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       pressed: [...document.querySelectorAll('#mockCard [data-n]')].map(b => b.getAttribute('aria-pressed')).join(),
       start: document.getElementById('mockStart').textContent.trim(),
     }));
-    ok('choosing 20 questions and 60 seconds changes the card in place: the same card, the same screen', r.same && r.screen === 'study');
+    ok('choosing 20 questions and 60 seconds changes the card in place: the same card, the same screen', r.same && r.screen === 'sessions');
     ok('the choice is marked and said: twenty minutes', r.on.n === 20 && r.on.sec === 60 && /Start a 20-question block · 20:00 on the clock/.test(r.start) && r.pressed === 'true,false,false', r.start + ' / ' + r.pressed);
     const kept = await page.evaluate(() => { const was = JSON.stringify(_mockCfg); setMockCfg('sec', 45); setMockCfg('sec', -1); setMockCfg('n', -5); setMockCfg('n', 'x'); setMockCfg('ch', 'Not a chapter'); setMockCfg('what', 1); return { same: JSON.stringify(_mockCfg) === was, cfg: _mockCfg }; });
     ok('the card refuses a pace it does not offer, a size that is not a number, a chapter the bank lacks, and a setting it does not have', kept.same && kept.cfg.ch === '', JSON.stringify(kept.cfg));
@@ -207,7 +215,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       opts: document.querySelectorAll('.mock-opt').length, keys: QBYID[S.mock.ids[0]].o.length,
     }));
     ok('pressing Start opens the block on the first question, of the size asked for', r.screen === 'mock' && r.n === 12 && /Question 1 of 12/.test(r.header), r.header.replace(/\n/g, ' '));
-    ok('the top bar has no search, no notes search and no Echo; only the theme menu is left', !r.nav.some(x => /openSearch|goNoteSearch|goEcho/.test(x)) && r.nav.some(x => /toggleThemeMenu/.test(x)), r.nav.join('|'));
+    ok('the top bar has no search, no notes search and no Echo; only Settings is left', !r.nav.some(x => /openSearch|goNoteSearch|goEcho/.test(x)) && r.nav.some(x => /openSettings/.test(x)), r.nav.join('|'));
     ok('the Apex button and panel are gone, and the panel is shut', r.fab === 'none' && r.panel === 'none' && !/ai-open|ai-full/.test(r.shell), r.fab + '/' + r.panel);
     ok('the pen and note tools are put away too', r.rail === true);
     ok('the chapter is not on the screen: not as a badge, not in the words (read as drawn, where the stylesheet capitals them)', !r.badge && !r.text.toLowerCase().includes(r.ch.toLowerCase()), r.ch);
@@ -544,17 +552,17 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('going Home stops the clock, keeps the block, and gives the search and the tutor back', s0.attr === false && s0.fab !== 'none' && s0.stored.sel[0] === 2 && s0.stored.flag[0] === 1 && s0.stored.elapsedMs === s0.el && s0.el >= 7000, JSON.stringify([s0.el, s0.fab]));
     await page.waitForTimeout(2200);
     ok('and time at home is not charged to the block', (await page.evaluate(() => S.mock.elapsedMs)) === s0.el);
-    ok('the Chapters door on the Home screen says a block is open, so it is not lost', /A mock block is open/.test(await page.evaluate(() => document.querySelector('.door-wide .door-txt i').textContent)));
+    ok('the Sessions card in Labs says a block is open, so it is not lost', /A mock block is open/.test(await page.evaluate(() => { const c = document.querySelector('#labSessions i'); return c ? c.textContent : ''; })));
     await toStudy();
     const c = await page.evaluate(() => ({ t: document.getElementById('mockCard').innerText, resume: !!document.getElementById('mockResume'), start: !!document.getElementById('mockStart') }));
-    ok('the Study card now says a block is open, how far it is and how long is left, and offers to resume it', /a block is open/i.test(c.t) && /1 of 12 answered/.test(c.t) && /left/.test(c.t) && /1 flagged/.test(c.t) && c.resume && !c.start, c.t.replace(/\n+/g, ' | '));
+    ok('the Sessions card now says a block is open, how far it is and how long is left, and offers to resume it', /a block is open/i.test(c.t) && /1 of 12 answered/.test(c.t) && /left/.test(c.t) && /1 flagged/.test(c.t) && c.resume && !c.start, c.t.replace(/\n+/g, ' | '));
     const idsBefore = await page.evaluate(() => S.mock.ids.slice());
     await page.evaluate(() => startMock());
     const reopened = await reached('mock');
     if (reopened) await onScreen(page, 'mock', { marker: '.mock-opt' });
     ok('starting a block while one is open opens that one, and does not replace it', reopened && await page.evaluate(ids => JSON.stringify(S.mock.ids) === JSON.stringify(ids), idsBefore));
-    await page.evaluate(() => goStudy());
-    await onScreen(page, 'study', { marker: '#planCard' });
+    await page.evaluate(() => goSessions());
+    await onScreen(page, 'sessions', { marker: '#sessionsPage' });
     await page.click('#mockDiscard');
     ok('discarding takes two taps: the first only asks', await page.evaluate(() => !!S.mock && /Tap again to discard/.test(document.getElementById('mockDiscard').textContent)));
     ok('and the keyboard is still on the button that asked, which was drawn again', await page.evaluate(() => !!document.activeElement && document.activeElement.id === 'mockDiscard'));
@@ -584,7 +592,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         return clear(id);
       };
       try {
-        discardMock(); resumeMock(); goStudy(); discardMock();
+        discardMock(); resumeMock(); goSessions(); discardMock();
         const before = _mockArm;
         if (held[0] && held[0].active) held[0].fn();
         return { before, after: _mockArm, timers: held.length };
@@ -593,7 +601,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         held.forEach(t => clear(t.id)); _mockArm = false; render();
       }
     });
-    await onScreen(page, 'study', { marker: '#mockDiscard' });
+    await onScreen(page, 'sessions', { marker: '#mockDiscard' });
     ok('an earlier discard expiry cannot cancel a new confirmation after Resume', timerProof.before && timerProof.after && timerProof.timers === 2, JSON.stringify(timerProof));
     await page.click('#mockDiscard');
     await quiet(page);
@@ -617,7 +625,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.waitForTimeout(1500);
     ok('and the time since the page closed is not counted', (await page.evaluate(() => S.mock.elapsedMs)) === 9000);
     await toStudy();
-    ok('the Study card offers it', /a block is open/i.test(await page.evaluate(() => document.getElementById('mockCard').innerText)));
+    ok('the Sessions card offers it', /a block is open/i.test(await page.evaluate(() => document.getElementById('mockCard').innerText)));
     await page.evaluate(() => {
       const r = JSON.parse(localStorage.getItem('accsap12.mock')); r.ids[0] = 'NOT_A_QUESTION';
       localStorage.setItem('accsap12.mock', JSON.stringify(r));
@@ -626,9 +634,9 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('a block that names a question the bank does not have is forgotten, and its record removed', await page.evaluate(() => S.mock === null && localStorage.getItem('accsap12.mock') === null));
     const cardText = () => page.evaluate(() => document.getElementById('mockCard').innerText);
     await toStudy();
-    ok('and the Study card says a block was set aside, rather than saying nothing', /could not be carried on/.test(await cardText()), (await cardText()).replace(/\n+/g, ' | ').slice(0, 160));
-    await page.evaluate(ids => { window.__build = MockExam.build; MockExam.build = () => ids.slice(); _mockCfg.sec = 60; startMock(); mockStopTicker(); MockExam.build = window.__build; goStudy(); }, ids10);
-    await onScreen(page, 'study', { marker: '#planCard' });
+    ok('and the Sessions card says a block was set aside, rather than saying nothing', /could not be carried on/.test(await cardText()), (await cardText()).replace(/\n+/g, ' | ').slice(0, 160));
+    await page.evaluate(ids => { window.__build = MockExam.build; MockExam.build = () => ids.slice(); _mockCfg.sec = 60; startMock(); mockStopTicker(); MockExam.build = window.__build; goSessions(); }, ids10);
+    await onScreen(page, 'sessions', { marker: '#sessionsPage' });
     await page.evaluate(() => { discardMock(); discardMock(); });
     ok('beginning another block takes that sentence away', !/could not be carried on/.test(await cardText()) && await page.evaluate(() => !!document.getElementById('mockStart')), (await cardText()).replace(/\n+/g, ' | ').slice(0, 160));
     await page.evaluate(() => localStorage.setItem('accsap12.mock', '{not json'));
@@ -788,7 +796,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('the history is read back from the saved record', await page.evaluate(b => JSON.stringify(S.mocks) === b.mocks && S.mocks.length === 2, before));
     await toStudy();
     const c = await page.evaluate(() => document.getElementById('mockCard').innerText);
-    ok('the Study card shows the score of the last block and offers its report', /Last block: \d+%/.test(c) && /see the report/.test(c), c.replace(/\n+/g, ' | '));
+    ok('the Sessions card shows the score of the last block and offers its report', /Last block: \d+%/.test(c) && /see the report/.test(c), c.replace(/\n+/g, ' | '));
     const stale = await page.evaluate(() => {
       const was = S.mockLast.submittedAt; S.mockLast.submittedAt = was + 1; render();       // a report that is not the last block's: an import replaced the history, or a write failed
       const b = document.querySelector('#mockCard .mock-quiet'), out = { disabled: b.disabled, text: b.textContent.trim() };
