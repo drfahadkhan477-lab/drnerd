@@ -16,7 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -588,6 +588,42 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a failed response body is never replayed', retryCases.partial.calls===1
      && !!retryCases.bodyError?.error && retryCases.partial.error===retryCases.bodyError.error
      && retryCases.partial.message===retryCases.bodyError.message, JSON.stringify(retryCases.partial));
+
+  head('explicit explanation uses one evidence-backed turn');
+  await page.evaluate(()=>{
+    window.explainProbe={saved:window.fetch,savedRun:runTool,requests:[],actions:0};
+    const requests=window.explainProbe.requests;
+    AI.provider='gemini'; AI.gemini.key='synthetic-key'; S.screen='home';AI_GROUNDED=true;
+    REF.push({id:'explain-fixture',title:'Fictional omega protocol',body:'Omega protocol uses an amber marker.',tags:'omega'});invalidateIndex();
+    CHATS._general=[];buildAI();
+    window.fetch=async(url,init)=>{
+      requests.push(JSON.parse(init.body));
+      return new Response('data: '+JSON.stringify({candidates:[{content:{parts:[{text:'The fictional protocol uses amber.'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+    };
+    document.getElementById('aiIn').value='Explain omega protocol';
+      const button=document.querySelector('[data-chip="explain"]');
+      if(button) button.click(); else fire('Explain omega protocol',true);
+      window.explainProbe.button=!!button;
+  });
+  await settled(page,()=>!aiBusy,{label:'explanation finishes'});
+  await page.evaluate(()=>{
+      const requests=window.explainProbe.requests;
+      runTool=()=>{window.explainProbe.actions++;return {result:'unexpected'};};
+      window.fetch=async(url,init)=>{
+        requests.push(JSON.parse(init.body));
+        return new Response('data: '+JSON.stringify({candidates:[{content:{parts:[{functionCall:{name:'get_performance',args:{}}}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+      };
+      fire('Explain omega again',true);
+  });
+  await settled(page,()=>!aiBusy,{label:'unexpected explanation tool call finishes'});
+  const explanation=await page.evaluate(()=>{
+    const p=window.explainProbe;
+    window.fetch=p.saved;runTool=p.savedRun;REF=REF.filter(r=>r.id!=='explain-fixture');invalidateIndex();
+    return {button:p.button,first:p.requests[0],count:p.requests.length,actions:p.actions,notice:CHATS._general.some(m=>m.err&&/cannot run study tools/.test(m.content))};
+  });
+  ok('Explain draft is explicit and omits tool declarations',explanation.button&&!!explanation.first&&!explanation.first.tools);
+  ok('explanation retains retrieved note evidence and grounding instruction',JSON.stringify(explanation.first).includes('Omega protocol uses an amber marker.')&&JSON.stringify(explanation.first).includes('supplied evidence is insufficient'));
+  ok('unexpected tool calls cannot act or cause follow-up requests in explanation mode',explanation.count===2&&explanation.actions===0&&explanation.notice);
 
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));

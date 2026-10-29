@@ -4004,6 +4004,7 @@ function buildAI(){
      ${srcStrip}
      ${figStrip}
      <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>(!c[2]||c[2](q))?`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`:'').join('')}
+       <button class="chip" data-chip="explain" title="Explain your draft using supplied context, without study tools">Explain draft · no tools</button>
        ${hist.length?'<button class="chip" data-chip="clear">Clear thread</button>':''}</div>
      <div class="ai-foot"><div class="ai-input">
        <button class="ai-more${apexChipsOpen?' on':''}" id="aiMore" type="button"
@@ -4313,6 +4314,7 @@ function bindChat(q){
     figsBtn.setAttribute('aria-expanded',apexFigsOpen?'true':'false');
   };
   panel.querySelectorAll('[data-chip]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.chip==='explain'){ const draft=document.getElementById('aiIn'); if(draft&&draft.value.trim()) fire(draft.value,true); else if(draft) draft.focus(); return; }
     if(b.dataset.chip==='clear'){ delete CHATS[q?q.id:'_general']; saveJSON(AI_CHAT,CHATS); buildAI(); return; }
     fire(CHIPS[+b.dataset.chip][1]);
   });
@@ -4320,7 +4322,7 @@ function bindChat(q){
      the bottom. Forcing it here would undo that on every rebuild. */
 }
 let lastHits=[], lastHitsKey=null;
-function fire(text){
+function fire(text,explainOnly=false){
   text=(text||'').trim(); if(!text||aiBusy||apexAway())return;
   /* Empty the composer BEFORE buildAI(). buildAI() reads the panel through
      apexPanelState() and writes it back through apexPanelRestore(), so a draft
@@ -4340,7 +4342,7 @@ function fire(text){
   try{ extra=retrievedContext(text,q); }catch(_){}
   lastHits=extra.hits; lastHitsKey=q?q.id:'_general';
   aiBusy=true; buildAI();
-  streamReply(q,hist,extra.text);
+  streamReply(q,hist,extra.text,explainOnly);
 }
 /* Open the panel if it is shut and ask it something. With no key the panel shows its setup screen, which is the answer; nothing is sent.
    Not into a mock block: the panel is put away there. */
@@ -4399,7 +4401,7 @@ function apexTrim(hist){
   hist.splice(0,from);
   return hist;
 }
-async function streamReply(q,hist,extra){
+async function streamReply(q,hist,extra,explainOnly=false){
   aiAbort=new AbortController();
   toolTrace=[];
   const wire=apexWire(hist);
@@ -4407,7 +4409,8 @@ async function streamReply(q,hist,extra){
   try{
     while(guard++ < 6){                       // bounded agent loop
       apexSetState('thinking');
-      const turn=await oneTurn(q,wire,extra);
+      const turn=await oneTurn(q,wire,extra,explainOnly);
+      if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
         if(turn.text.trim()) hist.push({role:'assistant',content:turn.text});
         saveJSON(AI_CHAT,CHATS);
@@ -4476,8 +4479,8 @@ function pushToolExchange(wire,turn,results){
 }
 
 /* one streamed request; returns {text, calls, raw} — dispatches by provider */
-function oneTurn(q,wire,extra){
-  return oneTurnGemini(q,wire,extra);
+function oneTurn(q,wire,extra,explainOnly=false){
+  return oneTurnGemini(q,wire,extra,explainOnly);
 }
 
 /* lastHits holds whichever notes retrievedContext/groundedContext put in
@@ -4630,7 +4633,7 @@ function toGeminiContents(wire){
   return wire.map(m=>m.parts ? {role:m.role,parts:m.parts}
                               : {role:m.role==='assistant'?'model':'user',parts:geminiParts(m.content)});
 }
-async function oneTurnGemini(q,wire,extra){
+async function oneTurnGemini(q,wire,extra,explainOnly=false){
   const model=cur().model;
   const contents=toGeminiContents(Vision.withImages(
     Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
@@ -4639,8 +4642,8 @@ async function oneTurnGemini(q,wire,extra){
     method:'POST', signal:aiAbort.signal,
     headers:gemHeaders(cur().key,true),
     body:JSON.stringify({
-      systemInstruction:{parts:[{text:systemPrompt()+'\n\n'+aiCtx(q)+(extra||'')}]},
-      tools:[{functionDeclarations:toGeminiTools(TOOLS)}],
+      systemInstruction:{parts:[{text:systemPrompt()+'\n\n'+aiCtx(q)+(extra||'')+(explainOnly?'\nExplain the supplied context concisely. No tools are available in this mode. Do not claim to search, save or change study state. If the supplied evidence is insufficient, say so.':'')}]},
+      ...(explainOnly?{}:{tools:[{functionDeclarations:toGeminiTools(TOOLS)}]}),
       generationConfig:{maxOutputTokens:2000},
       contents})
   },attempt=>{

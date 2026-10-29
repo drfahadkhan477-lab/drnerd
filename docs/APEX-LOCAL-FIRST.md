@@ -31,3 +31,19 @@ a daily reset. Existing bounded retries and partial-stream safeguards remain.
 
 Actual project allowance, billing and key validity still require Google's
 account information; error classification is not an account health check.
+
+## Explain a draft without tools
+
+Enter a question, open Suggested prompts, and choose **Explain draft · no tools**.
+Apex retrieves context on the device and sends it, the conversation and the
+usual grounding instructions to Gemini. This mode omits tool declarations and
+rejects any unexpected tool call before it can act. It requests a concise
+explanation and disclosure when supplied evidence is insufficient. An empty
+draft focuses the composer without sending a request.
+
+This is one model turn, not a guarantee of one HTTP attempt: existing bounded
+retries still apply to transient refusals before streaming. It still consumes
+cloud allowance. Normal Send retains study tools and multi-step conversations;
+no language heuristic silently changes the user's intended operation. Prompt
+and transport tests do not establish live medical answer quality or a measured
+reduction in billing. Source-versioned caching remains future work.
