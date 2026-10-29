@@ -438,8 +438,8 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     await onScreen(page, 'study', { marker: '#planCard' });
     const fab = async () => page.evaluate(() => { const f = document.querySelector('.ai-fab'); const r = f.getBoundingClientRect(); return { bottom: Math.round(r.bottom), vh: innerHeight, y: Math.round(scrollY) }; });
     const before = await fab();
-    await page.evaluate(() => { const m = document.scrollingElement; m.scrollTop = m.scrollHeight; window.scrollTo(0, document.body.scrollHeight); });
-    await page.waitForTimeout(200);
+    /* The scroll is a precondition: wait until the page has moved, so a scroll WebKit has not yet applied is not measured as one. */
+    await page.waitForFunction(() => { window.scrollTo(0, 99999); return scrollY > 0; }, null, { timeout: 8000, polling: 100 }).catch(() => {});
     const after = await fab();
     ok('with the filter on, Apex\'s button stays fixed to the screen as the page scrolls', after.y > 0 && after.bottom === before.bottom && after.bottom <= after.vh, JSON.stringify({ before, after }));
     await page.evaluate(() => resetTune());
