@@ -749,7 +749,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   await settled(page,()=>!window.__vtLive && !!document.querySelector('.hero-h1'),{label:'empty library Home'});
   const empty=await page.evaluate(()=>({gone:!document.getElementById('pearlCard'),
-    heading:document.querySelector('#atlasTitle')?.textContent.replace(/\s+/g,' ').replace('oneidea','one idea'),
+    heading:document.querySelector('#atlasTitle')?.textContent.replace(/\s+/g,' ').trim(),
 
     open:[...document.querySelectorAll('#homePage0 button')].some(b=>b.textContent==='Open notes')}));
   ok('no notes means no card, rather than an empty one',empty.gone);

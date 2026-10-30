@@ -99,6 +99,17 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await page.waitForFunction(()=>typeof window.resolveSettingsRequest==='function');
  await page.evaluate(async()=>{closeSettings();window.resolveSettingsRequest({models:[['gemini-test','Test']]});await Promise.resolve();});
  await check('closing Settings cancels pending credential replacement',async()=>await page.evaluate(()=>AI.gemini.key==='AIza-draft-test'),async()=>{await page.evaluate(()=>AI.gemini.key='AIza-cancelled-test');},20);
+ // The Apex panel's own setup keeps an accepted key when the panel is redrawn mid-check; only Settings cancels on close.
+ await page.evaluate(()=>{AI.provider='gemini';AI.gemini.key='';saveJSON(AI_CFG,AI);if(!document.querySelector('#shell').classList.contains('ai-open'))toggleAI();else buildAI();DISCOVER.gemini.fn=()=>new Promise(resolve=>window.resolvePanelRequest=resolve);});await quiet(page);
+ await page.locator('#ai #aiKey').fill('AIza-panel-test');await page.locator('#ai #aiSave').click({noWaitAfter:true});
+ await page.waitForFunction(()=>typeof window.resolvePanelRequest==='function');
+ await page.evaluate(async()=>{buildAI();window.resolvePanelRequest({models:[['gemini-test','Test']]});await new Promise(r=>setTimeout(r,50));});
+ await check('a key accepted in the Apex panel is kept when the panel is redrawn during the check',async()=>await page.evaluate(()=>AI.gemini.key==='AIza-panel-test'),async()=>{await page.evaluate(()=>AI.gemini.key='');},24);
+ // Removing the key in Settings shows the panel's setup again once Settings closes.
+ await page.evaluate(async()=>{await new Promise(r=>setTimeout(r,800));AI.provider='gemini';AI.gemini.key='AIza-panel-chat';saveJSON(AI_CFG,AI);buildAI();window.__panelChat=!document.querySelector('#ai #aiSave');openSettings('apex');});
+ await page.locator('#removeApexKey').click({noWaitAfter:true});await page.locator('#confirmRemoveApexKey').click({noWaitAfter:true});
+ await page.evaluate(()=>closeSettings());
+ await check('a key removed in Settings returns the Apex panel to its setup form',async()=>await page.evaluate(()=>window.__panelChat&&AI.gemini.key===''&&!!document.querySelector('#ai #aiSave')),async()=>{await page.evaluate(()=>document.querySelector('#ai #aiSave')?.remove());},25);
  await page.evaluate(()=>openSettings());await page.addScriptTag({content:require('axe-core').source});
  await check('Settings passes accessibility checks',async()=>(await page.evaluate(()=>axe.run('#generalSettings',{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa','best-practice']}}))).violations.length===0,async()=>{await page.evaluate(()=>{const x=document.querySelector('#generalSettings #aiKey');x.removeAttribute('aria-label');x.removeAttribute('placeholder');});},21);
  await page.evaluate(()=>{closeSettings();HTMLDialogElement.prototype.showModal=undefined;openSettings();});
