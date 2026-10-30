@@ -197,6 +197,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return {paints,advance:heroMon.t-before};
   });
   ok('offscreen Home does not repaint its pearl or advance its ECG', hiddenHero.paints===0 && hiddenHero.advance===0, JSON.stringify(hiddenHero));
+  await page.evaluate(() => homeGo(0));
+  await still('back on Home');
+  const ecg = await page.evaluate(async () => {
+    const frames=()=>new Promise(r=>{let n=0;const t=()=>++n<20?requestAnimationFrame(t):r();requestAnimationFrame(t);});
+    if(atlas3D) toggleAtlas3D();
+    const shown=getComputedStyle(document.getElementById('heroECG')).visibility;
+    let b=heroMon.t; await frames(); const flat=heroMon.t-b;
+    toggleAtlas3D(); b=heroMon.t; await frames(); const live=heroMon.t-b;
+    return {shown,flat,live};
+  });
+  /* Left in the 3D view: the overlay checks below count the ECG and the heart, which are drawn only there. */
+  ok('the ECG strip hidden under the illustration is not drawn, and draws in the 3D view', ecg.shown==='hidden' && ecg.flat===0 && ecg.live>0, JSON.stringify(ecg));
+  await page.evaluate(() => homeGo(2));
+  await still('back on Labs');
   const s2 = await state();
   ok('the Labs tab glides there rather than jumping', glide.moving, JSON.stringify(glide));
   ok('and lands on Labs', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2', JSON.stringify(s2));

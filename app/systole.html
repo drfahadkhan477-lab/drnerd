@@ -7942,7 +7942,8 @@ function homeMark(){
    hidden canvases must not consume the foreground's frame budget. */
 function syncHomeMotion(){
   const on=!atlasPaused&&S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
-  if(heroMon) on?heroMon.start():heroMon.stop();
+  /* The strip is drawn only in the 3D view; the illustration hides it (home.css), and a loop drawing what no one sees is a frame spent on nothing. */
+  if(heroMon) on&&atlas3D?heroMon.start():heroMon.stop();
   if(heroHeart3d) on&&atlas3D?heroHeart3d.start():heroHeart3d.stop();
   if(pearlTrace) on&&atlasReading?pearlTrace.resume():pearlTrace.pause();
   if(!on&&heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }
