@@ -136,12 +136,6 @@ html[data-theme="dark"][data-palette="contrast"]{
   align-items:center;justify-content:center;transition:background .18s var(--ease)}
 .icon-btn:active{background:rgba(255,255,255,.26)}
 .theme-wrap{position:relative}
-.theme-menu{position:absolute;top:44px;right:0;z-index:120;width:236px;
-  background:var(--card);border:1px solid var(--border);border-radius:14px;
-  box-shadow:var(--e4);padding:7px;opacity:0;transform:translateY(-6px) scale(.98);
-  transform-origin:top right;pointer-events:none;
-  transition:opacity .16s var(--ease),transform .16s var(--ease)}
-.theme-menu.open{opacity:1;transform:none;pointer-events:auto}
 .theme-menu-h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);padding:6px 9px 4px}
 .theme-opt{display:flex;align-items:center;gap:10px;width:100%;padding:8px 9px;border:none;

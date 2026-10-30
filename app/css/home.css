@@ -798,20 +798,6 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
 /* The Display panel: themes as a grid of swatches, then text size, reading width, and brightness and contrast, each a
    section of its own under a clear heading, in a panel wide enough to read and scrolled inside itself when the window
    is short. */
-.theme-menu{width:min(360px,calc(100vw - 24px));padding:10px 12px 14px;box-sizing:border-box;border-radius:18px}
-.theme-menu .dp-head{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;border-bottom:1px solid var(--border2)}
-.theme-menu .dp-title{display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:750;color:var(--text)}
-.theme-menu .dp-close{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-6px -6px -6px 0;
-  border:0;border-radius:12px;background:transparent;color:var(--muted);cursor:pointer}
-.theme-menu .dp-close:focus-visible{outline:2.5px solid var(--teal);outline-offset:-2px}
-@media(hover:hover){.theme-menu .dp-close:hover{background:var(--border2);color:var(--text)}}
-.theme-menu .dp-sec{padding:10px 0 4px;border-bottom:1px solid var(--border2)}
-.theme-menu .dp-sec:last-child{border-bottom:0}
-.theme-menu .theme-menu-h{padding:0 2px 8px;font-size:11px;color:var(--muted)}
-.theme-menu .dp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.theme-menu .dp-grid .theme-opt{min-height:44px;padding:8px 10px;border:1px solid var(--border2);border-radius:12px;font-size:13px}
-.theme-menu .dp-grid .theme-opt.on{border-color:var(--teal-ink)}
-.theme-menu .theme-sw{width:22px;height:22px;border-radius:7px;flex:none}
 .tune{display:grid;gap:10px}
 .tune-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px 10px;color:var(--text);font-size:13px;font-weight:600}
 .tune-l{display:inline-flex;align-items:center;gap:8px}
