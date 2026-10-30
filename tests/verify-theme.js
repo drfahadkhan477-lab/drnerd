@@ -164,15 +164,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('clicking an option applies that theme', picked.theme === 'nocturne' && picked.attr === 'nocturne');
   ok('and keeps Settings open', picked.menuOpen === true);
 
-  const dismiss = await page.evaluate(async () => {
-    openSettings();
-    await new Promise(r => setTimeout(r, 60));
-    const wasOpen = document.getElementById('generalSettings').open;
-    document.getElementById('generalSettings').dispatchEvent(new Event('cancel',{cancelable:true}));
-    await new Promise(r => setTimeout(r, 60));
-    return { wasOpen, nowOpen: !!document.getElementById('generalSettings')?.open };
-  });
+  /* The key itself, pressed with focus inside the dialog: a synthetic cancel event would pass with Escape broken. */
+  const wasOpen = await page.evaluate(async () => { openSettings(); await new Promise(r => setTimeout(r, 60));
+    return !!document.getElementById('generalSettings')?.open && document.getElementById('generalSettings').contains(document.activeElement); });
+  await page.keyboard.press('Escape');
+  const dismiss = await page.evaluate(async () => { await new Promise(r => setTimeout(r, 60)); return { nowOpen: !!document.getElementById('generalSettings')?.open }; });
+  dismiss.wasOpen = wasOpen;
   ok('Escape dismisses Settings', dismiss.wasOpen && dismiss.nowOpen === false);
+  /* A theme chosen in Settings redraws the page under it: the Home theme button was drawn for the old theme. */
+  await page.evaluate(() => { setTheme('daylight'); goHome(); });
+  await page.waitForFunction(() => S.screen === 'home' && !window.__vtLive, null, { timeout: 15000 }).catch(() => {});
+  await page.evaluate(() => { openSettings(); setTheme('midnight'); closeSettings(); });
+  await page.waitForFunction(() => !window.__vtLive, null, { timeout: 15000 }).catch(() => {});
+  const homeBtn = await page.evaluate(() => { const b = [...document.querySelectorAll('.nav [aria-label]')].find(x => /Switch to (light|dark) theme/.test(x.getAttribute('aria-label'))); return b ? b.getAttribute('aria-label') : null; });
+  ok('a theme chosen in Settings redraws the page, so the Home theme button names the theme now in use', homeBtn === 'Switch to light theme', String(homeBtn));
 
   head('it persists, and old preferences still resolve');
   const persisted = await page.evaluate(() => {

@@ -4083,7 +4083,7 @@ const DISCOVER={
     askMsg:'Asking Google which models this key can use…', vendor:'Google',
     hint:'A key made with <b>Get API key</b> in Google AI Studio gets the free tier without any billing account — try creating a fresh one there.'},
 };
-function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvider, connected=()=>buildAI()){
+function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvider, connected=()=>buildAI(), detachCancels=false){
   const find=id=>root.querySelector('#'+id);
   const btn=find('aiSave'), inp=find('aiKey'), paste=find('aiPaste');
   const keyMsg=(text,cls)=>{const el=find('keyMsg');if(el){for(const key of [inp?.value,...Object.values(AI).map(v=>v&&v.key)].filter(k=>typeof k==='string'&&k.length>4)){text=String(text).split(key).join('[redacted]').split(e(key)).join('[redacted]');}el.className='key-msg '+(cls||'');el.innerHTML=text;}};
@@ -4128,7 +4128,7 @@ function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvi
                 +' '+d.hint,'bad');
           btn.disabled=false; btn.textContent='Connect'; return;
         }
-        if(!btn.isConnected)return;
+        if(detachCancels&&!btn.isConnected)return;  // closing Settings cancels; a redrawn Apex panel does not
         MODELS[p]=found.models;
         try{ localStorage.setItem(d.cacheKey,JSON.stringify(found.models)); }catch(_){}
         const asked=model, have=found.models.some(m=>m[0]===asked);
@@ -4137,15 +4137,15 @@ function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvi
         const label=(found.models.find(m=>m[0]===model)||[model,model])[1];
         keyMsg(icon('check','icon-sm')+' Connected — '+e(label)
               +(have?'':' <span class="err-raw">(the model you picked is not on this key)</span>'),'good');
-        setTimeout(()=>{if(btn.isConnected)connected();},700);
+        setTimeout(()=>{if(!detachCancels||btn.isConnected)connected();},700);
         return;
       }
       const r=await validateKey(p,k,model);
       if(!r.ok){ keyMsg(await apiError(r,p),'bad'); btn.disabled=false; btn.textContent='Connect'; return; }
-      if(!btn.isConnected)return;
+      if(detachCancels&&!btn.isConnected)return;
       AI.provider=p; AI[p]={key:k,model}; saveJSON(AI_CFG,AI);
       keyMsg(icon('check','icon-sm')+' Connected','good');
-      setTimeout(()=>{if(btn.isConnected)connected();},450);
+      setTimeout(()=>{if(!detachCancels||btn.isConnected)connected();},450);
     }catch(err){
       keyMsg(networkErrorMsg(err,name),'bad');
       btn.disabled=false; btn.textContent='Connect';
@@ -5189,8 +5189,10 @@ function watchSystemTheme(){
 }
 function setTheme(id){
   S.theme=id; applyTheme(); save();
+  /* The page under Settings is redrawn too: its chapter inks and the Home theme button were drawn for the old theme. */
   if(document.getElementById('generalSettings')) refreshSettingsThemes();
-  else {closeThemeMenu(); render();}
+  else closeThemeMenu();
+  render();
   notifyThemeRenderers();
 }
 /* Kept so anything still calling it (or a keyboard shortcut) advances sensibly
@@ -5380,6 +5382,7 @@ function closeSettings(){
   const box=document.getElementById('generalSettings');if(!box)return;
   if(typeof box.close==='function')box.close();box.remove();document.getElementById('settingsBackdrop')?.remove();
   document.querySelectorAll('[data-settings-inert]').forEach(el=>{el.inert=false;el.removeAttribute('data-settings-inert');const hidden=el.getAttribute('data-settings-hidden');if(hidden==='missing')el.removeAttribute('aria-hidden');else if(hidden!==null)el.setAttribute('aria-hidden',hidden);el.removeAttribute('data-settings-hidden');});settingsProvider=null;
+  if(typeof buildAI==='function')buildAI();  // a key connected or removed in Settings changes what the Apex panel shows
   const target=settingsReturnFocus?.isConnected&&settingsReturnFocus!==document.body?settingsReturnFocus:document.getElementById('settingsBtn');target?.focus();
 }
 function settingsApex(p=AI.provider){
@@ -5391,7 +5394,7 @@ function settingsApex(p=AI.provider){
       <button type="button" class="btn" id="confirmRemoveApexKey">Remove key</button>
       <button type="button" class="btn" id="cancelRemoveApexKey">Cancel</button></div>
     <button type="button" class="btn" onclick="closeSettings();goMemory()">Apex memory</button>`;
-  bindSetup(box,()=>settingsProvider,settingsApex,()=>{if(document.getElementById('settingsApex'))settingsApex(AI.provider);});
+  bindSetup(box,()=>settingsProvider,settingsApex,()=>{if(document.getElementById('settingsApex'))settingsApex(AI.provider);},true);
   const remove=box.querySelector('#removeApexKey'),confirmation=box.querySelector('#removeApexConfirm');
   const cancel=box.querySelector('#cancelRemoveApexKey');
   remove.onclick=()=>{confirmation.hidden=false;cancel.focus();};
@@ -5403,7 +5406,7 @@ function settingsApex(p=AI.provider){
 }
 function resetDisplaySettings(){
   try{localStorage.removeItem(DISPLAY_KEY);localStorage.removeItem(READ_KEY);}catch(_){}
-  resetTune();S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();
+  resetTune();S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();render();
 }
 function openSettings(section='reading'){
   if(document.getElementById('generalSettings')){document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle')?.focus();return;}
@@ -6548,6 +6551,7 @@ function renderNow(){
   app.innerHTML=withScreenTitle(buildScreen());
   app.classList.toggle('again',again);
   applyDisplaySettings();
+  if(S.screen==='home'&&pearlRecalling)pearlApplyRecall();
   /* The Apex button is outside #app; on Home it shares the foot of the screen with the pages' tab bar (home.css). */
   document.body.classList.toggle('on-home',S.screen==='home');
   document.body.classList.toggle('rating-active',
@@ -7220,15 +7224,23 @@ function pearlReading(){
   button.setAttribute('aria-pressed',String(pearlAsWritten));
   pearlFit();
 }
-function pearlRecall(){
+/* Recall is state, not just markup: Home is redrawn by a theme switch, the system's dark mode or a return trip, and the
+   card it draws must still hide the answer the fellow has not recalled yet. */
+let pearlRecalling=false;
+function pearlApplyRecall(){
   const card=document.getElementById('pearlCard'); if(!card)return;
-  const hide=card.classList.toggle('is-recalling');
+  const hide=pearlRecalling;
+  card.classList.toggle('is-recalling',hide);
   document.getElementById('pearlBody').hidden=hide;
   const fig=document.getElementById('pearlFig'); if(fig)fig.hidden=hide;
   document.getElementById('pearlPrompt').hidden=!hide;
   const button=document.getElementById('pearlRecall');
   button.textContent=hide?'Reveal':'Recall';
   button.setAttribute('aria-expanded',String(!hide));
+}
+function pearlRecall(){
+  if(!document.getElementById('pearlCard'))return;
+  pearlRecalling=!pearlRecalling; pearlApplyRecall();
   pearlFit();
 }
 function pearlOpen(){ if(pearlCurrent)goRefs(pearlCurrent.id); }
@@ -7264,6 +7276,7 @@ function pearlNext(auto){
   if(card&&html) card.insertAdjacentHTML('beforeend',html);
   else if(card) card.insertAdjacentHTML('beforeend',pearlEmblem(pearlCurrent));
   if(card) card.classList.toggle('has-fig',!!html);
+  pearlRecalling=false;
   if(card){ card.classList.remove('is-recalling','pearl-all'); const home=card.closest('.home-wrap'); if(home) home.classList.remove('pearl-all-open'); }
   el.scrollTop=0;
   pearlFit();
@@ -7437,7 +7450,7 @@ function buildHome(){
     <div class="home-wrap anim-fade${atlasReading?' atlas-reading':''}" data-home="${S.homeLayout}">
     <section class="atlas-intro" id="atlasIntro"${atlasReading?' hidden':''} aria-labelledby="atlasTitle">
       <div class="atlas-eyebrow">${icon('sun')} <span>Daily pearl</span></div>
-      <h1 id="atlasTitle">Make one<br>idea stick.</h1>
+      <h1 id="atlasTitle">Make one <br>idea stick.</h1>
       <p class="atlas-description">Explain the mechanism in your own words.<br>Then reveal the note and compare.</p>
       <ol class="atlas-steps">
         <li><span class="atlas-step-icon">${icon('eye')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Observe</strong><span>Study the figure<br>and prompt.</span></li>

@@ -37,6 +37,11 @@ module.exports = async function atlasLanding(page, ok, settled) {
   await page.getByRole('button',{name:'Begin recall',exact:true}).click();
   const recall=await page.evaluate(()=>({intro:document.getElementById('atlasIntro').hidden,card:document.getElementById('pearlCard').hidden,answer:document.getElementById('pearlBody').hidden,prompt:document.getElementById('pearlPrompt').hidden}));
   ok('Begin recall opens the real pearl with its answer concealed',recall.intro&&!recall.card&&recall.answer&&!recall.prompt,JSON.stringify(recall));
+  // A redraw while recalling (here the Home theme button) must not reveal the answer.
+  await page.evaluate(()=>setTheme(themeIsDark()?'daylight':'midnight'));
+  await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'Home redrawn while recalling'});
+  const kept=await page.evaluate(()=>({recalling:document.getElementById('pearlCard').classList.contains('is-recalling'),answer:document.getElementById('pearlBody').hidden,prompt:document.getElementById('pearlPrompt').hidden,card:document.getElementById('pearlCard').hidden}));
+  ok('a redraw while recalling keeps the answer concealed',kept.recalling&&kept.answer&&!kept.prompt&&!kept.card,JSON.stringify(kept));
   await page.getByRole('button',{name:'Reveal',exact:true}).click();
   ok('Reveal shows the note-derived pearl answer',await page.evaluate(()=>!document.getElementById('pearlBody').hidden&&document.getElementById('pearlBody').textContent.trim().length>0));
   await page.getByRole('button',{name:'Back to Home',exact:true}).click();
