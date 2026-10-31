@@ -3921,6 +3921,21 @@ function apexPanelRestore(st){
    move someone who is reading something further up. */
 function apexStick(body){ if(body && apexAtBottom(body)) body.scrollTop=body.scrollHeight; }
 
+function apexLocalAction(action){
+  if(aiBusy||apexAway()) return;
+  if(action==='notes') goNoteSearch();
+  else if(action==='bank') openSearch();
+  else if(action==='progress') goStats();
+  else if(action==='review'&&dueQuestions().length) startQuiz(null,'due');
+}
+function apexLocalHtml(){
+  const due=dueQuestions().length;
+  return `<div class="src-strip" role="group" aria-label="On this device — no AI request">
+    <span class="src-lbl">On this device · no AI request</span>
+    ${[['notes','Find notes'],['bank','Find questions'],['progress','My progress'],['review',due?'Review due cards ('+due+')':'No cards due']].map(([action,label])=>
+      `<button type="button" class="src-pill" onclick="apexLocalAction('${action}')" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
+  </div>`;
+}
 function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
@@ -3949,11 +3964,11 @@ function buildAI(){
   /* Hosted Gemini needs nothing typed, so the setup screen would be a door
      with no lock on it. Every other provider still asks. */
   if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
-    wrap.innerHTML=head+setupHtml()+`<div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div>`; bindSetup(); mountApexAvatar(); return; }
+    wrap.innerHTML=head+apexLocalHtml()+setupHtml()+`<div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div>`; bindSetup(); mountApexAvatar(); return; }
   const msgs=hist.length
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
-        : `<div class="msg bot">${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
+        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
     : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
   /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
   const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
@@ -3985,10 +4000,11 @@ function buildAI(){
       title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}" loading="lazy">
       <figcaption>${e(clip(f.caption,150))}<span class="ai-fig-src">${e(clip(f.noteTitle,44))}</span></figcaption></figure>`).join('')}</div></div>`:'';
   wrap.innerHTML=head+
-    `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
+    `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${apexLocalHtml()}${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
      ${srcStrip}
      ${figStrip}
      <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>(!c[2]||c[2](q))?`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`:'').join('')}
+       <button class="chip" data-chip="explain" title="Explain your draft using supplied context, without study tools">Explain draft · no tools</button>
        ${hist.length?'<button class="chip" data-chip="clear">Clear thread</button>':''}</div>
      <div class="ai-foot"><div class="ai-input">
        <button class="ai-more${apexChipsOpen?' on':''}" id="aiMore" type="button"
@@ -4298,6 +4314,7 @@ function bindChat(q){
     figsBtn.setAttribute('aria-expanded',apexFigsOpen?'true':'false');
   };
   panel.querySelectorAll('[data-chip]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.chip==='explain'){ const draft=document.getElementById('aiIn'); if(draft&&draft.value.trim()) fire(draft.value,true); else if(draft) draft.focus(); return; }
     if(b.dataset.chip==='clear'){ delete CHATS[q?q.id:'_general']; saveJSON(AI_CHAT,CHATS); buildAI(); return; }
     fire(CHIPS[+b.dataset.chip][1]);
   });
@@ -4305,7 +4322,7 @@ function bindChat(q){
      the bottom. Forcing it here would undo that on every rebuild. */
 }
 let lastHits=[], lastHitsKey=null;
-function fire(text){
+function fire(text,explainOnly=false){
   text=(text||'').trim(); if(!text||aiBusy||apexAway())return;
   /* Empty the composer BEFORE buildAI(). buildAI() reads the panel through
      apexPanelState() and writes it back through apexPanelRestore(), so a draft
@@ -4325,7 +4342,7 @@ function fire(text){
   try{ extra=retrievedContext(text,q); }catch(_){}
   lastHits=extra.hits; lastHitsKey=q?q.id:'_general';
   aiBusy=true; buildAI();
-  streamReply(q,hist,extra.text);
+  streamReply(q,hist,extra.text,explainOnly);
 }
 /* Open the panel if it is shut and ask it something. With no key the panel shows its setup screen, which is the answer; nothing is sent.
    Not into a mock block: the panel is put away there. */
@@ -4384,7 +4401,7 @@ function apexTrim(hist){
   hist.splice(0,from);
   return hist;
 }
-async function streamReply(q,hist,extra){
+async function streamReply(q,hist,extra,explainOnly=false){
   aiAbort=new AbortController();
   toolTrace=[];
   const wire=apexWire(hist);
@@ -4392,9 +4409,10 @@ async function streamReply(q,hist,extra){
   try{
     while(guard++ < 6){                       // bounded agent loop
       apexSetState('thinking');
-      const turn=await oneTurn(q,wire,extra);
+      const turn=await oneTurn(q,wire,extra,explainOnly);
+      if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
-        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text});
+        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{})});
         saveJSON(AI_CHAT,CHATS);
       }
       /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
@@ -4461,8 +4479,8 @@ function pushToolExchange(wire,turn,results){
 }
 
 /* one streamed request; returns {text, calls, raw} — dispatches by provider */
-function oneTurn(q,wire,extra){
-  return oneTurnGemini(q,wire,extra);
+function oneTurn(q,wire,extra,explainOnly=false){
+  return oneTurnGemini(q,wire,extra,explainOnly);
 }
 
 /* lastHits holds whichever notes retrievedContext/groundedContext put in
@@ -4615,19 +4633,40 @@ function toGeminiContents(wire){
   return wire.map(m=>m.parts ? {role:m.role,parts:m.parts}
                               : {role:m.role==='assistant'?'model':'user',parts:geminiParts(m.content)});
 }
-async function oneTurnGemini(q,wire,extra){
+// Session-only: never persist additional private content or credentials.
+const apexExplanationCache=new Map();
+async function explanationKey(body){
+  try{
+    if(!crypto.subtle) return null;
+    let normalized=body;
+    for(const label of ['NOTE','MEMORY']) for(const close of ['', '/']){
+      normalized=normalized.split('<<<'+close+label+'-'+refFence()+'>>>').join('<<<'+close+label+'-SESSION>>>');
+    }
+    const identity=JSON.stringify([normalized,REF,AI_GROUNDED,AI.provider,cur().model,cur().key,apexHosted()]);
+    if(identity.length>1000000) return null;
+    const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity));
+    return Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
+  }catch(_){return null;}
+}
+async function oneTurnGemini(q,wire,extra,explainOnly=false){
   const model=cur().model;
   const contents=toGeminiContents(Vision.withImages(
     Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
     refImagesForHits(lastHits), AI.provider));
+  const requestBody=JSON.stringify({
+      systemInstruction:{parts:[{text:systemPrompt()+'\n\n'+aiCtx(q)+(extra||'')+(explainOnly?'\nExplain the supplied context concisely. No tools are available in this mode. Do not claim to search, save or change study state. If the supplied evidence is insufficient, say so.':'')}]},
+      ...(explainOnly?{}:{tools:[{functionDeclarations:toGeminiTools(TOOLS)}]}),
+      generationConfig:{maxOutputTokens:2000},
+      contents});
+  const cacheKey=explainOnly?await explanationKey(requestBody):null;
+  if(aiAbort.signal.aborted) throw new DOMException('Stopped','AbortError');
+  const cached=cacheKey&&apexExplanationCache.get(cacheKey);
+  if(cached&&Date.now()-cached.at<15*60*1000){
+    return {text:cached.text,raw:[],calls:[],reused:true};
+  }
   const r=await geminiFetch(gemUrl('stream',model,cur().key),{
     method:'POST', signal:aiAbort.signal,
-    headers:gemHeaders(cur().key,true),
-    body:JSON.stringify({
-      systemInstruction:{parts:[{text:systemPrompt()+'\n\n'+aiCtx(q)+(extra||'')}]},
-      tools:[{functionDeclarations:toGeminiTools(TOOLS)}],
-      generationConfig:{maxOutputTokens:2000},
-      contents})
+    headers:gemHeaders(cur().key,true),body:requestBody
   },attempt=>{
     const live=document.getElementById('aiLive');
     if(live) live.textContent='Gemini is busy. Retrying ('+attempt+'/2)…';
@@ -4643,7 +4682,7 @@ async function oneTurnGemini(q,wire,extra){
      the way oneTurnGroq's callMap has to). raw keeps every part in the order
      it arrived, so a turn that starts talking and then calls a tool pushes
      back exactly what it did, not a reconstruction of it. */
-  let buf='', text='', raw=[];
+  let buf='', text='', raw=[], finishReason='';
   const painter=makeStreamPainter(live,body,()=>text);
   try{
   while(true){
@@ -4656,6 +4695,7 @@ async function oneTurnGemini(q,wire,extra){
       let j; try{ j=JSON.parse(p); }catch(_){ continue; }
       if(j.error) throw new Error(j.error.message||'stream error');
       const cand=j.candidates&&j.candidates[0]; if(!cand)continue;
+      if(cand.finishReason) finishReason=cand.finishReason;
       for(const part of (cand.content&&cand.content.parts)||[]){
         /* THE SIGNATURE TRAVELS WITH THE PART, AND HAS TO GO BACK WITH IT.
            Gemini 3 signs the parts of a turn that involved thinking, and
@@ -4688,6 +4728,11 @@ async function oneTurnGemini(q,wire,extra){
   const calls=raw.filter(p=>p.functionCall).map(p=>({
     id:'call_'+Math.random().toString(36).slice(2),
     name:p.functionCall.name, input:p.functionCall.args||{}}));
+  if(cacheKey&&finishReason==='STOP'&&text.length<=50000&&text.trim()&&!calls.length&&!aiAbort.signal.aborted){
+    apexExplanationCache.delete(cacheKey);
+    while(apexExplanationCache.size>=8) apexExplanationCache.delete(apexExplanationCache.keys().next().value);
+    apexExplanationCache.set(cacheKey,{text,at:Date.now()});
+  }
   return {text, raw, calls};
 }
 /* Gemini says {error:{message}}. The other shapes — {message} or {detail} at
@@ -4715,14 +4760,35 @@ const RELAY_OK_KEY='accsap12.relayok';
 function relayAnswered(r){ if(r&&r.ok&&viaRelay(r)){ try{ localStorage.setItem(RELAY_OK_KEY,'1'); }catch(_){} } }
 function relayKnown(){ try{ return localStorage.getItem(RELAY_OK_KEY)==='1'; }catch(_){ return false; } }
 async function apiError(r,provider){
-  let d=''; try{ d=errMsg(await r.json()); }catch(_){}
+  let j=null; try{ j=await r.json(); }catch(_){}
+  const d=errMsg(j), detail=JSON.stringify(j&&j.error&&j.error.details||[]);
   const name='Gemini';
+  const account=viaRelay(r)?'the hosted key’s project':'your key’s project';
   if((r.status===401||r.status===403)&&viaRelay(r)) return `This site refused to pass the request to Gemini${d?': '+e(d):'.'}`;
   if(r.status===401) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
-  if(r.status===403&&provider==='gemini') return 'Your API key was rejected. Tap the settings icon to re-enter it.';
+  if(r.status===403&&provider==='gemini'){
+    if(/api key not valid|key.*(?:blocked|leaked|revoked)/i.test(d)) return 'Your API key was rejected or blocked. Check its status in Google AI Studio and replace it if necessary.';
+    return 'Google denied permission. Check the project’s API access, key restrictions and free-tier eligibility in Google AI Studio. A new key in the same project may not resolve this.';
+  }
   if(r.status===400&&provider==='gemini'&&/api key not valid/i.test(d)) return 'Your API key was rejected. Tap the settings icon to re-enter it.';
-  if(r.status===429&&provider==='gemini'&&/quota/i.test(d)) return "Gemini's quota limit was reached. Check your plan and quota in Google AI Studio, or choose another available model in Apex settings. The reset time depends on the limit.";
-  if(r.status===429) return 'Rate limited — wait a few seconds and try again.';
+  if(r.status===402) return `Check billing, prepaid balance and spending limits for ${account} in Google AI Studio. Repeated retries will not restore credit.`;
+  if(r.status===429){
+    const evidence=d+' '+detail;
+    if(/per.?day|daily/i.test(evidence)) return `Gemini's daily quota was reached for ${account}. Daily request quotas reset at midnight Pacific time. Check the affected model’s limits in Google AI Studio; creating another key in the same project does not reset them.`;
+    if(/billing|credit|balance|limit:\s*0\b/i.test(evidence)) return `Gemini has no available allowance for ${account}. Check billing, balance and the model’s active quota in Google AI Studio before retrying.`;
+    let seconds=null;
+    const h=r.headers&&r.headers.get('retry-after');
+    if(h!==null&&h!==undefined){const n=Number(h);seconds=Number.isFinite(n)?n:(Date.parse(h)-Date.now())/1000;}
+    if(seconds===null){
+      const info=j&&j.error&&Array.isArray(j.error.details)&&j.error.details.find(x=>/RetryInfo$/.test(x&&x['@type']||''));
+      const m=info&&String(info.retryDelay||'').match(/^(\d+(?:\.\d+)?)s$/);
+      if(m) seconds=Number(m[1]);
+    }
+    const wait=Number.isFinite(seconds)&&seconds>0?` Wait at least ${Math.ceil(seconds)} seconds before trying again.`:' Check the active limit before retrying; its reset time depends on the limit.';
+    if(viaRelay(r)&&/Too many requests in a minute/i.test(d)) return 'This site’s request limit was reached. Pause before asking again; replacing your Gemini key will not fix this site limit.';
+    return `Gemini’s quota or rate limit was reached for ${account}.`+wait+' Multiple keys in one project share quota.';
+  }
+  if(r.status>=500&&viaRelay(r)&&/GEMINI_API_KEY|ACCESS_AUD|ACCESS_TEAM_DOMAIN|APEX_MODELS|signing keys/i.test(d)) return 'This site’s Apex relay needs attention. Ask the site owner to check its Gemini secret, Access configuration and model settings. Re-entering a personal key is not required to repair the hosted service.';
   if(r.status===400&&/credit|balance/i.test(d)) return `Your ${name} account is out of credit.`;
   /* Pointing at the model menu is useless when every name in it is stale —
      which is the normal case once Google retires a generation. Pressing
