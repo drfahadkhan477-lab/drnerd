@@ -66,3 +66,14 @@ those stacks are not being merged over newer fixes. Their branch refs remain
 available as history. Superseded drafts #318, #319 and #322 were closed because
 release #323 already delivered their work. PRs #325, #328 and #329 remain open
 until the combined integration is accepted into master.
+
+
+## Integration test correction
+
+The final WebKit Home check exposed a measurement race in the existing ECG
+regression: rhythm rotation resets the monitor clock, so subtracting its values
+can report negative elapsed time even while the canvas draws. The check now
+counts canvas paint calls across a forced rhythm reset. It still requires no
+painting in the hidden illustration view and actual painting in the visible
+view. An injected hidden-ECG defect is used as the negative control; application
+motion guards are unchanged.

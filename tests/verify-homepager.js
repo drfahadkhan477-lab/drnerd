@@ -200,12 +200,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(() => homeGo(0));
   await still('back on Home');
   const ecg = await page.evaluate(async () => {
-    const frames=()=>new Promise(r=>{let n=0;const t=()=>++n<20?requestAnimationFrame(t):r();requestAnimationFrame(t);});
+    const frames=count=>new Promise(r=>{let n=0;const t=()=>++n<count?requestAnimationFrame(t):r();requestAnimationFrame(t);});
     if(atlas3D) toggleAtlas3D();
-    const shown=getComputedStyle(document.getElementById('heroECG')).visibility;
-    let b=heroMon.t; await frames(); const flat=heroMon.t-b;
-    toggleAtlas3D(); b=heroMon.t; await frames(); const live=heroMon.t-b;
-    return {shown,flat,live};
+    const canvas=document.getElementById('heroECG'), ctx=canvas.getContext('2d'), clear=ctx.clearRect;
+    const shown=getComputedStyle(canvas).visibility;
+    let paints=0;
+    ctx.clearRect=function(...args){paints++;return clear.apply(this,args);};
+    try{
+      await frames(20); const flat=paints; paints=0;
+      toggleAtlas3D(); await frames(10);
+      /* Rotation legitimately resets t to zero. Measure actual drawing, and
+         exercise that reset instead of treating the rhythm clock as monotonic. */
+      heroMon.setRhythm(heroCurrentKind); await frames(10);
+      return {shown,flat,live:paints};
+    }finally{ctx.clearRect=clear;}
   });
   /* Left in the 3D view: the overlay checks below count the ECG and the heart, which are drawn only there. */
   ok('the ECG strip hidden under the illustration is not drawn, and draws in the 3D view', ecg.shown==='hidden' && ecg.flat===0 && ecg.live>0, JSON.stringify(ecg));
