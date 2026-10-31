@@ -16,7 +16,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -520,6 +520,29 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a retired model points at Connect, not at the model menu',
      /Connect/.test(goneMsg) && !/pick a different one in settings/i.test(goneMsg), goneMsg);
 
+  head('actionable quota and permission guidance');
+  const guidance=await page.evaluate(async()=>{
+    const get=async(status,message,details=[],hosted=false)=>{
+      const r=new Response(JSON.stringify({error:{message,details}}),{status});
+      if(hosted) Object.defineProperty(r,'url',{value:'https://study.example/api/apex/gemini/stream'});
+      return apiError(r,'gemini');
+    };
+    return {
+      permission:await get(403,'Permission denied'),
+      daily:await get(429,'Quota exceeded',[{'@type':'type.googleapis.com/google.rpc.QuotaFailure',violations:[{quotaId:'GenerateRequestsPerDay'}]}]),
+      wait:await get(429,'Quota exceeded',[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'45s'}]),
+      credit:await get(402,'Payment required'),
+      relay:await get(503,'This deployment has no GEMINI_API_KEY set.',[],true),
+      site:await get(429,'Too many requests in a minute — wait a moment and try again.',[],true)
+    };
+  });
+  ok('permission failures explain project restrictions rather than reject every key',/restrictions/.test(guidance.permission)&&!/key was rejected/.test(guidance.permission));
+  ok('structured daily quotas explain Pacific reset and shared project allowance',/midnight Pacific/.test(guidance.daily)&&/same project/.test(guidance.daily));
+  ok('provider retry delay is preserved in the guidance',/45 seconds/.test(guidance.wait));
+  ok('payment failures explain balance and spending limits',/prepaid balance/.test(guidance.credit)&&/spending limits/.test(guidance.credit));
+  ok('relay configuration failures identify the hosted service',/relay needs attention/.test(guidance.relay)&&!/temporarily unavailable/.test(guidance.relay));
+  ok('site throttling is distinct from Google quota',/site’s request limit/.test(guidance.site));
+
   head('transient overload recovery without replaying a stream');
   const retryCases = await page.evaluate(async () => {
     const saved = window.fetch, results = {};
@@ -565,6 +588,71 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a failed response body is never replayed', retryCases.partial.calls===1
      && !!retryCases.bodyError?.error && retryCases.partial.error===retryCases.bodyError.error
      && retryCases.partial.message===retryCases.bodyError.message, JSON.stringify(retryCases.partial));
+
+  head('explicit explanation uses one evidence-backed turn');
+  await page.evaluate(()=>{
+    window.explainProbe={saved:window.fetch,savedRun:runTool,requests:[],actions:0};
+    const requests=window.explainProbe.requests;
+    AI.provider='gemini'; AI.gemini.key='synthetic-key'; S.screen='home';AI_GROUNDED=true;
+    REF.push({id:'explain-fixture',title:'Fictional omega protocol',body:'Omega protocol uses an amber marker.',tags:'omega'});invalidateIndex();
+    CHATS._general=[];buildAI();
+    window.fetch=async(url,init)=>{
+      requests.push(JSON.parse(init.body));
+      return new Response('data: '+JSON.stringify({candidates:[{content:{parts:[{text:'The fictional protocol uses amber.'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+    };
+    document.getElementById('aiIn').value='Explain omega protocol';
+      const button=document.querySelector('[data-chip="explain"]');
+      if(button) button.click(); else fire('Explain omega protocol',true);
+      window.explainProbe.button=!!button;
+  });
+  await settled(page,()=>!aiBusy,{label:'explanation finishes'});
+  await page.evaluate(()=>{
+      const requests=window.explainProbe.requests;
+      runTool=()=>{window.explainProbe.actions++;return {result:'unexpected'};};
+      window.fetch=async(url,init)=>{
+        requests.push(JSON.parse(init.body));
+        return new Response('data: '+JSON.stringify({candidates:[{content:{parts:[{functionCall:{name:'get_performance',args:{}}}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+      };
+      fire('Explain omega again',true);
+  });
+  await settled(page,()=>!aiBusy,{label:'unexpected explanation tool call finishes'});
+  const explanation=await page.evaluate(()=>{
+    const p=window.explainProbe;
+    window.fetch=p.saved;runTool=p.savedRun;REF=REF.filter(r=>r.id!=='explain-fixture');invalidateIndex();
+    return {button:p.button,first:p.requests[0],count:p.requests.length,actions:p.actions,notice:CHATS._general.some(m=>m.err&&/cannot run study tools/.test(m.content))};
+  });
+  ok('Explain draft is explicit and omits tool declarations',explanation.button&&!!explanation.first&&!explanation.first.tools);
+  ok('explanation retains retrieved note evidence and grounding instruction',JSON.stringify(explanation.first).includes('Omega protocol uses an amber marker.')&&JSON.stringify(explanation.first).includes('supplied evidence is insufficient'));
+  ok('unexpected tool calls cannot act or cause follow-up requests in explanation mode',explanation.count===2&&explanation.actions===0&&explanation.notice);
+
+  head('session explanation reuse is exact and complete');
+  const reuse=await page.evaluate(async()=>{
+    const saved=window.fetch, results={};let calls=0,finish='STOP';
+    if(typeof apexExplanationCache!=='undefined') apexExplanationCache.clear();
+    window.fetch=async()=>{calls++;return new Response('data: '+JSON.stringify({candidates:[{finishReason:finish,content:{parts:[{text:'Synthetic complete explanation'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});};
+    aiAbort=new AbortController();lastHits=[];
+    const wire=[{role:'user',content:'Explain the fictional marker'}];
+    const ask=async(normal=false)=>{refFenceRoll();return oneTurnGemini(null,wire,refBlock('NOTE','title: synthetic','Amber marker'),!normal);};
+    try{
+      await ask();const repeated=await ask();results.hit=calls===1&&repeated.reused===true;
+      REF.push({id:'cache-change',title:'Changed evidence',body:'New qualification'});
+      await ask();results.source=calls===2;REF.pop();
+      const model=cur().model;cur().model=model+'-different';await ask();results.model=calls===3;cur().model=model;
+      await ask(true);await ask(true);results.normal=calls===5;
+      wire[0].content='Another explanation';finish='MAX_TOKENS';await ask();await ask();results.incomplete=calls===7;
+      if(typeof apexExplanationCache!=='undefined'){
+        for(const entry of apexExplanationCache.values()) entry.at=Date.now()-16*60*1000;
+        wire[0].content='Explain the fictional marker';finish='STOP';await ask();results.expired=calls===8;
+      }
+      return results;
+    }finally{window.fetch=saved;aiAbort=null;if(typeof apexExplanationCache!=='undefined')apexExplanationCache.clear();}
+  });
+  ok('identical explanations reuse despite fresh evidence fences',reuse.hit);
+  ok('source changes invalidate explanation reuse',reuse.hit&&reuse.source);
+  ok('model changes invalidate explanation reuse',reuse.hit&&reuse.model);
+  ok('normal Send bypasses explanation reuse',reuse.hit&&reuse.normal);
+  ok('incomplete answers are never reused',reuse.hit&&reuse.incomplete);
+  ok('expired explanations require a new provider request',reuse.expired);
 
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
