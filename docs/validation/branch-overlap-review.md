@@ -8,7 +8,7 @@ Git refs and GitHub PR metadata were checked together. This is a snapshot, not l
 | Branch | Head | Behind / ahead of master | Review and action |
 |---|---|---|---|
 | `ccr-4a586d2b-55rh9m` | `396a4654` | 15 / 0 | Ancestor of master; no unique commits to integrate. |
-| `claude/bank-swap-rollback` | `dd28940c` | 256 / 1 | Unmerged bank-folder rollback fix (dd28940), no open PR found. Very old base; review/rebase this work separately rather than duplicating it. |
+| `claude/bank-swap-rollback` | `dd28940c` | 256 / 1 | Old rollback commit dd28940 is not an ancestor, but its functionality already landed as da9808d with broader failure coverage. Preserve master’s implementation. |
 | `claude/exciting-fermi-330ukl` | `b63984b3` | 0 / 1 | PR #328: independent removal of overridden Atlas CSS rules. Leave its CSS work separate. |
 | `codex/apex-local-first` | `22ef69bc` | 2 / 5 | PR #325: distinct local study actions, explanation reuse and Gemini error handling. Reserve app/systole.html, verify-chat and verify-gemini for that work. |
 | `codex/apex-quality` | `4990bbe4` | 5 / 5 | PR #322 stacked on #319. Its work was incorporated in release #323; quality docs, evaluation script and fixture match master. Reopening this old stack would overlap delivered work. |
@@ -23,9 +23,9 @@ Git refs and GitHub PR metadata were checked together. This is a snapshot, not l
 
 | PR | Base | Changed-file overlap with audit work | Disposition |
 |---|---|---|---|
-| [#318](https://github.com/drfahadkhan477-lab/drnerd/pull/318) | `master` | None in this snapshot | Already delivered through #323; original draft remains open. |
-| [#319](https://github.com/drfahadkhan477-lab/drnerd/pull/319) | `master` | None in this snapshot | Already delivered through #323; original draft remains open. |
-| [#322](https://github.com/drfahadkhan477-lab/drnerd/pull/322) | `codex/unified-settings-release` | None in this snapshot | Already delivered through #323; original stacked draft remains open. |
+| [#318](https://github.com/drfahadkhan477-lab/drnerd/pull/318) | `master` | None in this snapshot | Delivered through #323; superseded draft closed during completion. |
+| [#319](https://github.com/drfahadkhan477-lab/drnerd/pull/319) | `master` | None in this snapshot | Delivered through #323; superseded draft closed during completion. |
+| [#322](https://github.com/drfahadkhan477-lab/drnerd/pull/322) | `codex/unified-settings-release` | None in this snapshot | Delivered through #323; superseded stacked draft closed during completion. |
 | [#325](https://github.com/drfahadkhan477-lab/drnerd/pull/325) | `master` | None in this snapshot | Distinct pending feature; avoid its frontend/tool-action edits. |
 | [#328](https://github.com/drfahadkhan477-lab/drnerd/pull/328) | `master` | None in this snapshot | Independent CSS cleanup; leave separate. |
 | [#329](https://github.com/drfahadkhan477-lab/drnerd/pull/329) | `master` | Current audit PR | Current audit work. |
@@ -39,8 +39,30 @@ Git refs and GitHub PR metadata were checked together. This is a snapshot, not l
 
 ## Integration boundaries
 
-Keep new audit fixes on PR #329. Do not cherry-pick the old Settings, Atlas or grounded-evidence stacks wholesale, duplicate the pending bank rollback fix, or change the frontend actions reserved by #325. Review old drafts for administrative closure separately; this audit did not close PRs, delete branches, merge features or force-push other work.
+Keep new audit fixes on PR #329. Do not cherry-pick the old Settings, Atlas or grounded-evidence stacks wholesale, duplicate the pending bank rollback fix, or change the frontend actions reserved by #325. Review old drafts for administrative closure separately; the initial audit left those records intact. Completion subsequently closed the already-delivered drafts, while retaining their branch refs.
 
 ## Continued audit finding
 
 A delayed mock-exam tick could charge a question beyond the deadline while `finish()` clamped only the block total. The regression reproduces an inconsistent per-question report. The tick now charges only the time remaining in the block, preserving the existing untimed-clock and inactivity-gap rules. The pure suite demonstrates the original failure and the corrected totals; browser integration is checked with synthetic content in Chromium and WebKit.
+
+
+## Completion of the remaining work
+
+The unfinished feature work is integrated on `codex/finish-pending-branches`:
+Apex local actions, safe explanation reuse and actionable provider errors from
+#325, plus the independent CSS cleanup from #328. Master’s later key-redaction,
+Settings, and grounded-context-budget fixes are preserved.
+
+The bank rollback branch required no new implementation: `da9808d` already
+provides rollback and broader failure controls on master. Its original older
+commit was not reapplied. The build-bank regression suite passes on the retained
+implementation. The previous interpretation of that branch as pending work was
+corrected by comparing implementation and tests, rather than commit ancestry.
+
+Historical Atlas/Settings branches contain precursor implementations and old
+validation records. The paused/empty Home, expanded figures, active headings,
+unified Settings and grounded-evidence behavior are present in current master;
+those stacks are not being merged over newer fixes. Their branch refs remain
+available as history. Superseded drafts #318, #319 and #322 were closed because
+release #323 already delivered their work. PRs #325, #328 and #329 remain open
+until the combined integration is accepted into master.
