@@ -1539,6 +1539,9 @@ function search(query,{exclude=null,limit=5,kind=null}={}){
 
 /* ── build the extra context block handed to the tutor ────────────────────── */
 const CTX_BUDGET=5200;
+/* What grounded searches may still add to one reply. Each search is held to CTX_BUDGET*3, but a reply runs up to six
+   steps with any number of calls each, and grounded results skip the tool slice, so streamReply sets this per reply. */
+let groundedTurnLeft=Infinity;
 function systemPrompt(){ return AI_GROUNDED ? SYSTEM+GROUNDED : SYSTEM; }
 
 /* In grounded mode the library is the whole answer, not supporting material:
@@ -1590,21 +1593,21 @@ ${head}
 ${refSafe(body)}
 <<</${label}-${F}>>>`;
 }
-function groundedContext(userText,q,limit=6){
+function groundedContext(userText,q,limit=6,budget=CTX_BUDGET*3){
   const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{kind:'r',limit});
   if(!hits.length){
     return {text:'\n\nTHE FELLOW\u2019S REFERENCE LIBRARY RETURNED NOTHING for this question. Tell them their notes do not cover it — do not answer from your own knowledge.\n', hits:[]};
   }
-  const parts=[]; const kept=[]; let used=0;
+  const parts=[]; const kept=[]; let used=0, full=false;
   for(const h of hits){
     const r=REF.find(x=>x.id===h.meta.id); if(!r) continue;
     const block=refBlock('NOTE',
       `title: ${refSafe(r.title||'Untitled')}${r.source?'\n    source: '+refSafe(r.source):''}${r.tags?'\n    tags: '+refSafe(r.tags):''}${String(r.body||'').length>4000?'\n    excerpt: truncated; additional text is not supplied':''}`,
       clip(r.body,4000));
-    if(used+block.length>CTX_BUDGET*3) break;
+    if(used+block.length>budget){ full=true; break; }
     used+=block.length; parts.push(block); kept.push(h.meta);
   }
-  return {
+  return {used,full,
     text:`\n\nTHE FELLOW'S REFERENCE LIBRARY — these notes are the ONLY material you may teach from in this reply. Cite each by title.\n\n`+parts.join('\n\n'),
     hits:kept
   };
@@ -2603,7 +2606,11 @@ function runTool(name,input){
          total evidence budget as the initial grounded context. Cite only notes
          actually included within that budget. */
       if(AI_GROUNDED){
-        const context=groundedContext(query,null,n);
+        const spent={result:'This reply has already used its whole budget of notes. Answer from the notes returned above.',cite:[]};
+        if(groundedTurnLeft<=0) return spent;
+        const context=groundedContext(query,null,n,Math.min(CTX_BUDGET*3,groundedTurnLeft));
+        groundedTurnLeft-=context.used;
+        if(!context.hits.length&&context.full){ groundedTurnLeft=0; return spent; }
         return {result:context.hits.length?context.text:
           'No matching notes in the fellow\'s reference library. Grounded mode leaves the question bank out.',cite:context.hits};
       }
@@ -4386,7 +4393,7 @@ function apexTrim(hist){
 }
 async function streamReply(q,hist,extra){
   aiAbort=new AbortController();
-  toolTrace=[];
+  toolTrace=[]; groundedTurnLeft=CTX_BUDGET*6;
   const wire=apexWire(hist);
   let guard=0, truncated=false;
   try{
@@ -5325,14 +5332,10 @@ function themeOptHtml(t){
     <span class="tk">${e(t.name)}</span>
     <span class="tc">${icon('check')}</span></button>`;
 }
-let __themeMenuOpen=false, __themeMenuOff=null;
+/* The theme menu became Settings; these names stay for the callers and suites that still use them. */
 function toggleThemeMenu(){ if(document.getElementById('generalSettings'))closeSettings();else openSettings(); }
 function openThemeMenu(){openSettings();}
-function closeThemeMenu(){
-  const m=document.getElementById('themeMenu'); if(m) m.classList.remove('open');
-  __themeMenuOpen=false;
-  if(__themeMenuOff){ document.removeEventListener('click',__themeMenuOff); __themeMenuOff=null; }
-}
+function closeThemeMenu(){}
 
 
 /* Device display preferences deliberately stay outside the study record. */
@@ -5450,8 +5453,11 @@ function openSettings(section='reading'){
   }
   document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle').focus();
 }
-window.addEventListener('resize',applyDisplaySettings);
-if(document.getElementById('shell'))new MutationObserver(()=>applyDisplaySettings()).observe(document.getElementById('shell'),{attributes:true,attributeFilter:['class']});
+/* A drag of the Split View divider fires resize many times a frame, and each pass reads computed styles: one pass a frame is enough. */
+let displayRaf=0;
+const scheduleDisplaySettings=()=>{ if(!displayRaf) displayRaf=requestAnimationFrame(()=>{ displayRaf=0; applyDisplaySettings(); }); };
+window.addEventListener('resize',scheduleDisplaySettings);
+if(document.getElementById('shell'))new MutationObserver(scheduleDisplaySettings).observe(document.getElementById('shell'),{attributes:true,attributeFilter:['class']});
 
 function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
@@ -7942,7 +7948,8 @@ function homeMark(){
    hidden canvases must not consume the foreground's frame budget. */
 function syncHomeMotion(){
   const on=!atlasPaused&&S.screen==='home'&&homePage===0&&document.visibilityState!=='hidden'&&!figPs&&!apexIsFull();
-  if(heroMon) on?heroMon.start():heroMon.stop();
+  /* The strip is drawn only in the 3D view; the illustration hides it (home.css), and a loop drawing what no one sees is a frame spent on nothing. */
+  if(heroMon) on&&atlas3D?heroMon.start():heroMon.stop();
   if(heroHeart3d) on&&atlas3D?heroHeart3d.start():heroHeart3d.stop();
   if(pearlTrace) on&&atlasReading?pearlTrace.resume():pearlTrace.pause();
   if(!on&&heroRotateTimer){ clearInterval(heroRotateTimer); heroRotateTimer=null; }

@@ -456,6 +456,27 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     await page.context().close();
   }
 
+  head('a burst of resizes is one display pass');
+  {
+    const page = await open({ width: 1024, height: 768 });
+    /* Counted through applyTune, which every pass calls by name: a listener bound to applyDisplaySettings itself never meets a
+       wrapper put on window, but its inner call does. */
+    const burst = await page.evaluate(async () => {
+      const real = window.applyTune; let n = 0;
+      const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      window.applyTune = (...a) => { n++; return real(...a); };
+      try {
+        await frame(); n = 0; applyDisplaySettings(); const one = n;
+        await frame(); n = 0;
+        for (let i = 0; i < 10; i++) window.dispatchEvent(new Event('resize'));
+        await frame();
+        return { one, burst: n };
+      } finally { window.applyTune = real; }
+    });
+    ok('ten resize events in one frame make one display pass', burst.one === 1 && burst.burst === 1, JSON.stringify(burst));
+    await page.context().close();
+  }
+
   head('the bar has no Echo button');
   /* Echo is reached from Labs; it was in the bar on every screen but Home. */
   {

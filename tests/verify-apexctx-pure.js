@@ -241,6 +241,20 @@ head('grounded retrieval ranks notes before bank results can crowd them out');
     result.result.includes('Alpha is the topic') && !result.result.includes('BANK-ONLY-ANSWER-SENTINEL'));
 }
 
+head('grounded searches in one reply share one budget');
+{
+  const w = world({ grounded: true });
+  for (let i = 0; i < 12; i++) w.REF.push({ id: 'big-' + i, title: 'Invented sigma note ' + i, source: 'Invented',
+    body: 'Sigma evidence ' + i + '. ' + 'Long invented explanation. '.repeat(160) });
+  w.invalidateIndex();
+  vm.runInContext('groundedTurnLeft=CTX_BUDGET*6', w);
+  const sizes = Array.from({ length: 6 }, () => String(w.runTool('search_question_bank', { query: 'sigma evidence', limit: 6 }).result).length);
+  const total = sizes.reduce((a, b) => a + b, 0), cap = vm.runInContext('CTX_BUDGET*6', w);
+  ok('six grounded searches in one reply add no more than its budget of notes, and the last are told it is spent',
+    total <= cap + 6 * 400 && sizes[0] > 4000 && /whole budget of notes/.test(String(w.runTool('search_question_bank', { query: 'sigma evidence' }).result)),
+    JSON.stringify({ sizes, total, cap }));
+}
+
 head('grounded tool evidence preserves source details and long-note qualifications');
 {
   const w = world({ grounded: true });
