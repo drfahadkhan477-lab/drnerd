@@ -354,6 +354,34 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
     ok('a declared Content-Length over the cap is refused even though the real body is tiny', r7.status === 413, String(r7.status));
   }
 
+  head('the body cap bounds reading, not just forwarding');
+  {
+    const f = stub(), env = { ...ENV, APEX_RPM: '0' };
+    let reads = 0, cancelled = false;
+    const chunk = new Uint8Array(1024 * 1024).fill(0x20);
+    const stream = new ReadableStream({
+      pull(c) { reads++; c.enqueue(chunk); if (reads === 16) c.close(); },
+      cancel() { cancelled = true; },
+    });
+    const request = req('/api/apex/gemini/generate?model=gemini-3-flash-preview',
+      { method: 'POST', body: stream, duplex: 'half' });
+    const r = await handleApex(request, env, f);
+    ok('an oversized chunked body is rejected before Google', r.status === 413 && f.calls.length === 0, String(r.status));
+    ok('the unread remainder is cancelled instead of buffered', cancelled && reads < 16, `${reads} chunks, cancelled ${cancelled}`);
+
+    const sent = body({ contents: [{ role: 'user', parts: [{ text: 'µ — اردو 🫀' }] }] });
+    const bytes = new TextEncoder().encode(sent);
+    let at = 0;
+    const small = new ReadableStream({
+      pull(c) { if (at === bytes.length) c.close(); else c.enqueue(bytes.slice(at, ++at)); },
+    });
+    const good = stub();
+    const accepted = await handleApex(req('/api/apex/gemini/generate?model=gemini-3-flash-preview',
+      { method: 'POST', body: small, duplex: 'half' }), env, good);
+    ok('UTF-8 split across chunks is forwarded byte for byte',
+       accepted.status === 200 && good.calls.length === 1 && good.calls[0].opts.body === sent, String(accepted.status));
+  }
+
   head('what it attaches, and what it never sends back');
   {
     const f = stub();

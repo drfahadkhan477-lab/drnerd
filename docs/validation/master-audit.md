@@ -12,6 +12,14 @@ application path or the production deployment has been audited.
   answer. The proxy now refuses a supplied `candidateCount` unless it names a
   single candidate, and rejects duplicate keys and the protobuf snake_case alias. Omission and unrelated nested
   schema fields still work. Access authentication remains required.
+- **AI request memory boundary:** the body cap was checked only after
+  `request.text()` had buffered the complete request. A chunked upload without
+  a trustworthy Content-Length could therefore exhaust memory before rejection.
+  The worker now counts incoming bytes while decoding, cancels the unread
+  remainder on overflow, and preserves the outgoing encoded-byte check. The
+  regression observes cancellation before the complete oversized stream is read.
+  A control forwards UTF-8 split across byte boundaries without changing it;
+  deliberately disabling incremental decoding makes that control fail.
 - **Bank validation:** a figure list supplied as an object or number threw
   instead of producing a refusal. Strings were interpreted as individual
   characters. Non-list figure values now produce an explicit validation problem,

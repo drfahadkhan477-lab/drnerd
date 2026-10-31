@@ -119,6 +119,26 @@ const json = (status, body) =>
    reads .error.message and turns it into a sentence a fellow can act on. */
 const fail = (status, message) => json(status, { error: { message } });
 
+/* Stop reading at the byte cap even when Content-Length is absent or false.
+   request.text() buffers the entire stream before a caller can reject it. */
+async function limitedText(request) {
+  if (!request.body) return '';
+  const reader = request.body.getReader(), decoder = new TextDecoder();
+  let bytes = 0, raw = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return raw + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > MAX_BODY) {
+        try { await reader.cancel(); } catch (_) { /* still reject an oversized body */ }
+        return null;
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+  } finally { reader.releaseLock(); }
+}
+
 /* The keys of the JSON object that opens at `open`, at that object's own
    level: [{ name, at, valueAt }], plus where the object ends. null if it never
    closes.
@@ -492,28 +512,17 @@ export async function handleApex(request, env, fetchImpl, verifyAccess) {
   }
   if (!modelRe.test(model)) return fail(400, `"${model}" is not a model this deployment will call.`);
 
-  /* Checked twice on purpose. Content-Length is the cheap rejection for the
-     common case — refusing an oversized request before request.text() ever
-     buffers it into memory or spends CPU decoding it, which matters on a
-     CPU-metered platform. It is also the only one a client can lie about or
-     omit (chunked transfer encoding sends none at all), so the length check
-     below stays as the backstop that is actually authoritative. */
+  /* Content-Length is the cheap rejection. The streaming reader below also
+     enforces the byte cap when that header is absent or false. */
   const declaredLength = +(request.headers.get('content-length') || 0);
   if (declaredLength > MAX_BODY) {
     return fail(413, 'That request is too large. Try again without attaching so many figures.');
   }
 
-  const raw = await request.text();
-  /* BYTES, not characters. This was raw.length, which is UTF-16 code units:
-     MAX_BODY is a byte budget, content-length above is measured in bytes, and
-     the two checks disagreed on what they were counting. Anything outside the
-     BMP or simply outside ASCII — Urdu or Arabic in a pasted note, an emoji,
-     a figure caption with a µ in it — encodes to two, three or four bytes per
-     unit, so a body this check believed was under 6 MB could be three times
-     that on the wire. It only ever mattered where the header was absent or
-     wrong, which is exactly the case this check exists to be the backstop
-     for. TextEncoder is what the platform gives; Buffer does not exist here. */
-  if (new TextEncoder().encode(raw).length > MAX_BODY) {
+  const raw = await limitedText(request);
+  /* Decoding invalid UTF-8 replaces bytes with U+FFFD, which may expand the
+     encoded body. Preserve the outgoing byte cap as well as the read cap. */
+  if (raw === null || new TextEncoder().encode(raw).length > MAX_BODY) {
     return fail(413, 'That request is too large. Try again without attaching so many figures.');
   }
 
