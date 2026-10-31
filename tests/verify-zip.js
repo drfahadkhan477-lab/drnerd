@@ -37,25 +37,25 @@ new Function('module', 'exports', fs.readFileSync(path.join(__dirname, '..', 'sr
   .call(mod, { exports: mod }, mod);
 const Z = mod.ZipRead;
 
-/* A minimal ZIP writer — STORED entries only, which is all these checks need
-   and keeps the fixture readable. Deflate is exercised by the real imports. */
+/* A minimal ZIP writer with stored and raw-deflate entries. */
 function makeZip(entries) {
   const enc = new TextEncoder();
   const locals = [], centrals = [];
   let offset = 0;
-  for (const { name, size, declared = size } of entries) {
+  for (const { name, size, declared = size, method = 0 } of entries) {
     const nameB = enc.encode(name);
-    const data = new Uint8Array(size).fill(0x41);
+    const plain = new Uint8Array(size).fill(0x41);
+    const data = method === 8 ? require('zlib').deflateRawSync(plain) : plain;
     const lh = new Uint8Array(30 + nameB.length);
     const lv = new DataView(lh.buffer);
-    lv.setUint32(0, 0x04034b50, true); lv.setUint16(8, 0, true);
-    lv.setUint32(18, size, true); lv.setUint32(22, size, true);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(8, method, true);
+    lv.setUint32(18, data.length, true); lv.setUint32(22, size, true);
     lv.setUint16(26, nameB.length, true); lv.setUint16(28, 0, true);
     lh.set(nameB, 30);
     const ch = new Uint8Array(46 + nameB.length);
     const cv = new DataView(ch.buffer);
-    cv.setUint32(0, 0x02014b50, true); cv.setUint16(10, 0, true);
-    cv.setUint32(20, size, true); cv.setUint32(24, declared, true);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(10, method, true);
+    cv.setUint32(20, data.length, true); cv.setUint32(24, declared, true);
     cv.setUint16(28, nameB.length, true); cv.setUint16(30, 0, true);
     cv.setUint16(32, 0, true); cv.setUint32(42, offset, true);
     ch.set(nameB, 46);
@@ -125,6 +125,41 @@ function makeZip(entries) {
   ok('inconsistent stored sizes are refused even within the budget', inconsistent.files.length === 0 && inconsistent.skipped.includes('wrong.bin'));
   const normal = await Z.read(makeZip([{ name: 'x.bin', size: 4096 }]));
   ok('an ordinary archive is unaffected by the new limits', normal.files.length === 1 && normal.skipped.length === 0);
+
+  head('deflated data must match the central directory just as stored data does');
+  const compressed = await Z.read(makeZip([
+    { name: 'wrong.bin', size: 100, declared: 1, method: 8 },
+    { name: 'valid.bin', size: 100, method: 8 },
+  ]));
+  ok('a deflated entry with a false inflated size is skipped',
+     !compressed.files.some(f => f.name === 'wrong.bin') && compressed.skipped.includes('wrong.bin'));
+  const validDeflate = compressed.files.find(f => f.name === 'valid.bin');
+  ok('a valid deflated entry still loads byte for byte',
+     !!validDeflate && validDeflate.bytes.length === 100 && validDeflate.bytes.every(b => b === 0x41));
+
+  head('unsupported and damaged entries cannot masquerade as files');
+  for (const [label, mutate] of [
+    ['encrypted central entry', (v, c) => v.setUint16(c + 8, 1, true)],
+    ['encrypted local entry', v => v.setUint16(6, 1, true)],
+    ['invalid local signature', v => v.setUint32(0, 0, true)],
+    ['inconsistent compression methods', v => v.setUint16(8, 8, true)],
+  ]) {
+    const bytes = makeZip([{ name: 'bad.bin', size: 10 }, { name: 'safe.bin', size: 10 }]);
+    const view = new DataView(bytes), end = Z.findEOCD(view), central = view.getUint32(end + 16, true);
+    mutate(view, central);
+    const got = await Z.read(bytes);
+    ok(label + ' is skipped while the valid entry survives',
+       got.files.map(f => f.name).join(',') === 'safe.bin' && got.skipped.includes('bad.bin'));
+  }
+  head('an EOCD signature inside an archive comment is not the directory');
+  const original = new Uint8Array(makeZip([{ name: 'kept.bin', size: 10 }]));
+  const commented = new Uint8Array(original.length + 32);
+  commented.set(original);
+  const commentView = new DataView(commented.buffer);
+  commentView.setUint16(original.length - 2, 32, true);
+  commentView.setUint32(original.length, 0x06054b50, true);
+  const commentZip = await Z.read(commented.buffer);
+  ok('a valid commented archive still loads its real file', commentZip.files.map(f => f.name).join(',') === 'kept.bin');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

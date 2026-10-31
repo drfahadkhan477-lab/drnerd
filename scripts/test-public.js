@@ -179,8 +179,13 @@ function run(opts) {
         /* Diagnostics belong ahead of successful assertions that happen to
            mention an error. A locator timeout need not contain "Error". */
         const lines = String(r.stdout || '').split('\n').filter(l => l.trim());
-        let out = String(r.stderr || '').split('\n').filter(l => l.trim()).slice(-8)
-          .concat(lines.filter(l => /^\s*FAIL\b/.test(l)).slice(0, 8));
+        const assertions = lines.filter(l => /^\s*FAIL\b/.test(l)).slice(0, 8);
+        /* Death notes are written to stdout. An incidental stderr warning must
+           not suppress them merely because no assertion printed FAIL. Keep
+           successful assertions out of this fallback so they do not obscure
+           a real diagnostic from stderr. */
+        const context = assertions.length ? assertions : lines.filter(l => !/^\s*PASS\b/.test(l)).slice(-8);
+        let out = String(r.stderr || '').split('\n').filter(l => l.trim()).slice(-8).concat(context);
         if (!out.length) out = lines.slice(-8);
         if (r.error) out.unshift(r.error.message);
         if (out.length) log(out.map(l => '      ' + l).join('\n'));

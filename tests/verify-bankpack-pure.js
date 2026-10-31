@@ -121,6 +121,15 @@ async function run() {
   const leak = cases.map(([, mutate]) => BankPack.validate(mutate(good())).problems.join(' ')).join(' ');
   ok('no refusal quotes a word of the bank', !/Zq(stem|a|b|c|x|y)\b/.test(leak), (leak.match(/Zq\w+/) || [''])[0]);
 
+  head('malformed figure lists produce a verdict instead of throwing');
+  for (const figs of [{ file: 'ZQ_1_1.webp' }, 42, 'ZQ_1_1.webp']) {
+    let got = null, error = '';
+    try { got = BankPack.validate(withFile(good(), 'questions.json', bank(q => { q[0].figs = figs; return q; }))); }
+    catch (e) { error = e.message; }
+    ok(`figure list ${typeof figs} is refused with a reason`,
+       !!got && !got.ok && got.questions === null && got.problems.some(p => /ZQ_1:.*figures.*list/.test(p)), error || (got && got.problems.join('; ')));
+  }
+
   head('the written schema says what the code enforces');
   const doc = fs.readFileSync(path.join(ROOT, 'docs', 'CONTENT-SCHEMA.md'), 'utf8');
   const docVer = (doc.match(/\*\*Schema version: (\d+)\.\*\*/) || [])[1];

@@ -128,6 +128,7 @@ suite('verify-b', 'console.log("  FAIL  zq"); process.exit(1)');
 suite('verify-timeout', 'console.log("  PASS  with no errors on load"); console.error("locator.waitFor: Timeout 60000ms exceeded."); process.exit(1)');
 suite('verify-quiet-failure', 'console.log("the dependency never answered"); process.exit(1)');
 suite('verify-mixed-failure', 'console.error("a dependency warning"); console.log("  FAIL  the note was not persisted"); process.exit(1)');
+suite('verify-death-warning', 'console.error("a dependency warning"); console.log("last section reached: drawing the trace"); console.log("page.evaluate: Target page has been closed"); process.exit(1)');
 suite('verify-c', 'process.exit(process.env.SYSTOLE_ENGINE === "webkit" ? 0 : 3)');
 suite('verify-g', 'process.exit(["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0"].some(k => k in process.env) ? 4 : 0)');
 const go = (logic, br, opts, syn, split) => {
@@ -146,6 +147,9 @@ const go = (logic, br, opts, syn, split) => {
   const quiet = go(['verify-quiet-failure'], ['verify-c'], { pure: true });
   ok('a failure without an Error or FAIL keyword still reports its output',
      quiet.code === 1 && quiet.text.includes('the dependency never answered'), quiet.text);
+  const death = go(['verify-death-warning'], ['verify-c'], { pure: true });
+  ok('a stderr warning cannot hide a death diagnostic on stdout',
+     death.code === 1 && death.text.includes('drawing the trace') && death.text.includes('Target page has been closed') && death.text.includes('a dependency warning'), death.text);
   const mixed = go(['verify-mixed-failure'], ['verify-c'], { pure: true });
   ok('stderr does not hide a failed assertion on stdout',
      mixed.code === 1 && mixed.text.includes('a dependency warning') && mixed.text.includes('the note was not persisted'), mixed.text);

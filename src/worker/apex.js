@@ -218,6 +218,22 @@ function clampOutput(raw, max) {
   const mo = onlyKey(raw, cfg, 'maxOutputTokens', 'generationConfig');
   if (mo.error) return mo;
 
+  /* maxOutputTokens applies to each candidate, not the whole request. Apex
+     consumes one answer, so additional candidates only multiply billed output.
+     Keep omission (Google's default of one), but refuse ambiguity and anything
+     except one when the field is supplied. onlyKey also rejects escaped keys. */
+  if (cfg.keys.some(k => k.name === 'candidate_count'))
+    return { error: 'Use generationConfig.candidateCount, set to 1, instead of candidate_count.' };
+  if (cfg.keys.some(k => k.name === 'candidateCount')) {
+    const cc = onlyKey(raw, cfg, 'candidateCount', 'generationConfig');
+    if (cc.error) return cc;
+    const token = NUMBER.exec(raw.slice(cc.key.valueAt, cc.key.valueAt + 64));
+    let end = cc.key.valueAt + (token ? token[0].length : 0);
+    while (end < raw.length && /\s/.test(raw[end])) end++;
+    if (!token || Number(token[0]) !== 1 || (raw[end] !== ',' && raw[end] !== '}'))
+      return { error: 'generationConfig.candidateCount must be 1.' };
+  }
+
   const at = mo.key.valueAt;
   const m = NUMBER.exec(raw.slice(at, at + 64));
   let after = at + (m ? m[0].length : 0);

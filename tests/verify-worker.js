@@ -377,6 +377,43 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
        r.headers.get('content-type') === 'text/event-stream', r.headers.get('content-type'));
   }
 
+  head('one request may generate only one candidate');
+  {
+    const env = { ...ENV, APEX_RPM: '0' };
+    const route = '/api/apex/gemini/generate?model=gemini-3-flash-preview';
+    for (const value of [2, 8, 0, -1, 1.5, '8', null]) {
+      const f = stub();
+      const r = await handleApex(post(route, body({ generationConfig: { maxOutputTokens: 2000, candidateCount: value } })), env, f);
+      const message = (await r.json().catch(() => ({}))).error?.message || '';
+      ok(`candidateCount ${JSON.stringify(value)} is refused before Google`,
+         r.status === 400 && /candidateCount/.test(message) && f.calls.length === 0, String(r.status));
+    }
+    for (const cfg of [
+      '"maxOutputTokens":2000,"candidateCount":1,"candidateCount":8',
+      '"maxOutputTokens":2000,"candidateCount":1,"candidate\\u0043ount":8',
+    ]) {
+      const f = stub();
+      const r = await handleApex(post(route, '{"generationConfig":{' + cfg + '}}'), env, f);
+      ok('ambiguous candidateCount keys are refused before Google', r.status === 400 && f.calls.length === 0, String(r.status));
+    }
+    /* Protobuf JSON accepts original snake_case field names as well as camelCase.
+       Refuse the alias rather than letting it evade or conflict with the cap. */
+    for (const cfg of [{ maxOutputTokens: 2000, candidate_count: 8 },
+      { maxOutputTokens: 2000, candidateCount: 1, candidate_count: 8 }]) {
+      const f = stub();
+      const r = await handleApex(post(route, body({ generationConfig: cfg })), env, f);
+      ok('the protobuf candidate_count alias cannot bypass the single-answer rule',
+         r.status === 400 && f.calls.length === 0, String(r.status));
+    }
+    for (const cfg of [{ maxOutputTokens: 2000 }, { maxOutputTokens: 2000, candidateCount: 1 },
+      { maxOutputTokens: 2000, responseSchema: { type: 'OBJECT', properties: { candidateCount: { type: 'INTEGER' } } } }]) {
+      const f = stub(), sent = body({ generationConfig: cfg });
+      const r = await handleApex(post(route, sent), env, f);
+      ok('a single candidate or an unrelated nested field is forwarded intact',
+         r.status === 200 && f.calls.length === 1 && f.calls[0].opts.body === sent, String(r.status));
+    }
+  }
+
   head('the body is forwarded, not rebuilt');
   {
     /* Every line that rebuilt a turn would be a line that could drop an image
