@@ -753,21 +753,12 @@ body.on-home .nav .atlas-search{width:auto;gap:10px;padding:0 16px}
 @media(prefers-reduced-motion:reduce){.atlas-anatomy{animation:none}}
 .atlas-step-arrow{position:absolute;top:22px;left:72%;color:var(--muted);opacity:.5}
 .atlas-step-arrow .icon{width:32px;height:24px}
-@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
- #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:150px minmax(0,1fr) auto auto}
-}
 .atlas-cutaway{position:absolute;bottom:68px;right:16px;z-index:5;min-height:44px;border:1px solid var(--border2);border-radius:999px;padding:8px 14px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
 
 
 /* The selected reference retains its bottom session strip. */
 @media(min-width:700px) and (orientation:landscape){
  #app[data-screen="home"] #homePage0 .home-wrap{grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"pearl hero" "session session" "hello hello"}
-}
-@media(min-width:700px) and (orientation:portrait){
- #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:240px minmax(0,1fr) auto auto;grid-template-areas:"hero" "pearl" "session" "hello"}
-}
-@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
- #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:150px minmax(0,1fr) auto auto}
 }
 .atlas-paused .atlas-anatomy{animation-play-state:paused!important}
 #homePage0 .hero-live:not(.atlas-3d) .hero-tools,#homePage0 .hero-live:not(.atlas-3d) .hero-scan-credit{display:none}
