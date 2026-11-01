@@ -77,3 +77,15 @@ counts canvas paint calls across a forced rhythm reset. It still requires no
 painting in the hidden illustration view and actual painting in the visible
 view. An injected hidden-ECG defect is used as the negative control; application
 motion guards are unchanged.
+
+
+## Provenance UI integration
+
+The local-action feature reused the reference strip’s visual classes. That made
+an existing reference-isolation check count local buttons as stale evidence.
+The rendered groups now carry distinct semantic markers for local actions and
+reference sources, while keeping their shared styles. The isolation check
+measures the source group, verifies that the current thread’s source pills
+really are counted, and verifies that local actions remain available. Disabling
+the per-thread evidence filter remains the negative control, so this does not
+hide a real provenance leak.

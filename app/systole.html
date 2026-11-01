@@ -3937,7 +3937,7 @@ function apexLocalAction(action){
 }
 function apexLocalHtml(){
   const due=dueQuestions().length;
-  return `<div class="src-strip" role="group" aria-label="On this device — no AI request">
+  return `<div class="src-strip" data-apex-local-actions role="group" aria-label="On this device — no AI request">
     <span class="src-lbl">On this device · no AI request</span>
     ${[['notes','Find notes'],['bank','Find questions'],['progress','My progress'],['review',due?'Review due cards ('+due+')':'No cards due']].map(([action,label])=>
       `<button type="button" class="src-pill" onclick="apexLocalAction('${action}')" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
@@ -3979,7 +3979,7 @@ function buildAI(){
     : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
   /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
   const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
-  const srcStrip=hits.length?`<div class="src-strip"><span class="src-lbl">drawing on</span>${
+  const srcStrip=hits.length?`<div class="src-strip" data-apex-sources><span class="src-lbl">drawing on</span>${
     hits.map(h=>h.kind==='r'
       ? `<span class="src-pill ref">${icon('folder','icon-sm')} ${e(clip(h.title,26))}</span>`
       : `<button class="src-pill" data-jump="${h.id}">${e(h.ch.split(' ')[0])} · ${h.n}</button>`).join('')}</div>`:'';
