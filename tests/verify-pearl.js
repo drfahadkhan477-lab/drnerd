@@ -770,6 +770,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
 
   if(empty.open){
+    /* The layout sweeps above are not user input. On a slow runner they can
+       reach the idle threshold; wake the real overlay before pressing a door. */
+    const sleeping=await page.evaluate(()=>{AMBIENT.enter();return AMBIENT.active();});
+    await page.keyboard.press('Escape');
+    const awake=await page.evaluate(()=>!AMBIENT.active());
+    ok('a real key wakes idle Home before Open notes is pressed',sleeping&&awake);
+    if(!awake) await page.evaluate(()=>AMBIENT.exit()); // retain the failure, clean up for later checks
     await page.getByRole('button',{name:'Open notes',exact:true}).click();
     await settled(page,()=>!window.__vtLive,{label:'Open notes transition'});
   }

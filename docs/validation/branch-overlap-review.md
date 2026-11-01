@@ -89,3 +89,14 @@ measures the source group, verifies that the current thread’s source pills
 really are counted, and verifies that local actions remain available. Disabling
 the per-thread evidence filter remains the negative control, so this does not
 hide a real provenance leak.
+
+
+## Long-running pearl checks and idle mode
+
+CI identified the previously unexplained pearl failure: its layout sweeps can
+last beyond the normal idle threshold, allowing the ambient overlay to intercept
+an Open notes click. The suite now explicitly exercises that state, wakes Home
+with a real keyboard event, and then presses the button. The screensaver timeout
+and application behavior are unchanged. A broken keyboard-wake path is the
+negative control; the test records that failure before cleaning up for the
+remaining independent checks.
