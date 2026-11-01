@@ -354,6 +354,34 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
     ok('a declared Content-Length over the cap is refused even though the real body is tiny', r7.status === 413, String(r7.status));
   }
 
+  head('the body cap bounds reading, not just forwarding');
+  {
+    const f = stub(), env = { ...ENV, APEX_RPM: '0' };
+    let reads = 0, cancelled = false;
+    const chunk = new Uint8Array(1024 * 1024).fill(0x20);
+    const stream = new ReadableStream({
+      pull(c) { reads++; c.enqueue(chunk); if (reads === 16) c.close(); },
+      cancel() { cancelled = true; },
+    });
+    const request = req('/api/apex/gemini/generate?model=gemini-3-flash-preview',
+      { method: 'POST', body: stream, duplex: 'half' });
+    const r = await handleApex(request, env, f);
+    ok('an oversized chunked body is rejected before Google', r.status === 413 && f.calls.length === 0, String(r.status));
+    ok('the unread remainder is cancelled instead of buffered', cancelled && reads < 16, `${reads} chunks, cancelled ${cancelled}`);
+
+    const sent = body({ contents: [{ role: 'user', parts: [{ text: 'µ — اردو 🫀' }] }] });
+    const bytes = new TextEncoder().encode(sent);
+    let at = 0;
+    const small = new ReadableStream({
+      pull(c) { if (at === bytes.length) c.close(); else c.enqueue(bytes.slice(at, ++at)); },
+    });
+    const good = stub();
+    const accepted = await handleApex(req('/api/apex/gemini/generate?model=gemini-3-flash-preview',
+      { method: 'POST', body: small, duplex: 'half' }), env, good);
+    ok('UTF-8 split across chunks is forwarded byte for byte',
+       accepted.status === 200 && good.calls.length === 1 && good.calls[0].opts.body === sent, String(accepted.status));
+  }
+
   head('what it attaches, and what it never sends back');
   {
     const f = stub();
@@ -375,6 +403,43 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
     ok('and it arrives intact', (await r.text()) === 'STREAM-BODY');
     ok('and keeps the content type the SSE reader expects',
        r.headers.get('content-type') === 'text/event-stream', r.headers.get('content-type'));
+  }
+
+  head('one request may generate only one candidate');
+  {
+    const env = { ...ENV, APEX_RPM: '0' };
+    const route = '/api/apex/gemini/generate?model=gemini-3-flash-preview';
+    for (const value of [2, 8, 0, -1, 1.5, '8', null]) {
+      const f = stub();
+      const r = await handleApex(post(route, body({ generationConfig: { maxOutputTokens: 2000, candidateCount: value } })), env, f);
+      const message = (await r.json().catch(() => ({}))).error?.message || '';
+      ok(`candidateCount ${JSON.stringify(value)} is refused before Google`,
+         r.status === 400 && /candidateCount/.test(message) && f.calls.length === 0, String(r.status));
+    }
+    for (const cfg of [
+      '"maxOutputTokens":2000,"candidateCount":1,"candidateCount":8',
+      '"maxOutputTokens":2000,"candidateCount":1,"candidate\\u0043ount":8',
+    ]) {
+      const f = stub();
+      const r = await handleApex(post(route, '{"generationConfig":{' + cfg + '}}'), env, f);
+      ok('ambiguous candidateCount keys are refused before Google', r.status === 400 && f.calls.length === 0, String(r.status));
+    }
+    /* Protobuf JSON accepts original snake_case field names as well as camelCase.
+       Refuse the alias rather than letting it evade or conflict with the cap. */
+    for (const cfg of [{ maxOutputTokens: 2000, candidate_count: 8 },
+      { maxOutputTokens: 2000, candidateCount: 1, candidate_count: 8 }]) {
+      const f = stub();
+      const r = await handleApex(post(route, body({ generationConfig: cfg })), env, f);
+      ok('the protobuf candidate_count alias cannot bypass the single-answer rule',
+         r.status === 400 && f.calls.length === 0, String(r.status));
+    }
+    for (const cfg of [{ maxOutputTokens: 2000 }, { maxOutputTokens: 2000, candidateCount: 1 },
+      { maxOutputTokens: 2000, responseSchema: { type: 'OBJECT', properties: { candidateCount: { type: 'INTEGER' } } } }]) {
+      const f = stub(), sent = body({ generationConfig: cfg });
+      const r = await handleApex(post(route, sent), env, f);
+      ok('a single candidate or an unrelated nested field is forwarded intact',
+         r.status === 200 && f.calls.length === 1 && f.calls[0].opts.body === sent, String(r.status));
+    }
   }
 
   head('the body is forwarded, not rebuilt');

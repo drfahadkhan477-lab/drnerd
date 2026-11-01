@@ -219,15 +219,19 @@ const sse = text => [
     lastHitsKey = a.id;
     jumpTo(b.id); buildAI();
     const strayFigs = document.querySelectorAll('.fig-strip .ai-fig').length;
-    const strayPills = document.querySelectorAll('.src-strip .src-pill').length;
+    const strayPills = document.querySelectorAll('[data-apex-sources] .src-pill').length;
+    const local=document.querySelector('[data-apex-local-actions]');
+    const localVisible=!!local && local.getBoundingClientRect().height>0 && local.querySelectorAll('button').length>0;
     /* And when the hits do belong to this thread, they draw as normal. */
     lastHitsKey = b.id; buildAI();
-    return { strayFigs, strayPills,
+    return { strayFigs, strayPills, localVisible, ownPills:document.querySelectorAll('[data-apex-sources] .src-pill').length,
              ownFigs: document.querySelectorAll('.fig-strip .ai-fig').length };
   });
   ok('another thread\'s figure is not printed as this one\'s evidence',
      leak.strayFigs === 0, leak.strayFigs + ' stray figure(s)');
   ok('nor are its "drawing on" pills', leak.strayPills === 0, leak.strayPills + ' stray pill(s)');
+  ok('the thread\'s own reference pills are measured by the provenance selector', leak.ownPills === 1, leak.ownPills + ' own pill(s)');
+  ok('local study actions remain visible when another thread\'s evidence is hidden', leak.localVisible);
   ok('while the thread\'s own figure still shows', leak.ownFigs === 1, leak.ownFigs + ' figure(s)');
 
   head('a figure opens, and closes four ways');

@@ -96,7 +96,8 @@ function validate(files) {
       if (typeof q.ch !== 'string' || !q.ch) problems.push(`${q.id}: no chapter`);
       if (!Array.isArray(q.o) || q.o.length < 2) problems.push(`${q.id}: its options are not a list`);
       else if (!Number.isInteger(q.ci) || q.ci < 0 || q.ci >= q.o.length) problems.push(`${q.id}: its key is outside its options`);
-      for (const f of (q.figs || [])) {
+      if (q.figs != null && !Array.isArray(q.figs)) problems.push(`${q.id}: its figures are not a list`);
+      for (const f of (Array.isArray(q.figs) ? q.figs : [])) {
         if (typeof f !== 'string' || !SAFE_FIG.test(f) || f.includes('..')) { problems.push(`${q.id}: a figure name that is not safe`); continue; }
         wanted.add(f);
       }

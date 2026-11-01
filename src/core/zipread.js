@@ -65,7 +65,7 @@ function findEOCD(view) {
   const max = Math.min(view.byteLength, 0xffff + 22);
   for (let i = 22; i <= max; i++) {
     const p = view.byteLength - i;
-    if (u32(view, p) === EOCD_SIG) return p;
+    if (u32(view, p) === EOCD_SIG && p + 22 + u16(view, p + 20) === view.byteLength) return p;
   }
   return -1;
 }
@@ -107,6 +107,7 @@ async function read(arrayBuffer, opts) {
 
   for (let i = 0; i < total && p + 46 <= view.byteLength; i++) {
     if (u32(view, p) !== CEN_SIG) break;
+    const flags = u16(view, p + 8);
     const method = u16(view, p + 10);
     const compSize = u32(view, p + 20);
     const uncompSize = u32(view, p + 24);
@@ -119,6 +120,7 @@ async function read(arrayBuffer, opts) {
 
     if (!name || name.endsWith('/')) continue;                  // a directory
     if (compSize === 0xffffffff || localAt === 0xffffffff) { skipped.push(name); continue; }  // zip64
+    if (flags & 0x41) { skipped.push(name); continue; }  // traditional or strong encryption
     if (method !== 0 && method !== 8) { skipped.push(name); continue; }
     if (files.length >= maxEntries) { skipped.push(name); continue; }
 
@@ -135,7 +137,10 @@ async function read(arrayBuffer, opts) {
     /* The local header repeats the name and extra fields, and its extra field
        length may differ from the central one — so it has to be read here
        rather than assumed. */
-    if (localAt + 30 > view.byteLength) { skipped.push(name); continue; }
+    if (localAt + 30 > view.byteLength || u32(view, localAt) !== 0x04034b50 ||
+        (u16(view, localAt + 6) & 0x41) || u16(view, localAt + 8) !== method) {
+      skipped.push(name); continue;
+    }
     const lNameLen = u16(view, localAt + 26);
     const lExtraLen = u16(view, localAt + 28);
     const start = localAt + 30 + lNameLen + lExtraLen;
@@ -144,7 +149,7 @@ async function read(arrayBuffer, opts) {
 
     try {
       const bytes = method === 0 ? raw : await inflateRaw(raw, allow);
-      if (bytes.length > allow || (method === 0 && compSize !== uncompSize)) {
+      if (bytes.length > allow || bytes.length !== uncompSize) {
         skipped.push(name); continue;
       }
       totalOut += bytes.length;

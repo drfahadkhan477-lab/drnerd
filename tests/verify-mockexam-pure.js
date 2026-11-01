@@ -187,6 +187,21 @@ head('pausing, and a block that is over');
   ok('finishing twice changes nothing', JSON.stringify(r) === before);
 }
 
+head('a late timeout tick cannot inflate per-question study time');
+{
+  const r = M.start({ ids: ['ALP_1', 'ALP_2'], secPerQ: 1, now: 0 });
+  M.tick(r, 0, true); M.tick(r, 1500, true); M.go(r, 1);
+  M.tick(r, 3500, true);
+  ok('a delayed tick stops at the deadline for both the block and its current question',
+     r.elapsedMs === 2000 && r.ms[0] === 1500 && r.ms[1] === 500,
+     JSON.stringify({ total: r.elapsedMs, questions: r.ms }));
+  M.finish(r, 3500, true);
+  const g = M.grade(r, lookup);
+  ok('the timeout report does not charge more question time than the block used',
+     g.usedMs === 2000 && g.items.reduce((sum, x) => sum + x.ms, 0) === g.usedMs,
+     JSON.stringify({ total: g.usedMs, questions: g.items.map(x => x.ms) }));
+}
+
 head('the time limit');
 {
   const r = M.start({ ids: M.build({ pool, size: 40, rng: seeded(13) }), secPerQ: 90, now: 0 });

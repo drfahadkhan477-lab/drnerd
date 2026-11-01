@@ -1,0 +1,71 @@
+# Local-first Apex
+
+The conversation panel offers direct device actions for reference-note search,
+question-bank search, recorded progress and the existing review queue. They do
+not need a model or an API key. Review is enabled only when cards are due;
+the established review queue may also introduce new cards. The actions are
+blocked during generation and mock exams, preserving the current interaction.
+Search uses the library already on the device; this change does not download
+missing reader assets or introduce semantic embeddings.
+
+These are explicit buttons, not inferred commands: an ordinary message still
+uses the selected cloud model. No credentials or chat storage formats change.
+The actions sit inside the conversation's scroll area so they do not reduce
+its allocated height. They are also offered beside setup in standalone builds
+without a configured key.
+
+Next increments: reduce ordinary explanations to a single evidence-backed
+request where appropriate; classify provider failures with actionable cooldowns;
+and evaluate persistent, source-versioned explanation caching. Those changes need separate
+coverage of grounded evidence, state-changing tools and invalidation. No cloud
+fallback provider or browser model is introduced by this increment.
+
+## Provider failure guidance
+
+Apex distinguishes project permissions, daily quotas, provider retry delays,
+payment requirements, hosted relay configuration and the site's own throttle.
+Structured quota and retry details are interpreted locally; this adds no model
+request and does not retain raw responses. A retry delay is guidance, not a
+live countdown or an enforcement mechanism. Unknown quota errors do not claim
+a daily reset. Existing bounded retries and partial-stream safeguards remain.
+
+Actual project allowance, billing and key validity still require Google's
+account information; error classification is not an account health check.
+
+## Explain a draft without tools
+
+Enter a question, open Suggested prompts, and choose **Explain draft · no tools**.
+Apex retrieves context on the device and sends it, the conversation and the
+usual grounding instructions to Gemini. This mode omits tool declarations and
+rejects any unexpected tool call before it can act. It requests a concise
+explanation and disclosure when supplied evidence is insufficient. An empty
+draft focuses the composer without sending a request.
+
+This is one model turn, not a guarantee of one HTTP attempt: existing bounded
+retries still apply to transient refusals before streaming. It still consumes
+cloud allowance. Normal Send retains study tools and multi-step conversations;
+no language heuristic silently changes the user's intended operation. Prompt
+and transport tests do not establish live medical answer quality or a measured
+reduction in billing. Persistent caching remains future work; session reuse is described below.
+
+
+## Session explanation reuse
+
+Completed Explain draft responses can be reused for fifteen minutes, with at
+most eight entries held only in memory. A reused answer is labeled in the
+conversation. Reloading the app clears the cache. Normal Send bypasses it.
+
+The SHA-256 identity includes the exact outgoing context/history/figures, full
+reference library, model, grounding mode and credential route/identity. Only
+the per-turn note and memory fence nonces are normalized; source wording is
+not normalized. Changed conversation context therefore usually requires a new
+request, even when the latest question has identical wording. This favors
+correctness over a high hit rate. Credentials and private input text are not
+stored in cache keys or new persistent storage.
+
+Only a nonempty response ending with the provider's STOP finish reason and no
+tool calls is admitted. Truncation, errors and cancellation are excluded.
+Large inputs or unavailable browser cryptography bypass caching; large replies
+are not retained. This is reuse of a previous model answer, not independent
+verification of its correctness, and it does not establish measured savings
+for real study sessions.
