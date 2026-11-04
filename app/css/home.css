@@ -830,3 +830,11 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
  #homePage0 .hero-ecg{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 @media(forced-colors:active){#homePage0 .hero-ecg{border:1px solid CanvasText}}
+
+/* Long pearls recover space before reducing readable text. */
+@media(min-width:700px){
+ #app[data-screen="home"] #homePage0 .pearl-dense .pearl-main{padding:12px}
+ #app[data-screen="home"] #homePage0 .pearl-dense .pearl-concept{font-size:var(--t-h4);margin:6px 0}
+ #app[data-screen="home"] #homePage0 .pearl-dense .pearl-steps{gap:4px}
+ #app[data-screen="home"] #homePage0 .pearl-dense .pearl-step{padding:5px 10px}
+}

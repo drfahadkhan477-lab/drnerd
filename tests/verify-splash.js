@@ -91,6 +91,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       window.__t = {};
       (function tick() {
         if (!window.__t.splash && document.getElementById('splash')) window.__t.splash = performance.now();
+        if (document.querySelector('#splash .sp-trace')) window.__t.trace = true;
         if (!window.__t.app && document.querySelector('.hero-h1')) window.__t.app = performance.now();
         if (!window.__t.app) requestAnimationFrame(tick);
       })();
@@ -109,7 +110,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const during = await page.evaluate(() => ({
       splashAt: Math.round(window.__t.splash),
       appAt: Math.round(window.__t.app),
-      traceAnimated: !!document.querySelector('.sp-trace'),
+      traceAnimated: window.__t.trace === true,
     }));
     ok('the splash is on screen before the app renders',
        during.splashAt !== undefined && during.splashAt !== null
@@ -132,19 +133,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('the rhythm trace waits for the heart to settle, instead of sweeping in parallel with it');
   {
     const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'rhythm trace', errors);
+    await page.addInitScript(() => {
+      (function sample(){
+        const selectors=['.sp-heart-mount','.sp-word','.sp-sub','.sp-trace'];
+        const nodes=selectors.map(sel=>document.querySelector(sel));
+        if(nodes.every(el=>el&&getComputedStyle(el).animationName!=='none')){
+          window.__splashDelays=nodes.map(el=>parseFloat(getComputedStyle(el).animationDelay));return;
+        }
+        requestAnimationFrame(sample);
+      })();
+    });
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
     await page.waitForSelector('#splash', { timeout: 30000 });
-    const delays = await page.evaluate(() => {
-      const delayOf = sel => {
-        const el = document.querySelector(sel);
-        return el ? parseFloat(getComputedStyle(el).animationDelay) : null;
-      };
-      return {
-        heart: delayOf('.sp-heart-mount'),
-        word: delayOf('.sp-word'),
-        sub: delayOf('.sp-sub'),
-        trace: delayOf('.sp-trace'),
-      };
+    await page.waitForFunction(()=>Array.isArray(window.__splashDelays),null,{timeout:30000});
+    const delays=await page.evaluate(()=>{
+      const [heart,word,sub,trace]=window.__splashDelays;
+      return {heart,word,sub,trace};
     });
     ok('the heart, word and subtitle keep their original entrance timing',
        delays.heart === 0 && delays.word === 0.1 && delays.sub === 0.24, JSON.stringify(delays));
@@ -157,26 +161,35 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('the heart has its own keyframes, not the word/subtitle\'s later-declared spRise');
   {
     const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'heart keyframes', errors);
-    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
-    await page.waitForSelector('#splash', { timeout: 30000 });
-    const heart = await page.evaluate(() => {
-      const el = document.querySelector('.sp-heart-mount');
-      if (!el) return { found: false };
-      const name = getComputedStyle(el).animationName;
-      let fromTransform = null;
-      for (const sheet of document.styleSheets) {
-        let rules;
-        try { rules = sheet.cssRules; } catch (_) { continue; }
-        for (const rule of rules) {
-          if (rule instanceof CSSKeyframesRule && rule.name === name) {
-            for (const kf of rule.cssRules) {
-              if (kf.keyText === 'from' || kf.keyText === '0%') { fromTransform = kf.style.transform; break; }
+    await page.addInitScript(() => {
+      (function sampleHeart() {
+        const el = document.querySelector('.sp-heart-mount');
+        if (el) {
+          const name = getComputedStyle(el).animationName;
+          if (name && name !== 'none') {
+            let fromTransform = null;
+            for (const sheet of document.styleSheets) {
+              let rules;
+              try { rules = sheet.cssRules; } catch (_) { continue; }
+              for (const rule of rules) {
+                if (rule instanceof CSSKeyframesRule && rule.name === name) {
+                  for (const kf of rule.cssRules) {
+                    if (kf.keyText === 'from' || kf.keyText === '0%') { fromTransform = kf.style.transform; break; }
+                  }
+                }
+              }
             }
+            window.__splashHeart = { found: true, name, fromTransform };
+            return;
           }
         }
-      }
-      return { found: true, name, fromTransform };
+        requestAnimationFrame(sampleHeart);
+      })();
     });
+    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
+    await page.waitForSelector('#splash', { timeout: 30000 });
+    await page.waitForFunction(() => !!window.__splashHeart, null, { timeout: 30000 });
+    const heart = await page.evaluate(() => window.__splashHeart);
     ok('.sp-heart-mount uses its own animation name, not the shared spRise', heart.name === 'spRiseHeart', JSON.stringify(heart));
     ok('and that keyframes rule still carries the scale-in it was authored with',
        !!heart.fromTransform && /scale/.test(heart.fromTransform), heart.fromTransform);
@@ -189,6 +202,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await page.emulateMedia({ reducedMotion: 'reduce' });
     page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
     await page.waitForSelector('#splash', { timeout: 30000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.sp-trace');
+      return el && /^0(?:px)?$/.test(getComputedStyle(el).strokeDashoffset);
+    }, null, { timeout: 30000 });
     const trace = await page.evaluate(() => {
       const el = document.querySelector('.sp-trace');
       return el ? getComputedStyle(el).animationName : null;
