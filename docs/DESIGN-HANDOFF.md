@@ -61,9 +61,20 @@ merging or deploying. Raw logs remain under the ignored
 `build/private-validation/atlas-release/` directory in the current workspace.
 
 
-The owner subsequently asked for faithful reproduction of the selected Home
-composition. See `docs/validation/quiet-atlas-home-redesign.json`: the introductory
-landing and real pearl reader now have separate states, and Explore in 3D keeps
-the existing model accessible beside an original decorative anatomical asset.
-Begin recall and Reveal are the entry points for reader-specific browser checks.
-Do not interpret earlier full-run partial results as validating this redesign.
+The owner subsequently clarified that the redesign must preserve the previous
+Home behavior: a real pearl is visible on arrival and the physiological heart
+animates without an entry action. The invitation is now only the empty-library
+fallback; Recall, Paragraph, Read note and Another pearl remain on Home. The
+illustration is an optional view. A pearl explicitly requested with Another
+pearl must not be replaced by the automatic fitter; Show all provides access
+when it needs more room.
+
+Short portrait layouts compact the model row, session-strip description and
+first-visit hint before reducing reading space. The reading font floor, hint
+text and touch controls remain unchanged. Browser checks should start directly
+on the visible pearl and live model, rather than entering an invitation first.
+
+`docs/validation/quiet-atlas-home-redesign.json` records the earlier invitation-led
+composition. Treat it as historical evidence, not validation of the current
+interaction behavior. Keep current local validation and build provenance separate
+from those earlier checkpoints.

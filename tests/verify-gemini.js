@@ -654,6 +654,33 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('incomplete answers are never reused',reuse.hit&&reuse.incomplete);
   ok('expired explanations require a new provider request',reuse.expired);
 
+  head('explanation authentication stays with its cache identity');
+  const connection=await page.evaluate(async()=>{
+    const savedFetch=window.fetch,savedKey=cur().key,savedIdentity=explanationKey;
+    let release,entered,request=null;
+    const paused=new Promise(resolve=>{entered=resolve;});
+    const gate=new Promise(resolve=>{release=resolve;});
+    apexExplanationCache.clear();aiAbort=new AbortController();lastHits=[];
+    cur().key='synthetic-original-credential';
+    explanationKey=async body=>{const key=await savedIdentity(body);entered();await gate;return key;};
+    window.fetch=async(url,init)=>{
+      request={url:String(url),key:init.headers['x-goog-api-key']||''};
+      return new Response('data: '+JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:'Synthetic response'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+    };
+    try{
+      const turn=oneTurnGemini(null,[{role:'user',content:'Explain the credential fixture'}],'',true);
+      await paused;
+      // Removing a personal key in Settings is allowed while a turn is busy.
+      cur().key='';release();await turn;
+      return request;
+    }finally{
+      release();window.fetch=savedFetch;cur().key=savedKey;explanationKey=savedIdentity;
+      aiAbort=null;apexExplanationCache.clear();
+    }
+  });
+  ok('a key removed during hashing cannot switch the in-flight explanation to another route',
+     !!connection&&connection.key==='synthetic-original-credential'&&connection.url.includes('generativelanguage.googleapis.com'));
+
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

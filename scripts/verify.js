@@ -161,6 +161,7 @@ const SUITES = [
   ['inksave',      'the ink is written to the database when the pen has been still and not at every pen-up, at once when the page is hidden or exported and asked for at once when it is closed, and an eraser sweep or a run of undos is one write'],
   ['focus',        'focus mode reclaims the bar’s space, and never the progress or the confidence row'],
   ['taps',         'the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did'],
+  ['apex-cancel', 'a cancelled Apex response cannot execute tools or persist a partial conversation'],
   ['engine',       'the browser engine is a flag, not thirty-four hardcoded copies of one'],
   ['schema',       'an older copy of the app cannot silently eat a newer one’s saved data'],
   ['stats',        'the check counts in the README, BUILD.md and CI are the counts the tests produced'],
@@ -485,7 +486,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['shard-pure','settings'];
+const PENDING_RECORD = ['shard-pure','settings','apex-cancel'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

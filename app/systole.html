@@ -4417,6 +4417,8 @@ async function streamReply(q,hist,extra,explainOnly=false){
     while(guard++ < 6){                       // bounded agent loop
       apexSetState('thinking');
       const turn=await oneTurn(q,wire,extra,explainOnly);
+      // A response can finish as Stop is pressed. Never commit or execute it.
+      if(aiAbort.signal.aborted) break;
       if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
         if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{})});
@@ -4657,6 +4659,9 @@ async function explanationKey(body){
 }
 async function oneTurnGemini(q,wire,extra,explainOnly=false){
   const model=cur().model;
+  // Settings may replace a key while cache hashing yields. Keep the request
+  // on the credential whose identity was hashed for this turn.
+  const requestKey=cur().key;
   const contents=toGeminiContents(Vision.withImages(
     Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
     refImagesForHits(lastHits), AI.provider));
@@ -4671,9 +4676,9 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
   if(cached&&Date.now()-cached.at<15*60*1000){
     return {text:cached.text,raw:[],calls:[],reused:true};
   }
-  const r=await geminiFetch(gemUrl('stream',model,cur().key),{
+  const r=await geminiFetch(gemUrl('stream',model,requestKey),{
     method:'POST', signal:aiAbort.signal,
-    headers:gemHeaders(cur().key,true),body:requestBody
+    headers:gemHeaders(requestKey,true),body:requestBody
   },attempt=>{
     const live=document.getElementById('aiLive');
     if(live) live.textContent='Gemini is busy. Retrying ('+attempt+'/2)…';
@@ -7320,7 +7325,9 @@ function pearlNext(auto){
   const all=pearlAll();
   if(all.length<2) return;
   try{ pearlCurrent=Pearl.pick(all, pearlCurrent&&pearlCurrent.id); }catch(_){}
-  pearlPicked=pearlCurrent;
+  // Automatic fit retries belong to Home's selection, never to a note the
+  // reader deliberately requested with Another pearl.
+  pearlPicked=auto===true?pearlCurrent:null;
   if(auto!==true) pearlSkips=0;
   const el=document.getElementById('pearlBody');
   if(!el||!pearlCurrent) return;
@@ -7506,7 +7513,7 @@ function buildHome(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
   const dueN=dueQuestions().length, seenN=startedCount();
   const atlasPearl=pearlNow();
-  if(!atlasPearl)atlasReading=false;
+  atlasReading=!!atlasPearl;
 
   const today=S.daily[todayISO()]||{a:0,c:0};
   const covered=Math.round(seenN/TOTAL_Q*100);
@@ -7529,7 +7536,7 @@ function buildHome(){
         <li><span class="atlas-step-icon">${icon('message-circle')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Explain</strong><span>Put it in your<br>own words.</span></li>
         <li><span class="atlas-step-icon">${icon('clipboard')}</span><strong>Recall</strong><span>Reveal the note<br>and compare.</span></li>
       </ol>
-      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="${atlasPearl?'atlasBegin()':'goRefs()'}">${atlasPearl?'Begin recall':'Open notes'} ${icon('arrow-right')}</button><button class="atlas-note" onclick="${atlasPearl?'pearlOpen()':'goRefs()'}">${icon('note')} Read note</button></div>
+      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="goRefs()">Open notes ${icon('arrow-right')}</button></div>
     </section>
     <div class="hero-live${atlas3D?' atlas-3d':''}">
       <img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">
@@ -7558,7 +7565,7 @@ function buildHome(){
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
       <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
       <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" onclick="toggleAtlas3D()"
-        aria-label="Explore heart in 3D" aria-pressed="${atlas3D}" title="Explore heart in 3D">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
+        aria-label="${atlas3D?'Show heart illustration':'Explore heart in 3D'}" aria-pressed="${atlas3D}" title="${atlas3D?'Show heart illustration':'Explore heart in 3D'}">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
       <button class="atlas-pause" id="atlasLandingPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
       <button class="hero-heart-hit" id="heroHeartBtn" onclick="toggleHeroMenu(undefined,event)" aria-label="Heart model: motion, chambers and credit"
         aria-expanded="false" aria-controls="heroMenu" title="Heart model"></button>
@@ -7579,7 +7586,6 @@ function buildHome(){
         <div class="pearl-rule"></div>
         <div class="pearl-main">
           <div class="pearl-head">
-          <button class="atlas-back" onclick="atlasClose()">${icon('arrow-left','icon-sm')} Back to Home</button>
 
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
             <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
@@ -7637,38 +7643,19 @@ function buildHome(){
    time, so a swipe moves them under the finger the way the system's own pages move. The tab bar's pill is placed from
    the scroll position itself, so it slides with the finger rather than jumping when the page lands. The page a fellow
    was on is kept while the app is open: back from a lab, the Labs page is still the one showing. */
-let atlasPaused=false, atlasReading=false, atlas3D=false;
+// Home opens on the study material and live model. Only an empty note library
+// needs the invitation; an illustration remains an optional model view.
+let atlasPaused=false, atlasReading=true, atlas3D=true;
 function toggleAtlas3D(){
   atlas3D=!atlas3D;
   const hero=document.querySelector('#homePage0 .hero-live');
   if(hero)hero.classList.toggle('atlas-3d',atlas3D);
   const button=document.getElementById('atlasExplore');
-  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
+  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.setAttribute('aria-label',atlas3D?'Show heart illustration':'Explore heart in 3D');button.title=button.getAttribute('aria-label');button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
   const label=document.querySelector('.hero-live-status');
   if(label)label.textContent=atlas3D?'Live cardiac cycle':'Illustrative anatomy';
   const cutaway=document.getElementById('heroMechanics');if(cutaway)cutaway.hidden=!atlas3D;
   if(!atlas3D)toggleHeroMenu(false);
-  syncHomeMotion();
-}
-
-function atlasBegin(recall=true){
-  const card=document.getElementById('pearlCard');
-  if(!card){goRefs();return;}
-  atlasReading=true;
-  document.getElementById('atlasIntro').hidden=true;
-  card.hidden=false;
-  card.closest('.home-wrap').classList.add('atlas-reading');
-  if(recall&&!card.classList.contains('is-recalling'))pearlRecall();
-  pearlFit();
-  syncHomeMotion();
-  document.getElementById('pearlConcept').focus();
-}
-function atlasClose(){
-  atlasReading=false;
-  const card=document.getElementById('pearlCard');
-  if(card){card.hidden=true;card.classList.remove('pearl-all');}
-  const intro=document.getElementById('atlasIntro');
-  if(intro){intro.hidden=false;intro.closest('.home-wrap').classList.remove('atlas-reading','pearl-all-open');intro.querySelector('button').focus();}
   syncHomeMotion();
 }
 

@@ -412,49 +412,55 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('the app says what it is, in a structure a screen reader can navigate');
   {
-    await page.evaluate(()=>{homePage=0;goHome();render();});
+    await page.evaluate(()=>{homePage=0;goHome();});
     await settled(page,()=>S.screen==='home'&&!!document.getElementById('homePage0')&&!window.__vtLive,{label:'Home semantics'});
     const doc = await page.evaluate(() => {
-      goHome(); render();
       const h1s = [...document.querySelectorAll('h1')].filter(h=>!h.closest('[inert],[hidden]')&&h.getClientRects().length);
       const mains = document.querySelectorAll('main');
-      const hero = document.getElementById('atlasTitle');
+      const hero = document.getElementById('pearlConcept')||document.getElementById('atlasTitle');
 
       const cs = hero ? getComputedStyle(hero) : null;
       const heroWeight = cs ? cs.fontWeight : null;
       const heroMarginTop = cs ? cs.marginTop : null;
-      const h1Text=h1s.length?h1s[0].innerText.replace(/\s+/g,' ').trim():null;
-      goStats(); render();
-      const hd = document.querySelector('.app-disclaim');
+      // Screen-reader heading text excludes the CSS capitalization of innerText.
+      const h1Text=h1s.length?h1s[0].textContent.replace(/\s+/g,' ').trim():null;
       return {
         h1Count: h1s.length,
         h1Text,
         h1IsHero: !!hero && hero.tagName === 'H1',
+        expectedTitle: pearlCurrent?(pearlCurrent.concept||pearlCurrent.title):'Make one idea stick.',
 
         mainCount: mains.length,
         mainIsApp: mains.length ? mains[0].id : null,
         heroWeight, heroMarginTop,
+      };
+    });
+    await page.evaluate(()=>goStats());
+    await settled(page,()=>S.screen==='stats'&&!window.__vtLive&&!!document.querySelector('.app-disclaim'),{label:'Progress disclaimer'});
+    Object.assign(doc,await page.evaluate(()=>{
+      const hd=document.querySelector('.app-disclaim');
+      return {
         disclaimText: hd ? hd.textContent.replace(/\s+/g, ' ').trim() : null,
         disclaimColor: hd ? getComputedStyle(hd).color : null,
         muted: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(),
         dim: getComputedStyle(document.documentElement).getPropertyValue('--dim').trim(),
       };
-    });
+    }));
     const hex = h => {
       const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h.replace('#', '#'));
       return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : h;
     };
 
     ok('the active page exposes exactly one visible <h1>', doc.h1Count === 1, String(doc.h1Count));
-    ok('and it is the selected Home invitation title',
-       doc.h1IsHero && doc.h1Text === 'Make one idea stick.', JSON.stringify({ text: doc.h1Text, isHero: doc.h1IsHero }));
+    ok('and it names the visible pearl or empty-library invitation',
+       doc.h1IsHero && doc.h1Text === doc.expectedTitle, JSON.stringify({ isHero: doc.h1IsHero, actual: doc.h1Text, expected: doc.expectedTitle }));
 
     ok('the page has exactly one <main> landmark', doc.mainCount === 1, String(doc.mainCount));
     ok('and it is the app region itself', doc.mainIsApp === 'app', String(doc.mainIsApp));
     /* The tag swap must not be a visual change: a bare <h1> would inherit the
        user agent's bold and .67em top margin. */
-    ok('the invitation uses its intended serif weight and spacing',
-       doc.heroWeight === '400' && doc.heroMarginTop === '18px',
+    ok('the pearl heading uses its intended serif weight and spacing',
+       doc.heroWeight === '400' && doc.heroMarginTop === '0px',
 
        JSON.stringify({ weight: doc.heroWeight, marginTop: doc.heroMarginTop }));
 

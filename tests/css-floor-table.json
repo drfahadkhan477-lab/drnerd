@@ -484,6 +484,16 @@
       "sim": "translate",
       "guard": ".scroll-reveal",
       "note": "As property translate."
+    },
+    "media forced-colors": {
+      "since": "16",
+      "class": "progressive",
+      "note": "The optional system-color ECG border applies only when the browser exposes forced colors. Older Safari retains the theme border."
+    },
+    "media prefers-reduced-transparency": {
+      "since": null,
+      "class": "progressive",
+      "note": "The optional preference disables ECG blur and uses the opaque theme surface when supported. Browsers without the media feature retain the default surface; no controls or content depend on it."
     }
   },
   "watch": {

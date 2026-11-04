@@ -1,5 +1,12 @@
 # Quiet Atlas design comparison
 
+> Historical composition review. The owner has since restored the previous
+> Home interaction: pearls and the live physiological heart appear immediately.
+> The invitation is only an empty-library fallback and the illustration is an
+> optional view. The invitation-led interactions described below are superseded;
+> see `docs/DESIGN-HANDOFF.md` for current behavior. Earlier captures do not
+> establish the current build's validation status.
+
 final result: pass with documented visual differences
 
 This is the visual-composition review, not a declaration of release readiness.
