@@ -97,7 +97,12 @@ const INIT = () => {
   head('the count');
   {
     const first = await loops();
-    const n = await page.evaluate(async () => {
+    // Validate the counter independently of Home's finite entrance callbacks.
+    // The application leak checks below still measure the real page unchanged.
+    const probe = await browser.newPage();
+    await probe.addInitScript(INIT);
+    await probe.goto('data:text/html,<title>Animation counter probe</title>');
+    const n = await probe.evaluate(async () => {
       const before = (await window.__loops()).n;
       let on = true; (function again() { if (on) requestAnimationFrame(again); })();
       const during = (await window.__loops()).n;
@@ -105,6 +110,7 @@ const INIT = () => {
       const after = (await window.__loops()).n;
       return { before, during, after };
     });
+    await probe.close();
     ok('a loop started adds one to the count and a loop stopped takes it away, so what is counted is loops', n.during === n.before + 1 && n.after === n.before, JSON.stringify(n));
     ok("the page already runs loops before the reader has been anywhere (the tutor's avatar, which is always beating)", first.n >= 1, `${say(first)} on the home screen it opened on`);
   }

@@ -33,3 +33,9 @@ in this environment. Production has not been deployed: replacing the existing
 site with this synthetic build would discard its licensed content. A production
 release requires the owner's private build and the release checks described in
 BUILD.md; preserve Access, Gemini secrets and SITE_KV.
+
+The next CI run passed the corrected Home and heading checks but exposed the
+animation-counter self-test sampling Home during its finite startup callbacks.
+The counter self-test now uses an isolated document with the same RAF tracker;
+all application screen-leak assertions remain unchanged. Deliberately leaving
+the probe loop running fails that counter assertion; stopping it passes.
