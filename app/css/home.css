@@ -815,7 +815,7 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
 @media(prefers-reduced-motion:reduce){#homePage2 .door-ic .icon{animation:none!important;transition:none;transform:none!important}}
 /* Home monitor: keep the existing DPR-aware ECG renderer legible above the
    anatomy, without adding another animation loop or changing reader geometry. */
-#homePage0 .hero-ecg{top:12px;bottom:auto;left:0;right:auto;width:32%;min-width:100px;max-width:220px;height:48px!important;opacity:1;z-index:3;
+#homePage0 .hero-ecg{top:12px;bottom:auto;left:0;right:auto;width:32%;min-width:100px;max-width:220px;height:112px!important;opacity:1;z-index:3;
  border:1px solid var(--border2);border-radius:16px;
  background:var(--card);box-shadow:0 8px 28px rgba(0,0,0,.08);
  -webkit-mask-image:none;mask-image:none}

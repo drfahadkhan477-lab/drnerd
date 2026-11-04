@@ -16,8 +16,14 @@ The cancellation regression was measured with the guard removed: it failed
 because six tool actions ran. With the guard restored, both cancellation
 assertions pass. Chromium Gemini checks measured 78 passing assertions.
 Safari CSS floor, iPad CSS, registry and documentation-count checks pass after
-repairing the handoff issues. Broader browser results are pending completion;
-a started suite is not a pass. WebKit requires additional Debian libraries in
+repairing the handoff issues. Focused Home pager, pearl, Gemini and chat suites were measured in Chromium
+and WebKit. The broader CI run then found an undersized ECG surface and a
+heading probe crossing screen transitions and comparing CSS-capitalized
+innerText to the underlying concept. The ECG now preserves the existing
+readability threshold; the heading probe samples Home before navigating to
+Progress, with a separate render precondition for each screen. It compares
+semantic heading textContent to the selected concept, preserving exact equality. An injected
+incorrect heading failed the heading assertion. Full CI must pass before merge. WebKit requires additional Debian libraries in
 this environment; the browser bundle's library path needs those libraries too.
 The repository's WebKit harness disables view transitions because its pinned
 WebKit crashes on them; a pass does not validate WebKit view transitions.
