@@ -65,7 +65,7 @@ const unmeasurable = (label, why) => {
   console.log('  ----  ' + label + '  → not measurable here: ' + why);
 };
 let section = '';
-const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
 
 (async () => {
   const browser = await launch();
@@ -73,6 +73,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   onDeath(() => ({ section, checks: passed + failed, errors,
                    events: events.length ? events.join(', ') : 'none' }));
   const page = watch(await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 }), events, 'main');
+  // This suite measures an actively inspected heart, not the idle screensaver.
+  const head = async (t,target=page) => { await target.keyboard.press('Shift'); section=t; console.log('\n── '+t+' ──'); };
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
   /* Collected separately because it arrives as a WARNING, not an error, so the
@@ -86,7 +88,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const tMain = Date.now();
   await page.waitForFunction(() => !!document.getElementById('heroHeart'), null, { timeout: 60000 });
   events.push(`main page hero after ${Math.round((Date.now() - tMain) / 1000)}s`);
-  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
+  // The live model is visible on Home without an entry action.
   /* Wait for a mounted instance rather than a duration — the mesh is built by
      surface nets at mount and how long that takes is a property of the machine
      this happens to run on. Bounded, so a mount that never happens fails
@@ -95,7 +97,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     () => typeof heroHeart3d !== 'undefined' && !!heroHeart3d, null, { timeout: 60000 }
   ).catch(() => {});
 
-  head('both occupants of the medallion are present');
+  await head('both occupants of the medallion are present');
   const geo = await page.evaluate(() => {
     const plate = document.getElementById('heroHeart');
     const cv = document.getElementById('heroHeart3d');
@@ -123,7 +125,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('whose mesh actually built triangles', geo.tris > 5000, `${geo.tris} triangles`);
   ok('and the fallback has been handed over to it', geo.active);
 
-  head('anatomical tissue and electrical activation, judged from the pixels');
+  await head('anatomical tissue and electrical activation, judged from the pixels');
   /* A slate specimen fails the warm-tissue check; an anatomic fallback loses
      the through-tissue activation. The picture, not the option, is measured. */
   const px = await page.evaluate(async () => {
@@ -156,7 +158,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      px.lit > 0 && px.yellowish / px.lit > 0.01,
      `${(100 * px.yellowish / Math.max(px.lit, 1)).toFixed(2)}% yellow`);
 
-  head('what the heart is allowed to cost');
+  await head('what the heart is allowed to cost');
   /* CEILINGS, NOT FLOORS. The mesh checks elsewhere in this file are floors —
      "it has a mesh", "it is drawing" — and a floor is satisfied by anything
      bigger, including a heart four times the size that stutters on the device
@@ -216,7 +218,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     }
   }
 
-  head('the current travels — it is a wave, not a painted-on tree');
+  await head('the current travels — it is a wave, not a painted-on tree');
   /* Sampled inside one activation window. Heart3D's own cycle() reports the
      depolarisation front, so the samples are taken when there IS a front to
      see rather than at two arbitrary moments that might both be diastole. */
@@ -272,7 +274,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      `centroid spread ${travel.centroidSpread.toFixed(1)}px, ` +
      `intensity range ${(100 * (travel.totalMax - travel.totalMin) / Math.max(travel.totalMax, 1)).toFixed(1)}%`);
 
-  head('the rhythm reaches both the picture and the fallback');
+  await head('the rhythm reaches both the picture and the fallback');
   const beat = await page.evaluate(() => {
     const el = document.querySelector('#heroHeart .h-beat');
     if (!el || typeof setHeroBeatRate !== 'function' || typeof RHYTHMS === 'undefined') return null;
@@ -294,7 +296,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('and the turning heart takes a rhythm change without throwing', beat.took === true);
   }
 
-  head('a lost context hands the medallion back to the photograph');
+  await head('a lost context hands the medallion back to the photograph');
   const lost = await page.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const cv = document.getElementById('heroHeart3d');
@@ -350,7 +352,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('restoring it brings the heart back without a reload', lost.back === true);
   }
 
-head('a destroyed heart gives its context back');
+await head('a destroyed heart gives its context back');
 {
   /* WHY THIS EXISTS. destroy() stopped the render loop and set a dead flag,
      and left the WebGL2 context attached to the canvas — alive until the
@@ -424,7 +426,7 @@ head('a destroyed heart gives its context back');
      cycles.resurrected === 0, `onLost fired ${cycles.resurrected} time(s)`);
 }
 
-  head('reduced motion holds the fallback still');
+  await head('reduced motion holds the fallback still');
   /* The main page is done with. Left open, it is a second copy of the app —
      96 MB of document on the owner's build, still pulling in the deferred
      note figures — competing with this one while it parses: the hero took
@@ -450,7 +452,7 @@ head('a destroyed heart gives its context back');
   const r2 = await rm.evaluate(() => getComputedStyle(document.querySelector('#heroHeart .h-beat')).transform);
   ok('the still does not pulse', r1 === r2, r1 === r2 ? 'held' : `${r1} → ${r2}`);
 
-  head('mechanics opens the live chambers without replacing the heart');
+  await head('mechanics opens the live chambers without replacing the heart',rm);
   const mechanics=await rm.evaluate(()=>{
     const heart=heroHeart3d,canvas=heroHeart3dCanvas;
     if(!heart||!canvas)return null;

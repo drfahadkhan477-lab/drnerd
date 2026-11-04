@@ -50,8 +50,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     // Long renderer probes can cross the idle threshold; wake through real input before navigating.
     await page.keyboard.press('Shift');
     await settled(page, () => !window.__vtLive && !!document.getElementById('homePager'), { label: label + ': the home screen' });
-    await settled(page, () => { const p = document.getElementById('homePager'); const w = p.clientWidth;
-      return !homeTween && Math.abs(p.scrollLeft / w - Math.round(p.scrollLeft / w)) < 0.01; }, { timeout: 8000, label: label + ': the pager to come to rest on a page' });
+    try{
+      await settled(page, () => { const p = document.getElementById('homePager'); const w = p.clientWidth;
+        return !homeTween && Math.abs(p.scrollLeft / w - Math.round(p.scrollLeft / w)) < 0.01; }, { timeout: 8000, label: label + ': the pager to come to rest on a page' });
+    }catch(err){
+      const geometry=await page.evaluate(()=>{const p=document.getElementById('homePager');return {page:homePage,tween:homeTween,width:p.clientWidth,left:p.scrollLeft,scrollWidth:p.scrollWidth,snap:getComputedStyle(p).scrollSnapType,focus:document.activeElement?.id,panels:[...p.children].map(e=>({width:e.getBoundingClientRect().width,scroll:e.scrollWidth}))};});
+      throw new Error(err.message+'; pager geometry '+JSON.stringify(geometry));
+    }
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   };
   const state = () => page.evaluate(() => {
@@ -68,9 +73,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await page.evaluate(() => { homePage = 0; S.screen = 'home'; render(); });
   await still('first render');
-  head('the selected Home invitation');
+  head('Home opens on the pearl and live heart');
   await require('./_atlas-landing')(page,ok,settled);
-  await still('after invitation actions');
+  await still('after Home study actions');
 
   head('three pages, each with its own things');
   const parts = await page.evaluate(() => {
@@ -148,9 +153,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after tablet sizes');
-  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
-  await page.getByRole('button',{name:'Reveal',exact:true}).click();
-  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
+  // The pearl and live heart are already visible.
 
 
 
@@ -199,14 +202,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('offscreen Home does not repaint its pearl or advance its ECG', hiddenHero.paints===0 && hiddenHero.advance===0, JSON.stringify(hiddenHero));
   await page.evaluate(() => homeGo(0));
   await still('back on Home');
-  const ecg = await page.evaluate(async () => {
-    const frames=()=>new Promise(r=>{let n=0;const t=()=>++n<20?requestAnimationFrame(t):r();requestAnimationFrame(t);});
-    if(atlas3D) toggleAtlas3D();
-    const shown=getComputedStyle(document.getElementById('heroECG')).visibility;
-    let b=heroMon.t; await frames(); const flat=heroMon.t-b;
-    toggleAtlas3D(); b=heroMon.t; await frames(); const live=heroMon.t-b;
-    return {shown,flat,live};
-  });
+  // The trace clock wraps at the canvas edge; actual paints cannot look like
+  // backwards progress when a sample crosses that wrap.
+  const ecg = await require('./_home-ecg')(page);
   /* Left in the 3D view: the overlay checks below count the ECG and the heart, which are drawn only there. */
   ok('the ECG strip hidden under the illustration is not drawn, and draws in the 3D view', ecg.shown==='hidden' && ecg.flat===0 && ecg.live>0, JSON.stringify(ecg));
   await page.evaluate(() => homeGo(2));
@@ -483,7 +481,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and a tap anywhere else closes it',await page.evaluate(()=>document.getElementById('heroMenu').hidden===true));
 
   head('next session uses the actual due deck');
-  await page.getByRole('button',{name:'Back to Home',exact:true}).click();
+
   await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
   await still('empty due deck');
   await page.locator('.atlas-session button').click();

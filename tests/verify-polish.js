@@ -418,7 +418,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       goHome(); render();
       const h1s = [...document.querySelectorAll('h1')].filter(h=>!h.closest('[inert],[hidden]')&&h.getClientRects().length);
       const mains = document.querySelectorAll('main');
-      const hero = document.getElementById('atlasTitle');
+      const hero = document.getElementById('pearlConcept')||document.getElementById('atlasTitle');
 
       const cs = hero ? getComputedStyle(hero) : null;
       const heroWeight = cs ? cs.fontWeight : null;
@@ -430,6 +430,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         h1Count: h1s.length,
         h1Text,
         h1IsHero: !!hero && hero.tagName === 'H1',
+        expectedTitle: pearlCurrent?(pearlCurrent.concept||pearlCurrent.title):'Make one idea stick.',
 
         mainCount: mains.length,
         mainIsApp: mains.length ? mains[0].id : null,
@@ -446,15 +447,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     };
 
     ok('the active page exposes exactly one visible <h1>', doc.h1Count === 1, String(doc.h1Count));
-    ok('and it is the selected Home invitation title',
-       doc.h1IsHero && doc.h1Text === 'Make one idea stick.', JSON.stringify({ text: doc.h1Text, isHero: doc.h1IsHero }));
+    ok('and it names the visible pearl or empty-library invitation',
+       doc.h1IsHero && doc.h1Text === doc.expectedTitle, JSON.stringify({ isHero: doc.h1IsHero }));
 
     ok('the page has exactly one <main> landmark', doc.mainCount === 1, String(doc.mainCount));
     ok('and it is the app region itself', doc.mainIsApp === 'app', String(doc.mainIsApp));
     /* The tag swap must not be a visual change: a bare <h1> would inherit the
        user agent's bold and .67em top margin. */
-    ok('the invitation uses its intended serif weight and spacing',
-       doc.heroWeight === '400' && doc.heroMarginTop === '18px',
+    ok('the pearl heading uses its intended serif weight and spacing',
+       doc.heroWeight === '400' && doc.heroMarginTop === '0px',
 
        JSON.stringify({ weight: doc.heroWeight, marginTop: doc.heroMarginTop }));
 

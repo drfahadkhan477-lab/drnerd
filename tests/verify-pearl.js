@@ -17,7 +17,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted, settled } = require('./_render.js');
+const { booted, settled, watchTransitions } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -30,11 +30,14 @@ const ok = (label, cond, detail = '') => {
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label + (detail ? '  → ' + detail : ''));
 };
 let section = '';
-const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
+
 
 (async () => {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1100, height: 1100 } });
+  // Inspecting a long suite is activity, not an idle screensaver scenario.
+  const head = async t => { await page.keyboard.press('Shift'); section = t; console.log('\n── ' + t + ' ──'); };
+  await watchTransitions(page);
   const errors = [];
   const events = [];
   page.on('crash', () => events.push('the browser CRASHED the page'));
@@ -54,10 +57,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.goto(URL, { waitUntil: 'load', timeout: 250000 });
   await booted(page, { timeout: 150000 });
   await page.waitForTimeout(900);
-  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
-  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
-  head('what counts as a pearl');
+  await head('what counts as a pearl');
+  await require('./_pearl-stability')(page,ok);
   const rules = await page.evaluate(() => {
     const good = 'Oral beta-blockers should be started within the first 24 hours in patients without a contraindication.';
     const listy = 'Key transcription factors driving the programme include GATA4, Nkx2.5, SRF, MEF2 and NFAT.';
@@ -85,7 +87,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a sentence opening with a bolded term still splits off its neighbour',
      rules.splits === 2, rules.splits + ' sentence(s)');
 
-  head('the harvest from the shipped library');
+  await head('the harvest from the shipped library');
   const harvest = await page.evaluate(() => {
     const all = Pearl.harvest(REF);
     return { n: all.length, notes: REF.length,
@@ -106,7 +108,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('markdown emphasis is stripped before display', harvest.stillMarked === 0);
   ok('each names the note it came from', harvest.everyChapterNamed);
 
-  head('aimed at weak chapters, without becoming only weak chapters');
+  await head('aimed at weak chapters, without becoming only weak chapters');
   /* THIS USED TO ASSERT A BARE COUNT, AND PASSED FOR THE WRONG REASON.
      "hitWeak >= 12 of 60" is only evidence of aiming if you know what share of
      the shelf the weak chapter already occupies. It did not, and the shelf was
@@ -166,7 +168,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and the strong chapters have not been crowded out', weighting.strong >= 5,
      weighting.strong + ' other chapters in the same 60 draws');
 
-  head('on the page');
+  await head('on the page');
   const card = await page.evaluate(() => {
     S.screen = 'home'; render();
     return new Promise(r => setTimeout(() => r({
@@ -188,7 +190,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('there is a way to see another', card.hasNext);
   ok('and a way into the note behind it', card.hasOpen);
 
-  head('one sentence, broken at its own joints');
+  await head('one sentence, broken at its own joints');
   const lad = await page.evaluate(() => {
     const S1 = 'The highest risk of ischaemic complications is within 180 days, after which risk becomes roughly linear — so the first six months are where secondary prevention earns most of its benefit.';
     const S2 = 'Oral beta-blockers should be started within the first 24 hours — a Class I recommendation — in patients without contraindications.';
@@ -238,7 +240,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      lad.lost.every(l => l.length === 0), JSON.stringify(lad.lost));
   ok('an empty pearl yields no steps', lad.empty === 0);
 
-  head('the ladder, on the page');
+  await head('the ladder, on the page');
   const rung = await page.evaluate(() => {
     const all = pearlAll();
     pearlCurrent = all.find(p => Pearl.steps(p.text).length >= 3) || all[0];
@@ -401,7 +403,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a sentence with no joint is set as prose, not a list of one',
      !!prose && prose.single && prose.steps === 0 && prose.body, JSON.stringify(prose));
 
-  head('asking for another');
+  await head('asking for another');
   const next = await page.evaluate(() => {
     const before = (document.getElementById('pearlBody') || {}).textContent;
     const beforeFig = !!document.getElementById('pearlFig');
@@ -424,7 +426,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the figure follows the sentence it belongs to', next.figMatchesNote);
   ok('and the hero is not re-rendered underneath it', next.heroIntact);
 
-  head('a named concept, recall, and the selected source note');
+  await head('a named concept, recall, and the selected source note');
   const readingProse = await page.evaluate(() => {
     const b = document.getElementById('pearlReading');
     if (!b) return null;
@@ -487,7 +489,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>goHome());
   await settled(page,()=>S.screen==='home'&&!!document.querySelector('.hero-h1'),{label:'home screen'});
 
-  head('each step says what it is, in a colour of its own');
+  await head('each step says what it is, in a colour of its own');
   /* A ladder of steps in one grey read as a paragraph to wade through. Each step now wears the relationship
      Pearl.lesson names for it, in words and in a colour; the label's ink is its step's edge, and steps of different
      kinds are drawn apart. */
@@ -553,6 +555,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      whole pearl and Show less folds it back. */
   /* Round five: a pearl now shrinks its type until it fits (pearlScale), so only one too long even at the floor runs
      past the card, and Show all is that pearl's way in. The library's longest pearl, three times over, is one. */
+  await page.keyboard.press('Shift');
   await page.setViewportSize({ width: 1180, height: 820 });
   await page.evaluate(() => {
     const longest = pearlAll().slice().sort((a, b) => Pearl.lesson(b.text).length - Pearl.lesson(a.text).length || b.text.length - a.text.length)[0];
@@ -593,6 +596,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   /* THE OWNER'S iPAD, IN PORTRAIT: nothing runs past the card there, and yet the last step sat faded under a "More" that
      did nothing when tapped. The card had been measured once, while the steps were still rising in, when a moving
      transform made every pearl run past it, and never again. Read once the steps have landed. */
+  await page.keyboard.press('Shift');
   await page.setViewportSize({ width: 834, height: 1091 });
   await page.evaluate(() => { S.screen = 'home'; render(); });
   await settled(page, () => !!document.querySelector('#pearlCard .pearl-step') && !window.__vtLive, { label: 'the longest pearl in portrait' });
@@ -605,7 +609,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>{ const w=document.getElementById('pearlBody'); w.innerHTML='<p>A short teaching cue.</p>'; pearlFit(); });
   const shortCue=await page.evaluate(()=>{const w=document.getElementById('pearlBody');return {over:w.scrollHeight-w.clientHeight,fade:document.getElementById('pearlCard').classList.contains('pearl-more'),hidden:document.getElementById('pearlMore').hidden};});
   ok('where a short cue fits, nothing is faded and nothing offers more',shortCue.over<=4&&!shortCue.fade&&shortCue.hidden,JSON.stringify(shortCue));
-  head('a pearl Home chose that cannot fit is passed over');
+  await head('a pearl Home chose that cannot fit is passed over');
   /* Round five: on a smaller iPad window some of the owner's notes ran past the card even at the smallest scale. Home
      passes over a pearl it chose itself (pearlPicked) for one that fits; one opened on purpose is left alone, which is
      what the Show all checks above rely on. The library's longest pearl, three times over, cannot fit. */
@@ -628,9 +632,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      and verify-pearl was green through all of it, because nothing here had ever asked whether the body was VISIBLE.
      Measured at the sizes an iPad actually is: the card's height comes from the grid row, and the row from the
      viewport, so a size that is not driven is a size that is not checked. */
-  head('the pearl is readable at every size an iPad is');
+  await head('the pearl is readable at every size an iPad is');
   for (const [name, vw, vh] of [['iPad portrait', 1024, 1366], ['iPad landscape', 1366, 1024],
                                 ['iPad mini portrait', 744, 1133], ['Split View', 507, 1024]]) {
+    await page.keyboard.press('Shift');
     await page.setViewportSize({ width: vw, height: vh });
     await page.evaluate(() => {
       // The preceding auto-fit check may select a prose-only note; this section measures a stepped pearl.
@@ -654,9 +659,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok(name + ': the figure panel is whole, or it is not shown at all', !m.figShown || m.figCut <= 1,
        m.figShown ? `${m.figCut}px of the panel hidden` : 'too short for a figure, and none is drawn');
   }
+  await page.keyboard.press('Shift');
   await page.setViewportSize({ width: 1100, height: 1100 });
 
-  head('a pearl the size of its card, and never a scroll');
+  await head('a pearl the size of its card, and never a scroll');
   /* Round five (the owner's marked screenshot): a pearl should be taken in at a glance, so on a tablet it never scrolls
      inside its card, a pearl with no figure is set large enough to fill the card, and a pearl with a figure gives it room
      (a band, or where the card is too short, a thumbnail in the corner) and keeps its text compact. pearlScale() finds the
@@ -665,6 +671,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      and WebKit started one on each size the search tried, so it read the old size and chose a scale it never measured. */
   for (const [vw, vh, reduce] of [[1024, 1366], [1366, 1024], [834, 1194], [1194, 834], [744, 1000], [834, 1194, true]]) {
     await page.emulateMedia({ reducedMotion: reduce ? 'reduce' : 'no-preference' });
+    await page.keyboard.press('Shift');
     await page.setViewportSize({ width: vw, height: vh });
     /* The everyday Home: the first-day welcome card takes a row of its own until it is dismissed, and Show all is how a
        pearl is read in the short card that leaves. */
@@ -704,11 +711,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        `least ${(+w.leastFill).toFixed(2)} of ${w.texts}`);
   }
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.keyboard.press('Shift');
   await page.setViewportSize({ width: 1100, height: 1100 });
 
 
   /* A PHONE (22 October 2026): the longest pearl's steps ran off the card's right edge, cut mid-word. A phone's rule wraps
      the card's row, and a column that wraps sizes its line to the widest text rather than to the card. */
+  await page.keyboard.press('Shift');
   await page.setViewportSize({ width: 390, height: 844 });
   /* What sets the width of that line is the widest thing in it that cannot wrap: the head, with its chapter chip. A
      pearl from a chapter with a short name fitted either way, so the pearl is given the bank's longest chapter name. */
@@ -719,9 +728,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return [...document.getElementById('pearlCard').children].filter(e => e.getBoundingClientRect().width)
       .map(e => ({ el: e.className.split(' ')[0], over: Math.round(e.getBoundingClientRect().right - c.right) })); });
   ok('on a phone every part of the pearl stays inside its card', phone.length > 1 && phone.every(p => p.over <= 1), JSON.stringify(phone));
+  await page.keyboard.press('Shift');
   await page.setViewportSize({ width: 1100, height: 1100 });
 
-  head('a pearl always has a picture beside it');
+  await head('a pearl always has a picture beside it');
   /* A note's figure when it has one; when it has none, its chapter's emblem, as decoration (aria-hidden), never as #pearlFig,
      so the figure checks above still mean the note's own figure. */
   const pics = await page.evaluate(async () => {
@@ -743,7 +753,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a pearl with a figure shows the figure and no emblem', !!pics.fig && pics.fig.fig && !pics.fig.emblem, JSON.stringify(pics.fig));
   ok('another pearl without a figure brings the emblem with it', pics.swapped.emblem && !pics.swapped.fig, JSON.stringify(pics.swapped));
 
-  head('an empty library is not an error');
+  await head('an empty library is not an error');
   await page.evaluate(() => {
     window.__atlasKeptRefs=REF.slice(); REF.length=0; invalidateIndex(); pearlCurrent=null; S.screen='home'; render();
   });
@@ -756,6 +766,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('and nothing throws',errors.length===0);
   ok('empty Home invites one idea and offers Open notes',empty.heading==='Make one idea stick.'&&empty.open);
   for(const size of [{width:1194,height:834},{width:834,height:1194},{width:390,height:844}]){
+    await page.keyboard.press('Shift');
     await page.setViewportSize(size);
     await settled(page,()=>!window.__vtLive,{label:'empty Home resized'});
     const room=await page.evaluate(()=>{
@@ -776,10 +787,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('empty Home Open notes opens the reference library',await page.evaluate(()=>S.screen==='refs'));
   await page.evaluate(()=>{REF.push(...window.__atlasKeptRefs);delete window.__atlasKeptRefs;invalidateIndex();pearlCurrent=null;goHome();});
   await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'restored reference library'});
-  await page.getByRole('button',{name:'Begin recall',exact:true}).click();
-  await page.getByRole('button',{name:'Reveal',exact:true}).click();
 
-  head('headings and text the notes left behind');
+  await head('headings and text the notes left behind');
   /* Invented prose in the shape of the owner's notes (no licensed text). */
   const left = await page.evaluate(() => {
     const run = 'At 5 years the benefit of an early invasive strategy over a selective approach was gone, in part because of crossover in the latter group.17 Thus an invasive strategy is recommended in patients with NSTE-ACS who have troponin elevation on admission, or in whom these invented markers rise over the next 24 hours.';
@@ -804,8 +813,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      !left.steps.some(s => /^Contrast:/.test(s)) && !left.steps.some(s => /:Or in whom/i.test(s)), JSON.stringify(left.steps));
 
 
-  head('regression');
-  head('a pearl is a whole thought now');
+  await head('regression');
+  await head('a pearl is a whole thought now');
   {
     /* The old rules capped a pearl at 210 characters and required exactly one
        sentence. Measured over the 146 notes shipped at the time, that gave 96
@@ -846,7 +855,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('but a label followed by its statement is kept', judged.labelled === true);
   }
 
-  head('the current runs behind the words, not over them');
+  await head('the current runs behind the words, not over them');
   {
     /* Back to the home screen first: earlier sections navigate away, and a
        card that is not rendered has no canvas to measure. */
@@ -873,6 +882,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        it. color(srgb r g b / a) gives components 0-1 where rgb() gives 0-255;
        reading that wrong is what made an earlier version of this check report
        1.17:1 for black text on a white card. */
+    // A full render sweep can outlast the idle timer on a loaded host. Keep
+    // real reader activity during this probe; verify-ambient owns idle mode.
+    const readingActivity=setInterval(()=>{page.keyboard.press('Shift').catch(()=>{});},15000);
+    readingActivity.unref();
     const contrast = await page.evaluate(async () => {
       const RGBA = s => { s = String(s); const m = s.match(/-?[\d.]+/g); if (!m) return null;
         const sc = /^color\(/.test(s) ? 255 : 1;
@@ -943,7 +956,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       }
       setTheme('auto');
       return out;
-    });
+    }).finally(()=>clearInterval(readingActivity));
     const under = contrast.filter(c => c.worst < 4.5);
     /* A sweep that found no trace pixels would report Infinity and pass
        vacuously — the failure mode that makes a strengthened check weaker. */
