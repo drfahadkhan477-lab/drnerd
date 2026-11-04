@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 155 suites and roughly 6950 checks, and they
+ * WHY THIS EXISTS. There are 158 suites and roughly 7240 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -486,7 +486,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['shard-pure','settings','apex-cancel'];
+const PENDING_RECORD = [];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
@@ -508,16 +508,7 @@ const PENDING_RECORD = ['shard-pure','settings','apex-cancel'];
    counts stay in the record, untouched, until the next green run rewrites it
    and drops them; verify-stats leaves them out of every number it holds the
    prose to meanwhile. */
-const RETIRED_RECORD = [
-  'reader-assets-pure', 'study-file-check',
-  'memorizer-chunk-pure', 'memorizer-prompts-pure', 'memorizer-session-pure', 'memorizer-coach-pure',
-  'memorizer-appearance-pure', 'memorizer-home-pure', 'memorizer-book-pure', 'memorizer-ask-pure',
-  'memorizer-ground-pure', 'memorizer-vec-pure', 'memorizer-sheet-pure', 'memorizer-figure-pure',
-  'memorizer-agent-pure', 'memorizer-study-pure', 'memorizer-provenance-pure', 'memorizer-pack-pure',
-  'memorizer-studyimport-pure', 'memorizer', 'memorizer-misses-pure', 'memorizer-offline',
-  'memorizer-spec-pure', 'memorizer-recall-pure', 'memorizer-layout-pure', 'memorizer-studyimport',
-  'memorizer-data', 'memorizer-hardening',
-];
+const RETIRED_RECORD = [];
 
 /* ── the suites that must have the machine to themselves ──────────────────────
    --jobs runs suites concurrently, which is free for a suite that asserts on
