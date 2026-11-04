@@ -142,7 +142,11 @@ function tick(rec, now, active) {
   const last = rec.last;
   rec.last = Number.isFinite(now) && active ? now : null;
   if (!active || rec.paused || rec.done || !Number.isFinite(last) || !Number.isFinite(now)) return rec;
-  const dt = Math.min(Math.max(0, now - last), MAX_GAP_MS);
+  /* A late tick may cross the deadline. Charge only the time still available
+     to both the block and the current question, so the report agrees with it. */
+  const lim = limitMs(rec);
+  const dt = Math.min(Math.max(0, now - last), MAX_GAP_MS,
+    lim == null ? Infinity : Math.max(0, lim - rec.elapsedMs));
   rec.elapsedMs += dt;
   rec.ms[rec.i] = Math.min(MAX_QUESTION_MS, (rec.ms[rec.i] || 0) + dt);
   return rec;
