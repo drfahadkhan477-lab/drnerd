@@ -865,6 +865,14 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
  #homePage0 .hero-rhythm-label{margin:0}
  #homePage0 .hero-stats-row{display:none}
 }
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:160px minmax(0,1fr) auto auto;gap:12px}
+ #app[data-screen="home"] #homePage0 .atlas-hero-summary{top:14px;bottom:42px;left:22px}
+ #homePage0 .hero-greet{display:none}
+ #homePage0 .hero-h1{font-size:32px}
+ #homePage0 .hero-description{font-size:var(--t-tiny);line-height:1.35;margin:6px 0}
+ #homePage0 .hero-rhythm-label{font-size:var(--t-tiny)}
+}
 @media(max-width:699px){
  #homePage0 .hero-live{min-height:320px}
  #app[data-screen="home"] #homePage0 .atlas-hero-summary{top:24px;right:48%;bottom:72px;left:20px}
