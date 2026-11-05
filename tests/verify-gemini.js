@@ -682,6 +682,19 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a key removed during hashing cannot switch the in-flight explanation to another route',
      !!connection&&connection.key==='synthetic-original-credential'&&connection.url.includes('generativelanguage.googleapis.com'));
 
+  head('large reference libraries retain exact cache identity');
+  const largeLibrary=await page.evaluate(async()=>{
+    const saved=REF;
+    try{
+      REF=[{id:'large-fictional',title:'Invented reference',body:'Fictional background. '.repeat(110000)}];
+      const first=await explanationKey('small request');
+      REF[0].body+=' A final qualification.';
+      const changed=await explanationKey('small request');
+      return typeof first==='string'&&first.length===64&&typeof changed==='string'&&changed!==first;
+    }finally{REF=saved;}
+  });
+  ok('a library larger than the request cap hashes completely and source edits invalidate it',largeLibrary);
+
   head('incomplete explanations are disclosed');
   const completion=await page.evaluate(async()=>{
     const saved=window.fetch;let reason='MAX_TOKENS';

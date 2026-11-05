@@ -4668,8 +4668,14 @@ async function explanationKey(body){
     for(const label of ['NOTE','MEMORY']) for(const close of ['', '/']){
       normalized=normalized.split('<<<'+close+label+'-'+refFence()+'>>>').join('<<<'+close+label+'-SESSION>>>');
     }
-    const identity=JSON.stringify([normalized,REF,AI_GROUNDED,AI.provider,cur().model,cur().key,apexHosted()]);
-    if(identity.length>1000000) return null;
+    // Capture mutable context before hashing yields; preserve every source
+    // byte without charging the whole library against the request-size cap.
+    const context=[normalized,AI_GROUNDED,AI.provider,cur().model,cur().key,apexHosted()];
+    if(JSON.stringify(context).length>1000000) return null;
+    const sources=JSON.stringify(REF);
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(sources));
+    const library=Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
+    const identity=JSON.stringify([...context,library]);
     const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity));
     return Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
   }catch(_){return null;}
