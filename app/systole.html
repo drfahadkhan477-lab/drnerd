@@ -6943,8 +6943,8 @@ function pearlFit(){
   }
   const cut=!all&&over&&!wrap.hidden;
   if(!cut) pearlSkips=0;
-  else if(pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
-    pearlSkips++; requestAnimationFrame(()=>{ if(pearlCurrent===pearlPicked) pearlNext(true); });
+  else if(!pearlRecalling&&pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
+    pearlSkips++; requestAnimationFrame(()=>{ if(!pearlRecalling&&pearlCurrent===pearlPicked) pearlNext(true); });
   }
 }
 /* The largest text scale at which the pearl fits its card, so a short pearl fills the card and a long one still needs
