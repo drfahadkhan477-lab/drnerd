@@ -415,8 +415,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        pro.appW / pro.vw > 0.9, `${pro.appW} of ${pro.vw}`);
     ok('and the home screen fits in one screen, with nothing to scroll',
        pro.over <= 0, `${pro.over}px over`);
-    ok('the pearl sits to the left of the heart',
-       pro.hero.x >= pro.pearl.x + pro.pearl.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
+    ok('the live heart leads the pearl in landscape',
+       pro.pearl.x >= pro.hero.x + pro.hero.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
     ok('and it runs taller than the letterbox it used to be',
        pro.pearl.h > 400, `${pro.pearl.h}px tall`);
     /* The doors moved off Home: it is the hero and the pearl now, and the doors are on the Labs page, two swipes away

@@ -1111,6 +1111,13 @@ const STORE_WAIT_MS=15000;
 function storeReadyOrNull(){
   return Promise.race([Store.ready(),new Promise(r=>setTimeout(()=>r(null),STORE_WAIT_MS))]);
 }
+let pendingBackupSave=null;
+function confirmBackupSaved(){
+  if(!pendingBackupSave)return;
+  S.sinceBackup=Math.max(0,(S.sinceBackup||0)-pendingBackupSave.reviews);
+  S.lastBackup=pendingBackupSave.at;save();pendingBackupSave=null;
+  render();toast('Saved backup confirmed. Keep the file somewhere safe.');
+}
 async function exportMarkup(){
   try{
   if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
@@ -1123,11 +1130,14 @@ async function exportMarkup(){
     chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
     mem:(typeof Memory!=='undefined'?Memory.all():[])},null,0)],
     {type:'application/json'});
-  try{ S.sinceBackup=0; S.lastBackup=Date.now(); save(); }catch(_){}
+  const prepared={at:Date.now(),reviews:S.sinceBackup||0};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='accsap12-annotations-'+todayISO()+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  pendingBackupSave=missing.length?null:prepared;
+  if(S.screen==='stats')render();
+  if(!missing.length)toast('Download requested. After checking the saved file, confirm it in Progress → Your data.');
   if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
   return true;
   }catch(_){ toast('Backup could not be exported.'); return false; }
@@ -2185,6 +2195,7 @@ function buildStats(){
       <div class="panel-h">Your data</div>
       <div class="data-row">
         <button class="btn sb-back" onclick="exportMarkup()">⤓ Export everything</button>
+        ${pendingBackupSave?'<button class="btn sb-back" onclick="confirmBackupSaved()">I saved the backup file</button>':''}
         <button class="btn sb-back" onclick="importMarkup()">⤒ Import backup</button>
         <button class="btn sb-back" onclick="resetProgress()">Reset progress</button>
       </div>
@@ -3975,7 +3986,7 @@ function buildAI(){
   const msgs=hist.length
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
-        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
+        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}${m.incomplete?'<p class="src-lbl">Response reached its output limit and may be incomplete. Ask Apex to continue.</p>':''}</div>`).join('')
     : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
   /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
   const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
@@ -4081,6 +4092,10 @@ function setupHtml(p=AI.provider){
     </div>
     <button type="button" class="btn" id="aiKeyVisibility" aria-pressed="false">Show key</button>
     <div id="keyMsg" class="key-msg" role="status"></div>
+    <p>Active connection: ${active.key?'This device’s saved key':onSite?'Hosted key':'No key configured'} · ${e(active.model||'No model selected')}</p>
+    <button type="button" class="btn" id="aiTestGeneration">Test saved connection</button>
+    <p class="note">Sends a small test prompt using the saved model. Uses API allowance; your notes and questions are not included.</p>
+    <p id="aiTestResult" role="status">Generation has not been tested here.</p>
     <select id="aiModel" aria-label="Model">${models.map(m=>`<option value="${m[0]}"${active.model===m[0]?' selected':''}>${m[1]}</option>`).join('')}</select>
     <button class="btn btn-next" id="aiSave" style="width:100%;margin-top:10px">Connect</button>
     <div class="note" id="setupNote">${meta[3]} Stored only in this device's storage, sent only to the provider you picked, never written into this file.</div>
@@ -4108,6 +4123,25 @@ const DISCOVER={
 };
 function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvider, connected=()=>buildAI(), detachCancels=false){
   const find=id=>root.querySelector('#'+id);
+  const test=find('aiTestGeneration');
+  if(test) test.onclick=async()=>{
+    const p=provider(), saved={...AI[p]}, output=find('aiTestResult');
+    if(!saved.key&&location.protocol==='file:'){output.textContent='Save a key before testing.';return;}
+    test.disabled=true;output.textContent='Testing saved connection…';
+    const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),30000);
+    try{
+      const response=await fetch(gemUrl('generate',saved.model,saved.key),{method:'POST',signal:controller.signal,headers:gemHeaders(saved.key,true),body:JSON.stringify({generationConfig:{maxOutputTokens:128},contents:[{role:'user',parts:[{text:'Reply with OK.'}]}]})});
+      if(!test.isConnected)return;
+      if(apexSessionLapsed(response)){output.textContent=APEX_LAPSED;return;}
+      if(!response.ok){let message=await apiError(response,p);if(saved.key)message=message.split(saved.key).join('[redacted]').split(e(saved.key)).join('[redacted]');output.innerHTML=message;return;}
+      const data=await response.json();
+      const candidate=data.candidates&&data.candidates[0];
+      output.textContent=candidate&&candidate.content&&candidate.content.parts&&candidate.content.parts.some(part=>part.text)
+        ?'Generation succeeded with the saved connection. Quota and availability can change.'
+        :'Google responded, but returned no generated text. Generation is not confirmed.';
+    }catch(_){if(test.isConnected)output.textContent='Connection test could not reach the service. Check your network and try again.';}
+    finally{clearTimeout(timeout);if(test.isConnected)test.disabled=false;}
+  };
   const btn=find('aiSave'), inp=find('aiKey'), paste=find('aiPaste');
   const keyMsg=(text,cls)=>{const el=find('keyMsg');if(el){for(const key of [inp?.value,...Object.values(AI).map(v=>v&&v.key)].filter(k=>typeof k==='string'&&k.length>4)){text=String(text).split(key).join('[redacted]').split(e(key)).join('[redacted]');}el.className='key-msg '+(cls||'');el.innerHTML=text;}};
   const visibility=find('aiKeyVisibility');
@@ -4421,7 +4455,13 @@ async function streamReply(q,hist,extra,explainOnly=false){
       if(aiAbort.signal.aborted) break;
       if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
-        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{})});
+        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{}),...(turn.finishReason==='MAX_TOKENS'?{incomplete:true}:{})});
+        saveJSON(AI_CHAT,CHATS);
+      }
+      if(!turn.calls.length&&turn.finishReason&&turn.finishReason!=='STOP'&&!(turn.finishReason==='MAX_TOKENS'&&turn.text.trim())){
+        hist.push({role:'assistant',err:true,content:turn.finishReason==='MAX_TOKENS'
+          ?'This explanation reached the model’s output limit and may be incomplete. Ask a follow-up to continue; check the sources before relying on it.'
+          :'The model stopped without confirming a complete explanation. Check the sources or rephrase your question.'});
         saveJSON(AI_CHAT,CHATS);
       }
       /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
@@ -4651,8 +4691,14 @@ async function explanationKey(body){
     for(const label of ['NOTE','MEMORY']) for(const close of ['', '/']){
       normalized=normalized.split('<<<'+close+label+'-'+refFence()+'>>>').join('<<<'+close+label+'-SESSION>>>');
     }
-    const identity=JSON.stringify([normalized,REF,AI_GROUNDED,AI.provider,cur().model,cur().key,apexHosted()]);
-    if(identity.length>1000000) return null;
+    // Capture mutable context before hashing yields; preserve every source
+    // byte without charging the whole library against the request-size cap.
+    const context=[normalized,AI_GROUNDED,AI.provider,cur().model,cur().key,apexHosted()];
+    if(JSON.stringify(context).length>1000000) return null;
+    const sources=JSON.stringify(REF);
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(sources));
+    const library=Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
+    const identity=JSON.stringify([...context,library]);
     const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity));
     return Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
   }catch(_){return null;}
@@ -4745,7 +4791,7 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
     while(apexExplanationCache.size>=8) apexExplanationCache.delete(apexExplanationCache.keys().next().value);
     apexExplanationCache.set(cacheKey,{text,at:Date.now()});
   }
-  return {text, raw, calls};
+  return {text, raw, calls, finishReason};
 }
 /* Gemini says {error:{message}}. The other shapes — {message} or {detail} at
    the top level, either possibly an object rather than a string — are kept
@@ -6943,8 +6989,8 @@ function pearlFit(){
   }
   const cut=!all&&over&&!wrap.hidden;
   if(!cut) pearlSkips=0;
-  else if(pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
-    pearlSkips++; requestAnimationFrame(()=>{ if(pearlCurrent===pearlPicked) pearlNext(true); });
+  else if(!pearlRecalling&&pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
+    pearlSkips++; requestAnimationFrame(()=>{ if(!pearlRecalling&&pearlCurrent===pearlPicked) pearlNext(true); });
   }
 }
 /* The largest text scale at which the pearl fits its card, so a short pearl fills the card and a long one still needs
@@ -7545,17 +7591,16 @@ function buildHome(){
         <li><span class="atlas-step-icon">${icon('message-circle')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Explain</strong><span>Put it in your<br>own words.</span></li>
         <li><span class="atlas-step-icon">${icon('clipboard')}</span><strong>Recall</strong><span>Reveal the note<br>and compare.</span></li>
       </ol>
-      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="goRefs()">Open notes ${icon('arrow-right')}</button></div>
+      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="goRefs()">Open notes${icon('arrow-right')}</button></div>
     </section>
     <div class="hero-live${atlas3D?' atlas-3d':''}">
       <img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner atlas-hero-summary">
-        <div class="hero-greet">${greet()}</div>
+        <div class="hero-greet">${icon('activity','icon-sm')} Cardiology, in motion</div>
         <div class="hero-h1">Systole</div>
-        ${atlasPearl?'':'<button class="btn" onclick="goRefs()">Open notes</button>'}
-        <p class="hero-description">Cardiology, in motion.</p>
+        <p class="hero-description">See the rhythm.<br>Understand the why.</p>
 
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
         <div class="hero-line hero-stats-row">

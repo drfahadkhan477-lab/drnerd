@@ -287,6 +287,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('export carries the log');
   const exported = await page.evaluate(async () => {
+    S.sinceBackup=150;
     let blob = null;
     const create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
     URL.createObjectURL = b => { blob = b; return 'blob:stub'; };
@@ -300,7 +301,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('export includes the review log', exported && exported.hasLog && exported.n > 0,
     'v' + (exported && exported.v) + ', ' + (exported && exported.n) + ' entries');
-  ok('backup counter resets on export', exported && exported.since === 0);
+  ok('requesting an export retains the reminder until the file is confirmed saved', exported && exported.since === 150);
 
   head('regression: the rest of the app still works');
   await page.evaluate(() => { openSearch(); runSearch('amyloidosis'); render(); });

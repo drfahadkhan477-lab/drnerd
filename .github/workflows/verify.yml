@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7240 checks in
-# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7157.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7245 checks in
+# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7162.
 # The other 238 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 7157 real checks, up
+#                Across every job but split-build, 7162 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -301,7 +301,7 @@ jobs:
         run: node tests/verify-icons-pure.js
       - name: each pressure tracing shows what it is named for, measured from the curve, and the drill offers what is due and the look-alikes (99 checks)
         run: node tests/verify-drills-pure.js
-      - name: the release gate never claims more than it measured (66 checks)
+      - name: the release gate never claims more than it measured (67 checks)
         run: node tests/verify-release.js
       - name: a structurally broken question is caught, a sound one is left alone (24 checks)
         run: node tests/verify-contentrules.js
@@ -621,7 +621,7 @@ jobs:
         name: the worked reference notes obey the guide, and are retrievable (39 checks)
         run: node tests/verify-references.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-gemini,') }}
-        name: a free provider with real vision, wired to its own wire shape (78 checks)
+        name: a free provider with real vision, wired to its own wire shape (80 checks)
         run: node tests/verify-gemini.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-memory,') }}
         name: Apex still knows you next time, and you can see what it kept (51 checks)
@@ -669,7 +669,7 @@ jobs:
         name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (100 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
-        name: unified Settings preserves reading preferences, credentials and drafts (25 checks)
+        name: unified Settings preserves reading preferences, credentials and drafts (26 checks)
         run: node tests/verify-settings.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
@@ -690,7 +690,7 @@ jobs:
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
-        name: a restored backup appears now, not only after the next launch (138 checks)
+        name: a restored backup appears now, not only after the next launch (139 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)
@@ -948,7 +948,7 @@ jobs:
         name: the worked reference notes obey the guide, and are retrievable (39 checks)
         run: node tests/verify-references.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-gemini,') }}
-        name: a free provider with real vision, wired to its own wire shape (78 checks)
+        name: a free provider with real vision, wired to its own wire shape (80 checks)
         run: node tests/verify-gemini.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-memory,') }}
         name: Apex still knows you next time, and you can see what it kept (51 checks)
@@ -996,7 +996,7 @@ jobs:
         name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (100 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
-        name: unified Settings preserves reading preferences, credentials and drafts (25 checks)
+        name: unified Settings preserves reading preferences, credentials and drafts (26 checks)
         run: node tests/verify-settings.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
@@ -1017,7 +1017,7 @@ jobs:
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
-        name: a restored backup appears now, not only after the next launch (138 checks)
+        name: a restored backup appears now, not only after the next launch (139 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)

@@ -121,5 +121,13 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await page.evaluate(()=>{openSettings();window.settingsQuizBefore={index:S.qIdx,flagged:S.flagged.has(S.questions[S.qIdx].id)};});
  await page.keyboard.press('f');await page.keyboard.press('ArrowRight');await page.keyboard.press('Space');await quiet(page);
  await check('Settings owns keyboard shortcuts without changing the quiz',async()=>await page.evaluate(()=>S.qIdx===window.settingsQuizBefore.index&&S.answered&&S.flagged.has(S.questions[S.qIdx].id)===window.settingsQuizBefore.flagged),async()=>{await page.evaluate(()=>S.qIdx++);},23);
+ await page.evaluate(()=>{closeSettings();AI.provider='gemini';AI.gemini={key:'AIza-synthetic-health',model:'gemini-test'};openSettings('apex');});
+ const health=await page.evaluate(async()=>{
+   const button=document.querySelector('#aiTestGeneration');if(!button)return {present:false};
+   const saved=window.fetch;let calls=0,request;
+   window.fetch=async(url,init)=>{calls++;request={url,body:JSON.parse(init.body)};return new Response(JSON.stringify({candidates:[{content:{parts:[{text:'OK'}]}}]}),{headers:{'content-type':'application/json'}});};
+   try{await button.onclick();return {present:true,calls,request,message:document.querySelector('#aiTestResult').textContent,key:AI.gemini.key};}finally{window.fetch=saved;}
+ });
+ ok('saved connection test sends one isolated prompt and confirms generated text',health.present&&health.calls===1&&health.request.body.contents[0].parts[0].text==='Reply with OK.'&&/Generation succeeded/.test(health.message)&&health.key==='AIza-synthetic-health');
  console.log(`${passed} passed, ${failed} failed`);await browser.close();process.exitCode=failed?1:0;
 })().finally(async()=>{if(browser)await browser.close();}).catch(die);
