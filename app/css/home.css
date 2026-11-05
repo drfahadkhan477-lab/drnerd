@@ -881,7 +881,7 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
 /* Long pearls recover space before reducing readable text. */
 @media(min-width:700px){
  #app[data-screen="home"] #homePage0 .pearl-dense .pearl-main{padding:12px}
- #app[data-screen="home"] #homePage0 .pearl-dense .pearl-concept{font-size:var(--t-h4);margin:6px 0}
+ #app[data-screen="home"] #homePage0 .pearl-dense .pearl-concept{font-size:var(--t-h4);margin:0 0 6px}
  #app[data-screen="home"] #homePage0 .pearl-dense .pearl-steps{gap:4px}
  #app[data-screen="home"] #homePage0 .pearl-dense .pearl-step{padding:5px 10px}
 }
