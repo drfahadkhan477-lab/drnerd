@@ -690,7 +690,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
       S.screen='home';
       const hist=[{role:'user',content:'Explain the invented marker'}];CHATS._general=hist;aiBusy=true;
       await streamReply(null,hist,'',true);
-      const warned=hist.some(m=>m.err&&/output limit/.test(m.content));
+      const warned=hist.some(m=>m.incomplete===true)&&/output limit/.test(document.getElementById('ai').textContent);
       const kept=hist.some(m=>!m.err&&m.role==='assistant'&&m.content==='Synthetic explanation fragment');
       reason='STOP';const whole=[{role:'user',content:'A different invented marker'}];CHATS._general=whole;aiBusy=true;
       await streamReply(null,whole,'',true);
