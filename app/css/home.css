@@ -869,7 +869,7 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
  #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:160px minmax(0,1fr) auto auto;gap:12px}
  #app[data-screen="home"] #homePage0 .atlas-hero-summary{top:14px;bottom:42px;left:22px}
  #homePage0 .hero-greet{display:none}
- #homePage0 .hero-h1{font-size:32px}
+ #homePage0 .hero-h1{font-size:var(--t-h2)}
  #homePage0 .hero-description{font-size:var(--t-tiny);line-height:1.35;margin:6px 0}
  #homePage0 .hero-rhythm-label{font-size:var(--t-tiny)}
 }
