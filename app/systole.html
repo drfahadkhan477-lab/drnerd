@@ -7545,17 +7545,16 @@ function buildHome(){
         <li><span class="atlas-step-icon">${icon('message-circle')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Explain</strong><span>Put it in your<br>own words.</span></li>
         <li><span class="atlas-step-icon">${icon('clipboard')}</span><strong>Recall</strong><span>Reveal the note<br>and compare.</span></li>
       </ol>
-      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="goRefs()">Open notes ${icon('arrow-right')}</button></div>
+      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="goRefs()">Open notes${icon('arrow-right')}</button></div>
     </section>
     <div class="hero-live${atlas3D?' atlas-3d':''}">
       <img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner atlas-hero-summary">
-        <div class="hero-greet">${greet()}</div>
+        <div class="hero-greet">${icon('activity','icon-sm')} Cardiology, in motion</div>
         <div class="hero-h1">Systole</div>
-        ${atlasPearl?'':'<button class="btn" onclick="goRefs()">Open notes</button>'}
-        <p class="hero-description">Cardiology, in motion.</p>
+        <p class="hero-description">See the rhythm.<br>Understand the why.</p>
 
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
         <div class="hero-line hero-stats-row">
