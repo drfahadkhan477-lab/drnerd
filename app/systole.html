@@ -4092,6 +4092,10 @@ function setupHtml(p=AI.provider){
     </div>
     <button type="button" class="btn" id="aiKeyVisibility" aria-pressed="false">Show key</button>
     <div id="keyMsg" class="key-msg" role="status"></div>
+    <p>Active connection: ${active.key?'This device’s saved key':onSite?'Hosted key':'No key configured'} · ${e(active.model||'No model selected')}</p>
+    <button type="button" class="btn" id="aiTestGeneration">Test saved connection</button>
+    <p class="note">Sends a small test prompt using the saved model. Uses API allowance; your notes and questions are not included.</p>
+    <p id="aiTestResult" role="status">Generation has not been tested here.</p>
     <select id="aiModel" aria-label="Model">${models.map(m=>`<option value="${m[0]}"${active.model===m[0]?' selected':''}>${m[1]}</option>`).join('')}</select>
     <button class="btn btn-next" id="aiSave" style="width:100%;margin-top:10px">Connect</button>
     <div class="note" id="setupNote">${meta[3]} Stored only in this device's storage, sent only to the provider you picked, never written into this file.</div>
@@ -4119,6 +4123,25 @@ const DISCOVER={
 };
 function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvider, connected=()=>buildAI(), detachCancels=false){
   const find=id=>root.querySelector('#'+id);
+  const test=find('aiTestGeneration');
+  if(test) test.onclick=async()=>{
+    const p=provider(), saved={...AI[p]}, output=find('aiTestResult');
+    if(!saved.key&&location.protocol==='file:'){output.textContent='Save a key before testing.';return;}
+    test.disabled=true;output.textContent='Testing saved connection…';
+    const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),30000);
+    try{
+      const response=await fetch(gemUrl('generate',saved.model,saved.key),{method:'POST',signal:controller.signal,headers:gemHeaders(saved.key,true),body:JSON.stringify({generationConfig:{maxOutputTokens:128},contents:[{role:'user',parts:[{text:'Reply with OK.'}]}]})});
+      if(!test.isConnected)return;
+      if(apexSessionLapsed(response)){output.textContent=APEX_LAPSED;return;}
+      if(!response.ok){let message=await apiError(response,p);if(saved.key)message=message.split(saved.key).join('[redacted]').split(e(saved.key)).join('[redacted]');output.innerHTML=message;return;}
+      const data=await response.json();
+      const candidate=data.candidates&&data.candidates[0];
+      output.textContent=candidate&&candidate.content&&candidate.content.parts&&candidate.content.parts.some(part=>part.text)
+        ?'Generation succeeded with the saved connection. Quota and availability can change.'
+        :'Google responded, but returned no generated text. Generation is not confirmed.';
+    }catch(_){if(test.isConnected)output.textContent='Connection test could not reach the service. Check your network and try again.';}
+    finally{clearTimeout(timeout);if(test.isConnected)test.disabled=false;}
+  };
   const btn=find('aiSave'), inp=find('aiKey'), paste=find('aiPaste');
   const keyMsg=(text,cls)=>{const el=find('keyMsg');if(el){for(const key of [inp?.value,...Object.values(AI).map(v=>v&&v.key)].filter(k=>typeof k==='string'&&k.length>4)){text=String(text).split(key).join('[redacted]').split(e(key)).join('[redacted]');}el.className='key-msg '+(cls||'');el.innerHTML=text;}};
   const visibility=find('aiKeyVisibility');
