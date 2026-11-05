@@ -107,7 +107,7 @@ head('optional horizontal whitespace compaction');
 const compactSource = '  const  a = "two  spaces";\n\tconst b = `line  one\n  two ${ 1  +  2 }`;\n  const r = /a  b/;\n  function f(){ return\n    42; }\n  [a,b,r.source,f()]';
 const compacted = strip(compactSource, true);
 ok('compaction removes indentation and repeated horizontal separators',
-   compacted.startsWith('const a =') && compacted.includes('${ 1 + 2 }'));
+   compacted.startsWith('const a =') && compacted.includes('${1 + 2}'));
 ok('compaction preserves literal whitespace and automatic semicolon insertion',
    JSON.stringify(vm.runInNewContext(compacted)) === JSON.stringify(vm.runInNewContext(compactSource)) &&
    compacted.includes('return\n'));
