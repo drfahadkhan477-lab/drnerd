@@ -1111,6 +1111,13 @@ const STORE_WAIT_MS=15000;
 function storeReadyOrNull(){
   return Promise.race([Store.ready(),new Promise(r=>setTimeout(()=>r(null),STORE_WAIT_MS))]);
 }
+let pendingBackupSave=null;
+function confirmBackupSaved(){
+  if(!pendingBackupSave)return;
+  S.sinceBackup=Math.max(0,(S.sinceBackup||0)-pendingBackupSave.reviews);
+  S.lastBackup=pendingBackupSave.at;save();pendingBackupSave=null;
+  render();toast('Saved backup confirmed. Keep the file somewhere safe.');
+}
 async function exportMarkup(){
   try{
   if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
@@ -1123,11 +1130,14 @@ async function exportMarkup(){
     chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
     mem:(typeof Memory!=='undefined'?Memory.all():[])},null,0)],
     {type:'application/json'});
-  try{ S.sinceBackup=0; S.lastBackup=Date.now(); save(); }catch(_){}
+  const prepared={at:Date.now(),reviews:S.sinceBackup||0};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='accsap12-annotations-'+todayISO()+'.json';
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  pendingBackupSave=missing.length?null:prepared;
+  if(S.screen==='stats')render();
+  if(!missing.length)toast('Download requested. After checking the saved file, confirm it in Progress → Your data.');
   if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
   return true;
   }catch(_){ toast('Backup could not be exported.'); return false; }
@@ -2185,6 +2195,7 @@ function buildStats(){
       <div class="panel-h">Your data</div>
       <div class="data-row">
         <button class="btn sb-back" onclick="exportMarkup()">⤓ Export everything</button>
+        ${pendingBackupSave?'<button class="btn sb-back" onclick="confirmBackupSaved()">I saved the backup file</button>':''}
         <button class="btn sb-back" onclick="importMarkup()">⤒ Import backup</button>
         <button class="btn sb-back" onclick="resetProgress()">Reset progress</button>
       </div>

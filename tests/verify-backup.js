@@ -588,6 +588,22 @@ const restore = `(text) => new Promise((resolve, reject) => {
     }
   }
 
+  head('requesting a download is not proof of a saved backup');
+  const assurance=await page.evaluate(async()=>{
+    const click=HTMLAnchorElement.prototype.click,backup=RefAssets.backup;
+    HTMLAnchorElement.prototype.click=function(){};
+    RefAssets.backup=async()=>({assets:{},missing:[]});
+    try{
+      S.sinceBackup=150;S.lastBackup=123;S.screen='stats';
+      const exported=await exportMarkup();
+      const unchanged=S.sinceBackup===150&&S.lastBackup===123;
+      S.sinceBackup+=7;
+      if(typeof confirmBackupSaved==='function')confirmBackupSaved();
+      return {exported,unchanged,confirmed:S.sinceBackup===7&&S.lastBackup>123};
+    }finally{HTMLAnchorElement.prototype.click=click;RefAssets.backup=backup;}
+  });
+  ok('download requests retain the reminder and confirmation preserves later reviews',assurance.exported&&assurance.unchanged&&assurance.confirmed);
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed\n`);
   process.exit(failed ? 1 : 0);
