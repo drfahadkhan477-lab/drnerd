@@ -627,7 +627,8 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
 
   head('session explanation reuse is exact and complete');
   const reuse=await page.evaluate(async()=>{
-    const saved=window.fetch, results={};let calls=0,finish='STOP';
+    const saved=window.fetch, savedRefs=REF, results={};let calls=0,finish='STOP';
+    REF=[{id:'cache-fixture',title:'Synthetic marker',body:'Amber marker'}];invalidateIndex();
     if(typeof apexExplanationCache!=='undefined') apexExplanationCache.clear();
     window.fetch=async()=>{calls++;return new Response('data: '+JSON.stringify({candidates:[{finishReason:finish,content:{parts:[{text:'Synthetic complete explanation'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});};
     aiAbort=new AbortController();lastHits=[];
@@ -645,7 +646,7 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
         wire[0].content='Explain the fictional marker';finish='STOP';await ask();results.expired=calls===8;
       }
       return results;
-    }finally{window.fetch=saved;aiAbort=null;if(typeof apexExplanationCache!=='undefined')apexExplanationCache.clear();}
+    }finally{window.fetch=saved;REF=savedRefs;invalidateIndex();aiAbort=null;if(typeof apexExplanationCache!=='undefined')apexExplanationCache.clear();}
   });
   ok('identical explanations reuse despite fresh evidence fences',reuse.hit);
   ok('source changes invalidate explanation reuse',reuse.hit&&reuse.source);

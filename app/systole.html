@@ -6886,6 +6886,11 @@ function mountPearlCurrent(){
    one reading stood: the last step sat faded under a "More" that had nothing to open and did nothing when tapped. So it
    is measured when each step's entrance ends, and when the column or the card changes size. */
 let pearlRO=null, pearlFitRaf=0;
+function pearlScroll(){
+  const wrap=document.getElementById('pearlBody'),card=document.getElementById('pearlCard');
+  if(!wrap||!card)return;
+  card.classList.toggle('pearl-more',!wrap.hidden&&!card.classList.contains('pearl-all')&&wrap.scrollHeight-wrap.clientHeight-wrap.scrollTop>4);
+}
 function pearlFit(){
   const wrap=document.getElementById('pearlBody'), card=document.getElementById('pearlCard');
   if(!wrap||!card) return;
@@ -6908,10 +6913,13 @@ function pearlFit(){
   /* Every measure starts from the same card: no scale, no figure share, no thumbnail. Measured from what the last call
      left, the caption check below read the figure at the last call's text size, hid it, and the call after that showed
      it again: in WebKit the card flipped between the two for as long as the page was open. */
-  card.classList.remove('pearl-figthumb'); card.style.removeProperty('--pz'); card.style.removeProperty('--pf');
+  card.classList.remove('pearl-figthumb');
+  const fitId=pearlCurrent&&String(pearlCurrent.id||'');
+  if(card.dataset.pearlFitId!==fitId){ card.classList.remove('pearl-dense'); card.dataset.pearlFitId=fitId; }
+  card.style.removeProperty('--pz'); card.style.removeProperty('--pf');
   if(fig&&matchMedia('(min-width:700px)').matches&&!card.classList.contains('pearl-all')){
     card.classList.remove('pearl-nofig');
-    card.classList.toggle('pearl-nofig',fig.scrollHeight-fig.clientHeight>1);
+    if(fig.scrollHeight-fig.clientHeight>1) card.classList.add('pearl-figthumb');
   }else card.classList.remove('pearl-nofig');
   /* Measured as if the button were not there: it takes its own height from the column, so a pearl that fits without it
      runs past the card with it, and once shown (while the steps rise in, everything runs past) it would stay for good,
@@ -6962,6 +6970,7 @@ function pearlScale(card,wrap){
   /* Last, the figure folds to a thumbnail in the card's corner (a tap still enlarges it), rather than the steps being
      cut off under a Show all. */
   if(!fits(lo)&&fig){ card.classList.add('pearl-figthumb'); card.style.removeProperty('--pf'); hi=1.6; if(fits(hi)) return; }
+  if(!fits(lo)){ card.classList.add('pearl-dense'); if(fits(hi)) return; }
   if(!fits(lo)) return;
   for(let i=0;i<7;i++){ const m=(lo+hi)/2; if(fits(m)) lo=m; else hi=m; }
   /* The value that was measured to fit, not a rounding of it: rounded up, it crossed the point where a line wraps. */
@@ -7594,7 +7603,7 @@ function buildHome(){
           </div>
           <h1 class="pearl-concept" id="pearlConcept" tabindex="-1">${e(p.concept||p.title)}</h1>
 
-          <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlFit()">${pearlLadder(p)}</div>
+          <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlScroll()">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
           <div class="pearl-prompt" id="pearlPrompt" hidden>

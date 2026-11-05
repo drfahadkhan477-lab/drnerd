@@ -21,9 +21,9 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 6950 checks in
-# `node scripts/verify.js` plus 147 more under `--pwa`, this workflow runs 6867.
-# The other 230 all drive something this workflow does not have: the real
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7240 checks in
+# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7157.
+# The other 238 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
 # the ACCSAP 12 export — the licensed question bank, deliberately never
@@ -35,7 +35,7 @@
 # and verify-cachebuckets hold it to the synthetic generator's own totals.
 # They are not in these counts, because the record counts the split build only
 # from a run on the real bank, and on the real bank
-# there is no way to run those 230 checks here.
+# there is no way to run those 238 checks here.
 # See docs/BUILD.md and the comment at the top of scripts/assemble-app.js for why,
 # and README.md for how to run the full suite yourself, against your own copy.
 #
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 6867 real checks, up
+#                Across every job but split-build, 7157 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -125,7 +125,7 @@
 #                only when every browser job passed, or was skipped because
 #                `changes` said so; scripts/browser-done.js.
 #
-# Adding the other 230 checks to this file is possible — GitHub Actions
+# Adding the other 238 checks to this file is possible — GitHub Actions
 # supports encrypted repository secrets, and a workflow could decode the
 # export from one, build the app, and run the rest — but that means the
 # licensed export living, encrypted, inside GitHub's infrastructure rather
@@ -237,13 +237,13 @@ jobs:
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)
         run: node tests/verify-oracle.js
-      - name: the Cloudflare Worker request handler (138 checks)
+      - name: the Cloudflare Worker request handler (155 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
         run: node tests/verify-physio-pure.js
       - name: the 12-lead's geometry and morphology (47 checks)
         run: node tests/verify-leads-pure.js
-      - name: the ZIP reader's memory ceiling (16 checks)
+      - name: the ZIP reader's memory ceiling (23 checks)
         run: node tests/verify-zip.js
       - name: the calibration arithmetic (31 checks)
         run: node tests/verify-calib-pure.js
@@ -285,13 +285,13 @@ jobs:
         run: node tests/verify-lab-pure.js
       - name: the study plan fits the time, puts the most forgotten first and the weak chapters next, and never throws on damaged data (47 checks)
         run: node tests/verify-plan-pure.js
-      - name: a timed block is the size asked, counts only the time the app is on screen, scores a blank as wrong once, and is read back from storage whole or not at all (154 checks)
+      - name: a timed block is the size asked, counts only the time the app is on screen, scores a blank as wrong once, and is read back from storage whole or not at all (156 checks)
         run: node tests/verify-mockexam-pure.js
       - name: a flag is an id kept once and in order, read back only if it is nothing but ids; the flagged deck holds the questions the bank has; a note or a mark lists a question, found by every word typed (103 checks)
         run: node tests/verify-flagset-pure.js
       - name: Apex is told how the fellow answers (certain and wrong, why they miss, pace, the last mock block) only with the samples to say, what they chose on the question open, and their recent misses, and in grounded mode never which option or whether it was right (134 checks)
         run: node tests/verify-apexsignals-pure.js
-      - name: the page's own Apex code, cut from the shell, tells it what the fellow did in both modes and the key never in grounded mode, its misses, plan and flagged-quiz tools answer, and every tool refuses while a mock block is open (60 checks)
+      - name: the page's own Apex code, cut from the shell, tells it what the fellow did in both modes and the key never in grounded mode, its misses, plan and flagged-quiz tools answer, and every tool refuses while a mock block is open (68 checks)
         run: node tests/verify-apexctx-pure.js
       - name: questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair (33 checks)
         run: node tests/verify-topicrun-pure.js
@@ -315,7 +315,7 @@ jobs:
         run: node tests/verify-refassets-pure.js
       - name: every arrhythmia the picker offers has something that draws it (23 checks)
         run: node tests/verify-rhythms-pure.js
-      - name: nothing in src/ uses syntax an iPad cannot parse (50 checks)
+      - name: nothing in src/ uses syntax an iPad cannot parse (49 checks)
         run: node tests/verify-ipad-pure.js
       - name: the newer copy survives and a refused write is not lost (100 checks)
         run: node tests/verify-store-pure.js
@@ -337,9 +337,9 @@ jobs:
         run: node tests/verify-swupdate-pure.js
       - name: the service worker keeps the event alive for each cache write it makes, including the refresh behind a cache hit that the network answers late (27 checks)
         run: node tests/verify-swlifetime-pure.js
-      - name: no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind (23 checks)
+      - name: no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind (21 checks)
         run: node tests/verify-hover-pure.js
-      - name: every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says (144 checks)
+      - name: every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says (142 checks)
         run: node tests/verify-floor-css-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)
         run: node tests/verify-ui-pure.js
@@ -353,11 +353,11 @@ jobs:
         run: node tests/verify-notesearch-pure.js
       - name: the heart loads a mesh baked at build time, and refuses any other copy (39 checks)
         run: node tests/verify-heartbake-pure.js
-      - name: the pearls found at build time are the ones the search finds (47 checks)
+      - name: the pearls found at build time are the ones the search finds (52 checks)
         run: node tests/verify-pearlbake-pure.js
-      - name: the split build ships src/ without its comments, and nothing else changes (28 checks)
+      - name: the split build ships src/ without its comments, and nothing else changes (32 checks)
         run: node tests/verify-stripcomments-pure.js
-      - name: CSS documentation is omitted without changing strings, URLs or token boundaries (13 checks)
+      - name: CSS documentation is omitted without changing strings, URLs or token boundaries (16 checks)
         run: node tests/verify-cssdocs-pure.js
       - name: the note figures load after the home screen, one unit at a time (29 checks)
         run: node tests/verify-refimgdefer-pure.js
@@ -371,17 +371,17 @@ jobs:
         run: node tests/verify-olderacc-pure.js
       - name: extraction refuses an unsafe id, an image whose bytes are not its mime, damaged base64, and a bank that breaks the content schema, and a refusal leaves the last good content untouched (33 checks)
         run: node tests/verify-extract-pure.js
-      - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (28 checks)
+      - name: the code-only deploy's package — packed, read back and checked by the page's own code; every bad package refused, naming why, quoting nothing; the reference notes travel in it too, and the written schema names the version the code enforces (31 checks)
         run: node tests/verify-bankpack-pure.js
-      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (56 checks)
+      - name: npm test runs every suite this workflow runs, from this file's own list, and a failure, a missing suite or a missing browser fails it, and a pure-only run says what it left out (59 checks)
         run: node tests/verify-testpublic-pure.js
       - name: a browser suite's pass is reused only when nothing it depended on has changed, and a failure is never kept (139 checks)
         run: node tests/verify-suitecache-pure.js
-      - name: a pull request skips a browser job only when none of its files can reach it (60 checks)
+      - name: a pull request skips a browser job only when none of its files can reach it (65 checks)
         run: node tests/verify-cichanges-pure.js
       - name: every suite of a sharded browser job runs in exactly one shard, each step only in its own, and browser-done fails on a failed, cancelled or unexplained skipped job (57 checks)
         run: node tests/verify-shard-pure.js
-      - name: the counts record is written only from a run where every registered suite ran and passed, and keeps nothing that is no longer a suite (31 checks)
+      - name: the counts record is written only from a run where every registered suite ran and passed, and keeps nothing that is no longer a suite (23 checks)
         run: node tests/verify-record-pure.js
       - name: a suite far past its recorded time is stopped and named with the section it was in, and every section is timed, and the laptop run is what no CI job runs, and the --pwa phases are held to the ceiling too (53 checks)
         run: node tests/verify-suitetime-pure.js
@@ -591,7 +591,7 @@ jobs:
         name: the cardiac cycle is computed, not drawn, and keeps its own clock (58 checks)
         run: node tests/verify-physio.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-theme,') }}
-        name: nine palettes, two axes, unthemed semantics (41 checks)
+        name: nine palettes, two axes, unthemed semantics (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
@@ -600,13 +600,13 @@ jobs:
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-homepager,') }}
-        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (57 checks)
+        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (112 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lab,') }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-home,') }}
-        name: the welcome bar, the progress bar, three layouts (67 checks)
+        name: the welcome bar, the progress bar, three layouts (68 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-splash-heart,') }}
         name: the photographed heart paints before the app parses (14 checks)
@@ -621,7 +621,7 @@ jobs:
         name: the worked reference notes obey the guide, and are retrievable (39 checks)
         run: node tests/verify-references.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-gemini,') }}
-        name: a free provider with real vision, wired to its own wire shape (62 checks)
+        name: a free provider with real vision, wired to its own wire shape (78 checks)
         run: node tests/verify-gemini.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-memory,') }}
         name: Apex still knows you next time, and you can see what it kept (51 checks)
@@ -630,16 +630,16 @@ jobs:
         name: an imported chapter brings its figures, and keeps them (38 checks)
         run: node tests/verify-assets.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chatfigs,') }}
-        name: the figure Apex is reasoning from is one you can see (43 checks)
+        name: the figure Apex is reasoning from is one you can see (45 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-pearl,') }}
-        name: the home screen opens with something worth knowing (96 checks)
+        name: the home screen opens with something worth knowing (144 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-boundary,') }}
-        name: a retrieved note is material to teach from, never an instruction (54 checks)
+        name: a retrieved note is material to teach from, never an instruction (56 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chat,') }}
-        name: the panel keeps what you typed, and sends a window not an archive (32 checks)
+        name: the panel keeps what you typed, and sends a window not an archive (35 checks)
         run: node tests/verify-chat.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-store,') }}
         name: the big stores live in a database, and nothing is ever in neither place (39 checks)
@@ -654,7 +654,7 @@ jobs:
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-mockscreen,') }}
-        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (172 checks)
+        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (174 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-flags,') }}
         name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (173 checks)
@@ -666,10 +666,10 @@ jobs:
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
-        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (72 checks)
+        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (100 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
-        name: unified Settings preserves reading preferences, credentials and drafts (23 checks)
+        name: unified Settings preserves reading preferences, credentials and drafts (25 checks)
         run: node tests/verify-settings.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
@@ -723,7 +723,7 @@ jobs:
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-taps,') }}
-        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (24 checks)
+        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (27 checks)
         run: node tests/verify-taps.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-floor,') }}
         name: with the features that have a fallback made unknown to the engine, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have (15 checks)
@@ -744,7 +744,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-csp,') }}
-        name: the policy contains an injection without breaking anything the app does (28 checks)
+        name: the policy contains an injection without breaking anything the app does (27 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-echo,') }}
         name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
@@ -774,7 +774,7 @@ jobs:
         name: Apex can take the whole page, and a numbered list stays numbered (22 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-resume,') }}
-        name: a chapter you left is the chapter you come back to (33 checks)
+        name: a chapter you left is the chapter you come back to (35 checks)
         run: node tests/verify-resume.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figsharp,') }}
         name: no figure is drawn wider than the pixels it has (9 checks)
@@ -918,7 +918,7 @@ jobs:
         name: the 12-lead morphology falls out of one dipole (25 checks)
         run: node tests/verify-leads.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-theme,') }}
-        name: nine palettes, two axes, unthemed semantics (41 checks)
+        name: nine palettes, two axes, unthemed semantics (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
@@ -927,13 +927,13 @@ jobs:
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-homepager,') }}
-        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (57 checks)
+        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (112 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lab,') }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-home,') }}
-        name: the welcome bar, the progress bar, three layouts (67 checks)
+        name: the welcome bar, the progress bar, three layouts (68 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-splash-heart,') }}
         name: the photographed heart paints before the app parses (14 checks)
@@ -948,7 +948,7 @@ jobs:
         name: the worked reference notes obey the guide, and are retrievable (39 checks)
         run: node tests/verify-references.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-gemini,') }}
-        name: a free provider with real vision, wired to its own wire shape (62 checks)
+        name: a free provider with real vision, wired to its own wire shape (78 checks)
         run: node tests/verify-gemini.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-memory,') }}
         name: Apex still knows you next time, and you can see what it kept (51 checks)
@@ -957,16 +957,16 @@ jobs:
         name: an imported chapter brings its figures, and keeps them (38 checks)
         run: node tests/verify-assets.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chatfigs,') }}
-        name: the figure Apex is reasoning from is one you can see (43 checks)
+        name: the figure Apex is reasoning from is one you can see (45 checks)
         run: node tests/verify-chatfigs.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-pearl,') }}
-        name: the home screen opens with something worth knowing (96 checks)
+        name: the home screen opens with something worth knowing (144 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-boundary,') }}
-        name: a retrieved note is material to teach from, never an instruction (54 checks)
+        name: a retrieved note is material to teach from, never an instruction (56 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-chat,') }}
-        name: the panel keeps what you typed, and sends a window not an archive (32 checks)
+        name: the panel keeps what you typed, and sends a window not an archive (35 checks)
         run: node tests/verify-chat.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-store,') }}
         name: the big stores live in a database, and nothing is ever in neither place (39 checks)
@@ -981,7 +981,7 @@ jobs:
         name: the "I have N minutes" card plans a review session of that size, in order, most-forgotten first, and rating in it moves the schedule (15 checks)
         run: node tests/verify-planscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-mockscreen,') }}
-        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (172 checks)
+        name: a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload (174 checks)
         run: node tests/verify-mockscreen.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-flags,') }}
         name: a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block's flags join the list when it is handed in (173 checks)
@@ -993,10 +993,10 @@ jobs:
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
-        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (72 checks)
+        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (100 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
-        name: unified Settings preserves reading preferences, credentials and drafts (23 checks)
+        name: unified Settings preserves reading preferences, credentials and drafts (25 checks)
         run: node tests/verify-settings.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-topicrunscreen,') }}
         name: the Topic runs card asks three to five questions about one thing, in one chapter, each holding the words it says they share, from what you missed (13 checks)
@@ -1050,7 +1050,7 @@ jobs:
         name: focus mode reclaims the bar’s space, and never the progress or the confidence row (25 checks)
         run: node tests/verify-focus.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-taps,') }}
-        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (24 checks)
+        name: the navigation icon buttons and the brand take a press a few pixels outside them and never into a neighbour, the confidence and mistake chips and the Back and Got it buttons are 44 px tall and stay inside a phone, and a tap leaves no hover behind, since every :hover rule is asked for only where a device can hover and the Flag button tapped on and off looks as it did (27 checks)
         run: node tests/verify-taps.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-floor,') }}
         name: with the features that have a fallback made unknown to the engine, nothing in the app moves, resizes or loses a ground, a border or a text colour, and each @supports not rule gives an element what the rule it stands in for would have (15 checks)
@@ -1068,7 +1068,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-csp,') }}
-        name: the policy contains an injection without breaking anything the app does (28 checks)
+        name: the policy contains an injection without breaking anything the app does (27 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-echo,') }}
         name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
@@ -1098,7 +1098,7 @@ jobs:
         name: Apex can take the whole page, and a numbered list stays numbered (22 checks)
         run: node tests/verify-apexpage.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-resume,') }}
-        name: a chapter you left is the chapter you come back to (33 checks)
+        name: a chapter you left is the chapter you come back to (35 checks)
         run: node tests/verify-resume.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-figsharp,') }}
         name: no figure is drawn wider than the pixels it has (9 checks)
