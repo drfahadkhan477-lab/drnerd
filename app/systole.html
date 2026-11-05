@@ -3975,7 +3975,7 @@ function buildAI(){
   const msgs=hist.length
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
-        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}</div>`).join('')
+        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}${m.incomplete?'<p class="src-lbl">Response reached its output limit. Ask Apex to continue.</p>':''}</div>`).join('')
     : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
   /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
   const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
@@ -4421,7 +4421,7 @@ async function streamReply(q,hist,extra,explainOnly=false){
       if(aiAbort.signal.aborted) break;
       if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
-        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{})});
+        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{}),...(turn.incomplete?{incomplete:true}:{})});
         saveJSON(AI_CHAT,CHATS);
       }
       /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
@@ -4745,7 +4745,7 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
     while(apexExplanationCache.size>=8) apexExplanationCache.delete(apexExplanationCache.keys().next().value);
     apexExplanationCache.set(cacheKey,{text,at:Date.now()});
   }
-  return {text, raw, calls};
+  return {text, raw, calls, incomplete:finishReason==='MAX_TOKENS'};
 }
 /* Gemini says {error:{message}}. The other shapes — {message} or {detail} at
    the top level, either possibly an object rather than a string — are kept
