@@ -103,7 +103,7 @@ const pixels = () => {
 
   const browser = await launch();
   const outside = [];
-  const open = async (tag, opts, init) => {
+  const open = async (tag, opts, init, direct = false) => {
     const ctx = await browser.newContext(Object.assign({ viewport: { width: 900, height: 900 }, serviceWorkers: 'block' }, opts || {}));
     const p = watch(await ctx.newPage(), events, tag, errors);
     p.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(tag + ': console ' + m.text()); });
@@ -113,7 +113,9 @@ const pixels = () => {
     if (init) await p.addInitScript(init);
     await p.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(p);
-    p.__opened = await toLab(p);
+    // Navigation is measured by the main and phone cases. Appearance-only
+    // cases enter directly, avoiding another frame-sensitive pager traversal.
+    p.__opened = await (direct ? reopenLab(p) : toLab(p));
     return p;
   };
   /* Into the Lab the way a fellow goes: the Labs page of Systole's home screen (its tab), and the Practice Lab card. */
@@ -433,7 +435,7 @@ const pixels = () => {
     ok('every button and the picker is at least 40 px tall, for a thumb', small.n >= 3 && small.small.length === 0, small.small.join(', ') || small.n + ' controls');
     await ph.context().close();
 
-    const dk = await open('dark', { colorScheme: 'dark' });
+    const dk = await open('dark', { colorScheme: 'dark' }, undefined, true);
     const bg = await dk.evaluate(() => getComputedStyle(document.body).backgroundColor);
     const lum = c => { const m = c.match(/\d+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const fg = await dk.evaluate(() => getComputedStyle(document.body).color);

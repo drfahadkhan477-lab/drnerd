@@ -92,8 +92,11 @@ const STEPS = [
      the gate with the variable set and checks the command each step shows. */
   { id: 'chromium',  what: 'the full suite, on chromium',
     cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'chromium']], after: 'build', needs: () => fs.existsSync(BUILD) },
-  { id: 'pwa',       what: 'the full suite, against the split build over http',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--pwa', '--engine', 'chromium']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
+  /* Chromium already measured the standalone registry above. --only pwa
+     still builds and measures the split artifacts, Worker and cache phases;
+     it does not replay the standalone suites before those phases. */
+  { id: 'pwa',       what: 'the split build, Worker and offline cache over http',
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--only', 'pwa', '--pwa', '--engine', 'chromium']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
   /* WebKit is the ACTUAL TARGET — the app is used on an iPad — so it is on by
      default and skipping it costs you the CERTIFIED line rather than passing
      quietly. It is also the engine where the 42 MB single file takes ~100s to

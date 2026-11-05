@@ -129,6 +129,10 @@ head('a step that says chromium runs on chromium, whatever the shell has set');
     return m ? m[1].trim().split(/\s+/) : null;
   };
   const engineOf = argv => argv && argv.indexOf('--engine') > 0 ? argv[argv.indexOf('--engine') + 1] : null;
+  const pwaCommand = cmdOf('pwa') || [];
+  ok('the split-build step runs PWA phases without repeating the standalone registry',
+     pwaCommand.includes('--pwa') && pwaCommand[pwaCommand.indexOf('--only') + 1] === 'pwa'
+     && !cmdOf('chromium')?.includes('--only') && !cmdOf('webkit')?.includes('--only'));
   for (const [id, want] of [['chromium', 'chromium'], ['pwa', 'chromium'], ['webkit', 'webkit']]) {
     const argv = cmdOf(id);
     ok(`the ${id} step shows the command it would run`, !!argv && /verify\.js$/.test(argv[1] || ''),
