@@ -682,6 +682,23 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('a key removed during hashing cannot switch the in-flight explanation to another route',
      !!connection&&connection.key==='synthetic-original-credential'&&connection.url.includes('generativelanguage.googleapis.com'));
 
+  head('incomplete explanations are disclosed');
+  const completion=await page.evaluate(async()=>{
+    const saved=window.fetch;let reason='MAX_TOKENS';
+    window.fetch=async()=>new Response('data: '+JSON.stringify({candidates:[{finishReason:reason,content:{parts:[{text:'Synthetic explanation fragment'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+    try{
+      S.screen='home';
+      const hist=[{role:'user',content:'Explain the invented marker'}];CHATS._general=hist;aiBusy=true;
+      await streamReply(null,hist,'',true);
+      const warned=hist.some(m=>m.err&&/output limit/.test(m.content));
+      const kept=hist.some(m=>!m.err&&m.role==='assistant'&&m.content==='Synthetic explanation fragment');
+      reason='STOP';const whole=[{role:'user',content:'A different invented marker'}];CHATS._general=whole;aiBusy=true;
+      await streamReply(null,whole,'',true);
+      return {warned,kept,clean:!whole.some(m=>m.err)};
+    }finally{window.fetch=saved;}
+  });
+  ok('output-limit replies retain their text with a notice while complete replies remain clean',completion.warned&&completion.kept&&completion.clean);
+
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

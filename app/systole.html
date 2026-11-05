@@ -4424,6 +4424,12 @@ async function streamReply(q,hist,extra,explainOnly=false){
         if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{})});
         saveJSON(AI_CHAT,CHATS);
       }
+      if(!turn.calls.length&&turn.finishReason&&turn.finishReason!=='STOP'){
+        hist.push({role:'assistant',err:true,content:turn.finishReason==='MAX_TOKENS'
+          ?'This explanation reached the model’s output limit and may be incomplete. Ask a follow-up to continue; check the sources before relying on it.'
+          :'The model stopped without confirming a complete explanation. Check the sources or rephrase your question.'});
+        saveJSON(AI_CHAT,CHATS);
+      }
       /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
       if(!turn.calls.length||apexAway()) break;
       if(guard>=6) truncated=true;          // calls still pending on the last allowed step
@@ -4745,7 +4751,7 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
     while(apexExplanationCache.size>=8) apexExplanationCache.delete(apexExplanationCache.keys().next().value);
     apexExplanationCache.set(cacheKey,{text,at:Date.now()});
   }
-  return {text, raw, calls};
+  return {text, raw, calls, finishReason};
 }
 /* Gemini says {error:{message}}. The other shapes — {message} or {detail} at
    the top level, either possibly an object rather than a string — are kept
