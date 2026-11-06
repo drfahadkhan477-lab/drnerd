@@ -7598,20 +7598,11 @@ function buildHome(){
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner atlas-hero-summary">
-        <div class="hero-greet">${icon('activity','icon-sm')} Cardiology, in motion</div>
         <div class="hero-h1">The living heart</div>
 
 
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
-        <div class="hero-line hero-stats-row">
-
-          <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>
-          <span class="hl-dot"></span>
-          <span class="hl-item"><b>${covered}%</b> started</span>
-          <span class="hl-dot"></span>
-          <span class="hl-item"><b>${today.a}</b> today</span>
-          ${dueN?`<button class="hl-item hl-due" id="atlasNext" onclick="startQuiz(null,'due',dueQuestions())"><b>${dueN}</b> due ${icon('arrow-right','icon-sm')}</button>`:''}
-        </div>
+        <div class="hero-line hero-stats-row" hidden></div>
       </div>
       <div class="hero-heart-plate" id="heroHeart" aria-hidden="true">
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
