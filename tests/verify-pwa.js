@@ -175,7 +175,10 @@ async function heapAfterBoot(page, url) {
        simply not the thing a download budget should be denominated in. */
     const gzip = buf => require('zlib').gzipSync(buf, { level: 6 }).length;
     const wireBytes = gzip(Buffer.from(shellHtml)) + gzip(Buffer.from(appJs));
-    ok('the shell transfers under 280 KB', wireBytes < 280 * 1024,
+    // Owner-approved Observatory allowance: 288 KiB, up 2.86% from 280 KiB.
+    // Measured before redundant markup removal: 287,785 bytes. This budget
+    // concerns transfer only; rendering and accessibility checks stay separate.
+    ok('the shell transfers under 288 KB', wireBytes < 288 * 1024,
        `${kb(wireBytes)} gzipped, from ${kb(shellBytes)} on disk`);
 
   }

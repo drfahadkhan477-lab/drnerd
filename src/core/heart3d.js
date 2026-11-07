@@ -1249,6 +1249,14 @@ void main(){
       // wet tissue depth without adding a texture download or extra mesh.
       col += sss * 0.65 * ao;
       col += vec3(1.00,0.88,0.80) * pow(max(dot(bump,H),0.0), 6.0) * 0.14 * ao;
+      // Observatory studio light: a cool silhouette separates the living
+      // surface from the glass stage without recolouring its anatomy.
+      // Reuse the existing normal and lights; no extra draw or texture pass.
+      float edge = pow(1.0 - max(dot(bump,V),0.0), 3.8);
+      float rim = max(dot(bump,L3),0.0);
+      col += toLinear(vec3(0.30,0.82,0.92)) * edge * (0.10 + rim * 0.32) * ao;
+      vec3 softbox = normalize(vec3(-0.35,0.80,0.48) + V);
+      col += vec3(0.82,0.94,1.0) * pow(max(dot(bump,softbox),0.0),48.0) * 0.16 * ao;
       col *= 1.0 + uV * 0.12 * (vW.x + vW.y);
     }
 

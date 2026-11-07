@@ -1609,7 +1609,7 @@ console.log('');
 console.log(`  index.html           ${kb(fs.statSync(path.join(DIST, 'index.html')).size)}`);
 console.log(`  app.js               ${kb(fs.statSync(path.join(DIST, 'app.js')).size)}`);
 console.log(`  shell total          ${kb(shellBytes)}   (was ${mb(fs.statSync(SRC).size)} in one file)`);
-console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 280 KB)`);
+console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 288 KB)`);
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
 console.log(`  largest file         ${hostCheck.largest.rel} ${(hostCheck.largest.bytes / 1e6).toFixed(2)} MB   (the host's ceiling: 25.00 MB, decimal)`);

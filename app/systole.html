@@ -230,7 +230,7 @@ function icon(name, cls){
 @@SLOT[src:src/ui/coronaryTree.js]@@
 
 /* the heart's surfaces, baked by scripts/heart-bake.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='397e3004227c19eb';
+window.HEART3D_MESH_KEY='a223435e67acb2d4';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -7571,7 +7571,7 @@ function buildHome(){
   atlasReading=!!atlasPearl;
 
   const today=S.daily[todayISO()]||{a:0,c:0};
-  const covered=Math.round(seenN/TOTAL_Q*100);
+  const covered=TOTAL_Q?Math.min(100,Math.round(seenN/TOTAL_Q*100)):0;
   /* Mastery is FSRS's own recall estimate, summed over the whole bank — the
      same measure the chapter rings show, aggregated. So the bar and the rings
      can never tell different stories. */
@@ -7598,20 +7598,11 @@ function buildHome(){
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
       <div class="hero-inner atlas-hero-summary">
-        <div class="hero-greet">${icon('activity','icon-sm')} Cardiology, in motion</div>
-        <div class="hero-h1">Systole</div>
-        <p class="hero-description">See the rhythm.<br>Understand the why.</p>
+        <div class="hero-h1">The living heart</div>
+
 
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
-        <div class="hero-line hero-stats-row">
-
-          <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>
-          <span class="hl-dot"></span>
-          <span class="hl-item"><b>${covered}%</b> started</span>
-          <span class="hl-dot"></span>
-          <span class="hl-item"><b>${today.a}</b> today</span>
-          ${dueN?`<button class="hl-item hl-due" id="atlasNext" onclick="startQuiz(null,'due',dueQuestions())"><b>${dueN}</b> due ${icon('arrow-right','icon-sm')}</button>`:''}
-        </div>
+        <div class="hero-line hero-stats-row" hidden></div>
       </div>
       <div class="hero-heart-plate" id="heroHeart" aria-hidden="true">
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
@@ -7667,7 +7658,7 @@ function buildHome(){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
-    <div class="atlas-session"><span class="atlas-session-icon" aria-hidden="true">${icon('clipboard')}</span><div><small>Your next session</small><strong>${dueN?`${dueN} questions ready`:'Build your next idea'}</strong><p>Continue building your understanding, one idea at a time.</p></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Start review':'Explore chapters'} ${icon('arrow-right','icon-sm')}</button></div>
+    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Reviews today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Review':'Continue'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">

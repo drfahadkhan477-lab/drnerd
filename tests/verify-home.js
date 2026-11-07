@@ -120,7 +120,16 @@ onDeath(() => ({ section, checks: passed + failed, errors,
      `drawn ${prog.mastDrawn} of 100, number ${prog.mid}`);
   ok('and so does the coverage ring', Math.abs(prog.seenDrawn - prog.seenFrac) < 1, `drawn ${prog.seenDrawn}, ${prog.seenFrac}%`);
   ok('the gauge states both figures in words', /mastered/i.test(prog.label) && /seen/i.test(prog.label), prog.label);
-  ok('and the progress bar it replaced is gone from Home', !prog.bar);
+  const homeProgress = await page.evaluate(() => {
+    const meter=document.querySelector('.observatory-meter');
+    const numbers=[...document.querySelectorAll('.observatory-stats strong')].map(el=>parseInt(el.textContent,10));
+    const seen=startedCount(), percentage=TOTAL_Q?Math.min(100,Math.round(seen/TOTAL_Q*100)):0;
+    return !!meter && Number(meter.getAttribute('aria-valuenow'))===seen &&
+      Number(meter.getAttribute('aria-valuemax'))===Math.max(1,TOTAL_Q) &&
+      meter.querySelector('span').style.width===percentage+'%' &&
+      JSON.stringify(numbers)===JSON.stringify([percentage,(S.daily[todayISO()]||{a:0}).a,dueQuestions().length]);
+  });
+  ok('Home coverage, today and due metrics match actual study state', homeProgress);
 
   head('it fills the display, like an app');
   /* Added to the Home Screen, iPadOS gives a web app the whole screen and draws
