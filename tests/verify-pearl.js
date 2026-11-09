@@ -448,7 +448,20 @@ let section = '';
   });
   ok('another pearl keeps paragraph mode, and switching back restores the steps', !!proseNext && proseNext.kept && proseNext.restored);
   const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source,heading:document.getElementById('pearlConcept').textContent}));
-  ok('the heading names the selected concept', current.heading === current.concept);
+  const sourceControl=page.locator('#pearlSourceToggle');
+  let sourceDisclosure=false;
+  if(await sourceControl.count()){
+    const closed=await sourceControl.getAttribute('aria-expanded')==='false' && !(await page.locator('#pearlSource').isVisible());
+    await sourceControl.click();
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const opened=await page.locator('#pearlSource').isVisible() && await sourceControl.getAttribute('aria-expanded')==='true' && await page.locator('#pearlSource').textContent()===(current.source||'Your reference notes');
+    await sourceControl.focus();
+    await page.keyboard.press('Enter');
+    const keyboardClosed=await sourceControl.getAttribute('aria-expanded')==='false' && !(await page.locator('#pearlSource').isVisible());
+    await page.keyboard.press('Space');
+    sourceDisclosure=closed && opened && keyboardClosed && await page.locator('#pearlSource').isVisible();
+  }
+  ok('the heading names the selected concept and its source opens by touch and keyboard', current.heading === current.concept && sourceDisclosure);
   await page.locator('#pearlRecall').click();
   const hidden = await page.evaluate(() => ({body:document.getElementById('pearlBody').hidden,
     prompt:!document.getElementById('pearlPrompt').hidden,expanded:document.getElementById('pearlRecall').getAttribute('aria-expanded'),
@@ -460,8 +473,8 @@ let section = '';
   await page.locator('#pearlRecall').click();
   await page.locator('.pearl-next').click();
   const moved=await page.evaluate(()=>({id:pearlCurrent.id,concept:pearlCurrent.concept,shown:document.getElementById('pearlConcept').textContent,
-    source:pearlCurrent.source,shownSource:document.getElementById('pearlSource').textContent,hidden:document.getElementById('pearlBody').hidden}));
-  ok('another pearl updates its concept and source and exits recall', moved.id !== current.id && moved.concept === moved.shown && moved.source === moved.shownSource && !moved.hidden);
+    source:pearlCurrent.source,shownSource:document.getElementById('pearlSource').textContent,hidden:document.getElementById('pearlBody').hidden,sourceClosed:document.getElementById('pearlSource').hidden && document.getElementById('pearlSourceToggle')?.getAttribute('aria-expanded')==='false'}));
+  ok('another pearl updates its concept and source and exits recall', moved.id !== current.id && moved.concept === moved.shown && moved.source === moved.shownSource && !moved.hidden && moved.sourceClosed);
   // The new figure is inserted without a full render; keyboard zoom must work there too.
   // A randomly drawn pearl may legitimately have no relevant image. Choose
   // a different, resolvable figured pearl for this interaction, through the

@@ -949,3 +949,6 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
  #homePage0 .hello{padding:10px 14px}
 }
 @media(max-width:699px){#homePage0 .observatory-stats{gap:8px}}
+
+/* Explicitly opened provenance stays readable at the reader's type scale. */
+#homePage0 .pearl-source{font-size:var(--t-meta);overflow-wrap:break-word}
