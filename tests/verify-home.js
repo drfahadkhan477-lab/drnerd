@@ -129,7 +129,30 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       meter.querySelector('span').style.width===percentage+'%' &&
       JSON.stringify(numbers)===JSON.stringify([percentage,(S.daily[todayISO()]||{a:0}).a,dueQuestions().length]);
   });
-  ok('Home coverage, today and due metrics match actual study state', homeProgress);
+  const metricEdges = await page.evaluate(() => {
+    const srs=S.srs, practice=S.practice, daily=S.daily, paused=atlasPaused;
+    try {
+      const first=POOL[0].id, foreign='__audit_absent_question__';
+      if(POOL.some(q=>q.id===foreign))throw new Error('audit id must be absent');
+      S.srs={[first]:{}};S.practice={[first]:{},[foreign]:{}};
+      const coverage=startedCount()===1 && Object.hasOwn(S.practice,foreign);
+      S.daily={[todayISO()]:{a:7,c:4,r:2}};
+      const detached=document.createElement('div');detached.innerHTML=buildHome();
+      const today=detached.querySelector('.observatory-stats>div:nth-child(2)');
+      const label=today.querySelector('span').textContent==='Answers today' && today.querySelector('strong').textContent==='7';
+      if(!atlasPaused)toggleAtlasMotion();
+      const fill=document.querySelector('.observatory-meter>span');
+      fill.style.animation='none';void fill.offsetWidth;fill.style.animation='';
+      const css=getComputedStyle(fill);
+      const motion=css.animationName==='none'||css.animationPlayState==='paused';
+      return {coverage,label,motion};
+    } finally {
+      S.srs=srs;S.practice=practice;S.daily=daily;
+      if(atlasPaused!==paused)toggleAtlasMotion();
+    }
+  });
+  ok('Home metrics count current-bank answers, label them accurately and respect pause',
+    homeProgress && metricEdges.coverage && metricEdges.label && metricEdges.motion,JSON.stringify(metricEdges));
 
   head('it fills the display, like an app');
   /* Added to the Home Screen, iPadOS gives a web app the whole screen and draws

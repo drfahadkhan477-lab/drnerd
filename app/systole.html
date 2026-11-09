@@ -2049,11 +2049,10 @@ function forecast7(){
   }
   return out;
 }
-/* every card you have met, by either route */
+/* Current-bank coverage, without deleting history from other banks. */
 function startedCount(){
-  const s=new Set(Object.keys(S.srs));
-  for(const k in S.practice) s.add(k);
-  return s.size;
+  return POOL.reduce((n,q)=>n+(Object.prototype.hasOwnProperty.call(S.srs,q.id)||
+    Object.prototype.hasOwnProperty.call(S.practice,q.id)?1:0),0);
 }
 function last30(){
   const out=[];
@@ -7658,7 +7657,7 @@ function buildHome(){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
-    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Reviews today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Review':'Continue'} ${icon('arrow-right','icon-sm')}</button></div>
+    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Answers today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Review':'Continue'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">

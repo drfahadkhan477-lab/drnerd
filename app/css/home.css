@@ -932,7 +932,7 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
 #homePage0 .observatory-meter{height:6px;margin-top:12px;border-radius:999px;background:var(--border2);overflow:hidden}
 #homePage0 .observatory-meter>span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--teal-ink),var(--teal2));transform-origin:left;animation:observatoryProgress .7s ease-out both}
 @keyframes observatoryProgress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-.atlas-paused .observatory-meter>span{animation:none}
+.atlas-paused #homePage0 .observatory-meter>span{animation:none}
 @media(prefers-reduced-motion:reduce){#homePage0 .observatory-meter>span{animation:none}}
 #homePage0 .pearl-head{margin-bottom:8px}
 #homePage0 .pearl-tag{font-size:var(--t-micro);letter-spacing:.16em}
