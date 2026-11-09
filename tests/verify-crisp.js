@@ -10,7 +10,7 @@
  * every hairline soft. So the test is simply: does each canvas's backing store
  * actually scale with the display?  The 2D line-art canvases (the ECG strips,
  * the 12-lead, the physiology diagram) should reach 3×; the one 3D surface, the
- * heart, should reach 2.5× on this pointer:fine browser — high enough to be
+ * heart, should reach 3× on this pointer:fine browser — high enough to be
  * crisp, capped low enough not to triple a phone's shading budget.
  *
  * The ceilings are ceilings, so this also confirms none of these canvases is
@@ -75,7 +75,13 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   head('the home ECG strip');
   await page.waitForFunction(() => { const c = document.getElementById('heroECG'); return c && c.width > 0; }, null, { timeout: 30000 });
   const hero = await ratioOf(page, '#heroECG');
-  ok('the hero ECG strip backs itself at ~3×, not the old 2×', hero >= 2.8, `${hero ? hero.toFixed(2) : hero}×`);
+  await page.waitForFunction(()=>{const c=document.querySelector('#heroHeart3dSlot canvas');return c&&c.width>0;},null,{timeout:30000});
+  const heart=await ratioOf(page,'#heroHeart3dSlot canvas');
+  await page.evaluate(()=>{const c=document.querySelector('#heroHeart3dSlot canvas');c.style.width='1400px';c.style.height='1000px';});
+  await page.waitForFunction(()=>{const c=document.querySelector('#heroHeart3dSlot canvas');return c.width>1000;},null,{timeout:30000});
+  const pixels=await page.evaluate(()=>{const c=document.querySelector('#heroHeart3dSlot canvas');return c.width*c.height;});
+  await page.evaluate(()=>{const c=document.querySelector('#heroHeart3dSlot canvas');c.style.width='';c.style.height='';});
+  ok('hero ECG and desktop heart render at 3× while large heart surfaces stay within budget', hero>=2.8 && heart>=2.8 && pixels<=4005000, JSON.stringify({ecg:hero,heart,pixels}));
 
   head('Rhythm Lab canvases');
   await page.evaluate(() => { goLab(); render(); });

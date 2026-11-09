@@ -460,12 +460,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const r=s=>{const e=document.querySelector(s);return e?e.getBoundingClientRect():null;};
     const rhythm=r('#homePage0 .hero-rhythm-label'), stats=r('#homePage0 .hero-stats-row'), live=r('#homePage0 .hero-live');
     const loose=[...document.querySelectorAll('#homePage0 .hero-tool')].filter(b=>!b.closest('#heroMenu')&&b.offsetWidth>0).length;
-    const entry=r('#atlasExplore');
+    const entry=r('#atlasExplore'),heart=r('#heroHeart3dSlot'),ecg=r('#heroECG');
     return {entry:!!entry&&entry.width>=44&&entry.height>=44,
+      anatomy:!!(heart&&live)&&heart.height>=live.height*(matchMedia('(orientation:landscape)').matches?.65:.75),
+      rhythm:!!(heart&&ecg)&&(matchMedia('(orientation:landscape)').matches?ecg.top>=heart.bottom:ecg.right<=heart.left+live.width*.06),
       below:!!(rhythm&&stats)&&stats.top>=rhythm.bottom-1, inside:!!(stats&&live)&&stats.bottom<=live.bottom+1&&stats.top>=live.top,
       loose, menuHidden:document.getElementById('heroMenu')?.hidden};
   });
-  ok('the selected design keeps a touch-sized explicit 3D entry',hero.entry,JSON.stringify(hero));
+  ok('the glass hero keeps a touch-sized 3D entry, tall anatomy and a separate rhythm lane',hero.entry&&hero.anatomy&&hero.rhythm,JSON.stringify(hero));
   ok('no round tool stands beside the heart; they are in its menu, closed',hero.loose===0&&hero.menuHidden===true,JSON.stringify(hero));
   await page.locator('#heroHeartBtn').click();
   const opened=await page.evaluate(()=>{const m=document.getElementById('heroMenu'),b=document.getElementById('heroHeartBtn');

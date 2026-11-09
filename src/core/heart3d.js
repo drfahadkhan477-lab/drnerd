@@ -1774,16 +1774,15 @@ void main(){
   };
   const MODES = { whole: 0, cutaway: 1, conduction: 2, coronary: 3 };
 
+  const maxBackingSide = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), 4096);
   function fit() {
     const r = canvas.getBoundingClientRect();
-    /* The heart is the one 3D surface here, so its device pixels cost fragment
-       shading, not just fill. A pointer:fine device (a desktop with a real GPU
-       and mains power) gets 2.5 for a crisper silhouette; a touch device stays
-       at 2, which is already retina, rather than tripling the shading budget on
-       a phone. */
-    const finePtr = window.matchMedia && window.matchMedia('(pointer:fine)').matches;
-    const dpr = Math.min(window.devicePixelRatio || 1, finePtr ? 2.5 : 2);
     if (!r.width || !r.height) return false;
+    // Desktop detail follows the display up to 3x. Touch retains its 2x cap;
+    // a four-million-pixel budget bounds shading cost on large windows.
+    const finePtr = window.matchMedia && window.matchMedia('(pointer:fine)').matches;
+    const dpr = Math.min(window.devicePixelRatio || 1, finePtr ? 3 : 2,
+      Math.sqrt(4000000 / (r.width * r.height)), maxBackingSide / r.width, maxBackingSide / r.height);
     const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     gl.viewport(0, 0, w, h);
