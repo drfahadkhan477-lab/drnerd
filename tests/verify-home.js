@@ -508,8 +508,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     ok('portrait still stacks, and still fits',
        port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
     /* The pages run the full width now, and Home's column is the fixed measure (.home-page-in, 900px). */
-    ok('and its column reserves space for the navigation rail',
-       !!port.col && port.col.w === port.vw - 128, port.col ? `${port.col.w}px` : 'no column');
+    ok('and its column reclaims the removed sidebar width',
+       !!port.col && port.col.w === port.vw - 40, port.col ? `${port.col.w}px` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem.

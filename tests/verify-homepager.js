@@ -68,7 +68,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const pillAt = () => page.evaluate(() => {
     const pill = document.querySelector('.home-tab-pill').getBoundingClientRect();
     return [0, 1, 2].map(i => document.getElementById('homeTab' + i).getBoundingClientRect())
-      .map(t => ({ left: innerWidth>=700?t.top:t.left, width: innerWidth>=700?t.height:t.width })).concat([{ pill: innerWidth>=700?pill.top:pill.left, w: innerWidth>=700?pill.height:pill.width }]);
+      .map(t => ({ left: t.left, width: t.width })).concat([{ pill: pill.left, w: pill.width }]);
   });
 
   await page.evaluate(() => { homePage = 0; S.screen = 'home'; render(); });
@@ -104,7 +104,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
   head('one screen tall');
-  /* Tablet navigation follows the selected left-rail design; phones retain bottom tabs. */
+  /* Tablet navigation uses top tabs; phones retain bottom tabs. */
   const fits = async (label) => {
     const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect();
       const tabs = r(document.querySelector('.home-tabs')), pager = r(document.getElementById('homePager')), fab = r(document.getElementById('aiFab'));
@@ -117,10 +117,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
          Beside the pages is a rail; under them is a bar. */
       const besidePages = tabs.right <= pager.left + 1;
       return { doc: document.documentElement.scrollHeight, vh: innerHeight, besidePages,
-        placement: besidePages ? tabs.left>=0 && tabs.top>=0 && tabs.bottom<=innerHeight
-          : pager.bottom<=tabs.top && Math.abs(innerHeight-12-tabs.bottom)<=1,
+        placement: !besidePages && tabs.left>=0 && tabs.right<=innerWidth && (tabs.bottom<=pager.top+1 || pager.bottom<=tabs.top+1),
         orientation: document.querySelector('.home-tabs').getAttribute('aria-orientation'),
-        wanted: besidePages?'vertical':'horizontal',
+        wanted: 'horizontal',
 
         fabClear:buttons.every(t=>fab.right<=t.left||fab.left>=t.right||fab.bottom<=t.top||fab.top>=t.bottom) };
     });
@@ -176,8 +175,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const half = await page.evaluate(() => new Promise(r => {
     const p = document.getElementById('homePager'); p.style.scrollSnapType = 'none'; p.scrollLeft = p.clientWidth * 1.5;
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const pill = document.querySelector('.home-tab-pill').getBoundingClientRect().top;
-      const a = document.getElementById('homeTab1').getBoundingClientRect().top, b = document.getElementById('homeTab2').getBoundingClientRect().top;
+      const pill = document.querySelector('.home-tab-pill').getBoundingClientRect().left;
+      const a = document.getElementById('homeTab1').getBoundingClientRect().left, b = document.getElementById('homeTab2').getBoundingClientRect().left;
       p.style.scrollSnapType = ''; r({ pill, a, b });
     }));
   }));
@@ -213,11 +212,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the Labs tab glides there rather than jumping', glide.moving, JSON.stringify(glide));
   ok('and lands on Labs', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2', JSON.stringify(s2));
   await page.locator('#homeTab2').focus();
-  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowLeft');
   await still('after ArrowUp');
   const k = await page.evaluate(() => ({ f: document.getElementById('homePager').scrollLeft / document.getElementById('homePager').clientWidth,
     focus: document.activeElement && document.activeElement.id }));
-  ok('ArrowUp on the vertical tab bar goes to Brain and takes the focus with it', Math.abs(k.f - 1) < 0.01 && k.focus === 'homeTab1', JSON.stringify(k));
+  ok('ArrowLeft on the horizontal tab bar goes to Brain and takes the focus with it', Math.abs(k.f - 1) < 0.01 && k.focus === 'homeTab1', JSON.stringify(k));
   const tabStop = await page.evaluate(() => [0, 1, 2].map(i => document.getElementById('homeTab' + i).tabIndex).join());
   ok('only the selected tab is a tab stop', tabStop === '-1,0,-1', tabStop);
 
@@ -411,7 +410,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('turning the iPad');
   await page.evaluate(() => homeGo(1)); await still('Brain before turning');
   await page.setViewportSize({ width: 820, height: 1180 });
-  await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth - 80 && innerWidth === 820, { label: 'the pager to take the portrait width' });
+  await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth && innerWidth === 820, { label: 'the pager to take the portrait width' });
   await still('after turning');
   const turned = await state();
   ok('turned to portrait, Brain is still the page', Math.abs(turned.f - 1) < 0.01 && turned.sel.join() === '1', JSON.stringify(turned));
@@ -421,7 +420,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await still('on a phone');
   await fits('a phone');
   await page.setViewportSize({ width: 820, height: 1180 });
-  await settled(page, () => document.getElementById('homePager').clientWidth === 740, { label: 'the pager back at the portrait width' });
+  await settled(page, () => document.getElementById('homePager').clientWidth === 820, { label: 'the pager back at the portrait width' });
   await still('back in portrait');
 
   head('reduced motion');

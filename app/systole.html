@@ -8042,7 +8042,7 @@ function homeMark(){
      tests/verify-homepager.js reads the rail's direction off the screen rather than off this number,
      so the two cannot drift apart unnoticed. */
   const tabs=root.querySelector('.home-tabs');
-  if(tabs) tabs.setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
+  if(tabs) tabs.setAttribute('aria-orientation','horizontal');
 
   for(let i=0;i<3;i++){
     const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
@@ -8094,8 +8094,8 @@ function homeGo(i){
   homeTween=requestAnimationFrame(step);
 }
 function homeTabKey(ev){
-  const k=ev.key, vertical=matchMedia('(min-width:700px)').matches;
-  const n=(k==='ArrowRight'||(vertical&&k==='ArrowDown'))?homePage+1:(k==='ArrowLeft'||(vertical&&k==='ArrowUp'))?homePage-1:k==='Home'?0:k==='End'?2:null;
+  const k=ev.key;
+  const n=(k==='ArrowRight')?homePage+1:(k==='ArrowLeft')?homePage-1:k==='Home'?0:k==='End'?2:null;
   if(n==null) return;
   ev.preventDefault(); homeGo(n);
   const tab=document.getElementById('homeTab'+homePage); if(tab) tab.focus();

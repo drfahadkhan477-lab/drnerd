@@ -1025,3 +1025,16 @@ body.on-home .home-tab[aria-selected="true"] .icon{animation:glassIconIn .45s ea
  #homePage0 .hero-live,#homePage0 .pearl-card,#homePage0 .atlas-session,#homePage0 .hero-ecg{border-color:CanvasText}
  #homePage0 button{border-color:ButtonText}
 }
+
+/* Horizontal glass navigation replaces the tablet rail. */
+@media(min-width:700px){
+ .home-pages{padding-left:0;padding-top:66px}
+ .home-tabs{left:50%;top:8px;bottom:auto;transform:translateX(-50%);width:360px;max-width:calc(100% - 120px);height:50px;margin:0;padding:4px;border-radius:999px;flex-direction:row;align-items:center}
+ .home-tab{flex:1 1 0;flex-direction:row;min-height:42px;gap:8px;padding:0 10px}
+ .home-tab .icon{width:20px;height:20px}
+ .home-tab-pill{left:4px;top:4px;bottom:4px;width:calc((100% - 8px)/3);height:auto;border-radius:999px;transform:translateX(calc(var(--hp-f)*100%))}
+ body.on-home .ai-fab{left:auto;right:20px;bottom:20px;width:52px;height:52px;padding:0;border-radius:50%;background:var(--card);box-shadow:0 8px 24px -12px var(--navy)}
+ .home-page{padding-left:20px;padding-right:20px}
+}
+
+@media(min-width:700px){body.on-home .ai-fab{top:76px;bottom:auto}}
