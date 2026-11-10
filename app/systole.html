@@ -7600,6 +7600,9 @@ function dismissHello(){
 }
 function buildHome(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
+  /* The session strip's button: with cards due, Review them; with history and nothing due, Continue opens Chapters;
+     with nothing answered yet, Start begins the 20-minute plan Study offers, because a first visit should not open
+     on a menu (docs/ux-discovery, principle 1). */
   const dueN=dueQuestions().length, seenN=startedCount();
   const atlasPearl=pearlNow();
   atlasReading=!!atlasPearl;
@@ -7693,7 +7696,7 @@ function buildHome(){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
-    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Answers today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":"goStudy()"}">${dueN?'Review':'Continue'} ${icon('arrow-right','icon-sm')}</button></div>
+    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Answers today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":seenN?"goStudy()":"startPlan(20)"}"${dueN||seenN?'':' aria-label="Start a 20-minute study session"'}>${dueN?'Review':seenN?'Continue':'Start'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">

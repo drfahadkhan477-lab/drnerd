@@ -8,8 +8,8 @@ Every item has an id (`F1`, `E2`, `S3` …) and a model tier, so a session can b
 started with "do S1 from docs/ROADMAP.md" on the model that item names. The tier
 table is in section 7.
 
-**Done since:** F1, F3 (the Apex button; the chip is PR #339's), F6 and F7, in
-PR #340. Each item below says what was done.
+**Done since:** F1, F2, F3 (the Apex button; the chip is PR #339's), F6 and
+F7, in PR #340. Each item below says what was done.
 
 ## How this review was done
 
@@ -77,6 +77,9 @@ Continue opens Chapters, which is a menu. The discovery doc's first principle is
 that removing the decision beats adding a feature. When there is no history,
 label it Start and open a planned session (`studyplan.plan` at the default
 length); keep Chapters one tap away. *Sonnet.*
+*Done:* with nothing answered, the strip's button says Start and begins the
+20-minute plan; with history it still says Continue and opens Chapters.
+verify-homepager holds both.
 
 **F3 — Floating controls cover text on a phone.** At phone width the Apex button
 sits over the pearl's text and the "Live cardiac cycle" chip sits over the heart.
