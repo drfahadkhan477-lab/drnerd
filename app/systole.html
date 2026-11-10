@@ -8407,7 +8407,7 @@ function buildQuiz(){
     <div class="qbar anim-slide">
       <div class="qbar-top">
         <span class="ch-badge" style="background:${chColor}22;color:${chInk(chColor)}">${e(q.ch)}</span>
-        <span class="q-counter">Q ${qIdx+1} / ${questions.length}</span>
+        <span class="q-counter">${qIdx+1} of ${questions.length}<span class="sr-only"> in this session</span></span>
         ${S.resumed?`<button class="q-restart" type="button" onclick="restartQuiz()"
           title="Deal this chapter again from the beginning">Resumed · start over</button>`:''}
       </div>

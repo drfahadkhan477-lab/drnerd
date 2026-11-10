@@ -10,11 +10,14 @@
  * trigger either a second time — that is not a UI nicety, it is the
  * difference between a chapter's percentage being accurate and a card's due
  * date drifting further out every time its question is revisited.
+ *
+ * And the header those moves redraw: the counter says the place in the session ("4 of 20"), and only the question's
+ * tag says "Question" with the bank's own number.
  */
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, afterRender } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -187,6 +190,28 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('it appears once a second question is reached', onQ1 === 1);
     ok('clicking it returns to question 0, answered', state.qIdx === 0 && state.answered === true);
     ok('and the restored options are disabled, not re-clickable', disabledOpts > 0, String(disabledOpts));
+  }
+
+  /* Two numbers sit on the quiz: where this question falls in the session, and the bank's own number for it. Both
+     used to be "Q"/"Question" — "Q 1 / 20" over "Question 10 · Arrhythmias" — so the screen named one question by two
+     numbers in the same words. The tag keeps the bank's number (what the source bank and Apex call it); the counter
+     says only a place. */
+  head('the counter is a place in the session; the tag is the question\'s own number');
+  {
+    await page.evaluate(() => (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'));
+    /* Move to a question whose place in the deck differs from its number, so the two cannot agree by accident. */
+    const moved = await page.evaluate(() => { for (let k = 0; k < S.questions.length; k++) { if (S.qIdx + 1 !== S.questions[S.qIdx].n) return true; nextQ(); } return false; });
+    await afterRender(page, () => { const c = document.querySelector('.q-counter'), t = document.getElementById('qTag'), q = S.questions[S.qIdx];
+      return S.screen === 'quiz' && !!c && !!t && new RegExp('(^|\\D)' + (S.qIdx + 1) + '(\\D|$)').test(c.textContent) && t.textContent.indexOf('Question ' + q.n) >= 0; },
+      { label: 'the quiz header to show the question now in S.qIdx' });
+    const r = await page.evaluate(() => { const c = document.querySelector('.q-counter'), q = S.questions[S.qIdx];
+      const hidden = c.querySelector('.sr-only'), seen = c.textContent.replace(hidden ? hidden.textContent : '', '').trim();
+      return { seen, all: c.textContent.trim(), tag: document.getElementById('qTag').textContent.trim(), place: S.qIdx + 1, of: S.questions.length, n: q.n }; });
+    ok('a question whose place differs from its number was reached (precondition)', moved, JSON.stringify({ place: r.place, n: r.n }));
+    ok('the counter shows the place as "k of n"', r.seen === `${r.place} of ${r.of}`, JSON.stringify(r.seen));
+    ok('and does not call it "Q" or "Question", the word the tag uses for the bank\'s own number',
+      !/\bQ(uestion)?\b/.test(r.seen) && r.tag.indexOf('Question ' + r.n) === 0, JSON.stringify({ counter: r.seen, tag: r.tag.slice(0, 40) }));
+    ok('a screen reader is told what the place counts', r.all === `${r.place} of ${r.of} in this session`, JSON.stringify(r.all));
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
