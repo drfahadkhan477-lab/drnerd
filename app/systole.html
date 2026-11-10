@@ -1875,7 +1875,7 @@ function refImportText(){
 @@SLOT[src:src/core/mockexam.js]@@
 @@SLOT[src:src/core/flagset.js]@@
 
-/* ═══════════ SM-2 spaced repetition + active recall ═══════════
+/* ═══════════ Spaced repetition (FSRS-5, src/core/fsrs.js) + active recall ═══════════
    Per-question card: {difficulty, stability, ivl, reps, due, lapses, last}.
    difficulty/stability drive FSRS-5's forgetting-curve model (src/core/fsrs.js).
    ivl: the scheduled interval in days, at FSRS's default 90% target retention.
@@ -3588,7 +3588,13 @@ document.addEventListener('click', function(ev){
   try { window.scrollTo(0, 0); } catch (_) {}
 });
 
-/* ══════════════ Glass — see scripts/glass-patch.js ══════════════ */
+/* ══════════════ Glass ══════════════
+   Designed from a census of the controls (tools/button-census.js): the neutral ones paint their ground with --card,
+   and the ones whose colour means something (the right and the wrong answer, a destructive button, a selected chip)
+   paint another colour. So glass redefines --card on the control as the --card-glass below, and only what was already
+   the card turns see-through; no glass rule names a background. High contrast stays solid, reduced motion keeps
+   still, and chips are not blurred, because the notes screen holds thousands of them. verify-glass holds the rules
+   on those class names. (Its first home, scripts/glass-patch.js, went with the patch chain in c57a593.) */
 /* --card-glass is the theme's own --card, see-through. Derived here rather
    than listed per theme, so a theme added later is glass without anyone
    remembering to add it. Recomputed whenever the theme changes: setTheme()
@@ -5043,7 +5049,15 @@ const KEY='accsap12.v2';
 
 /* Shape of the object under KEY; the fields this build writes; and the fields
    a NEWER build wrote that this one must carry through untouched rather than
-   drop. Why, at length, in scripts/schema-patch.js. */
+   drop. Two copies at different versions (an iPad and a laptop) is the normal
+   case, and an older build that saved only the fields it knew would delete a
+   newer one's silently and for good. Refusing to load is not the answer either:
+   that shows an empty progress screen. So save() carries the strangers through.
+   DATA_SCHEMA_VERSION is the blob's shape, bumped when a stored field is added,
+   removed or changes meaning; it is not a card's `sv` (src/core/fsrs.js), which
+   names the scheduler that wrote a schedule. SCHEMA_KEYS is a fixed list, not
+   derived, because "everything else" means nothing without a fixed "everything
+   this build knows". */
 const DATA_SCHEMA_VERSION=1;
 const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'sessionCorrect','sessionTotal','srs','reviewStreak','lastReviewDay','daily',
@@ -6611,7 +6625,11 @@ function render(){
       /* A TRANSITION SKIPPED BY THE NEXT ONE IS NAVIGATION, NOT A FAILURE.
          startViewTransition hands back three promises. Only updateCallbackDone
          can carry a render throw, which is why it alone reaches the crash
-         screen — curate-patch.js records why that must not be loosened. But
+         screen, and that must not be loosened: by the View Transitions spec it
+         rejects only when the update callback itself throws, and renderNow()
+         runs inside that callback after the try/catch around it has returned,
+         so this catch is the only thing that can see a render throw on the
+         transition path. Without it, a throw there is a blank screen. But
          ready and finished reject with AbortError whenever a newer transition
          starts before the current one settles, and a fellow tapping through
          screens faster than the animation does exactly that. Unhandled, those
@@ -7426,7 +7444,13 @@ function pearlNext(auto){
   pearlFit();
 }
 /* ═══════════ Putting the whole bank on the device ═══════════
-   Only meaningful in the split build — see the header of offline-patch.js. */
+   Only in the split build (window.SPLIT_BUILD, an explicit flag rather than a
+   guess from the shape of IMGS). There a figure arrives the first time a
+   question uses it, so a tablet about to be studied with no network needs every
+   one requested once; the service worker caches each as it is fetched, so this
+   only requests and keeps no cache of its own to drift from the worker's. In
+   the single file every figure is already a data: URI, and a button offering a
+   download would be a lie. */
 function offlineCapable(){
   return typeof window!=='undefined' && window.SPLIT_BUILD===true
       && typeof caches!=='undefined' && typeof IMGS!=='undefined';
@@ -8610,11 +8634,11 @@ Store.ready().then(r=>{
    and the store keeps a copy of it in the database so that seven quiet days on
    an iPad cannot take the cards with them. See src/core/store.js.
 
-   DRIVEN FROM HERE RATHER THAN FROM save(). The obvious place is the end of
-   save() itself, and it was the wrong place: save()'s last line was the anchor
-   scripts/resume-patch.js matched on, and appending to it broke the build
-   with "expected exactly 1 match, found 0". The patch chain's exact-match rule
-   was the whole safety model, so the call moved instead of the anchor.
+   DRIVEN FROM HERE RATHER THAN FROM save(). It first went at the end of save(),
+   which the build of the day could not take: the app was then made by a chain
+   of patch scripts, each required to match its anchor exactly once, and save()'s
+   last line was one of those anchors. The chain was retired in c57a593; the
+   call stays here on its own merits.
 
    Nothing is lost by that. Store.mirror() compares the stored text against
    what it last copied, so a call with nothing to do is one string comparison —
@@ -8669,7 +8693,15 @@ function dismissSplash(){
     setTimeout(()=>{ if(sp.parentNode) sp.remove(); },520);
   });
 }
-/* ══════════ on-device self-test — why, at length, in scripts/selftest-patch.js ══════════ */
+/* ══════════ on-device self-test (#selftest) ══════════
+   The checks come to the device because the gap they cover is the device. The
+   suites run a Linux build of WebKit at chosen sizes against invented figures;
+   a figure-fit defect once clipped nearly every real figure on an 11-inch iPad
+   in landscape while every suite passed. Open the app with #selftest and a few
+   invariants run in the real engine, at the real size and orientation. They
+   open real figures and measure what is drawn rather than recompute the sizing
+   rule, which would agree with a wrong rule. Scheduling and answer keys are not
+   here: those do not vary by device and are settled in Node. */
 const ST_SAMPLE=24;
 const stFrame=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 

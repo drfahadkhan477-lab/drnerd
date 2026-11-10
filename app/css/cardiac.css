@@ -78,7 +78,8 @@
 .q-card,.exp-text,.reveal-body .exp-text{font-size:var(--t-body)}
 
 /* ═══════════ Spacing scale, applied ═══════════
-   An override layer, on purpose — see scripts/scale-patch.js for why. Every
+   An override layer, on purpose: retrofitting a scale into hundreds of rules
+   in place is how a layout breaks quietly, and here it reads in one place. Every
    value below is a step on the 4-point scale; the ones that were already on it
    are restated rather than left out, so this block is the whole story of the
    app's structural rhythm rather than a list of exceptions to it. */
