@@ -8,8 +8,9 @@ Every item has an id (`F1`, `E2`, `S3` …) and a model tier, so a session can b
 started with "do S1 from docs/ROADMAP.md" on the model that item names. The tier
 table is in section 7.
 
-**Done since:** F1, F2, F3 (the Apex button; the chip is PR #339's), F5, F6
-and F7, in PR #340. Each item below says what was done.
+**Done since:** F1, F2, F3 (the Apex button; the chip is PR #339's), F5, F6,
+F7 and F8 (it needs one dashboard step), in PR #340. Each item below says what
+was done.
 
 ## How this review was done
 
@@ -140,6 +141,11 @@ screen reader. verify-quiznav holds it.
 itself. Replace it with Cloudflare's Workers rate-limiting binding, or a Durable
 Object counter, keyed by the verified Access identity, and keep the in-memory map
 as the fallback. Needed before the URL is shared with anyone else. *Opus.*
+*Done, with D1:* Pages does not list the rate-limiting binding, and a Durable
+Object needs a second Worker, so an optional D1 binding (`APEX_DB`) holds one
+atomic count per caller per minute; unbound, nothing changes, and a failing
+database falls back to the per-isolate limiter. verify-worker holds it.
+**Owner step:** create the D1 database and bind it (`docs/IPAD.md`).
 
 **F9 — Decide the data-use terms for Apex.** Open mode sends a question's stem,
 options and commentary to the model provider. Check the bank licence's terms on

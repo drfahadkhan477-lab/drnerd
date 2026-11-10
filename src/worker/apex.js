@@ -38,10 +38,11 @@
         someone, which any client can type. See accessVerifier() below.
      2. The output clamp below, which bounds what any single request can cost.
      3. The body cap.
-     4. The rate limiter, which is best-effort and says so: a Worker isolate has
-        no shared counter, so two isolates keep two tallies. It is a speed bump
-        for a runaway loop, not a quota. If this URL is ever shared beyond one
-        person, replace it with a KV-backed counter first.
+     4. The rate limiter. Without a database it is best-effort and says so: a
+        Worker isolate has no shared counter, so two isolates keep two tallies,
+        a speed bump for a runaway loop, not a quota. Bind a D1 database as
+        APEX_DB and every isolate counts against one table (overSharedRate()
+        below). Do that before this URL is shared beyond one person.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -88,6 +89,35 @@ function overRate(key, limit) {
   at.n++;
   sweep(minute);
   return at.n > limit;
+}
+
+/* ── A COUNTER EVERY ISOLATE SHARES, when the deployment has one ─────────────
+   overRate() is per isolate. A Pages project cannot have Workers' rate-limiting
+   binding (it is not among the bindings Pages lists), and a Durable Object
+   needs a second Worker. It can have D1, and D1's single primary makes one
+   upsert an atomic count. So: bind a D1 database as APEX_DB (Settings ->
+   Bindings -> D1) and every isolate, in every location, counts against one
+   row per caller per minute. Unbound, nothing here runs.
+
+   IF THE DATABASE FAILS, THE ISOLATE'S OWN LIMITER ANSWERS. A broken counter
+   must not become an open door to the key, and it must not take the tutor
+   down either; the per-isolate tally is the speed bump it always was.
+
+   The table is made on first use, and minutes older than two are swept once a
+   minute per binding, so the table holds about one row per recent caller. */
+const RATE_TABLE = 'CREATE TABLE IF NOT EXISTS apex_rate (who TEXT NOT NULL, minute INTEGER NOT NULL, ' +
+  'n INTEGER NOT NULL, PRIMARY KEY (who, minute))';
+const RATE_COUNT = 'INSERT INTO apex_rate (who, minute, n) VALUES (?1, ?2, 1) ' +
+  'ON CONFLICT (who, minute) DO UPDATE SET n = n + 1 RETURNING n';
+const RATE_SWEEP = 'DELETE FROM apex_rate WHERE minute < ?1';
+const rateReady = new WeakSet(), rateSwept = new WeakMap();
+async function overSharedRate(db, key, limit, minute) {
+  if (!rateReady.has(db)) { await db.prepare(RATE_TABLE).run(); rateReady.add(db); }
+  if (rateSwept.get(db) !== minute) { rateSwept.set(db, minute); await db.prepare(RATE_SWEEP).bind(minute - 2).run(); }
+  const row = await db.prepare(RATE_COUNT).bind(key, minute).first();
+  const n = row ? Number(row.n) : NaN;
+  if (!Number.isFinite(n)) throw new Error('the shared counter returned no count');
+  return n > limit;
 }
 
 /* EVERY ONE OF THESE IS A STRING FROM A DASHBOARD FIELD, and each of the three
@@ -472,8 +502,16 @@ export async function handleApex(request, env, fetchImpl, verifyAccess) {
      header: under the hatch that is still the client's word, and a new word
      per request was a new allowance per request. */
   const who = identity || request.headers.get('cf-connecting-ip') || 'anon';
-  if (rpm > 0 && overRate(who, rpm)) {
-    return fail(429, 'Too many requests in a minute — wait a moment and try again.');
+  if (rpm > 0) {
+    let over;
+    const db = env.APEX_DB;
+    if (db && typeof db.prepare === 'function') {
+      try { over = await overSharedRate(db, who, rpm, Math.floor(Date.now() / 60000)); }
+      catch (_) { over = overRate(who, rpm); }
+    } else {
+      over = overRate(who, rpm);
+    }
+    if (over) return fail(429, 'Too many requests in a minute — wait a moment and try again.');
   }
 
   let modelRe;
