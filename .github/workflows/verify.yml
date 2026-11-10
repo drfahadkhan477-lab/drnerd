@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 78 suites that are pure Node with no Playwright and no
+#   logic        the 79 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -327,6 +327,8 @@ jobs:
         run: node tests/verify-cause-pure.js
       - name: nothing a model says can become something the page runs (64 checks)
         run: node tests/verify-md-pure.js
+      - name: a refused request is told as what it is, the provider's words escaped, and the response read no more than it was (67 checks)
+        run: node tests/verify-providererror-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (70 checks)
