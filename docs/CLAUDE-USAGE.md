@@ -34,7 +34,8 @@ the app out of the shell, the physiology engine, fitting the scheduler, designin
 Apex's answer evaluation, the sync design); Opus for leak-guard / check design
 (where "prove it fails" reasoning matters), suite races and the roadmap's Opus
 items; Sonnet for everything else; Haiku for doc tweaks, lookups and reading a CI
-log. Section 7 of the roadmap assigns every item a tier.
+log. Section 7 of the roadmap gives every item a model and an effort level
+(`/effort low|medium|high|xhigh|max`), and the commands to switch both.
 
 ## What consumes tokens
 

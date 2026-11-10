@@ -360,16 +360,77 @@ after two weeks of real use, and let them choose the next feature. *Sonnet.*
 
 One standing rule until S9 has data: no new screen and no new element on Home.
 
-## 7. Which model for which work
+## 7. Which model and effort for which work
 
-Switch with `/model` in Claude Code. Start a fresh session per item (`AGENTS.md`:
-one session per task), give the item's id and its acceptance line, and let the
-session read this page. Fable is the most capable tier and is metered the
-heaviest, so it is kept for the work below; giving it Sonnet's work buys nothing.
+### How to switch
 
-| Tier | What it is for here | Items |
+Start a fresh session for each item (`AGENTS.md`: one session per task), set the
+model and effort before the first message, then give the item's id and its
+acceptance line ("Do S1 from docs/ROADMAP.md").
+
+| Where | Model | Effort |
 | --- | --- | --- |
-| **Fable** | Long, cross-cutting work where a mistake is silent; scientific and mathematical modelling; evaluation and architecture design. Give it the whole specification at the start and a high effort; very high only for E1 and S8. | E1 (the map and the first two moves), E6 design, A3 design, S2 review, S3, S7, S8, and a whole-repository review like this one each quarter |
-| **Opus** | Hard engineering inside clear bounds; small security-relevant changes; layout work judged from screenshots; scheduler changes; WebKit races and flaky suites. | F8, E1 (per screen), E2, E3, E4, E6 build, D1, D2, D3, A1, A2, A4, A5, A6, S1, S2, S6 |
-| **Sonnet** | Features and fixes with a clear specification and an existing suite to extend. | F1, F2, F3, F4, F5, F7, E5, E7, D4, D5, S4, S5, S7 screen, S9, running A3 |
-| **Haiku** | Comment and doc tidying, lookups, reading a CI log for its FAIL lines. | F6, E4 log reading |
+| Terminal CLI | `/model fable` (or `opus`, `sonnet`, `haiku`); or start with `claude --model fable` | `/effort high` (levels `low`, `medium`, `high`, `xhigh`, `max`); or start with `--effort high` |
+| Model picker (`/model` with no argument) | arrows to choose, `Enter` saves it as your default, `s` keeps it to this session | left and right arrows move the effort slider |
+| Cloud session (claude.ai/code, the Claude app) | `/model fable`: the cloud session takes the name as an argument rather than opening the picker | `/effort high` typed the same way; if the session will not take it, run that item from the terminal CLI |
+| One turn only | | put `ultrathink` in the message |
+
+Defaults to know: Fable, Opus, Sonnet and Haiku all start at `medium` effort.
+`/effort status` shows the level in force; a change applies from your next
+message. Use `s` in the picker (session only) when you try a tier for one task,
+so your default does not move.
+
+What the levels are for, in this repository:
+
+- `low`: tidying comments and docs, lookups, reading a CI log for its FAIL lines.
+- `medium`: a change with a clear specification and a suite that already covers it.
+- `high`: a bug fix or check where the "see it fail" evidence matters, anything
+  that touches WebKit, the scheduler, storage, the Worker or the build. The
+  default for this repository's real work.
+- `xhigh`: long work across many files where a mistake is silent, and
+  modelling (E1's map, S3, S8).
+- `max`: only to probe the hardest problem once, unattended; the returns
+  diminish and it can overthink. Not a default for anything here.
+
+On Fable: give it the whole specification at the start and leave out the
+"remember to verify" reminders; it checks its own work, and the reminders cost
+tokens without adding care. Keep AGENTS.md's evidence rules in force all the
+same: they are the project's, not a reminder.
+
+### Every open item
+
+| Item | Model | Effort | Note |
+| --- | --- | --- | --- |
+| F4 | `sonnet` | `medium` | Only if PR #339 does not already settle it; check its head first |
+| F9 | (you) | | A decision, not a task; A1 follows if you change provider or tier |
+| E1 map and first two moves | `fable` | `xhigh` | The dependency map of the shell's globals; one module per PR |
+| E1 each screen after | `opus` | `high` | Follow E1's map; Chromium and WebKit before and after, measured |
+| E2 | `opus` | `high` | After E1's screens; needs the CSP suite's injected-handler check |
+| E3 | `opus` | `medium` | Never rename a job's `name:` (branch protection) |
+| E4 analysis | `opus` | `high` | Reading the CI logs for it: `haiku`, `low` |
+| E5 | `sonnet` | `medium` | Needs your iPad battery readings from a real session |
+| E6 design | `fable` | `xhigh` | Only if you study on two devices |
+| E6 build | `opus` | `high` | |
+| E7 | `sonnet` | `high` | Then an `opus` `high` session to review the cryptography |
+| D1 decisions | `opus` | `high` | Works from screenshots; you choose the direction |
+| D1 token moves | `sonnet` | `medium` | Mechanical once D1's decisions are made |
+| D2 | `opus` | `high` | The contrast sweep; F1 is its first finding |
+| D3 | `opus` | `high` | Measure in WebKit at iPad sizes |
+| D4, D5 | `sonnet` | `medium` | D4 after you pick from the candidates |
+| D6 | (you), then `sonnet` | `low` | Which themes to keep is yours |
+| A1 | `opus` | `high` | The provider seam and a Claude adapter behind the Worker |
+| A2 | `opus` | `medium` | Claim savings only from reported cached tokens |
+| A3 design | `fable` | `high` | The judge and the adversarial cases |
+| A3 runs | `sonnet` | `medium` | Spends your API credit; approve the budget first |
+| A4, A5 | `opus` | `high` | Only after A3 shows the need |
+| A6 | `opus` | `high` | Your own notes only, unless F9 allows more |
+| S1 | `opus` | `high` | Changes the scheduler's contract and the oracle's scope |
+| S2 | `opus` | `high` | Then a `fable` `high` session to review the mathematics |
+| S3 | `fable` | `xhigh` | Fitting and validation design; an `opus` `high` session implements |
+| S4, S5, S9 | `sonnet` | `medium` | |
+| S6 | `opus` | `high` | |
+| S7 model | `fable` | `high` | You supply the blueprint weights |
+| S7 screen | `sonnet` | `medium` | |
+| S8 | `fable` | `xhigh` | Validation tables per lesion; an `opus` `high` session wires the views |
+| A whole-repository review like this one | `fable` | `high` | Once a quarter |
+| Watching a PR, reading CI | `sonnet` | `low` | `haiku` `low` to read one log |
