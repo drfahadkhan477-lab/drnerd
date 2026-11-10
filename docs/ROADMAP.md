@@ -9,7 +9,7 @@ started with "do S1 from docs/ROADMAP.md" on the model that item names. The tier
 table is in section 7.
 
 **Done since:** F1, F2, F3 (the Apex button; the chip is PR #339's), F5, F6,
-F7 and F8 (it needs one dashboard step), in PR #340. Each item below says what
+F7, F8 (it needs one dashboard step) and S1 (first answer only), in PR #340. Each item below says what
 was done.
 
 ## How this review was done
@@ -298,6 +298,11 @@ exposure only. The testing effect is the reason; grading by confidence is what
 keeps a lucky guess from being scheduled as known. Checks: a pure suite over the
 mapping; a browser check that a quiz answer creates a card. *Opus* (it changes
 the scheduler's contract and the oracle's scope).
+*Done, as the owner chose (first answer only):* a quiz's first answer to a
+question with no card makes its card (wrong: Again; right and Guess or Unsure:
+Hard; otherwise Good; never Easy). A card that exists is still moved by the
+review queue alone, and the mock exam and its review schedule nothing.
+`FSRS.firstRating` (verify-fsrs), the app (verify-stage0, verify-stage2).
 
 **S2 — Schedule toward the exam.** With an exam date set: no interval ends past
 the exam, so each card is seen once more before it; target retention rises as

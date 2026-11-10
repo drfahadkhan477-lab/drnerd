@@ -1881,8 +1881,9 @@ function refImportText(){
    ivl: the scheduled interval in days, at FSRS's default 90% target retention.
    due: ISO date string (day granularity — ISO strings compare correctly with <=).
    rating: FSRS's own 1-4 scale (Again/Hard/Good/Easy), supplied directly by
-   the post-explanation self-rating in review sessions. Ordinary quiz answers
-   (Stage 0 onward) never reach the scheduler at all — see selectOpt/S.practice.
+   the post-explanation self-rating in review sessions. An ordinary quiz answer
+   reaches the scheduler once: the first answer to a question with no card makes
+   its card (seedFirstCard); after that only review sessions move it.
 */
 'use strict';
 
@@ -5903,7 +5904,9 @@ function recordAnswer(q,ok,mode,extra){
   /* Practice and review are different signals. A chapter drill records that it
      happened; only the review queue is allowed to move a card's due date.
      Otherwise drilling a chapter silently rewrites the schedule for every card
-     it touches, and answering twice in a day compresses its interval. */
+     it touches, and answering twice in a day compresses its interval. The one
+     exception is a question with no card at all: its first answer makes the
+     card (seedFirstCard below), and moves nothing that existed. */
   logReview(q,null,ok,mode==='due'?'review-answer':mode==='exam'?'exam':'practice',extra);
   if(mode!=='due'){
     const pr=S.practice[q.id]||(S.practice[q.id]={n:0,c:0,t:0});
@@ -5911,16 +5914,25 @@ function recordAnswer(q,ok,mode,extra){
   }
   logAnswer(ok);
 }
+/* A question's first answer in a quiz makes its card, rated from the answer and the confidence given
+   (FSRS.firstRating, src/core/fsrs.js). Never in the review queue, which rates on its own row; never in
+   a mock block or its review, which schedule nothing (a blank answered there is one practice answer and
+   only that); never over a card that exists. */
+function seedFirstCard(q,ok,cf,mode){
+  if(mode==='due'||mode==='exam'||mode==='mockreview'||!q||Object.prototype.hasOwnProperty.call(S.srs,q.id)) return;
+  S.srs[q.id]=FSRS.update(null,FSRS.firstRating(ok,cf),todayISO());
+}
 function selectOpt(idx){
   if(S.answered)return;
   const q=S.questions[S.qIdx];
   if(!(idx>=0&&idx<q.o.length))return;                 // guard: key beyond option count
   const ok=idx===q.ci;
+  const cf=(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null;
   S.quizTotal++; if(ok)S.quizCorrect++;
   recordAnswer(q,ok,S.mode,{pick:idx});
+  seedFirstCard(q,ok,cf,S.mode);
   S.selected=idx;S.answered=true;
-  S.answers[S.qIdx]={selected:idx,rated:false,
-    cf:(S.answers[S.qIdx]&&S.answers[S.qIdx].cf!=null)?S.answers[S.qIdx].cf:null};
+  S.answers[S.qIdx]={selected:idx,rated:false,cf};
   recordResume();save();render();
   try{ announceResult(ok,q.o[q.ci]); focusEl('.reveal-header'); }catch(_){}
   try{ feedbackBlip(document.querySelector('.reveal-header'),ok); }catch(_){}
