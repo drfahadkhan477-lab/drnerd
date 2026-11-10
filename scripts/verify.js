@@ -291,6 +291,10 @@ const SUITES = [
      was the body of the shell's apiError() and could only be reached through a
      browser; it is src/core/providererror.js now (roadmap E1). */
   ['providererror-pure', 'a refused request is told as what it is: the site\'s refusal, a rejected or blocked key, a daily quota, no allowance or a wait read from the response, a retired model, an outage; the provider\'s words escaped, and the response read no more than it was'],
+  /* What a review session holds was three functions in the shell reading the
+     bank and the cards as globals. Their rule, that due cards are never capped
+     to a round number, had no check that did not need a browser. */
+  ['reviewqueue-pure', 'a review session is every due card, however many, then new questions a round at a time across chapters up to its size; a card for a question the bank lacks is never dealt; nothing handed in is changed; and an interval is said in days, weeks or months'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -491,8 +495,8 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-/* Waiting since roadmap E1's first moves: providererror-pure. */
-const PENDING_RECORD = ['providererror-pure'];
+/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
