@@ -117,6 +117,7 @@ the features changed.
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
 - **[docs/IPAD.md](docs/IPAD.md)** — getting it onto an iPad, in Safari, without a third-party app
 - **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex, with [three worked examples](docs/reference-examples/)
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — a whole-repository review and what to build next, with the model tier each item needs
 
 Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
 
