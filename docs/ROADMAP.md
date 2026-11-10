@@ -8,6 +8,9 @@ Every item has an id (`F1`, `E2`, `S3` …) and a model tier, so a session can b
 started with "do S1 from docs/ROADMAP.md" on the model that item names. The tier
 table is in section 7.
 
+**Done since:** F1, F3 (the Apex button; the chip is PR #339's), F6 and F7, in
+PR #340. Each item below says what was done.
+
 ## How this review was done
 
 - **Read:** `AGENTS.md`, every page in `docs/`, `tasks/lessons.md`, the shell
@@ -66,6 +69,8 @@ measures a list of texts that does not include the header. Fix: scope the Quiet
 Atlas wordmark colours to `body.on-home`, or give `#navbar` its own ink tokens.
 Regression: add the header's two texts to verify-ink's measured text in every
 theme state; inject today's rule, watch that check's FAIL, restore. *Sonnet.*
+*Done:* the colours are scoped to Home; verify-ink reads the bar on Study and on
+Home in every theme state.
 
 **F2 — First run asks for a decision.** With nothing seen and nothing due, Home's
 Continue opens Chapters, which is a menu. The discovery doc's first principle is
@@ -79,6 +84,11 @@ A floating control reserves its own space in the scroll container and never sits
 over text. Check: at phone width, on Home, a question and an explanation, no
 floating control's box intersects a text node's box. Read PR #339 first; it
 touches Home. *Sonnet.*
+*Done, for Home:* on a phone the Apex button is a round button at the end of the
+tab bar's row, which the pages never reach; verify-home asserts its box never
+meets the pager's at three phone sizes. PR #339 hides the chip. On the quiz the
+button still floats over text mid-scroll and the page's end scrolls clear of it,
+which is the ordinary trade for a floating button; it was left as it is.
 
 **F4 — On iPad landscape the ECG panel covers the heart.** The strip's glass panel
 and the Illustration and Pause controls sit over the lower half of the 3D heart.
@@ -106,11 +116,17 @@ code still reads "SM-2 spaced repetition" (`app/systole.html:1878`);
 Recover each "why" from history (`git log -S` on the deleted file) into the
 comment or a docs page, or remove the pointer. *Haiku* (Sonnet where the history
 has to be read).
+*Done:* each reason recovered from the scripts as they stood before `c57a593`
+and written where the pointer was, including five more pointers in the
+stylesheets.
 
 **F7 — Two numbers for one question.** The quiz header reads "Q 1/20" and the
 card under it "Question 10 · Arrhythmias": position in the session and the bank's
 item number, in the same words. Call the second one "Item 10", or move it to a
 meta line. *Sonnet.*
+*Done, the other way round:* the tag keeps "Question 10", the bank's own number
+and what Apex cites; the counter reads "1 of 20", with "in this session" for a
+screen reader. verify-quiznav holds it.
 
 **F8 — The Worker's rate limit is per isolate.** `src/worker/apex.js` says so
 itself. Replace it with Cloudflare's Workers rate-limiting binding, or a Durable
