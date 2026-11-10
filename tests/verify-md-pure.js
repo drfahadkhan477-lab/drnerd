@@ -4,8 +4,9 @@
  *
  *   node tests/verify-md-pure.js
  *
- * No browser and no build. md() lives in the built bundle, so this rebuilds it
- * from the patch chain and drives the result directly.
+ * No browser and no build. md() is src/core/markdown.js's render(), which the
+ * page calls with its own escaper and figure lookup; this loads that module as
+ * it ships and drives it directly.
  *
  * WHY IT IS WORTH A SUITE. Seventeen sites in the app assign to innerHTML, and
  * the ones that matter are the AI path:
@@ -17,10 +18,10 @@
  * in seventy suites asserted it. Every grep for "escap" in tests/ finds the
  * Escape key or an escape hatch.
  *
- * WHAT THIS CAN AND CANNOT CLAIM. e() is not in this repository: it comes from
- * the ACCSAP base export, so the app's whole HTML-injection defence is a
- * function the project does not own and cannot review. This suite therefore
- * does two separable things:
+ * WHAT THIS CAN AND CANNOT CLAIM. render() does not own its escaper: the page
+ * hands it e(), declared in app/systole.html, so the app's whole HTML-injection
+ * defence is two things in two files. This suite therefore does three
+ * separable things:
  *
  *   1. It checks md()'s OWN behaviour — that it escapes first, never reaches
  *      back to the raw input afterwards, and none of its own rules re-open
@@ -29,20 +30,24 @@
  *   2. It states what e() must do for (1) to be worth anything, and proves the
  *      dependency by running md() against an escaper that does NOT do it. That
  *      turns "we assume e() is fine" into a named, tested contract.
+ *   3. It holds the page to that contract: the page's md() is the one line
+ *      that calls render() with the page's e and refImgSrc, and the page's e,
+ *      cut out of the shell and run here, escapes all five characters.
  *
- * It cannot verify e() itself. Only the built bundle can, and that needs a
- * browser — the same division tests/verify-ipad-pure.js draws for the same
- * reason.
+ * What it cannot see is a browser running the built page; verify-apexpage and
+ * verify-assets call md() there.
  *
  * The last two sections hold what md() makes of the lists a model writes and
  * of the blocks around them: the bullet Gemini, the default model here, writes
  * is a list, and no block is ever drawn inside a paragraph.
  *
- * THE FUNCTION IS LIFTED, NOT COPIED. A copy of md() pasted here would be
- * wrong the first time anybody changed the real one, and would keep passing.
- * So it is cut out of app/systole.html, the page that ships. (It used to be
- * rebuilt by replaying the patch chain onto read-patch's MD_NEW; the chain is
- * retired and every edit to md() now goes into the page.)
+ * THE FUNCTION IS THE ONE THAT SHIPS, NOT A COPY. A copy of md() pasted here
+ * would be wrong the first time anybody changed the real one, and would keep
+ * passing. So the module is loaded from src/core/markdown.js, the file the
+ * build writes into the page, and the text the structural checks read is cut
+ * from the same file and held equal to the function that was loaded. (It was
+ * cut out of app/systole.html until md() moved to the module, roadmap E1; and
+ * before that rebuilt by replaying the patch chain.)
  */
 'use strict';
 const fs = require('fs');
@@ -62,22 +67,24 @@ const ROOT = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 /* ── md() as the page ships it ────────────────────────────────────────────
-   Until the patch chain was retired this suite rebuilt md() by taking
-   read-patch.js's MD_NEW and replaying every later patch step whose anchor
-   matched it. Since then md() lives in app/systole.html and every edit goes
-   there, so it is cut out of the page: from its one `function md(t){` to the
-   first closing brace at column 0 after it. */
+   md() is render() in src/core/markdown.js, which the build writes into the
+   page through a slot. Its text is cut from that file, from its one
+   `function render(t, e, refImgSrc) {` to the first closing brace at column 0
+   after it, for the checks that read the code; the function itself is the
+   module's, loaded as any src/core module is. */
+const MODULE = 'src/core/markdown.js';
 function liftMd() {
-  const page = read('app/systole.html');
-  const open = 'function md(t){';
-  const n = page.split(open).length - 1;
-  if (n !== 1) throw new Error(`app/systole.html: expected one "${open}", found ${n}`);
-  const i = page.indexOf(open), j = page.indexOf('\n}\n', i);
-  if (j < 0) throw new Error('md() has no closing brace at column 0');
-  return page.slice(i, j + 2);
+  const file = read(MODULE);
+  const open = 'function render(t, e, refImgSrc) {';
+  const n = file.split(open).length - 1;
+  if (n !== 1) throw new Error(`${MODULE}: expected one "${open}", found ${n}`);
+  const i = file.indexOf(open), j = file.indexOf('\n}\n', i);
+  if (j < 0) throw new Error('render() has no closing brace at column 0');
+  return file.slice(i, j + 2);
 }
 
 const MD_SRC = liftMd();
+const { Markdown } = require(path.join(ROOT, MODULE));
 
 /* An escaper that does what e() is assumed to do. Named REFERENCE rather than
    `e`, because it is this suite's assumption made visible — not the app's. */
@@ -90,24 +97,28 @@ const REFERENCE = s => String(s)
 const NO_QUOTES = s => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/* md() as the page makes it: render(), given an escaper and a figure lookup. */
 function compile(escaper, figures) {
   const refImgSrc = key => (figures && figures[key]) || '';
-  const factory = new Function('e', 'refImgSrc', 'REF_IMGS', 'RefAssets',
-    `${MD_SRC}\nreturn md;`);
-  return factory(escaper, refImgSrc, figures || {}, { get: refImgSrc });
+  return t => Markdown.render(t, escaper, refImgSrc);
 }
 const md = compile(REFERENCE, { k: 'data:image/png;base64,AAAA' });
 
 head('the function under test is the one the page ships');
 {
   ok('md() was found and is a whole function',
-     /^function md\(t\)\{/.test(MD_SRC.trim()) && /return s;/.test(MD_SRC),
+     /^function render\(t, e, refImgSrc\) \{/.test(MD_SRC.trim()) && /return s;/.test(MD_SRC),
      `${MD_SRC.split('\n').length} lines`);
   /* Vacuity guard: a cut that stopped early would still compile and would
      test a fragment. The figure branch is the last thing md() learned. */
   ok('the cut runs past the figure branch to the end of the function',
      /refImgSrc\(/.test(MD_SRC) && MD_SRC.trim().endsWith('}'), `${MD_SRC.length} characters`);
   ok('it compiles to a callable function', typeof md === 'function');
+  /* The checks below that read the code read MD_SRC, and the ones that run it
+     run the module's function. They are the same function only if this holds. */
+  ok('and the text read below is the text of the function that is run',
+     typeof Markdown.render === 'function' && Markdown.render.toString() === MD_SRC,
+     `${String(Markdown.render).length} characters loaded, ${MD_SRC.length} cut`);
 }
 
 /* ── looking at tags, not at substrings ─────────────────────────────────────
@@ -169,7 +180,7 @@ head('escaping happens first, and the raw input is never reached again');
   /* Blanked, not stripped: the scan below is per line and by position, and
      removing a comment would shift both. */
   const lines = blankComments(MD_SRC).split('\n');
-  const first = lines.findIndex(l => /\S/.test(l) && !/^function md/.test(l.trim()));
+  const first = lines.findIndex(l => /\S/.test(l) && !/^function render/.test(l.trim()));
   ok('the first thing md() does is escape its argument',
      /^\s*let\s+s\s*=\s*e\(\s*t\s*\)\s*;/.test(lines[first]), lines[first].trim());
   /* LITERALS FIRST, AND THAT IS NOT A DETAIL. Scanning the raw lines for the
@@ -248,6 +259,36 @@ head('and that is exactly what e() has to guarantee');
      REFERENCE('<"&>'));
   ok('and the weakened one differs from it only in the quote',
      NO_QUOTES('<"&>') === '&lt;"&amp;&gt;', NO_QUOTES('<"&>'));
+}
+
+head('the page\'s md() is that function, given the page\'s own escaper and figure lookup');
+{
+  /* render() is safe only with an escaper that does its job, and it is the
+     page that chooses the escaper. So the page is read: its md() must be the
+     one line that hands render() the page's e and refImgSrc, the module must
+     be written into the page once, and the page's e, cut out and run here,
+     must do what the reference escaper above does. Comments are blanked: the
+     shell explains itself, and quotes what is looked for. */
+  const page = blankComments(read('app/systole.html'));
+  const CALL = 'function md(t){ return Markdown.render(t,e,refImgSrc); }';
+  ok('the page\'s md() is one call into the module, with e and refImgSrc',
+     page.split(CALL).length - 1 === 1 && page.split('function md(').length - 1 === 1,
+     `${page.split(CALL).length - 1} of that line, ${page.split('function md(').length - 1} md() in the page`);
+  const slot = page.indexOf('@@SLOT[src:' + MODULE + ']@@');
+  ok('and the module is written into the page, above it',
+     slot >= 0 && slot < page.indexOf(CALL) && page.indexOf('@@SLOT[src:' + MODULE + ']@@', slot + 1) < 0,
+     slot < 0 ? 'no slot' : 'slot at ' + slot);
+  const m = /\nconst ESC=(\{[^\n]*\});\nconst e=([^\n]*);\n/.exec(page);
+  ok('the page declares its escaper where this can read it', !!m, m ? m[2].slice(0, 60) : 'not found');
+  const pageE = m ? new Function(`const ESC=${m[1]}; const e=${m[2]}; return e;`)() : () => '';
+  ok('the page\'s e escapes all five characters, as the reference does',
+     pageE('<"&\'>') === REFERENCE('<"&\'>'), pageE('<"&\'>'));
+  ok('and nothing and null become the empty string, never the word',
+     pageE(null) === '' && pageE(undefined) === '', JSON.stringify([pageE(null), pageE(undefined)]));
+  const asThePage = t => Markdown.render(t, pageE, key => (key === 'k' ? 'data:image/png;base64,AAAA' : ''));
+  const attacked = asThePage('![x" onerror="alert(1)](refimg://k)');
+  ok('so md() as the page wires it cannot have a caption close its alt attribute',
+     /<img /.test(attacked) && offences(attacked).length === 0, offences(attacked).join(', ') || 'inert');
 }
 
 head('and the whole section above is load-bearing');
