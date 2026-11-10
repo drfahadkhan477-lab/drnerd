@@ -1987,6 +1987,16 @@ function requestPersistence(){
     if(S.screen==='stats') render();
   }).catch(()=>{});
 }
+/* IN A SAFARI TAB THE DATA HAS SEVEN DAYS. WebKit deletes all of a site's script-writable storage (localStorage,
+   IndexedDB, the service worker's registration and cache) after seven days of Safari use with no interaction on the
+   site; the first party of a Home Screen web app is exempt (webkit.org/tracking-prevention). persist() is not said to
+   lift that cap, and the database copy src/core/store.js keeps goes with the rest. So in a tab the defences are the
+   Home Screen and a backup, and the data panel says so. Apple's vendor string marks WebKit; 'installed' is set on
+   <html> at boot for a Home Screen app. */
+function safariTabStorage(){
+  try{ return navigator.vendor==='Apple Computer, Inc.'&&!document.documentElement.classList.contains('installed'); }
+  catch(_){ return false; }
+}
 function storageLine(){
   const p = PERSISTED===null ? 'checking storage'
           : PERSISTED ? 'storage granted eviction protection (not permanent — keep exporting backups)'
@@ -2198,6 +2208,9 @@ function buildStats(){
         <button class="btn sb-back" onclick="importMarkup()">⤒ Import backup</button>
         <button class="btn sb-back" onclick="resetProgress()">Reset progress</button>
       </div>
+      ${safariTabStorage()?`<div class="notice" id="safariTabNote"><span>${icon('alert')}</span><span><b>Add Systole to your Home Screen to keep this.</b>
+        In a Safari tab, Safari deletes a site's saved data (progress, schedule, notes, ink and the downloaded bank) after
+        seven days of use without a visit here. The Home Screen app is exempt. Share, then Add to Home Screen; and export a backup.</span></div>`:''}
       <div class="ref-hint">${LOG.length} reviews logged · ${storageLine()}<br>
         Progress, ink, notes and review schedule live in this device's local storage.
         iPadOS can clear that for files opened directly from Files — export a backup before any system update.

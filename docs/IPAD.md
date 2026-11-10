@@ -332,9 +332,12 @@ has to parse before it can draw anything.
   watched it boot on an actual iPad.
 - **`backdrop-filter`** carries `-webkit-` prefixes throughout, which is what
   Safari wants.
-- **Storage is evictable.** iOS may clear a site's data after roughly seven days
-  with no visit. Installing to the Home Screen makes this much less likely; your
-  progress also rides in the export bundle, so take one before a long break.
+- **Storage is evictable in a Safari tab.** After seven days of Safari use with
+  no visit to the site, Safari deletes all of its saved data (localStorage,
+  IndexedDB and the service worker's cache together). A Home Screen web app is
+  exempt (webkit.org/tracking-prevention), so install it; your progress also
+  rides in the export bundle, so take one before a long break. In a tab, the
+  Progress screen's data panel says this too.
 
 ## Memorizer on the iPad
 

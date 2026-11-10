@@ -8,8 +8,8 @@ Every item has an id (`F1`, `E2`, `S3` …) and a model tier, so a session can b
 started with "do S1 from docs/ROADMAP.md" on the model that item names. The tier
 table is in section 7.
 
-**Done since:** F1, F2, F3 (the Apex button; the chip is PR #339's), F6 and
-F7, in PR #340. Each item below says what was done.
+**Done since:** F1, F2, F3 (the Apex button; the chip is PR #339's), F5, F6
+and F7, in PR #340. Each item below says what was done.
 
 ## How this review was done
 
@@ -107,6 +107,11 @@ localStorage alone being cleared, not against the cap. Confirm against WebKit's
 current storage policy, then correct the comment, and in a Safari tab (not
 `display-mode: standalone`) show a one-line nudge to Add to Home Screen beside a
 more prominent backup reminder. *Sonnet* (Opus if the policy reading is unclear).
+*Done:* WebKit's tracking-prevention page confirms the cap covers IndexedDB and
+the service worker's cache, exempts the Home Screen app, and says nothing of
+`persist()`. `store.js` and `docs/IPAD.md` say so; in a Safari tab the Progress
+screen's data panel tells the fellow to add it to the Home Screen and back up
+(verify-backup).
 
 **F6 — Comments that point at files that no longer exist.** Comments send the
 reader to retired patch scripts for the reasoning behind a rule:
