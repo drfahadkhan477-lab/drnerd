@@ -168,6 +168,16 @@ measured rather than reused, and `docs/ARCHITECTURE.md`'s warnings about the
 baked heart mesh respected. *Fable* (very high effort) for the dependency map of
 the globals and the first two moves; *Opus* for each screen after that, following
 the map.
+*Done so far:* the map (`docs/SHELL-MAP.md`, written by `tools/shell-map.js`);
+step 1 (`src/core/markdown.js`, `providererror.js`, `reviewqueue.js`); and the
+wire half of step 2 (`src/core/apexwire.js`: the window, Gemini's request and
+its stream, as `ApexWire.gemini`, which is where A1's second adapter goes).
+Each is held by a pure suite, and the shell keeps a one-line function of each
+old name. **Left in the shell from step 2:** `streamReply()`, the loop that
+runs a turn. It rebinds script-level names that other functions read
+(`aiAbort`, `aiBusy`, `toolTrace`, `groundedTurnLeft`, `lastHits`), so moving
+it means giving that state one owner first: its own change, before or with A1.
+Step 3 follows the map's order of screens; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
