@@ -35,9 +35,9 @@ The script is one scope. Every function, class, `const` and `let` at its top lev
 | | |
 |---|---|
 | functions at the top level | 523 |
-| of them already a call into a module | 15 |
+| of them already a call into a module | 18 |
 | pure | 61 |
-| pure but for the clock | 10 |
+| pure but for the clock | 7 |
 | read state, change nothing, reach nothing outside | 65 |
 | change state, reach nothing outside | 37 |
 | call a method of an object held in state | 4 |
@@ -56,9 +56,9 @@ The rule behind the order: move what depends on least first, so each move has le
 
 These take their inputs as arguments already. Each can move into a `src/` module with a pure suite, leaving a one-line function of the same name in the shell so that no caller, handler or test changes. Why first: nothing else has to move with them, and a pure suite can hold them without a browser. One that is handed an element or a canvas belongs in `src/ui/`; one that builds markup naming a handler (its entry says *wires*) still needs that handler to stay a script-level name.
 
-`hasPeers` `icon` `gauss` `beatMV` `heartSVG` `paletteFor` `roundPt` `rdp` `simplifyStroke` `penOutline` `fillOutline` `refHash` `extractRefImages` `stemWord` `refSafe` `clip` `stripFrontmatter` `splitSections` `parseImportText` `refResolveAsset` `isoLocal` `todayISO` (clock) `addDays` (clock) `pct` `secs` `semText` `leadCardHtml` `buildPractice` `figZoomBy` `figFit` `figPct` `figSyncZoom` `figFromEl` `refPager` `hl` `snippet` `gemUrl` (clock) `gemHeaders` (clock) `apexSessionLapsed` `apexAtBottom` `apexStick` `cleanKey` `networkErrorMsg` `geminiDefaultModel` `pushToolExchange` (clock) `toOpenAITools` `chIcon` `e` `statDay` (clock) `statRecord` `statEntryOk` `usableStats` `progressFromBackup` (clock) `closeThemeMenu` `shuf` (clock) `resumeKey` `runLabel` `validExamDate` (clock) `arc` `annoPractiseHtml` `mockClockText` `mockPaceText` `mockCellLabel` `figLabel` `greet` (clock) `pearlFigureKey` `pearlMark` `offlineIsImage` `brainHash` `brainDendrites` `runSelfTestNow`
+`hasPeers` `icon` `gauss` `beatMV` `heartSVG` `paletteFor` `roundPt` `rdp` `simplifyStroke` `penOutline` `fillOutline` `refHash` `extractRefImages` `stemWord` `refSafe` `clip` `stripFrontmatter` `splitSections` `parseImportText` `refResolveAsset` `isoLocal` `todayISO` (clock) `addDays` (clock) `pct` `secs` `semText` `leadCardHtml` `buildPractice` `figZoomBy` `figFit` `figPct` `figSyncZoom` `figFromEl` `refPager` `hl` `snippet` `apexSessionLapsed` `apexAtBottom` `apexStick` `cleanKey` `networkErrorMsg` `geminiDefaultModel` `toOpenAITools` `chIcon` `e` `statDay` (clock) `statRecord` `statEntryOk` `usableStats` `progressFromBackup` (clock) `closeThemeMenu` `shuf` (clock) `resumeKey` `runLabel` `validExamDate` (clock) `arc` `annoPractiseHtml` `mockClockText` `mockPaceText` `mockCellLabel` `figLabel` `greet` (clock) `pearlFigureKey` `pearlMark` `offlineIsImage` `brainHash` `brainDendrites` `runSelfTestNow`
 
-Already moved, and now a call into a module: `loadJSON` → `Store.get`, `fsrsPreview` → `FSRS.update`, `dueQuestions` → `ReviewQueue.due`, `newQuestionsForReview` → `ReviewQueue.fresh`, `reviewQueue` → `ReviewQueue.queue`, `fmtInterval` → `ReviewQueue.fmtInterval`, `buildEchoScreen` → `EchoUI.screenHtml`, `buildNoteSearch` → `NoteSearch.screenHtml`, `apexWire` → `ApexWire.wire`, `apexTrim` → `ApexWire.trim`, `md` → `Markdown.render`, `planNow` → `StudyPlan.plan`, `flaggedQs` → `FlagSet.deck`, `annoShown` → `FlagSet.find`, `mockLoadLast` → `MockExam.restoreDone`.
+Already moved, and now a call into a module: `loadJSON` → `Store.get`, `fsrsPreview` → `FSRS.update`, `dueQuestions` → `ReviewQueue.due`, `newQuestionsForReview` → `ReviewQueue.fresh`, `reviewQueue` → `ReviewQueue.queue`, `fmtInterval` → `ReviewQueue.fmtInterval`, `buildEchoScreen` → `EchoUI.screenHtml`, `buildNoteSearch` → `NoteSearch.screenHtml`, `gemUrl` → `ApexWire.gemini.url`, `gemHeaders` → `ApexWire.gemini.headers`, `apexWire` → `ApexWire.wire`, `apexTrim` → `ApexWire.trim`, `pushToolExchange` → `ApexWire.gemini.exchange`, `md` → `Markdown.render`, `planNow` → `StudyPlan.plan`, `flaggedQs` → `FlagSet.deck`, `annoShown` → `FlagSet.find`, `mockLoadLast` → `MockExam.restoreDone`.
 
 ### 2. Readers: functions that read state and change nothing
 
@@ -893,8 +893,8 @@ Each `src:` or `app:` slot in the script, in order: the names it gives the scrip
 - **`APEX_API`** const, value
 - **`apexHosted()`** — *reaches the DOM, storage or the network* · reads `AI.gemini` · DOM `location`
 - *slot:* `src/core/apexwire.js`
-- **`gemUrl(op,model,key,page)`** — *pure but for the clock* · modules `ApexWire.gemini.url` · constants `APEX_API` `ENDPOINT`
-- **`gemHeaders(key,post)`** — *pure but for the clock* · modules `ApexWire.gemini.headers`
+- **`gemUrl(op,model,key,page)`** — *a call into ApexWire.gemini.url* · modules `ApexWire.gemini.url` · constants `APEX_API` `ENDPOINT`
+- **`gemHeaders(key,post)`** — *a call into ApexWire.gemini.headers* · modules `ApexWire.gemini.headers`
 - **`apexSessionLapsed(r)`** — *pure*
 - **`APEX_LAPSED`** const, value
 
@@ -947,7 +947,7 @@ Each `src:` or `app:` slot in the script, in order: the names it gives the scrip
 - **`networkErrorMsg(err,name)`** — *pure* · calls `e`
 - **`geminiPause(ms,signal)`** — *reaches the DOM, storage or the network* · DOM `DOMException` · clock `clearTimeout` `setTimeout`
 - **`geminiFetch(url,init={},onRetry)`** async — *reaches the DOM, storage or the network* · DOM `DOMException` · net `fetch` · clock `Date` `Math.random` · calls `geminiPause`
-- **`validateKey(p,k,model)`** — *reaches the DOM, storage or the network* · modules `ApexWire.gemini.plain` · calls `gemHeaders` `gemUrl` `geminiFetch` · through its calls: DOM, net
+- **`validateKey(p,k,model)`** — *reaches the DOM, storage or the network* · modules `ApexWire.gemini.plain` · calls `gemHeaders` `gemUrl` `geminiFetch` · through its calls: DOM, net, clock
 - **`GEM_NOT_CHAT`** const, value
 - **`geminiModels(key)`** async — *reaches the DOM, storage or the network* · net `fetch` · calls `apexSessionLapsed` `apiError` `gemHeaders` `gemUrl` `networkErrorMsg` `relayAnswered` · constants `APEX_LAPSED` `GEM_NOT_CHAT` · through its calls: clock, storage, DOM
 - **`geminiDefaultModel(models)`** — *pure*
@@ -966,12 +966,12 @@ Each `src:` or `app:` slot in the script, in order: the names it gives the scrip
 - **`apexWire(hist)`** — *a call into ApexWire.wire* · modules `ApexWire.wire`
 - **`apexTrim(hist)`** — *a call into ApexWire.trim* · modules `ApexWire.trim`
 - **`streamReply(q,hist,extra,explainOnly=false)`** async — *reaches the DOM, storage or the network* · reads `AI_GROUNDED` `CHATS` `aiAbort.signal` `lastHits` · writes `aiAbort` `aiBusy` `groundedTurnLeft` `lastHits` `toolTrace` · DOM `AbortController` · calls `apexAway` `apexSetState` `apexWire` `buildAI` `flushNav` `oneTurn` `pushToolExchange` `runTool` `saveJSON` · constants `AI_CHAT` `CTX_BUDGET` · through its calls: held, storage, clock, net
-- **`pushToolExchange(wire,turn,results)`** — *pure but for the clock* · modules `ApexWire.gemini.exchange`
+- **`pushToolExchange(wire,turn,results)`** — *a call into ApexWire.gemini.exchange* · modules `ApexWire.gemini.exchange`
 - **`oneTurn(q,wire,extra,explainOnly=false)`** — *reaches the DOM, storage or the network* · calls `oneTurnGemini` · through its calls: reads, writes, DOM, clock, storage, net, held
 - **`refFiguresForHits(hits,cap)`** — *reaches the DOM, storage or the network* · reads `REF` · calls `extractRefImages` `refImgSrc` · through its calls: writes, DOM, storage, clock
 - **`refImagesForHits(hits)`** — *reaches the DOM, storage or the network* · reads `AI_GROUNDED` · calls `refFiguresForHits` · through its calls: writes, DOM, storage, clock
 - **`makeStreamPainter(live,body,getText)`** — *reaches the DOM, storage or the network* · DOM `cancelAnimationFrame` `requestAnimationFrame` · calls `apexStick` `md` `toolStrip` · through its calls: reads, writes, storage, clock
-- **`oneShot(prompt,maxTokens)`** async — *reaches the DOM, storage or the network* · reads `AI.provider` · modules `ApexWire.gemini.plain` `ApexWire.gemini.text` · calls `apexHosted` `apexSessionLapsed` `cur` `gemHeaders` `gemUrl` `geminiFetch` `relayAnswered` · through its calls: DOM, net, storage
+- **`oneShot(prompt,maxTokens)`** async — *reaches the DOM, storage or the network* · reads `AI.provider` · modules `ApexWire.gemini.plain` `ApexWire.gemini.text` · calls `apexHosted` `apexSessionLapsed` `cur` `gemHeaders` `gemUrl` `geminiFetch` `relayAnswered` · through its calls: DOM, net, clock, storage
 - **`sessionSummarised`** let, value
 - **`summariseSession()`** async — *reaches the DOM, storage or the network* · reads `S.sessionCorrect` `S.sessionTotal` `AI.provider` `CHATS` `sessionSummarised` · writes `sessionSummarised` · modules `Memory` `Memory.add` `Memory.all` `Profile` `Profile.weakChapters` · calls `apexHosted` `cur` `oneShot` `relayKnown` · through its calls: DOM, storage, net
 - **`toOpenAITools(tools)`** — *pure*

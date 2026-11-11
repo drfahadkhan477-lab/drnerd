@@ -483,7 +483,18 @@ function moduleOf(name, text, kind) {
     if (n.type === 'AssignmentExpression' && n.left.type === 'MemberExpression' && !n.left.computed && globalObj(n.left.object)) {
       const x = n.left.property.name;
       defines.add(x);
-      if (n.right.type === 'ObjectExpression') members[x] = n.right.properties.filter(p => p.type === 'Property' && !p.computed).map(p => ({ member: p.key.name || p.key.value, local: p.value.type === 'Identifier' ? p.value.name : null, node: p.value }));
+      /* root.X = { a, g: { u, v } } gives X.a, X.g.u and X.g.v, each traced to its own function. */
+      if (n.right.type === 'ObjectExpression') {
+        members[x] = [];
+        (function collect(prefix, obj) {
+          for (const p of obj.properties) {
+            if (p.type !== 'Property' || p.computed) continue;
+            const key = prefix + '.' + (p.key.name || p.key.value);
+            if (p.value.type === 'ObjectExpression') collect(key, p.value);
+            else members[x].push({ path: key, local: p.value.type === 'Identifier' ? p.value.name : null, node: p.value });
+          }
+        })(x, n.right);
+      }
     }
     children(n, find);
   })(ast);
@@ -532,11 +543,13 @@ function analyse(html, readFile) {
     for (const it of m.items) for (const r of it.refs) if (!m.local.has(r.name) && r.name !== m.rootParam && byName.has(r.name) && !moduleOfName.has(r.name)) back.add(r.name);
     m.back = [...back].sort();
   }
-  const memberKey = r => (r.call ? r.call.split('.').slice(0, 2).join('.') : r.prop && r.prop !== '[…]' ? r.name + '.' + r.prop : r.name);
   const lent = (r, from) => {               // what a use of another module's name brings with it
     const other = moduleOfName.get(r.name);
     if (!other || other === from || (from && from.local.has(r.name))) return null;
-    return other.memberEffects[memberKey(r)] || other.all;
+    /* The longest path that names a member: ApexWire.gemini.url before ApexWire.gemini. */
+    const path = r.call ? r.call.split('.') : r.prop && r.prop !== '[…]' ? [r.name, r.prop] : [r.name];
+    for (let n = path.length; n >= 2; n--) { const k = path.slice(0, n).join('.'); if (other.memberEffects[k]) return other.memberEffects[k]; }
+    return other.all;
   };
   const refCats = (r, m) => {
     const s = new Set(), c = catOf(r);
@@ -560,10 +573,13 @@ function analyse(html, readFile) {
         }
       }
       for (const set of direct.values()) for (const c of set) m.all.add(c);
-      for (const [x, list] of Object.entries(m.members)) for (const p of list) {
-        const key = x + '.' + p.member, set = m.memberEffects[key] || (m.memberEffects[key] = new Set());
+      for (const list of Object.values(m.members)) for (const p of list) {
+        const set = m.memberEffects[p.path] || (m.memberEffects[p.path] = new Set());
         if (p.local && m.eff.has(p.local)) for (const c of m.eff.get(p.local)) set.add(c);
         else if (p.node.type !== 'Literal') for (const r of refsOf(p.node, { later: false })) { for (const c of refCats(r, m)) set.add(c); if (m.local.has(r.name)) for (const k of m.eff.get(r.name) || []) set.add(k); }
+        /* An object that holds members is, used whole, everything they are. */
+        const parts = p.path.split('.');
+        for (let n = parts.length - 1; n >= 2; n--) { const k = parts.slice(0, n).join('.'), up = m.memberEffects[k] || (m.memberEffects[k] = new Set()); for (const c of set) up.add(c); }
       }
       if (m.all.size + Object.values(m.memberEffects).reduce((n, x) => n + x.size, 0) !== before) again = true;
     }
@@ -661,11 +677,15 @@ function analyse(html, readFile) {
     return 'pure';
   };
   for (const it of items) it.tier = tier(it);
-  /* A function that is only a call into a module already lives there. */
+  /* A function that is only a call into a module already lives there: one statement, which returns
+     the call or just makes it, on a member at any depth (ApexWire.wire, ApexWire.gemini.url). */
   for (const it of fnItems) {
     const b = it.body;
-    const one = b && (b.type === 'BlockStatement' ? (b.body.length === 1 && b.body[0].type === 'ReturnStatement' ? b.body[0].argument : null) : b);
-    if (one && one.type === 'CallExpression' && one.callee.type === 'MemberExpression' && one.callee.object.type === 'Identifier' && moduleOfName.has(one.callee.object.name) && !byName.has(one.callee.object.name)) it.wrapper = one.callee.object.name + '.' + one.callee.property.name;
+    const st = b && b.type === 'BlockStatement' ? (b.body.length === 1 ? b.body[0] : null) : null;
+    const one = !b ? null : b.type !== 'BlockStatement' ? b : !st ? null : st.type === 'ReturnStatement' ? st.argument : st.type === 'ExpressionStatement' ? st.expression : null;
+    if (!one || one.type !== 'CallExpression' || one.callee.type !== 'MemberExpression') continue;
+    const c = chainOf(one.callee);
+    if (c.root.type === 'Identifier' && moduleOfName.has(c.root.name) && !byName.has(c.root.name) && c.props.every(Boolean)) it.wrapper = c.root.name + '.' + c.props.join('.');
   }
 
   /* ── who calls whom, backwards ── */
@@ -1009,6 +1029,9 @@ function bankReader(){ return POOL.length; }
 function moduleWriter(){ Demo.keep(1); }
 function moduleReader(){ return Demo.peek(); }
 function moduleClock(){ return Demo.stamp(); }
+function nestedWrapper(x){ return Demo.inner.twice(x); }
+function nestedCall(){ Demo.inner.stamp(); }
+function nestedWhole(){ return Demo.inner; }
 /* ── a light banner ── */
 function later(){ setTimeout(()=>writer(),0); return [1].map(v=>pureAdd(v,1)); }
 const table={a(){ writer(); }};
@@ -1020,7 +1043,7 @@ function stamp() { return Date.now(); }
 let kept = 0;
 function keep(n) { kept = n; }
 function peek() { return kept; }
-root.Demo = { twice, stamp, keep, peek };
+root.Demo = { twice, stamp, keep, peek, inner: { twice, stamp } };
 })(typeof window !== 'undefined' ? window : this);
 `;
 function selfTest() {
@@ -1040,6 +1063,8 @@ function selfTest() {
     ['the page\'s own markup names a handler', A.markupHandlers.has('pageTap') && !A.unreached.includes('pageTap')],
     ['a function that is one call into a module is a wrapper, and takes that member\'s reach, not the module\'s', it('viaWrapper').wrapper === 'Demo.twice' && it('viaWrapper').tier === 'pure'],
     ['the clock is not pure', it('clocked').tier === 'clock'],
+    ['a member of an object inside a module is traced to its own function, not to its neighbours\'; the object used whole is all of them', it('nestedWrapper').tier === 'pure' && it('nestedCall').tier === 'clock' && it('nestedWhole').tier === 'clock'],
+    ['a function that is one call into a member at any depth is a wrapper, whether it returns the call or only makes it', it('nestedWrapper').wrapper === 'Demo.inner.twice' && it('nestedCall').wrapper === 'Demo.inner.stamp' && !it('nestedWhole').wrapper],
     ['a call into a module takes what that member reaches: its clock, its own state read, its own state changed', it('moduleClock').tier === 'clock' && it('moduleReader').tier === 'reads' && it('moduleWriter').tier === 'writes'],
     ['a method of an object held in state is a call into it; a method of a list is a read', it('held').tier === 'held' && it('held').facts.opaque.has('viewer.close') && it('plain').tier === 'reads' && !it('plain').facts.opaque.size],
     ['a handler named in markup is wired, not part of the reach; what it reaches is not the builder\'s', it('drawer').facts.wires.has('handler') && !it('drawer').reach.has('storage')],
