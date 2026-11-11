@@ -113,7 +113,12 @@ head('the function under test is the one the page ships');
      test a fragment. The figure branch is the last thing md() learned. */
   ok('the cut runs past the figure branch to the end of the function',
      /refImgSrc\(/.test(MD_SRC) && MD_SRC.trim().endsWith('}'), `${MD_SRC.length} characters`);
-  ok('it compiles to a callable function', typeof md === 'function');
+  /* This asked whether the cut-out text compiled. md is now a wrapper this file makes, and is a
+     function whatever the module holds, so the question is asked of the module: what it gives
+     under the name the page calls, and that a call comes back with text. */
+  ok('the module gives a callable function, and a call comes back with text',
+     typeof Markdown.render === 'function' && (() => { try { return typeof md('plain') === 'string'; } catch (_) { return false; } })(),
+     typeof Markdown.render);
   /* The checks below that read the code read MD_SRC, and the ones that run it
      run the module's function. They are the same function only if this holds. */
   ok('and the text read below is the text of the function that is run',
