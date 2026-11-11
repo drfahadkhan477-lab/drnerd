@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 80 suites that are pure Node with no Playwright and no
+#   logic        the 81 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -331,6 +331,8 @@ jobs:
         run: node tests/verify-providererror-pure.js
       - name: a review session is every due card then new questions across chapters up to its size, and an interval is said in days, weeks or months (42 checks)
         run: node tests/verify-reviewqueue-pure.js
+      - name: what Apex sends and reads back is the window, the request and the stream it should be, whatever the chunk boundaries, with every signature kept (107 checks)
+        run: node tests/verify-apexwire-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (70 checks)

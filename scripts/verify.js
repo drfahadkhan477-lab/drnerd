@@ -295,6 +295,11 @@ const SUITES = [
      bank and the cards as globals. Their rule, that due cards are never capped
      to a round number, had no check that did not need a browser. */
   ['reviewqueue-pure', 'a review session is every due card, however many, then new questions a round at a time across chapters up to its size; a card for a question the bank lacks is never dealt; nothing handed in is changed; and an interval is said in days, weeks or months'],
+  /* What Apex sends the model and what it reads back: the window, the request
+     and the stream. It was inline in the shell's oneTurnGemini() and around it,
+     so its shape was only ever checked through a browser and a stubbed network.
+     src/core/apexwire.js now (roadmap E1 step 2), the seam a second provider needs. */
+  ['apexwire-pure', 'a request carries a window of the thread that opens on a user turn and no failed turn; it goes to Google with a key and to this site\'s relay without, carrying no secret; its body is the text sent, key for key; the stream is read the same whatever its chunk boundaries, each part kept with its signature; a tool\'s answer goes back with the model\'s own parts'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -495,8 +500,8 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure'];
+/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
