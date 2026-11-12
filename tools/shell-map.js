@@ -432,7 +432,11 @@ function shapeOf(e) {
 const TOKEN_RE = /@@SLOT\[([a-z]+):([^\]@]+)\]@@/g;
 function readShell(html) {
   const scripts = [];
-  const re = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/g;
+  /* As HTML reads a script element: the tag's name in any case, attributes on it, and an end tag that
+     may hold white space. This reads the repository's own shell and filters nothing, so a tag it
+     missed could not let anything through; it would be a script the map silently left out, or its
+     text scanned as markup for handlers. */
+  const re = /<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi;
   let m;
   while ((m = re.exec(html))) scripts.push({ attrs: m[1] || '', text: m[2], at: m.index + m[0].indexOf('>') + 1 });
   const app = scripts.filter(s => s.text.includes('@@SLOT[payload:ALL_Q]@@'));
@@ -1077,6 +1081,8 @@ function selfTest() {
     ['the slot is a module that gives its name', A.modules.length === 1 && A.modules[0].defines.includes('Demo')],
     ['the banners are the sections', A.sections.some(s => s.title === 'first banner' && s.subs.some(x => x.title === 'a light banner' && x.items.some(e => e.item && e.item.name === 'later')))],
     ['nothing in the fixture is left unplaced', A.items.every(i => !i.facts.unplaced.size)],
+    ['a script element is found whatever the case of its tag, with attributes on it and a space in its end tag, and its text is not taken for markup',
+      (() => { try { const r = readShell(FIXTURE.replace('<script>', '<SCRIPT type="text/javascript">').replace('</script>', '</SCRIPT >')); return r.slots.length === 1 && r.src.includes('function early()') && !r.outside.includes('function early()'); } catch (_) { return false; } })()],
   ];
   return want.filter(w => !w[1]).map(w => w[0]);
 }
