@@ -29,7 +29,7 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 
 | Layer | Holds | Rule |
 |---|---|---|
-| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire) | Must run under Node for the pure suites |
+| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |

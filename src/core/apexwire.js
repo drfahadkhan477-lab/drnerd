@@ -39,7 +39,7 @@
      5. An error inside the stream is thrown, with the provider's words. A line that is not JSON is skipped.
 
    What is not here: fetch, the retry, the panel, the tools themselves, the prompt's words, and the loop
-   that runs a turn (streamReply in the page, which owns the state a turn changes; docs/SHELL-MAP.md).
+   that runs a turn (run() in src/core/apexturn.js, with the state a turn changes).
    These were the page's gemUrl(), gemHeaders(), apexWire(), apexTrim(), pushToolExchange(),
    toGeminiTools(), geminiParts(), toGeminiContents() and the inside of oneTurnGemini() and oneShot() until
    they moved here (docs/ROADMAP.md, E1 step 2). tests/verify-apexwire-pure.js holds them.
