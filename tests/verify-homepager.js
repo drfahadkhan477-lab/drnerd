@@ -483,12 +483,26 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('next session uses the actual due deck');
 
-  await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
-  await still('empty due deck');
+  /* A first visit has nothing answered and nothing due, and a menu is a decision to make before any study: the button
+     says Start and begins the 20-minute plan Study offers. Once there is history and nothing is due, it opens Chapters. */
+  const first=await page.evaluate(()=>{S.srs={};S.practice={};homePage=0;S.screen='home';render();
+    return {seen:startedCount(),plan:planNow(20).items.map(it=>it.id)};});
+  await still('a first visit');
+  const startBtn=await page.evaluate(()=>{const b=document.querySelector('.atlas-session button');
+    return b?{text:b.textContent.trim(),name:b.getAttribute('aria-label')||b.textContent.trim()}:null;});
+  await page.locator('.atlas-session button').click();
+  await settled(page,()=>!window.__vtLive&&S.screen!=='home',{label:'the first-visit action to leave Home'});
+  const began=await page.evaluate(()=>({screen:S.screen,mode:S.mode,ids:S.questions.map(q=>q.id)}));
+  ok('on a first visit the button says Start and names what it starts',first.seen===0&&!!startBtn&&startBtn.text==='Start'&&/^Start a 20-minute study session$/.test(startBtn.name),JSON.stringify(startBtn));
+  ok('and starts the 20-minute plan, not a menu',began.screen==='quiz'&&began.mode==='due'&&began.ids.length>0&&JSON.stringify(began.ids)===JSON.stringify(first.plan),JSON.stringify({screen:began.screen,mode:began.mode,n:began.ids.length,plan:first.plan.length}));
+
+  await page.evaluate(()=>{S.srs={};S.practice={};S.practice[POOL[0].id]={n:1,c:1,t:Date.now()};homePage=0;S.screen='home';render();});
+  await still('history, and an empty due deck');
+  const contBtn=await page.evaluate(()=>(document.querySelector('.atlas-session button')||{}).textContent.trim());
   await page.locator('.atlas-session button').click();
 
   await settled(page,()=>!window.__vtLive,{label:'chapter action'});
-  ok('with no due cards the next-session action opens Chapters',await page.evaluate(()=>S.screen==='study'));
+  ok('with history and no due cards the next-session action says Continue and opens Chapters',contBtn==='Continue'&&await page.evaluate(()=>S.screen==='study'),contBtn);
 
   const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
     homePage=0;S.screen='home';render();return dueQuestions().map(q=>q.id);});

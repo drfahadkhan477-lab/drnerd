@@ -24,6 +24,8 @@
  *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, a chapter
  *     tile's percentage (in its own chapter's ink, not the accent's), and the Echo screen's selected tab (text on the ink
  *     rather than in it, with no glass sheen under it); a chapter with no colour of its own takes the accent ink;
+ *   · the top bar's name and the line under it, on Study (a navy bar) and on Home (a paper one), clear 4.5:1 in every
+ *     state;
  *   · every <select> on those screens has a name a screen reader can say (two had none);
  *   · nothing throws.
  */
@@ -212,6 +214,11 @@ const TOOLS = () => {
       ['the rhythm lab', () => { goLab(); }, null, [['the phase chip', '#physioPhase']]],
       ['the Echo screen', () => { goEcho(); }, null, [['the selected tab', '.echo-tab.on']]],
       ['Study', () => { goStudy(); }, null, [['a chapter tile\'s percentage', '.ch-tile .ct-foot b']]],
+      /* The top bar is navy on every screen but Home, and paper on Home, and one rule once gave the name the page's text
+         colour on both: 1.3:1 on the navy in a light theme. axe left it alone (contrast over a translucent, blurred bar is
+         "incomplete", not a violation), so it is read here, on a screen of each kind. */
+      ['the top bar on Study', () => { goStudy(); }, null, [['the app\'s name', '#navbar .nav-title'], ['the bank under it', '#navbar .nav-sub']]],
+      ['the top bar on Home', () => { goHome(); }, null, [['the app\'s name', '#navbar .nav-title'], ['the bank under it', '#navbar .nav-sub']]],
     ];
     const per = {}, names = [];
     for (const [id, scheme, label] of STATES) {

@@ -49,7 +49,7 @@ record counts the split build only from a run on the real bank. On every push
 it also checks, with no source file: every script parses, the test-suite
 list still lists without crashing, `npm run build` still refuses to run and
 explains why when no source is present, and
-the 78 suites that need neither a browser nor a build all stay green. See
+the 81 suites that need neither a browser nor a build all stay green. See
 [`.github/workflows/verify.yml`](.github/workflows/verify.yml) for the exact
 scope and why the other 238 checks can't run here.
 
@@ -117,6 +117,7 @@ the features changed.
 - **[docs/BUILD-PLAN.html](docs/BUILD-PLAN.html)** — what was built, measured, and why
 - **[docs/IPAD.md](docs/IPAD.md)** — getting it onto an iPad, in Safari, without a third-party app
 - **[docs/REFERENCE-GUIDE.md](docs/REFERENCE-GUIDE.md)** — writing reference notes for Apex, with [three worked examples](docs/reference-examples/)
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — a whole-repository review and what to build next, with the model tier each item needs
 
 Lives in `src/`, `scripts/`, `tests/`, `assets/`, `docs/`.
 

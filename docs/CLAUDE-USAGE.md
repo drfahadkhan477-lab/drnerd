@@ -23,14 +23,19 @@ your account has.
 
 - **Sonnet** — the large majority of coding work: features, tests, known bugs, routine refactors.
 - **Opus** — hard debugging, cross-cutting refactors, architecture calls. Meaningfully more quota per turn.
+- **Fable** — the most capable tier, and metered the heaviest: long work across many files where a mistake is silent, scientific or mathematical modelling, evaluation and architecture design.
 - **Haiku** — quick lookups, renames, boilerplate, scripted runs.
 
 Switching mid-session keeps the conversation. `/model opusplan` plans with
 Opus and executes with Sonnet.
 
-**For this repo:** use Opus for patch-chain anchor work, leak-guard / check
-design (where "prove it fails" reasoning matters), and suite races; Sonnet for
-everything else; Haiku for doc tweaks and lookups.
+**For this repo:** use Fable for the items `docs/ROADMAP.md` marks Fable (taking
+the app out of the shell, the physiology engine, fitting the scheduler, designing
+Apex's answer evaluation, the sync design); Opus for leak-guard / check design
+(where "prove it fails" reasoning matters), suite races and the roadmap's Opus
+items; Sonnet for everything else; Haiku for doc tweaks, lookups and reading a CI
+log. Section 7 of the roadmap gives every item a model and an effort level
+(`/effort low|medium|high|xhigh|max`), and the commands to switch both.
 
 ## What consumes tokens
 

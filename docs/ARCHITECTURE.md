@@ -29,10 +29,25 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 
 | Layer | Holds | Rule |
 |---|---|---|
-| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals | Must run under Node for the pure suites |
+| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
+
+## The shell's script
+
+Most of the app's logic is still one inline script in `app/systole.html`, where
+every function can reach every script-level name. `docs/SHELL-MAP.md` says what
+each one reads, writes and calls, and in what order they can leave;
+`tools/shell-map.js` writes it, and `--check` says whether it is current.
+
+A function leaves by one pattern (roadmap E1). Its body goes to a `src/` module,
+slotted where the function stood, taking as arguments what it used to reach
+for. The shell keeps a one-line function of the same name, so no caller, inline
+handler or suite changes. A pure suite holds the module, and holds the shell's
+line to handing over the right things. Before moving one, read its entry in the
+map for what runs as the script loads: a function declaration is hoisted and a
+module is not.
 
 ## The clock
 

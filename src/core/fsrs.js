@@ -298,8 +298,23 @@ function fsrsUpdate(card, rating, today) {
   return { difficulty, stability, ivl, reps, lapses, due: localDateToISO(dueDate), last: now, sv: SCHEDULER_VERSION };
 }
 
+/* THE FIRST ANSWER TO A QUESTION IS A RETRIEVAL, and it makes the question's card.
+   A question answered in a quiz that has never been scheduled gets its first
+   card from that answer: wrong is Again; right but Guess or Unsure is Hard
+   (a lucky guess is not knowledge); right and Fairly sure or Certain is Good;
+   right with no confidence given (the prompt is optional) is Good. Never Easy:
+   one answer is one data point, and Easy's first interval is about two weeks.
+   Only the FIRST answer does this. A card that exists is moved by the review
+   queue alone, so drilling a chapter cannot rewrite schedules (recordAnswer in
+   the shell). cf is calib.js's band id: 0 Guess, 1 Unsure, 2 Fairly sure,
+   3 Certain; anything else counts as not given. */
+function fsrsFirstRating(ok, cf) {
+  if (!ok) return 1;
+  return cf === 0 || cf === 1 ? 2 : 3;
+}
+
 root.FSRS = {
-  update: fsrsUpdate, retrievability: fsrsRetrievability, seed: fsrsSeed,
+  update: fsrsUpdate, firstRating: fsrsFirstRating, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
   ivl: fsrsIvl, daysBetween, todayISO, isoToLocalDate, localDateToISO,
   W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
