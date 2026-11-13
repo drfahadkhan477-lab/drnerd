@@ -230,7 +230,7 @@ function icon(name, cls){
 @@SLOT[src:src/ui/coronaryTree.js]@@
 
 /* the heart's surfaces, baked by scripts/heart-bake.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='a223435e67acb2d4';
+window.HEART3D_MESH_KEY='00a489a2d6003159';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -7007,7 +7007,7 @@ function pearlFigure(p){
   const cap=(p.figCap||'').trim();
   return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
     onkeydown="pearlFigureKey(event,this)"
-    title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')} Figure <i>${icon('expand','icon-sm')} Tap to enlarge</i></span>
+    title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')}<i>${icon('expand','icon-sm')}</i></span>
     <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
 }
@@ -7337,9 +7337,9 @@ function buildHome(){
         <div class="h-beat"><img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async"></div>
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
-      <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
+      <span class="hero-live-status sr-only"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
       <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" onclick="toggleAtlas3D()"
-        aria-label="${atlas3D?'Show heart illustration':'Explore heart in 3D'}" aria-pressed="${atlas3D}" title="${atlas3D?'Show heart illustration':'Explore heart in 3D'}">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
+        aria-label="${atlas3D?'Show heart illustration':'Explore heart in 3D'}" aria-pressed="${atlas3D}" title="${atlas3D?'Show heart illustration':'Explore heart in 3D'}">${icon('layers','icon-sm')}</button>
       <button class="atlas-pause" id="atlasLandingPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
       <button class="hero-heart-hit" id="heroHeartBtn" onclick="toggleHeroMenu(undefined,event)" aria-label="Heart model: motion, chambers and credit"
         aria-expanded="false" aria-controls="heroMenu" title="Heart model"></button>
@@ -7378,9 +7378,9 @@ function buildHome(){
           </div>
           <div class="pearl-actions">
             <button class="pearl-recall" id="pearlRecall" onclick="pearlRecall()" aria-controls="pearlBody" aria-expanded="true">Recall</button>
-            <button class="pearl-reading" id="pearlReading" onclick="pearlReading()" aria-controls="pearlBody" aria-pressed="${pearlAsWritten}" title="Read the complete statement as a paragraph">${icon('book','icon-sm')} Paragraph</button>
-            <button class="pearl-reading" id="pearlSourceToggle" onclick="pearlSourceToggle()" aria-controls="pearlSource" aria-expanded="false">Source</button>
-            <button class="pearl-open" onclick="pearlOpen()" title="${e(p.source||'Your reference notes')}">Read note ${icon('arrow-right','icon-sm')}</button>
+            <button class="pearl-reading" id="pearlReading" onclick="pearlReading()" aria-controls="pearlBody" aria-pressed="${pearlAsWritten}" title="Read the complete statement as a paragraph">${icon('book','icon-sm')} Text</button>
+            <button class="pearl-reading" id="pearlSourceToggle" onclick="pearlSourceToggle()" aria-controls="pearlSource" aria-expanded="false" aria-label="Pearl source" title="Pearl source">${icon('info','icon-sm')}</button>
+            <button class="pearl-open" onclick="pearlOpen()" title="${e(p.source||'Your reference notes')}">Note ${icon('arrow-right','icon-sm')}</button>
           </div>
           <div class="pearl-source" id="pearlSource" role="region" aria-label="Pearl source" hidden>${e(p.source||'Your reference notes')}</div>
 
@@ -7426,7 +7426,7 @@ function toggleAtlas3D(){
   const hero=document.querySelector('#homePage0 .hero-live');
   if(hero)hero.classList.toggle('atlas-3d',atlas3D);
   const button=document.getElementById('atlasExplore');
-  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.setAttribute('aria-label',atlas3D?'Show heart illustration':'Explore heart in 3D');button.title=button.getAttribute('aria-label');button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
+  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.setAttribute('aria-label',atlas3D?'Show heart illustration':'Explore heart in 3D');button.title=button.getAttribute('aria-label');button.innerHTML=icon('layers','icon-sm');}
   const label=document.querySelector('.hero-live-status');
   if(label)label.textContent=atlas3D?'Live cardiac cycle':'Illustrative anatomy';
   const cutaway=document.getElementById('heroMechanics');if(cutaway)cutaway.hidden=!atlas3D;
@@ -7761,7 +7761,7 @@ function homeMark(){
      tests/verify-homepager.js reads the rail's direction off the screen rather than off this number,
      so the two cannot drift apart unnoticed. */
   const tabs=root.querySelector('.home-tabs');
-  if(tabs) tabs.setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
+  if(tabs) tabs.setAttribute('aria-orientation','horizontal');
 
   for(let i=0;i<3;i++){
     const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
@@ -7813,8 +7813,8 @@ function homeGo(i){
   homeTween=requestAnimationFrame(step);
 }
 function homeTabKey(ev){
-  const k=ev.key, vertical=matchMedia('(min-width:700px)').matches;
-  const n=(k==='ArrowRight'||(vertical&&k==='ArrowDown'))?homePage+1:(k==='ArrowLeft'||(vertical&&k==='ArrowUp'))?homePage-1:k==='Home'?0:k==='End'?2:null;
+  const k=ev.key;
+  const n=(k==='ArrowRight')?homePage+1:(k==='ArrowLeft')?homePage-1:k==='Home'?0:k==='End'?2:null;
   if(n==null) return;
   ev.preventDefault(); homeGo(n);
   const tab=document.getElementById('homeTab'+homePage); if(tab) tab.focus();
