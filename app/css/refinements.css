@@ -13,7 +13,7 @@ html[data-theme="dark"] .q-card::before{opacity:.22}
 /* option letters: circular, chapter-tinted, real depth */
 .opt-letter{--acc:var(--teal);min-width:30px;height:30px;border-radius:50%;
   background:color-mix(in srgb, var(--acc) 12%, var(--card));
-  color:var(--acc); border:1.5px solid color-mix(in srgb, var(--acc) 38%, var(--border));
+  color:var(--teal-ink); border:1.5px solid color-mix(in srgb, var(--acc) 38%, var(--border));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
   font-weight:800; font-size:13px}
 /* The older spelling of the color-mix() above: see the note in app/css/cardiac.css. */
@@ -137,7 +137,8 @@ html[data-theme="dark"]{
 .opt-letter{min-width:28px;height:28px;border-radius:9px;font-size:11px;
   border-color:color-mix(in srgb, var(--acc,var(--border)) 35%, var(--border))}
 @supports not (color:color-mix(in srgb,red,blue)){.opt-letter{border-color:var(--border)}}
-@media (hover:hover){.opt:not(:disabled):hover .opt-letter{border-color:var(--acc,var(--teal));color:var(--acc,var(--teal))}}
+/* The letter is text: --acc tints the badge and its border, --teal-ink writes the letter (as --acc it read 3.8:1). */
+@media (hover:hover){.opt:not(:disabled):hover .opt-letter{border-color:var(--acc,var(--teal));color:var(--teal-ink)}}
 
 /* progress bar: gradient fill instead of a flat tint */
 .prog-track{background:var(--border2);border-radius:99px;overflow:hidden}
