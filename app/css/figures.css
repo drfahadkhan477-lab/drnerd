@@ -282,8 +282,8 @@ html[data-theme="light"]{--due-bg:linear-gradient(135deg,#ECFEFF,#F0FDFA);--due-
    is chrome, and went with it: the thread now has 81.1%, a shade more than
    before this change rather than less. */
 .ai-powered{font-size:var(--t-tiny);color:var(--muted);text-align:center;padding:0 0 4px;letter-spacing:.02em}
-/* Never --dim: it fails AA at every theme, which is what contrastfix-patch.js
-   existed to settle. A disclaimer nobody can read is not a disclaimer.
+/* Never --dim: it fails AA in every theme, as the retired contrastfix step
+   found. A disclaimer nobody can read is not a disclaimer.
    Sizes are steps on the type ladder, not round numbers — verify-type.js
    rejects any fixed font-size that is not, and rejected 10px here first. */
 /* The standard visually-hidden idiom: reachable by assistive technology,

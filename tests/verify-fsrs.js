@@ -67,6 +67,21 @@ for (const S of [0.2, 0.4072, 0.6, 1, 1.5, 2, 3, 5, 8, 21, 60, 180])
   for (const D of [1, 2, 3, 5, 7, 9, 10])
     for (const el of [0, 1, 2, 3, 5, 8, 13, 21, 34, 60, 120, 200]) STATES.push({ S, D, el });
 
+head('a question\'s first answer makes its card, and only Again, Hard or Good');
+{
+  const r = (ok, cf) => F.firstRating(ok, cf);
+  ok('a wrong first answer is Again, however sure it was', [null, 0, 1, 2, 3].every(c => r(false, c) === 1),
+     [null, 0, 1, 2, 3].map(c => r(false, c)).join(','));
+  ok('right but a Guess or Unsure is Hard: a lucky guess is not knowledge', r(true, 0) === 2 && r(true, 1) === 2);
+  ok('right and Fairly sure or Certain is Good', r(true, 2) === 3 && r(true, 3) === 3);
+  ok('right with no confidence given is Good, and an unknown band counts as none', r(true, null) === 3 && r(true, undefined) === 3 && r(true, 'x') === 3 && r(true, 7) === 3);
+  ok('never Easy: one answer is one data point', [true, false].every(o => [null, 0, 1, 2, 3].every(c => r(o, c) !== 4)));
+  const good = F.update(null, r(true, 3), DAY0), again = F.update(null, r(false, 3), DAY0), hard = F.update(null, r(true, 0), DAY0);
+  ok('and the card it makes is the first-review card for that rating: Again tomorrow, Hard before Good',
+     again.due === plus(DAY0, 1) && hard.ivl < good.ivl && good.due === plus(DAY0, good.ivl) && good.reps === 1 && again.lapses === 1,
+     JSON.stringify({ again: again.due, hard: hard.ivl, good: good.ivl }));
+}
+
 head('stability means what it says');
 /* Definitional, not tuned: if FACTOR and DECAY ever drift apart this is the
    only check that notices. */

@@ -187,14 +187,36 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     goHome(); render();
     const home = !!document.querySelector('.hero-h1');
     (S.resume = {}, startQuiz)('Arrhythmias');
-    const q = S.questions[0];
+    /* A practice quiz's FIRST answer to a question with no card makes the card, rated from the answer (right with no
+       confidence given: Good); a second answer to it, and any answer to a question that already has a card, moves
+       nothing. A wrong first answer given as Certain is Again; a right one given as Unsure is Hard. */
+    const q = S.questions[0], today = todayISO();
     selectOpt(q.ci);
-    const practiceOk = S.answered && !S.srs[q.id];   // practice still never touches SRS
+    const seeded = S.srs[q.id] ? JSON.stringify(S.srs[q.id]) : null;
+    const goodOk = !!S.srs[q.id] && S.srs[q.id].last === today && S.srs[q.id].reps === 1 && S.srs[q.id].lapses === 0 &&
+      S.srs[q.id].stability === FSRS.initStability(3);
+    /* startQuiz deals a whole chapter or the whole pool; startAdhocQuiz asks exactly the questions it is given
+       (mode 'pick', a practice quiz), so each answer below lands on the question it names. */
+    const ask = (x, cf, right) => { startAdhocQuiz([x], x.ch); const on = S.questions[S.qIdx] === x;
+      if (cf != null) setConfidence(cf); selectOpt(right ? x.ci : (x.ci + 1) % x.o.length); return on && S.answered; };
+    const askedAgain = ask(q, null, false);
+    const untouched = JSON.stringify(S.srs[q.id]) === seeded;
+    const q2 = POOL.find(x => !x.bad && x.id !== q.id && !S.srs[x.id]);
+    const askedQ2 = ask(q2, 3, false);
+    const q3 = POOL.find(x => !x.bad && x.id !== q.id && x.id !== q2.id && !S.srs[x.id]);
+    const askedQ3 = ask(q3, 1, true);
+    const again = S.srs[q2.id], hard = S.srs[q3.id];
     goLab(); render();
-    return { home, practiceOk, labMounted: typeof physio !== 'undefined' };
+    return { home, goodOk, untouched, asked: askedAgain && askedQ2 && askedQ3,
+             again: !!again && again.lapses === 1 && again.stability === FSRS.initStability(1),
+             hard: !!hard && hard.stability === FSRS.initStability(2), seeded: seeded && seeded.slice(0, 80),
+             labMounted: typeof physio !== 'undefined' };
   });
   ok('home renders', reg.home);
-  ok('practice quizzes still never write an SRS card', reg.practiceOk);
+  ok('a practice quiz\'s first answer to an unscheduled question makes its card: right, no confidence, Good', reg.goodOk, String(reg.seeded));
+  ok('each later answer landed on the question it named (precondition)', reg.asked);
+  ok('a second answer to it, wrong this time, moves nothing: only the review queue moves a card that exists', reg.untouched);
+  ok('a wrong first answer given as Certain is Again, and a right one given as Unsure is Hard', reg.again && reg.hard, JSON.stringify({ again: reg.again, hard: reg.hard }));
   ok('the lab still mounts what it renders', reg.labMounted);
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

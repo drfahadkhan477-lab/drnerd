@@ -125,7 +125,7 @@
   background:var(--card);color:var(--text);border:1px solid var(--border)}
 .ns-note-title{margin:4px 0 6px}
 .ns-source{color:var(--muted);font-size:.85em;margin:0 0 14px}
-/* ── glass — see scripts/glass-patch.js ── */
+/* ── glass — why, in app/systole.html "Glass" ── */
 :root{--card-glass:var(--card);--gl-shine:rgba(255,255,255,.62);--gl-rim:rgba(255,255,255,.85);
   --gl-edge:rgba(15,23,42,.07);--gl-sweep:rgba(255,255,255,.55);--gl-lift:0 6px 18px rgba(8,15,30,.18);
   --gl-blur:blur(14px) saturate(1.6);--gl-ease:cubic-bezier(.2,.8,.2,1)}

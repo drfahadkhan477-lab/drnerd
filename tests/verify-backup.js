@@ -19,7 +19,7 @@
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { resolved } = require('./_render.js');
 
@@ -603,6 +603,28 @@ const restore = `(text) => new Promise((resolve, reject) => {
     }finally{HTMLAnchorElement.prototype.click=click;RefAssets.backup=backup;}
   });
   ok('download requests retain the reminder and confirmation preserves later reviews',assurance.exported&&assurance.unchanged&&assurance.confirmed);
+
+  /* In a Safari tab the data has seven days: WebKit deletes all of a site's script-writable storage after seven days of
+     Safari use with no visit, the database copy included, and a Home Screen app is exempt. The data panel says so in a
+     tab and nowhere else. Read from the panel's own markup under each condition, then once on the engine as it is. */
+  head('in a Safari tab, the data panel says how to keep the data, and only there');
+  const tab=await page.evaluate(()=>{
+    const html=document.documentElement, was=html.classList.contains('installed');
+    const as=(vendor,installed)=>{
+      Object.defineProperty(navigator,'vendor',{configurable:true,get:()=>vendor});
+      html.classList.toggle('installed',installed);
+      const box=document.createElement('div'); box.innerHTML=buildStats();
+      const n=box.querySelector('#safariTabNote'); return n?n.textContent.replace(/\s+/g,' ').trim():null;
+    };
+    try{ return {tab:as('Apple Computer, Inc.',false),installed:as('Apple Computer, Inc.',true),other:as('Google Inc.',false)}; }
+    finally{ delete navigator.vendor; html.classList.toggle('installed',was); }
+  });
+  ok('in a Safari tab the panel says to add it to the Home Screen, why, and to export a backup',
+     !!tab.tab&&/Home Screen/.test(tab.tab)&&/seven days/.test(tab.tab)&&/exempt/.test(tab.tab)&&/backup/.test(tab.tab),String(tab.tab).slice(0,90));
+  ok('and says nothing of it in the installed Home Screen app, or in another browser',tab.installed===null&&tab.other===null,JSON.stringify({installed:tab.installed,other:tab.other}));
+  const shown=await page.evaluate(()=>{const box=document.createElement('div');box.innerHTML=buildStats();return !!box.querySelector('#safariTabNote');});
+  const webkit=engineName()==='webkit';
+  ok(`on this engine as it is (${engineName()}), the note is ${webkit?'shown':'absent'}`,shown===webkit,String(shown));
 
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed\n`);

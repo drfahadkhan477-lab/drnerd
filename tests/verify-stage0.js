@@ -251,11 +251,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     (S.resume = {}, startQuiz)('Pericardial Disease');
     const q = S.questions[0];
     selectOpt(q.ci);
-    return { srs: Object.keys(S.srs).length, practiced: Object.keys(S.practice).length,
+    return { srs: Object.keys(S.srs).length, card: !!S.srs[q.id], practiced: Object.keys(S.practice).length,
              logged: LOG.length, entry: LOG[LOG.length - 1],
              mastery: masteryFor('Pericardial Disease'), started: startedCount() };
   });
-  ok('practice writes no SRS card', practice.srs === 0);
+  /* A practice answer to a question with no card makes its card (the first answer only; verify-stage2 holds the
+     rest of that rule). Practice still never moves a card that exists. */
+  ok('a practice answer to a question with no card makes exactly that card', practice.srs === 1 && practice.card === true, JSON.stringify(practice.srs));
   ok('practice attempt recorded', practice.practiced === 1);
   ok('answer written to the review log',
     practice.logged === 1 && practice.entry.m === 'practice' && practice.entry.g === null);

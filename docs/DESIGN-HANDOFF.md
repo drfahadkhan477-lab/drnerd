@@ -29,7 +29,8 @@ The Home styling is scoped to the landing pages so question reading keeps its
 existing measure. Navigation remains a horizontal swipe pager; its controls
 form a vertical rail on tablets and bottom tabs on phones. The selected tab's
 orientation updates on resize. The review strip uses due questions when
-available and opens Chapters otherwise.
+available and opens Chapters otherwise; on a first visit, with nothing
+answered yet, it says Start and begins the 20-minute plan Study offers.
 
 A different account cannot automatically access another session's files or
 credentials. Prefer using the existing laptop checkout. Otherwise transfer

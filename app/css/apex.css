@@ -220,9 +220,10 @@
 .cb-val{font-size:var(--t-tiny);color:var(--muted);width:6.5em;text-align:right;flex:none}
 .cb-thin{font-size:var(--t-tiny);color:var(--muted);padding:2px 0}
 .miss-lab{width:100%}
-/* Only the tutor's own prompt row folds away — see chipfix-patch.js. It is
-   hidden by id rather than by class so the Lab and the search screen, which
-   share .chips and have no button to unfold them, keep theirs. */
+/* Only the tutor's own prompt row folds away. It is hidden by id rather than
+   by class so the Lab and the search screen, which share .chips and have no
+   button to unfold them, keep theirs (hiding .chips once took the Lab's
+   rhythm buttons with it, unseen by a check that only counted nodes). */
 #aiChips{display:none}
 #aiChips.open{display:flex}
 .ai-more{flex:0 0 auto;width:40px;height:40px;border-radius:11px;
@@ -355,7 +356,7 @@
    about five of them. Without it .ai-body kept min-height:0 — correct for
    letting a flex item shrink enough to scroll, and catastrophic as a lower
    bound, because the figure list then took the answer down to 43px on an iPad
-   held portrait. See scripts/answerroom-patch.js for the measurements.
+   held portrait; 8rem is about five lines, and the figures give way instead.
    .fig-strip needs min-height:0 for the same reason .ai-body needed it: it is
    now the box expected to give way. */
 .ai-body{min-height:8rem}

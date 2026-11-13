@@ -10,8 +10,9 @@
  *
  * It does NOT stop script injection, and pretending otherwise would be worse
  * than having no policy at all. The app carries over a hundred inline event
- * handlers — onclick="openFigureFrom(this)" and its relatives, 119 of them in
- * the patch scripts alone and more in the ACCSAP code underneath. Inline
+ * handlers — onclick="openFigureFrom(this)" and its relatives, written into
+ * the markup app/systole.html builds (they came from the patch chain and the
+ * export's code, both since folded into the shell). Inline
  * handlers cannot be covered by a hash or a nonce; only 'unsafe-inline' allows
  * them, and 'unsafe-inline' is precisely the thing script-src exists to
  * withhold. A script-src here would be decoration. Removing every handler

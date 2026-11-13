@@ -112,11 +112,11 @@ let pieces = null, cutError = '';
 try {
   pieces = {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
-      '/* ══════════════ Glass — see scripts/glass-patch.js'),
+      '/* ══════════════ Glass ══════════════'),
     route: cut('app/systole.html', "    :S.screen==='notesearch'?buildNoteSearch()", "    :S.screen==='echo'?buildEchoScreen()"),
     doors: cut('app/systole.html', '      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"',
       '      <!-- Study shortcuts end -->'),
-    css: cutStylesheet('.echo-studio{', '/* ── glass — see scripts/glass-patch.js ── */'),
+    css: cutStylesheet('.echo-studio{', '/* ── glass — why, in app/systole.html "Glass" ── */'),
   };
 } catch (e) { cutError = e.message; }
 
