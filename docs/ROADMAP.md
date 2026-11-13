@@ -173,11 +173,14 @@ step 1 (`src/core/markdown.js`, `providererror.js`, `reviewqueue.js`); and the
 wire half of step 2 (`src/core/apexwire.js`: the window, Gemini's request and
 its stream, as `ApexWire.gemini`, which is where A1's second adapter goes).
 Each is held by a pure suite, and the shell keeps a one-line function of each
-old name. **Left in the shell from step 2:** `streamReply()`, the loop that
-runs a turn. It rebinds script-level names that other functions read
-(`aiAbort`, `aiBusy`, `toolTrace`, `groundedTurnLeft`, `lastHits`), so moving
-it means giving that state one owner first: its own change, before or with A1.
-Step 3 follows the map's order of screens; write the map again before starting.
+old name. Then the rest of step 2: the seven names a turn rebinds (`aiBusy`,
+`aiAbort`, `toolTrace`, `groundedTurnLeft`, `lastHits`, `lastHitsKey`,
+`pendingNav`) became one owner, `APEX_TURN` (`src/core/apexturn.js`), with the
+old names kept as views of its fields; and `streamReply()`, the loop that runs a
+turn, moved there as `ApexTurn.run()`, handed the page's parts. The views go
+when nothing says the old names; the map lists who still does, and fourteen
+browser suites say them from inside the page. Step 3 follows the map's order of
+screens; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
