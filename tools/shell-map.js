@@ -528,6 +528,30 @@ function analyse(html, readFile) {
   const windowNames = new Set();
   for (const it of items) for (const r of it.refs) if (r.name === 'window' && r.kind === 'm' && r.prop && r.prop !== '[…]') windowNames.add(r.prop);
 
+  /* Views: an old script-level name kept as an accessor on window over one field of an owner,
+       Object.defineProperties(window, { old: viewOf('field') })    with  const viewOf = f => ({ get(){ return OWNER[f]; }, … })
+     or with the getter written out, get(){ return OWNER.field; }. A use of the old name is a use of the field. */
+  const views = new Map();
+  const getterOf = obj => { const g = obj && obj.type === 'ObjectExpression' ? obj.properties.find(q => q.type === 'Property' && !q.computed && (q.key.name || q.key.value) === 'get' && isFn(q.value)) : null;
+    const b = g && g.value.body, r = b && (b.type === 'BlockStatement' ? (b.body[0] && b.body[0].type === 'ReturnStatement' ? b.body[0].argument : null) : b);
+    return r && r.type === 'MemberExpression' && r.object.type === 'Identifier' ? r : null; };
+  const viewTarget = node => {
+    if (node.type === 'ObjectExpression') { const r = getterOf(node); return r && !r.computed ? { owner: r.object.name, field: r.property.name } : null; }
+    if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || !node.arguments[0] || node.arguments[0].type !== 'Literal') return null;
+    const helper = byName.get(node.callee.name), fn = helper && isFn(helper.init) ? helper.init : null;
+    const param = fn && fn.params[0] && fn.params[0].type === 'Identifier' ? fn.params[0].name : null;
+    const r = fn && getterOf(fn.body);
+    return r && r.computed && r.property.type === 'Identifier' && r.property.name === param ? { owner: r.object.name, field: String(node.arguments[0].value) } : null;
+  };
+  for (const st of ast.body) {
+    const e = st.type === 'ExpressionStatement' ? st.expression : null;
+    if (!e || e.type !== 'CallExpression' || e.callee.type !== 'MemberExpression' || e.callee.object.name !== 'Object' || e.callee.property.name !== 'defineProperties') continue;
+    const target = e.arguments[0], props = e.arguments[1];
+    if (!target || target.type !== 'Identifier' || target.name !== 'window' || !props || props.type !== 'ObjectExpression') continue;
+    for (const q of props.properties) { if (q.type !== 'Property' || q.computed) continue; const v = viewTarget(q.value); if (v && byName.has(v.owner)) views.set(q.key.name || q.key.value, v); }
+  }
+  const viewOwners = new Set([...views.values()].map(v => v.owner));
+
   const place = name => byName.has(name) ? 'shell' : moduleOfName.has(name) ? 'module' : LANGUAGE.has(name) ? 'language' : BROWSER_OF.has(name) ? BROWSER_OF.get(name) : windowNames.has(name) ? 'window' : 'unplaced';
 
   /* A module's own effects, per name it gives: what the function behind each
@@ -603,6 +627,7 @@ function analyse(html, readFile) {
   /* ── each item, placed ── */
   const mutated = new Set();    // shell names something changes or rebinds after they are made
   for (const it of items) for (const r of it.refs) if ((r.kind === 'm' || r.kind === 'w') && byName.has(r.name)) mutated.add(r.name);
+  for (const o of viewOwners) mutated.add(o);
   /* What is made from a payload as the script loads is the bank's data: ALL_Q, and POOL made from it, and so on. It is
      listed with the state, because a function that reads it needs it handed over just the same. */
   const bank = new Set();
@@ -614,13 +639,17 @@ function analyse(html, readFile) {
   const isFunc = name => { const it = byName.get(name); return !!it && (it.kind === 'function' || it.kind === 'class'); };
 
   for (const it of items) {
-    const d = it.facts = { reads: new Map(), writes: new Map(), calls: new Set(), wires: new Set(), consts: new Set(), modules: new Set(), cats: { DOM: new Set(), storage: new Set(), net: new Set(), clock: new Set() }, unplaced: new Set(), moduleCats: new Set(), opaque: new Set() };
+    const d = it.facts = { reads: new Map(), writes: new Map(), calls: new Set(), wires: new Set(), consts: new Set(), modules: new Set(), cats: { DOM: new Set(), storage: new Set(), net: new Set(), clock: new Set() }, unplaced: new Set(), moduleCats: new Set(), opaque: new Set(), views: new Set() };
     const add = (map, name, prop) => { if (!map.has(name)) map.set(name, new Set()); if (prop !== undefined) map.get(name).add(prop); };
     for (const r of it.refs) {
       if (r.name === '__slot__' || r.name === '__payload__') continue;
       let name = r.name, prop = r.prop, where = place(name);
       /* LOG.push(…) and POOL.filter(…) are uses of LOG and POOL, not of a property called push or filter. */
       if (r.call && r.call.split('.').length === 2) prop = undefined;
+      /* aiBusy=true is a write to APEX_TURN.busy; toolTrace.push(…) a change inside APEX_TURN.trace. */
+      const view = !byName.has(name) && !r.wire ? views.get(name) : null;
+      let kind = r.kind, call = r.call;
+      if (view) { d.views.add(name); if (call) call = view.owner + '.' + view.field + call.slice(name.length); name = view.owner; prop = view.field; where = 'shell'; if (kind === 'w') kind = 'm'; }
       /* window.NAME is NAME, when NAME is the app's. */
       if (name === 'window' && prop && prop !== '[…]' && (byName.has(prop) || moduleOfName.has(prop) || windowNames.has(prop))) {
         if (byName.has(prop) || moduleOfName.has(prop)) { name = prop; prop = undefined; where = place(name); }
@@ -628,13 +657,13 @@ function analyse(html, readFile) {
       }
       if (where === 'shell') {
         if (name === it.name && it.kind !== 'function') continue;
-        if (isFunc(name)) { if (r.wire) d.wires.add(name); else if (name !== it.name) d.calls.add(name); if (r.kind === 'w' || r.kind === 'm') add(d.writes, name, prop); continue; }
+        if (isFunc(name)) { if (r.wire) d.wires.add(name); else if (name !== it.name) d.calls.add(name); if (kind === 'w' || kind === 'm') add(d.writes, name, prop); continue; }
         if (r.wire) continue;
-        if (r.kind === 'w') add(d.writes, name);
-        else if (r.kind === 'm') add(d.writes, name, prop === undefined ? '*' : prop);
+        if (kind === 'w') add(d.writes, name);
+        else if (kind === 'm') add(d.writes, name, prop === undefined ? '*' : prop);
         else if (isState(name)) add(d.reads, name, prop);
         else d.consts.add(name);
-        if (r.call && !r.alias && !(r.kind === 'm') && !PLAIN_METHODS.has(r.call.split('.').pop())) d.opaque.add(r.call);
+        if (call && !r.alias && !(kind === 'm') && !PLAIN_METHODS.has(call.split('.').pop())) d.opaque.add(call);
       } else if (where === 'module') {
         if (r.wire) { d.wires.add(name); continue; }
         const call = r.call || (prop && prop !== '[…]' ? name + '.' + prop : name);
@@ -770,7 +799,7 @@ function analyse(html, readFile) {
   });
   const unreached = fnItems.filter(f => !reachable.has(f.name)).map(f => f.name);
 
-  return { shell, items, fnItems, modules, byName, moduleOfName, sections, callers, hoistedAtLoad, loaders, screens: screenInfo, unreached, markupHandlers, isState, isFunc, place, TAGS, bank, mutated };
+  return { shell, items, fnItems, modules, byName, moduleOfName, sections, callers, hoistedAtLoad, loaders, screens: screenInfo, unreached, markupHandlers, isState, isFunc, place, TAGS, bank, mutated, views, viewOwners };
 }
 
 /* ── the map, as text ───────────────────────────────────────────────────── */
@@ -837,6 +866,7 @@ function render(A) {
   L.push('- **calls into** are methods called on a value the script holds in state (`apexAv.setState`, a viewer, a canvas context kept in a variable). What such a method does is not followed, so the item is put with neither the readers nor the writers.');
   L.push('- **calls** are the shell\'s own functions it calls, or hands on as a value. **wires** are the functions it writes into markup as inline handlers; they run when tapped, so they are no part of the item\'s reach, and they are counted where the map works out which functions a screen owns.');
   L.push('- **constants** are script-level names nothing changes after they are made, and that are not made from the bank.');
+  L.push('- An old name the shell keeps as a **view** of one field of an owner (`aiBusy` of `APEX_TURN.busy`) is shown as that field: the entry says what the function touches, not what it calls it. "Who touches what" lists the views and who still says each.');
   L.push('- The phrase in italics is the item\'s reach through the shell functions it calls and wires, to a fixed point: *pure* (nothing below), *pure but for the clock*, *reads state*, *changes state*, *calls into an object held in state*, or *reaches the DOM, storage or the network*. **through its calls** names what that adds to what the item does itself.');
   L.push('');
   L.push('## What this cannot see');
@@ -936,8 +966,9 @@ function render(A) {
   const who = new Map();
   const note = (key, kind, it) => { if (!who.has(key)) who.set(key, { r: new Set(), w: new Set() }); who.get(key)[kind].add(it.name || '(load)'); };
   for (const it of items) {
-    for (const [name, props] of it.facts.reads) { if (!props.size) note(name, 'r', it); for (const p of props) note(name === 'S' ? 'S.' + p : name, 'r', it); }
-    for (const [name, props] of it.facts.writes) { if (!A.byName.has(name) || A.isFunc(name)) continue; const ps = [...props].filter(p => p !== '*'); if (!ps.length || name !== 'S') note(name, 'w', it); if (name === 'S') for (const p of ps) note('S.' + p, 'w', it); }
+    const fields = name => name === 'S' || A.viewOwners.has(name);
+    for (const [name, props] of it.facts.reads) { if (!props.size) note(name, 'r', it); for (const p of props) note(fields(name) ? name + '.' + p : name, 'r', it); }
+    for (const [name, props] of it.facts.writes) { if (!A.byName.has(name) || A.isFunc(name)) continue; const ps = [...props].filter(p => p !== '*'); if (!ps.length || !fields(name)) note(name, 'w', it); if (fields(name)) for (const p of ps) note(name + '.' + p, 'w', it); }
   }
   const keys = [...who.keys()].sort((a, b) => { const sa = a === 'S' || a.startsWith('S.'), sb = b === 'S' || b.startsWith('S.'); return sa !== sb ? (sa ? -1 : 1) : a < b ? -1 : a > b ? 1 : 0; });
   const names = (set) => { const a = [...set].sort(); return a.length ? a.map(tick).join(' ') : 'nothing'; };
@@ -945,6 +976,17 @@ function render(A) {
   L.push('');
   for (const k of keys.filter(k => k === 'S' || k.startsWith('S.'))) { const w = who.get(k); L.push(`- ${tick(k)} — written by ${names(w.w)} — read by ${names(w.r)}`); }
   L.push('');
+  if (A.views.size) {
+    L.push('### Old names that are views');
+    L.push('');
+    L.push('Each of these was a script-level `let` and is now an accessor on `window` over one field of an owner. A use of the name is listed, here and in the map, as a use of the field. The view can go when nothing in the shell says the name; the suites that say it from inside the page (`tests/`) have to stop first.');
+    L.push('');
+    for (const [name, v] of [...A.views].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+      const users = items.filter(it => it.facts.views.has(name)).map(it => it.name || '(load)');
+      L.push(`- ${tick(name)} is ${tick(v.owner + '.' + v.field)} — still said by ${names(new Set(users))}`);
+    }
+    L.push('');
+  }
   L.push('### Every other piece of state');
   L.push('');
   for (const k of keys.filter(k => !(k === 'S' || k.startsWith('S.')))) { const w = who.get(k); L.push(`- ${tick(k)} — written by ${names(w.w)} — read by ${names(w.r)}`); }
@@ -1027,6 +1069,12 @@ function pageTap(){ drawer(); }
 function viaWrapper(x){ return Demo.twice(x); }
 function clocked(){ return Date.now(); }
 let viewer=null;
+const OWNER={n:0,list:[],tool:null};
+const viewOf=f=>({get(){ return OWNER[f]; },set(v){ OWNER[f]=v; },configurable:true});
+Object.defineProperties(window,{oldN:viewOf('n'),oldList:viewOf('list'),oldTool:viewOf('tool'),written:{get(){ return OWNER.n; },set(v){ OWNER.n=v; }}});
+function viewReader(){ return oldN+written; }
+function viewWriter(){ oldN=1; oldList.push(2); }
+function viewHeld(){ return oldTool.run(); }
 function held(){ return viewer.close(); }
 function plain(){ return LOG.map(x=>x).join(','); }
 function bankReader(){ return POOL.length; }
@@ -1080,6 +1128,11 @@ function selfTest() {
     ['what is made from a payload is the bank\'s data, and reading it is reading state', A.bank.has('ALL_Q') && A.bank.has('POOL') && !A.bank.has('LIMIT') && it('bankReader').facts.reads.has('POOL') && it('bankReader').tier === 'reads'],
     ['the slot is a module that gives its name', A.modules.length === 1 && A.modules[0].defines.includes('Demo')],
     ['the banners are the sections', A.sections.some(s => s.title === 'first banner' && s.subs.some(x => x.title === 'a light banner' && x.items.some(e => e.item && e.item.name === 'later')))],
+    ['an old name kept as a view of an owner\'s field is found, through a helper or with its getter written out', A.views.size === 4 && A.views.get('oldN').owner === 'OWNER' && A.views.get('oldN').field === 'n' && A.views.get('oldList').field === 'list' && A.views.get('written').field === 'n'],
+    ['reading a view is reading the field; assigning to one, or changing what it holds, is writing the field', has(it('viewReader').facts.reads, 'OWNER', 'n') && !it('viewReader').facts.writes.size && it('viewReader').tier === 'reads'
+      && has(it('viewWriter').facts.writes, 'OWNER', 'n') && has(it('viewWriter').facts.writes, 'OWNER', 'list') && it('viewWriter').tier === 'writes'],
+    ['a method called on what a view holds is a call into an object held in state, named by its field', it('viewHeld').tier === 'held' && it('viewHeld').facts.opaque.has('OWNER.tool.run')],
+    ['who still says an old name is kept, by name', it('viewReader').facts.views.has('oldN') && it('viewWriter').facts.views.has('oldList') && !it('reader').facts.views.size],
     ['nothing in the fixture is left unplaced', A.items.every(i => !i.facts.unplaced.size)],
     ['a script element is found whatever the case of its tag, with attributes on it and a space in its end tag, and its text is not taken for markup',
       (() => { try { const r = readShell(FIXTURE.replace('<script>', '<SCRIPT type="text/javascript">').replace('</script>', '</SCRIPT >')); return r.slots.length === 1 && r.src.includes('function early()') && !r.outside.includes('function early()'); } catch (_) { return false; } })()],

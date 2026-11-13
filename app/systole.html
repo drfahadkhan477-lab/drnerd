@@ -1550,8 +1550,8 @@ function search(query,{exclude=null,limit=5,kind=null}={}){
 /* ── build the extra context block handed to the tutor ────────────────────── */
 const CTX_BUDGET=5200;
 /* What grounded searches may still add to one reply. Each search is held to CTX_BUDGET*3, but a reply runs up to six
-   steps with any number of calls each, and grounded results skip the tool slice, so streamReply sets this per reply. */
-let groundedTurnLeft=Infinity;
+   steps with any number of calls each, and grounded results skip the tool slice, so streamReply sets this per reply.
+   groundedTurnLeft is a view of the turn's state, APEX_TURN.groundedLeft (below, and src/core/apexturn.js). */
 function systemPrompt(){ return AI_GROUNDED ? SYSTEM+GROUNDED : SYSTEM; }
 
 /* In grounded mode the library is the whole answer, not supporting material:
@@ -2568,7 +2568,7 @@ const TOOLS=[
   input_schema:{type:'object',properties:{},required:[]}}
 ];
 
-let pendingNav=null, toolTrace=[];
+/* pendingNav and toolTrace are views of the turn's state, APEX_TURN.nav and .trace (below, and src/core/apexturn.js). */
 /* Grounded mode: answer from the reference library alone. Off by default —
    with an empty library it would leave Apex with nothing to say. */
 let AI_GROUNDED=(()=>{try{return localStorage.getItem('accsap12.grounded')==='1';}catch(_){return false;}})();
@@ -3633,7 +3633,16 @@ for(const p of Object.keys(AI_DEFAULT)){
 if(AI.provider==='provider' || !AI_DEFAULT[AI.provider]){ AI.provider=AI_DEFAULT.provider; aiFixed=true; }
 if(aiFixed) saveJSON(AI_CFG,AI);
 let CHATS = loadJSON(AI_CHAT,{});
-let aiBusy=false, aiAbort=null;
+@@SLOT[src:src/core/apexturn.js]@@
+/* ═══════════ the turn's state has one owner ═══════════
+   What a turn changes was seven script-level names declared in four places. It is one object, made by
+   src/core/apexturn.js, which says what each field is. The old names stay, each a view of one field:
+   the panel's functions below still say them, and so do the browser suites, from inside the page. A
+   function switches to APEX_TURN when it leaves the shell (docs/ROADMAP.md, E1). */
+const APEX_TURN=ApexTurn.state();
+const apexTurnView=f=>({get(){ return APEX_TURN[f]; },set(v){ APEX_TURN[f]=v; },configurable:true});
+Object.defineProperties(window,{aiBusy:apexTurnView('busy'),aiAbort:apexTurnView('abort'),toolTrace:apexTurnView('trace'),
+  groundedTurnLeft:apexTurnView('groundedLeft'),lastHits:apexTurnView('hits'),lastHitsKey:apexTurnView('hitsKey'),pendingNav:apexTurnView('nav')});
 
 const PROVIDERS=[
   ['gemini','Gemini','free — sees figures',"No card. Create a key at aistudio.google.com → Get API key."],
@@ -4332,7 +4341,7 @@ function bindChat(q){
   /* Scroll is restored by apexPanelRestore, which knows whether you were at
      the bottom. Forcing it here would undo that on every rebuild. */
 }
-let lastHits=[], lastHitsKey=null;
+/* lastHits and lastHitsKey are views of the turn's state, APEX_TURN.hits and .hitsKey. */
 function fire(text,explainOnly=false){
   text=(text||'').trim(); if(!text||aiBusy||apexAway())return;
   /* Empty the composer BEFORE buildAI(). buildAI() reads the panel through
