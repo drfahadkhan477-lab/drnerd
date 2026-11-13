@@ -508,8 +508,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     ok('portrait still stacks, and still fits',
        port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
     /* The pages run the full width now, and Home's column is the fixed measure (.home-page-in, 900px). */
-    ok('and its column reserves space for the navigation rail',
-       !!port.col && port.col.w === port.vw - 128, port.col ? `${port.col.w}px` : 'no column');
+    ok('and its column reclaims the removed sidebar width',
+       !!port.col && port.col.w === port.vw - 40, port.col ? `${port.col.w}px` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem.
@@ -633,6 +633,42 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     for (const r of rows) {
       ok(`${r.label}: "Got it" keeps more room from the card's right edge than the Apex button is wide`,
          !r.err && r.clearance > r.fabW, r.err || `${r.clearance}px clear vs a ${r.fabW}px button`);
+    }
+  }
+
+  head('on a phone, the Apex button stands beside the tab bar, never over the pages');
+  /* Lifted above the bar, the button stood over the page's first lines on arrival, and with some pearls over the
+     pearl's key statement. Which words it covered depended on the pearl and on the scroll, so the same reasoning as
+     the check above applies: assert the property that makes covering impossible, not that today's page happened to be
+     clear. The pages scroll inside #homePager; a button whose box never meets the pager's box covers none of them. */
+  {
+    const prev = page.viewportSize();
+    const rows = [];
+    for (const [w, h] of [[390, 844], [375, 667], [320, 568]]) {
+      await resized(page, w, h);
+      await page.evaluate(() => { goHome(); render(); });
+      await settled(page, () => { const f = document.getElementById('aiFab'), p = document.getElementById('homePager');
+        /* Still means no finite animation left: the button's glow runs for ever and is not a move. */
+        const moving = !!f && f.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity);
+        return S.screen === 'home' && !!f && !!p && !moving && p.getBoundingClientRect().height > 0; },
+        { label: 'Home drawn with the Apex button still' });
+      rows.push(await page.evaluate(() => {
+        const r = e => e.getBoundingClientRect(), f = r(document.getElementById('aiFab')), p = r(document.getElementById('homePager'));
+        const meet = (a, b) => a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+        const bar = r(document.querySelector('.home-tabs')), tabs = [...document.querySelectorAll('.home-tab')].map(r);
+        return { vw: innerWidth, vh: innerHeight, shown: getComputedStyle(document.getElementById('aiFab')).display !== 'none',
+          overPages: meet(f, p), onTab: tabs.some(t => meet(f, t)), inView: f.left >= 0 && f.right <= innerWidth && f.bottom <= innerHeight,
+          rowShared: f.top < bar.bottom && f.bottom > bar.top, size: [Math.round(f.width), Math.round(f.height)],
+          tabW: Math.round(Math.min(...tabs.map(t => t.width))), name: document.getElementById('aiFab').getAttribute('aria-label') };
+      }));
+    }
+    if (prev) await resized(page, prev.width, prev.height);
+    for (const g of rows) {
+      const at = `${g.vw}x${g.vh}`;
+      ok(`${at}: the Apex button is shown and its box never meets the pages'`, g.shown && !g.overPages, JSON.stringify(g));
+      ok(`${at}: it stands in the tab bar's row, clear of every tab, on screen`, g.rowShared && !g.onTab && g.inView, JSON.stringify(g));
+      ok(`${at}: it stays a touch target with a name, and the tabs keep theirs`,
+         g.size[0] >= 44 && g.size[1] >= 44 && /Apex/.test(g.name || '') && g.tabW >= 44, JSON.stringify(g));
     }
   }
 

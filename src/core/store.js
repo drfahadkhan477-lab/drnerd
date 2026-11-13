@@ -30,11 +30,12 @@
    stay for the same reason.
 
    AND IT IS COPIED HERE ANYWAY. That paragraph settles the QUOTA question and
-   says nothing about the other one: localStorage and IndexedDB do not have the
-   same lifetime, and iOS evicts the first after seven days without a visit. So
-   accsap12.v2 keeps its synchronous home and gets a copy in the database,
-   restored if the original is ever found missing. See MIRRORED below; it is a
-   backup, not a second store, and it changes nothing about boot.
+   says nothing about the other one: localStorage can be emptied while the
+   database survives. So accsap12.v2 keeps its synchronous home and gets a copy
+   in the database, restored if the original is ever found missing. See
+   MIRRORED below; it is a backup, not a second store, and it changes nothing
+   about boot. It is not a defence against Safari's seven-day cap, which takes
+   both (see below).
 
    THE ORDER OF EVENTS AT BOOT, which is the only genuinely tricky part:
 
@@ -85,14 +86,20 @@ const MANAGED = ['accsap12.ink', 'accsap12.notes', 'accsap12.chat', 'accsap12.lo
 
    BUT THAT ARGUMENT IS ABOUT SIZE, AND THE RISK HERE IS NOT SIZE. The header
    says the blob "cannot grow", which is true and settles the quota question
-   completely. It does not touch the other one: localStorage and IndexedDB do
-   not have the same LIFETIME. iOS and iPadOS evict a site's localStorage after
-   seven days without a visit, and this app is opened in Safari over http as
-   well as from the Home Screen — docs/IPAD.md exists because the iPad cannot
-   open a local file at all. So the four keys that moved are protected from
-   eviction and the one that stayed is not, and it is the only one a fellow
-   cannot rebuild: notes can be rewritten and figures re-imported, a year of
-   spaced repetition cannot.
+   completely. It does not touch the other one: what happens to it when
+   localStorage alone is lost, and it is the only key a fellow cannot rebuild:
+   notes can be rewritten and figures re-imported, a year of spaced repetition
+   cannot.
+
+   WHAT THE COPY DOES NOT COVER. This file once said the keys in the database
+   were protected from the seven-day eviction and localStorage was not. WebKit
+   says otherwise: after seven days of Safari use with no interaction on a site,
+   it deletes ALL of that site's script-writable storage, localStorage and
+   IndexedDB and the service worker's cache alike; the first party of a Home
+   Screen web app is exempt (webkit.org/tracking-prevention), and persist() is
+   not said to lift the cap. This app is opened in a Safari tab as well as from
+   the Home Screen (docs/IPAD.md), so in a tab the defences are the Home Screen
+   and a backup; the Progress screen's data panel says so (safariTabStorage()).
 
    So the key stays exactly where it is and a COPY is kept in the database.
    Nothing on the synchronous boot path changes — the app still reads and
@@ -347,9 +354,9 @@ function mirror(key) {
   const raw = lsRaw(key);
   if (raw == null) return false;                    // nothing to copy
   /* CHEAP TO CALL, so the caller does not have to know when the value changed.
-     The alternative was hooking save() itself, and save()'s last line was the
-     anchor scripts/resume-patch.js matched on — editing it would have broken
-     the build with `expected exactly 1 match, found 0`. A caller that mirrors
+     The alternative was hooking save() itself, which the patch chain that built
+     the app at the time could not allow (save()'s last line was one of its
+     exact-match anchors; the chain was retired in c57a593). A caller that mirrors
      on a timer and on page-hide is worth more than one that is exactly timely,
      and this is what makes that caller free: an unchanged blob costs one
      string comparison and no transaction. */

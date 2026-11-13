@@ -635,12 +635,12 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     const wire=[{role:'user',content:'Explain the fictional marker'}];
     const ask=async(normal=false)=>{refFenceRoll();return oneTurnGemini(null,wire,refBlock('NOTE','title: synthetic','Amber marker'),!normal);};
     try{
-      await ask();const repeated=await ask();results.hit=calls===1&&repeated.reused===true;
+      const complete=await ask();results.completeMarked=complete.incomplete===false;const repeated=await ask();results.hit=calls===1&&repeated.reused===true;
       REF.push({id:'cache-change',title:'Changed evidence',body:'New qualification'});
       await ask();results.source=calls===2;REF.pop();
       const model=cur().model;cur().model=model+'-different';await ask();results.model=calls===3;cur().model=model;
       await ask(true);await ask(true);results.normal=calls===5;
-      wire[0].content='Another explanation';finish='MAX_TOKENS';await ask();await ask();results.incomplete=calls===7;
+      wire[0].content='Another explanation';finish='MAX_TOKENS';const limited=await ask();results.limitMarked=limited.incomplete===true&&limited.text==='Synthetic complete explanation';await ask();results.incomplete=calls===7;
       if(typeof apexExplanationCache!=='undefined'){
         for(const entry of apexExplanationCache.values()) entry.at=Date.now()-16*60*1000;
         wire[0].content='Explain the fictional marker';finish='STOP';await ask();results.expired=calls===8;
@@ -653,6 +653,8 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   ok('model changes invalidate explanation reuse',reuse.hit&&reuse.model);
   ok('normal Send bypasses explanation reuse',reuse.hit&&reuse.normal);
   ok('incomplete answers are never reused',reuse.hit&&reuse.incomplete);
+  ok('output-limited answers retain text and are marked incomplete',reuse.limitMarked);
+  ok('complete answers are not marked incomplete',reuse.completeMarked);
   ok('expired explanations require a new provider request',reuse.expired);
 
   head('explanation authentication stays with its cache identity');

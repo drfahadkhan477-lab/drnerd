@@ -279,7 +279,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      when it is merely late. */
   const settled = () => page.waitForFunction(() => {
     const c = document.querySelector('.q-counter');
-    return !!c && c.textContent.trim() === 'Q ' + (S.qIdx + 1) + ' / ' + S.questions.length;
+    return !!c && c.textContent.trim() === (S.qIdx + 1) + ' of ' + S.questions.length + ' in this session';
   }, null, { timeout: 15000 });
   await settled();
   const chrome = await page.evaluate(() => ({
