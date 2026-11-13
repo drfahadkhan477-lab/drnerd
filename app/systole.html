@@ -4637,7 +4637,7 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
     while(apexExplanationCache.size>=8) apexExplanationCache.delete(apexExplanationCache.keys().next().value);
     apexExplanationCache.set(cacheKey,{text,at:Date.now()});
   }
-  return {text, raw, calls, finishReason};
+  return {text, raw, calls, finishReason, incomplete:finishReason==='MAX_TOKENS'};
 }
 @@SLOT[src:src/core/providererror.js]@@
 /* A refusal from this site's own relay (hosted: no key typed) is not about a
