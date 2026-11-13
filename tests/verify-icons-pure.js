@@ -79,7 +79,10 @@ for (const [file, src] of files) {
          through on the results screen's declaration, further down the same file, and a name there that the
          sprite lacks would have passed. It showed when the results screen left for src/app/results.js and
          took that declaration with it. */
-      const decl = new RegExp('(?:\\b(?:const|let|var)\\s+|,\\s*)' + ident[1].replace(/\$/g, '\\$') + '\\s*=(?!=)([^;\\n]*)', 'g');
+      /* The name is letters, digits, _ and $ by the pattern above. It is escaped whole all the same, so the
+         expression below is that name whatever it holds, and a `$` in it is a character, not the end of a line. */
+      const literally = ident[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const decl = new RegExp('(?:\\b(?:const|let|var)\\s+|,\\s*)' + literally + '\\s*=(?!=)([^;\\n]*)', 'g');
       const dl = [...src.matchAll(decl)].flatMap(d => [...d[1].matchAll(/['"]([a-z0-9-]+)['"]/g)].map(x => x[1]));
       if (!dl.length) unresolved.push(`${file}: icon(${ident[1]})`);
       dl.forEach(n => note(n, file + ' via ' + ident[1]));
