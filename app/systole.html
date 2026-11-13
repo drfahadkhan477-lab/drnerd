@@ -1550,8 +1550,8 @@ function search(query,{exclude=null,limit=5,kind=null}={}){
 /* ── build the extra context block handed to the tutor ────────────────────── */
 const CTX_BUDGET=5200;
 /* What grounded searches may still add to one reply. Each search is held to CTX_BUDGET*3, but a reply runs up to six
-   steps with any number of calls each, and grounded results skip the tool slice, so streamReply sets this per reply. */
-let groundedTurnLeft=Infinity;
+   steps with any number of calls each, and grounded results skip the tool slice, so streamReply sets this per reply.
+   groundedTurnLeft is a view of the turn's state, APEX_TURN.groundedLeft (below, and src/core/apexturn.js). */
 function systemPrompt(){ return AI_GROUNDED ? SYSTEM+GROUNDED : SYSTEM; }
 
 /* In grounded mode the library is the whole answer, not supporting material:
@@ -2568,7 +2568,7 @@ const TOOLS=[
   input_schema:{type:'object',properties:{},required:[]}}
 ];
 
-let pendingNav=null, toolTrace=[];
+/* pendingNav and toolTrace are views of the turn's state, APEX_TURN.nav and .trace (below, and src/core/apexturn.js). */
 /* Grounded mode: answer from the reference library alone. Off by default —
    with an empty library it would leave Apex with nothing to say. */
 let AI_GROUNDED=(()=>{try{return localStorage.getItem('accsap12.grounded')==='1';}catch(_){return false;}})();
@@ -3633,7 +3633,16 @@ for(const p of Object.keys(AI_DEFAULT)){
 if(AI.provider==='provider' || !AI_DEFAULT[AI.provider]){ AI.provider=AI_DEFAULT.provider; aiFixed=true; }
 if(aiFixed) saveJSON(AI_CFG,AI);
 let CHATS = loadJSON(AI_CHAT,{});
-let aiBusy=false, aiAbort=null;
+@@SLOT[src:src/core/apexturn.js]@@
+/* ═══════════ the turn's state has one owner ═══════════
+   What a turn changes was seven script-level names declared in four places. It is one object, made by
+   src/core/apexturn.js, which says what each field is. The old names stay, each a view of one field:
+   the panel's functions below still say them, and so do the browser suites, from inside the page. A
+   function switches to APEX_TURN when it leaves the shell (docs/ROADMAP.md, E1). */
+const APEX_TURN=ApexTurn.state();
+const apexTurnView=f=>({get(){ return APEX_TURN[f]; },set(v){ APEX_TURN[f]=v; },configurable:true});
+Object.defineProperties(window,{aiBusy:apexTurnView('busy'),aiAbort:apexTurnView('abort'),toolTrace:apexTurnView('trace'),
+  groundedTurnLeft:apexTurnView('groundedLeft'),lastHits:apexTurnView('hits'),lastHitsKey:apexTurnView('hitsKey'),pendingNav:apexTurnView('nav')});
 
 const PROVIDERS=[
   ['gemini','Gemini','free — sees figures',"No card. Create a key at aistudio.google.com → Get API key."],
@@ -4332,7 +4341,7 @@ function bindChat(q){
   /* Scroll is restored by apexPanelRestore, which knows whether you were at
      the bottom. Forcing it here would undo that on every rebuild. */
 }
-let lastHits=[], lastHitsKey=null;
+/* lastHits and lastHitsKey are views of the turn's state, APEX_TURN.hits and .hitsKey. */
 function fire(text,explainOnly=false){
   text=(text||'').trim(); if(!text||aiBusy||apexAway())return;
   /* Empty the composer BEFORE buildAI(). buildAI() reads the panel through
@@ -4373,61 +4382,15 @@ function askApexMisses(){ return askApex(APEX_ASK.misses); }
    (apexTrim) are the wire's rules: src/core/apexwire.js. */
 function apexWire(hist){ return ApexWire.wire(hist); }
 function apexTrim(hist){ return ApexWire.trim(hist); }
-async function streamReply(q,hist,extra,explainOnly=false){
-  aiAbort=new AbortController();
-  toolTrace=[]; groundedTurnLeft=CTX_BUDGET*6;
-  const wire=apexWire(hist);
-  let guard=0, truncated=false;
-  try{
-    while(guard++ < 6){                       // bounded agent loop
-      apexSetState('thinking');
-      const turn=await oneTurn(q,wire,extra,explainOnly);
-      // A response can finish as Stop is pressed. Never commit or execute it.
-      if(aiAbort.signal.aborted) break;
-      if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
-      if(turn.text.trim()||turn.calls.length){
-        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{}),...(turn.incomplete||turn.finishReason==='MAX_TOKENS'?{incomplete:true}:{})});
-        saveJSON(AI_CHAT,CHATS);
-      }
-      if(!turn.calls.length&&turn.finishReason&&turn.finishReason!=='STOP'&&!(turn.finishReason==='MAX_TOKENS'&&turn.text.trim())){
-        hist.push({role:'assistant',err:true,content:turn.finishReason==='MAX_TOKENS'
-          ?'This explanation reached the model’s output limit and may be incomplete. Ask a follow-up to continue; check the sources before relying on it.'
-          :'The model stopped without confirming a complete explanation. Check the sources or rephrase your question.'});
-        saveJSON(AI_CHAT,CHATS);
-      }
-      /* A mock block opened while this turn was at the model: its words are kept, its calls are not run, and nothing more is asked. */
-      if(!turn.calls.length||apexAway()) break;
-      if(guard>=6) truncated=true;          // calls still pending on the last allowed step
-      const results=turn.calls.map(c=>{
-        const out=runTool(c.name,c.input);
-        if(out.cite) lastHits=(lastHits||[]).concat(out.cite).slice(-6);
-        toolTrace.push({kind:'call',name:c.name,input:c.input});
-        // Grounded search already budgets whole fenced notes. A second character
-        // cut here could remove a qualification and leave its fence unclosed.
-        const content=String(out.result);
-        return {id:c.id, name:c.name, content:AI_GROUNDED&&c.name==='search_question_bank'
-          ?content:content.slice(0,9000)};
-      });
-      pushToolExchange(wire,turn,results);      // provider-shaped, see below
-      buildAI();                                // show the tool chips as they run
-    }
-    /* Marked err:true so it renders as a notice rather than as teaching, and
-       so rule 3 above keeps it out of the next request. */
-    if(truncated){
-      hist.push({role:'assistant',err:true,
-        content:'That needed more tool steps than one turn allows, so I stopped there. Ask again and I will carry on from where this left off.'});
-      saveJSON(AI_CHAT,CHATS);
-    }
-  }catch(err){
-    if(err.name!=='AbortError'){
-      hist.push({role:'assistant',err:true,content:err.message||'Request failed. Check the connection.'});
-      saveJSON(AI_CHAT,CHATS);
-    }
-  }finally{
-    aiBusy=false; aiAbort=null; buildAI();
-    apexSetState('idle');
-    try{ flushNav(); }catch(_){}
-  }
+function streamReply(q,hist,extra,explainOnly=false){
+  /* The loop is src/core/apexturn.js's run(); this hands it the turn's state and the page's parts, each
+     looked up when the loop calls it, as the loop looked them up when it stood here. Not async: the
+     caller gets run()'s own promise, settling when the loop's did. */
+  return ApexTurn.run(APEX_TURN,{AbortController,groundedBudget:CTX_BUDGET*6,
+    wire:h=>apexWire(h), oneTurn:(a,b,c,x)=>oneTurn(a,b,c,x), runTool:(n,i)=>runTool(n,i),
+    exchange:(w,t,r)=>pushToolExchange(w,t,r), grounded:()=>AI_GROUNDED, away:()=>apexAway(),
+    save:()=>saveJSON(AI_CHAT,CHATS), render:()=>buildAI(), setState:s=>apexSetState(s), flush:()=>flushNav()},
+    q,hist,extra,explainOnly);
 }
 /* The model's own parts go back verbatim, answered with one functionResponse per call: the
    shape is Gemini's, and is built by src/core/apexwire.js. */

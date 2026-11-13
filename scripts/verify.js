@@ -300,6 +300,13 @@ const SUITES = [
      so its shape was only ever checked through a browser and a stubbed network.
      src/core/apexwire.js now (roadmap E1 step 2), the seam a second provider needs. */
   ['apexwire-pure', 'a request carries a window of the thread that opens on a user turn and no failed turn; it goes to Google with a key and to this site\'s relay without, carrying no secret; its body is the text sent, key for key; the stream is read the same whatever its chunk boundaries, each part kept with its signature; a tool\'s answer goes back with the model\'s own parts'],
+  /* What a turn with the tutor changes was seven script-level names, declared in four places and rebound by
+     whichever function got there, which is why the loop that runs a turn could not leave the shell. They are
+     one object now, src/core/apexturn.js, and the old names are views of it (roadmap E1). */
+  ['apexturn-pure', 'a turn\'s state is one object the page holds once, made by the module, and each of the seven old names reads and writes its own field of it, and nothing else'],
+  /* The loop that runs a turn, streamReply() in the shell until the turn's state had one owner. Its rules are
+     the ones the shell's comments told as stories; here each is a check, and the page's hand-over is one too. */
+  ['apexloop-pure', 'a turn stopped as its reply arrives keeps and runs nothing; explain-only runs no tool; a cut-off reply is kept and marked; a mock block stops the tools; an answer is cut at 9,000 characters but a grounded search\'s; six steps at most; however a turn ends it ends in the same order; and the page hands the loop its own state and parts, each looked up when called'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -500,8 +507,8 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure'];
+/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
