@@ -232,6 +232,14 @@ files, with an allowlist for illustration, and watch it fail on an injected one.
 node on each landing and study screen in every theme state, against its effective
 ground (composite translucent layers; read a backdrop-filtered layer as the page
 under it). F1 is what the list missed. *Opus.*
+*Started:* a probe that composites background colours read 3,704 texts across
+nine screens and twelve theme states and found one real failure: an unchosen
+option's letter, the accent at 3.5-3.9:1 (fixed; verify-ink holds it, and its
+scan now sees the `--acc` alias). It could not measure 2,319 texts on gradients
+or images, and it mis-read the selected tab, whose ground is a sibling pill. The
+rest of D2 needs pixel sampling: hide the text, screenshot, read the ground
+under each text box. Also seen, not fixed: the mock exam's chosen letter is
+white on the raw accent (about 4.1:1).
 
 **D3 — Figure questions on iPad landscape.** A figure item shows the figure full
 width and pushes the stem below it. When there is width, default figure items to
