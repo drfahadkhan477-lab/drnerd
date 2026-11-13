@@ -10,7 +10,8 @@
  * the theme button's symbol existed nowhere. So, read from app/systole.html and src/ with comments blanked:
  *   · the live sprite is the <svg><defs> in the page markup, and it is the only place a symbol is defined;
  *   · every name handed to icon() is one of its symbols: string literals in the call, the values of
- *     CH_ICONS, and the literals of a const the call is handed by name (msgIcon);
+ *     CH_ICONS, and the literals of every declaration, in that file, of a name the call is handed
+ *     (msgIcon), wherever in its statement the name is declared;
  *   · every href="#i-..." written into markup is one of its symbols.
  * It cannot see a name built at run time from data it does not read; there is none today, and a new one
  * would show here as an identifier with no literals, which fails.
@@ -72,8 +73,14 @@ for (const [file, src] of files) {
     if (/CH_ICONS/.test(arg)) continue;   // its values are read below
     const ident = /^\s*([A-Za-z_$][\w$]*)\s*$/.exec(arg);
     if (ident && ident[1] !== 'name') {
-      const def = new RegExp('(?:const|let|var)\\s+' + ident[1] + '\\s*=([^;\\n]*)').exec(src);
-      const dl = def ? [...def[1].matchAll(/['"]([a-z0-9-]+)['"]/g)].map(x => x[1]) : [];
+      /* EVERY declaration of the name in the file, first in its statement or not. This read the first
+         `const msgIcon=` only, and only where the name followed the keyword. The mock report declares its own
+         second in a statement (`const msg=…, msgIcon=…;`), so its icons were never read: its call was let
+         through on the results screen's declaration, further down the same file, and a name there that the
+         sprite lacks would have passed. It showed when the results screen left for src/app/results.js and
+         took that declaration with it. */
+      const decl = new RegExp('(?:\\b(?:const|let|var)\\s+|,\\s*)' + ident[1].replace(/\$/g, '\\$') + '\\s*=(?!=)([^;\\n]*)', 'g');
+      const dl = [...src.matchAll(decl)].flatMap(d => [...d[1].matchAll(/['"]([a-z0-9-]+)['"]/g)].map(x => x[1]));
       if (!dl.length) unresolved.push(`${file}: icon(${ident[1]})`);
       dl.forEach(n => note(n, file + ' via ' + ident[1]));
     } else if (!lits.length && !(ident && ident[1] === 'name')) unresolved.push(`${file}: icon(${arg.trim().slice(0, 40)})`);
