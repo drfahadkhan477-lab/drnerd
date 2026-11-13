@@ -22,7 +22,7 @@ The script is one scope. Every function, class, `const` and `let` at its top lev
 ## What this cannot see
 
 - A call made by a name the script builds while it runs: `window[name]()`, a handler attribute assembled from pieces (`onclick="${fn}()"`), `setTimeout` given a string, `eval`, `new Function`. Handlers written whole into markup, `onclick="name(…)"` in a string or a template, are read; so are the ones in the page's own markup outside the script.
-- A change made through a value it cannot follow. It follows a local name bound to part of a script-level name (`const c=S.srs[id]; c.due=…` is a write to `S.srs`), a `for…of` over one, the first parameter of a `forEach`/`map`/`filter`/`find`/`some`/`every` callback on one, and the result of `find`/`at`/`get`/`filter`/`slice` on one. It does not follow a value handed to another function as an argument and changed there, a destructured name (`const {srs}=S`), or a value that came back from a call. So a function that passes `S.srs[id]` to a helper that changes it is listed as reading `S.srs`, and the helper as changing nothing of the script's.
+- A change made through a value it cannot follow. It follows a local name bound to part of a script-level name (`const c=S.srs[id]; c.due=…` is a write to `S.srs`), a `for…of` over one, the first parameter of a `forEach`/`map`/`filter`/`find`/`some`/`every` callback on one, and the result of `find`/`at`/`get`/`filter`/`slice` on one. A piece of state handed whole to a member of a module (`ResultsScreen.screenHtml(S,…)`) is followed into that member's own function, one step: the caller is listed with the fields the member reads and changes of it, and with the whole of it when the member hands it on. It does not follow a value handed to another function of the shell and changed there, a part of the state handed over (`S.srs[id]`), a destructured name (`const {srs}=S`), or a value that came back from a call. So a function that passes `S.srs[id]` to a helper that changes it is listed as reading `S.srs`, and the helper as changing nothing of the script's.
 - Anything finer than the first property. `S.srs[q.id].due=…` is "writes `S.srs`". A computed first property is shown as `[…]`.
 - What a value is. *Pure* means the item uses nothing of the script's or the browser's by name. A function that works only on what it is handed is pure here even when what it is handed is an element, a canvas or a viewer (`apexAtBottom(el)`, `figZoomBy(ps,k)`); read a leaf before choosing between `src/core/` and `src/ui/` for it.
 - Which branch runs. Every name a function mentions counts, whether or not the line is ever reached, and "runs as the script loads" takes a called function to run everything it mentions. Both err towards saying more.
@@ -214,15 +214,14 @@ Each of these was a script-level `let` and is now an accessor on `window` over o
 - `AI_GROUNDED` — written by `toggleGrounded` — read by `TOOLS` `aiCtx` `apexDid` `buildAI` `explanationKey` `refImagesForHits` `retrievedContext` `runTool` `streamReply` `systemPrompt` `toggleGrounded`
 - `ALL_Q` — written by nothing — read by `POOL` `QBYID` `flushNav` `indexJob` `jumpTo` `peekQuestion` `retrievedContext` `runSearch` `runTool`
 - `ANNO` — written by `annoInput` `buildAnnotations` `goAnnotations` — read by `annoCountText` `annoInput` `annoListHtml` `annoRowHtml` `annoShown` `buildAnnotations`
-- `APEX_TURN` — written by nothing — read by `streamReply`
 - `APEX_TURN.[…]` — written by `apexTurnView` — read by `apexTurnView`
-- `APEX_TURN.abort` — written by nothing — read by `bindChat` `oneTurnGemini`
-- `APEX_TURN.busy` — written by `fire` — read by `apexLocalAction` `apexLocalHtml` `askApex` `bindChat` `buildAI` `fire` `mountApexAvatar`
-- `APEX_TURN.groundedLeft` — written by `runTool` — read by `runTool`
-- `APEX_TURN.hits` — written by `fire` — read by `buildAI` `oneTurnGemini`
+- `APEX_TURN.abort` — written by `streamReply` — read by `bindChat` `oneTurnGemini` `streamReply`
+- `APEX_TURN.busy` — written by `fire` `streamReply` — read by `apexLocalAction` `apexLocalHtml` `askApex` `bindChat` `buildAI` `fire` `mountApexAvatar`
+- `APEX_TURN.groundedLeft` — written by `runTool` `streamReply` — read by `runTool`
+- `APEX_TURN.hits` — written by `fire` `streamReply` — read by `buildAI` `oneTurnGemini` `streamReply`
 - `APEX_TURN.hitsKey` — written by `fire` — read by `buildAI`
 - `APEX_TURN.nav` — written by `flushNav` `runTool` — read by `flushNav`
-- `APEX_TURN.trace` — written by `runTool` — read by `toolStrip`
+- `APEX_TURN.trace` — written by `runTool` `streamReply` — read by `toolStrip`
 - `BANK` — written by nothing — read by `BANK_BY` `TOOLS` `aiCtx` `buildQuiz`
 - `BANK_BY` — written by nothing — read by `GROUNDED` `aiCtx` `buildSearch` `retrievedContext`
 - `BANK_INFO` — written by nothing — read by `BANK`
@@ -863,7 +862,7 @@ Each `src:` or `app:` slot in the script, in order: the names it gives the scrip
 - **`NOTESEARCH`** var, table
 - **`nsShelf()`** — *reads state* · reads `REF`
 - **`nsSearch(q,o)`** — *changes state* · calls `search` · through its calls: reads, writes, clock
-- **`buildNoteSearch()`** — *a call into NoteSearch.screenHtml* · reads `NOTESEARCH` · modules `NoteSearch.screenHtml` · calls `e` `icon` `md` `nsSearch` `nsShelf` · through its calls: writes, clock, DOM, storage
+- **`buildNoteSearch()`** — *a call into NoteSearch.screenHtml* · reads `NOTESEARCH.open` `NOTESEARCH.q` · modules `NoteSearch.screenHtml` · calls `e` `icon` `md` `nsSearch` `nsShelf` · through its calls: writes, clock, DOM, storage
 - **`goNoteSearch()`** — *reaches the DOM, storage or the network* · writes `S.screen` `NOTESEARCH.open` · calls `render` · through its calls: reads, DOM, storage, held, clock, net
 - **`nsRepaintResults()`** — *reaches the DOM, storage or the network* · reads `NOTESEARCH.q` · DOM `document` · modules `NoteSearch.results` `NoteSearch.resultsHtml` · calls `e` `nsSearch` `nsShelf` · through its calls: writes, clock
 - *runs at load:* `document.addEventListener('input', function(ev){ var el = ev.target; if (!el || !el.hasAtt` — writes `NOTESEARCH.q` · DOM `document` · calls `nsRepaintResults`
@@ -981,7 +980,7 @@ Each `src:` or `app:` slot in the script, in order: the names it gives the scrip
 
 - **`apexWire(hist)`** — *a call into ApexWire.wire* · modules `ApexWire.wire`
 - **`apexTrim(hist)`** — *a call into ApexWire.trim* · modules `ApexWire.trim`
-- **`streamReply(q,hist,extra,explainOnly=false)`** — *a call into ApexTurn.run* · reads `AI_GROUNDED` `APEX_TURN` `CHATS` · DOM `AbortController` · modules `ApexTurn.run` · calls `apexAway` `apexSetState` `apexWire` `buildAI` `flushNav` `oneTurn` `pushToolExchange` `runTool` `saveJSON` · constants `AI_CHAT` `CTX_BUDGET` · through its calls: writes, clock, storage, net, held
+- **`streamReply(q,hist,extra,explainOnly=false)`** — *a call into ApexTurn.run* · reads `AI_GROUNDED` `APEX_TURN.abort` `APEX_TURN.hits` `CHATS` · writes `APEX_TURN.abort` `APEX_TURN.busy` `APEX_TURN.groundedLeft` `APEX_TURN.hits` `APEX_TURN.trace` · DOM `AbortController` · modules `ApexTurn.run` · calls `apexAway` `apexSetState` `apexWire` `buildAI` `flushNav` `oneTurn` `pushToolExchange` `runTool` `saveJSON` · constants `AI_CHAT` `CTX_BUDGET` · through its calls: clock, storage, net, held
 - **`pushToolExchange(wire,turn,results)`** — *a call into ApexWire.gemini.exchange* · modules `ApexWire.gemini.exchange`
 - **`oneTurn(q,wire,extra,explainOnly=false)`** — *reaches the DOM, storage or the network* · calls `oneTurnGemini` · through its calls: reads, writes, DOM, clock, storage, net, held
 - **`refFiguresForHits(hits,cap)`** — *reaches the DOM, storage or the network* · reads `REF` · calls `extractRefImages` `refImgSrc` · through its calls: writes, DOM, storage, clock

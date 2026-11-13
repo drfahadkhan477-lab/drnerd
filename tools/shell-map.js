@@ -171,9 +171,13 @@ function handlersIn(text) {
    call:  for a call through a member, the path called (FSRS.update)
    later: the use stands inside a function that does not run when the item itself runs
    alias: the change was made through a local name bound to part of it
-   wire:  the name was written into markup as an inline handler */
+   wire:  the name was written into markup as an inline handler
+   handed, to, arg: the name was handed bare to a call; to a member (Module.member), as its argument number arg
+   opts.free: parameters of the function itself to leave unbound, so that what the function does with what
+   it is handed is reported under the parameter's name, by the same rules as a use of a script-level name. */
 function refsOf(node, opts = {}) {
   const out = [];
+  const freeParam = (fn, p, n) => !!opts.free && fn === node && p.type === 'Identifier' && opts.free.has(n);
   const mk = (names, parent, fn) => ({ names: new Map(names.map(n => [n, {}])), parent, fn });
   const lookup = (name, scope) => { for (let s = scope; s; s = s.parent) if (s.names.has(name)) return s.names.get(name); return null; };
   const line = n => (n.loc ? n.loc.start.line : 0);
@@ -253,7 +257,7 @@ function refsOf(node, opts = {}) {
   function func(node, scope, later, elementAlias) {
     const s = mk([], scope, true);
     if (node.type === 'FunctionExpression' && node.id) s.names.set(node.id.name, {});
-    node.params.forEach(p => patternNames(p).forEach(n => s.names.set(n, {})));
+    node.params.forEach(p => patternNames(p).forEach(n => { if (!freeParam(node, p, n)) s.names.set(n, {}); }));
     if (elementAlias && node.params[0] && node.params[0].type === 'Identifier') s.names.get(node.params[0].name).alias = elementAlias;
     node.params.forEach(p => patternExprs(p, s, later));
     if (node.body.type === 'BlockStatement') {
@@ -361,10 +365,13 @@ function refsOf(node, opts = {}) {
             }
           }
         } else visit(cal, scope, later);
+        /* Module.member(S, …): which member is handed the name, and as which argument. */
+        let to;
+        if (cal.type === 'MemberExpression') { const c = chainOf(cal); if (c.root.type === 'Identifier' && !lookup(c.root.name, scope) && c.props.length && c.props.every(p => p !== null)) to = c.root.name + '.' + c.props.join('.'); }
         node.arguments.forEach((a, i) => {
           /* A function handed to a call runs when the call says: now, unless the call is one that waits. */
           if (isFn(a)) func(a, scope, argsLater, i === 0 ? eachAlias : null);
-          else if (a.type === 'Identifier') { if (!lookup(a.name, scope)) emit(a, 'r', argsLater, { handed: true }); }
+          else if (a.type === 'Identifier') { if (!lookup(a.name, scope)) emit(a, 'r', argsLater, to ? { handed: true, to, arg: i } : { handed: true }); }
           else visit(a.type === 'SpreadElement' ? a.argument : a, scope, later);
         });
         return;
@@ -624,6 +631,26 @@ function analyse(html, readFile) {
     return BROWSER_OF.get(r.name) || null;
   }
 
+  /* What a module's member does with what it is handed. A screen that has left the shell is a function of
+     the page's state: buildResults() is ResultsScreen.screenHtml(S, …), and the fields of S that the screen
+     reads are read in the module, under the parameter's name. So the member's own function is read again
+     with that parameter left free, and its uses of it are the caller's uses of the name it handed over.
+     null when the member is not a plain function of the module, or the parameter is not a plain name. */
+  const handedCache = new Map();
+  const handedUses = (to, i) => {
+    const key = to + '#' + i;
+    if (handedCache.has(key)) return handedCache.get(key);
+    let uses = null;
+    const m = moduleOfName.get(to.split('.')[0]), list = m && m.members ? m.members[to.split('.')[0]] : null;
+    const p = list ? list.find(x => x.path === to) : null;
+    const own = p && p.local && m.local && m.local.get(p.local);
+    const fn = own && own.kind === 'function' ? own.node : p && isFn(p.node) ? p.node : null;
+    const param = fn ? fn.params[i] : null;
+    if (param && param.type === 'Identifier') uses = refsOf(fn, { free: new Set([param.name]) }).filter(r => r.name === param.name);
+    handedCache.set(key, uses);
+    return uses;
+  };
+
   /* ── each item, placed ── */
   const mutated = new Set();    // shell names something changes or rebinds after they are made
   for (const it of items) for (const r of it.refs) if ((r.kind === 'm' || r.kind === 'w') && byName.has(r.name)) mutated.add(r.name);
@@ -654,6 +681,22 @@ function analyse(html, readFile) {
       if (name === 'window' && prop && prop !== '[…]' && (byName.has(prop) || moduleOfName.has(prop) || windowNames.has(prop))) {
         if (byName.has(prop) || moduleOfName.has(prop)) { name = prop; prop = undefined; where = place(name); }
         else { (r.kind === 'm' ? d.writes : d.reads).set('window.' + prop, new Set()); continue; }
+      }
+      /* A piece of state handed whole to a module's member: listed by what that member does with it. */
+      if (r.handed && r.to && where === 'shell' && !view && isState(name)) {
+        const uses = handedUses(r.to, r.arg);
+        if (uses && uses.length) {
+          let whole = false;
+          for (const u of uses) {
+            const up = u.call && u.call.split('.').length === 2 ? undefined : u.prop;
+            if (u.kind === 'w') continue;                      // the member rebinds its own parameter, not the page's name
+            if (u.kind === 'm') { add(d.writes, name, up === undefined ? '*' : up); continue; }
+            if (up === undefined) whole = true; else add(d.reads, name, up);
+            const called = u.call ? name + u.call.slice(u.name.length) : null;
+            if (called && !u.alias && !PLAIN_METHODS.has(called.split('.').pop())) d.opaque.add(called);
+          }
+          if (!whole) continue;
+        }
       }
       if (where === 'shell') {
         if (name === it.name && it.kind !== 'function') continue;
@@ -805,7 +848,7 @@ function analyse(html, readFile) {
 /* ── the map, as text ───────────────────────────────────────────────────── */
 const LIMITS = [
   'A call made by a name the script builds while it runs: `window[name]()`, a handler attribute assembled from pieces (`onclick="${fn}()"`), `setTimeout` given a string, `eval`, `new Function`. Handlers written whole into markup, `onclick="name(…)"` in a string or a template, are read; so are the ones in the page\'s own markup outside the script.',
-  'A change made through a value it cannot follow. It follows a local name bound to part of a script-level name (`const c=S.srs[id]; c.due=…` is a write to `S.srs`), a `for…of` over one, the first parameter of a `forEach`/`map`/`filter`/`find`/`some`/`every` callback on one, and the result of `find`/`at`/`get`/`filter`/`slice` on one. It does not follow a value handed to another function as an argument and changed there, a destructured name (`const {srs}=S`), or a value that came back from a call. So a function that passes `S.srs[id]` to a helper that changes it is listed as reading `S.srs`, and the helper as changing nothing of the script\'s.',
+  'A change made through a value it cannot follow. It follows a local name bound to part of a script-level name (`const c=S.srs[id]; c.due=…` is a write to `S.srs`), a `for…of` over one, the first parameter of a `forEach`/`map`/`filter`/`find`/`some`/`every` callback on one, and the result of `find`/`at`/`get`/`filter`/`slice` on one. A piece of state handed whole to a member of a module (`ResultsScreen.screenHtml(S,…)`) is followed into that member\'s own function, one step: the caller is listed with the fields the member reads and changes of it, and with the whole of it when the member hands it on. It does not follow a value handed to another function of the shell and changed there, a part of the state handed over (`S.srs[id]`), a destructured name (`const {srs}=S`), or a value that came back from a call. So a function that passes `S.srs[id]` to a helper that changes it is listed as reading `S.srs`, and the helper as changing nothing of the script\'s.',
   'Anything finer than the first property. `S.srs[q.id].due=…` is "writes `S.srs`". A computed first property is shown as `[…]`.',
   'What a value is. *Pure* means the item uses nothing of the script\'s or the browser\'s by name. A function that works only on what it is handed is pure here even when what it is handed is an element, a canvas or a viewer (`apexAtBottom(el)`, `figZoomBy(ps,k)`); read a leaf before choosing between `src/core/` and `src/ui/` for it.',
   'Which branch runs. Every name a function mentions counts, whether or not the line is ever reached, and "runs as the script loads" takes a called function to run everything it mentions. Both err towards saying more.',
@@ -1084,6 +1127,9 @@ function moduleClock(){ return Demo.stamp(); }
 function nestedWrapper(x){ return Demo.inner.twice(x); }
 function nestedCall(){ Demo.inner.stamp(); }
 function nestedWhole(){ return Demo.inner; }
+const SHAPE={w:1};
+function handsOver(){ return Demo.show(S,LOG,LIMIT,POOL,SHAPE); }
+function handsOn(){ return Demo.passOn(S); }
 /* ── a light banner ── */
 function later(){ setTimeout(()=>writer(),0); return [1].map(v=>pureAdd(v,1)); }
 const table={a(){ writer(); }};
@@ -1095,7 +1141,9 @@ function stamp() { return Date.now(); }
 let kept = 0;
 function keep(n) { kept = n; }
 function peek() { return kept; }
-root.Demo = { twice, stamp, keep, peek, inner: { twice, stamp } };
+function show(st, log, n, pool, shape) { const c = st.srs.a; c.due = 1; log.push(n); (function (st) { st.other = 1; })({}); return st.n + pool.length + shape.w + peek.name.length; }
+function passOn(st) { return twice(st); }
+root.Demo = { twice, stamp, keep, peek, show, passOn, inner: { twice, stamp } };
 })(typeof window !== 'undefined' ? window : this);
 `;
 function selfTest() {
@@ -1133,6 +1181,12 @@ function selfTest() {
       && has(it('viewWriter').facts.writes, 'OWNER', 'n') && has(it('viewWriter').facts.writes, 'OWNER', 'list') && it('viewWriter').tier === 'writes'],
     ['a method called on what a view holds is a call into an object held in state, named by its field', it('viewHeld').tier === 'held' && it('viewHeld').facts.opaque.has('OWNER.tool.run')],
     ['who still says an old name is kept, by name', it('viewReader').facts.views.has('oldN') && it('viewWriter').facts.views.has('oldList') && !it('reader').facts.views.size],
+    ['state handed whole to a module\'s member is read by the fields that member\'s function reads of it, and not as a whole',
+      has(it('handsOver').facts.reads, 'S', 'n') && has(it('handsOver').facts.reads, 'S', 'srs') && it('handsOver').facts.reads.get('S').size === 2 && it('handsOver').facts.reads.has('POOL')],
+    ['a list handed over and only added to is changed, not read', it('handsOver').facts.writes.has('LOG') && !it('handsOver').facts.reads.has('LOG')],
+    ['and is changed where the member changes it, through a local name for a field; a function inside the member with a parameter of the same name is not the member', has(it('handsOver').facts.writes, 'S', 'srs') && it('handsOver').facts.writes.get('S').size === 1 && it('handsOver').tier === 'writes'],
+    ['a constant handed over is still a constant, whether the member reads it whole or by a field', it('handsOver').facts.consts.has('LIMIT') && it('handsOver').facts.consts.has('SHAPE') && !it('handsOver').facts.reads.has('LIMIT') && !it('handsOver').facts.reads.has('SHAPE')],
+    ['a member that hands the state on is taken to use the whole of it', it('handsOn').facts.reads.has('S') && it('handsOn').facts.reads.get('S').size === 0 && !it('handsOn').facts.writes.size],
     ['nothing in the fixture is left unplaced', A.items.every(i => !i.facts.unplaced.size)],
     ['a script element is found whatever the case of its tag, with attributes on it and a space in its end tag, and its text is not taken for markup',
       (() => { try { const r = readShell(FIXTURE.replace('<script>', '<SCRIPT type="text/javascript">').replace('</script>', '</SCRIPT >')); return r.slots.length === 1 && r.src.includes('function early()') && !r.outside.includes('function early()'); } catch (_) { return false; } })()],
