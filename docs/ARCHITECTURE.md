@@ -32,6 +32,7 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 | `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
+| `src/app/` | Screens that have left the shell, one file each: results | A function of what the page hands it; changes nothing it is given; must run under Node |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
 
 ## The shell's script
@@ -48,6 +49,14 @@ handler or suite changes. A pure suite holds the module, and holds the shell's
 line to handing over the right things. Before moving one, read its entry in the
 map for what runs as the script loads: a function declaration is hoisted and a
 module is not.
+
+A screen leaves the same way, into `src/app/` (roadmap E1 step 3). Its builder
+becomes `screenHtml(S, …, kit)`: the page's state, the bank's names it reads,
+and a kit of the page's helpers its markup uses (`e`, `icon` and the like). The
+parameters keep the page's names for the same things, so the body moves as it
+stood. The handlers its buttons name stay in the shell: an inline handler is
+read where it is tapped, in the page. The map follows the state into the
+module, so the screen is still listed under each field it reads.
 
 ## The clock
 

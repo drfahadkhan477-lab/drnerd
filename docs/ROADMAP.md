@@ -179,8 +179,15 @@ old name. Then the rest of step 2: the seven names a turn rebinds (`aiBusy`,
 old names kept as views of its fields; and `streamReply()`, the loop that runs a
 turn, moved there as `ApexTurn.run()`, handed the page's parts. The views go
 when nothing says the old names; the map lists who still does, and fourteen
-browser suites say them from inside the page. Step 3 follows the map's order of
-screens; write the map again before starting.
+browser suites say them from inside the page. Step 3 has begun, in the map's
+order of screens: its first rows were already calls into a module
+(`buildEchoScreen`, `buildNoteSearch`) or one line of markup (`buildPractice`),
+so the first screen to move is the results screen, now `src/app/results.js`
+(`ResultsScreen.screenHtml(S, CHAPTERS, CH_COLORS, kit)`), held by
+`verify-results-pure`. The map now follows state handed whole to a module's
+function, so a screen that has moved is still listed under the fields it reads
+and changes. Next in the map's order is `buildMemory`; write the map again
+before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
