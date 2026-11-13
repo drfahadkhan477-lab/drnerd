@@ -25,7 +25,7 @@ the selected source. Brain holds your progress, and Labs opens the practice tool
 ```bash
 npm test                                            # no export needed: every suite CI runs
 npm run build -- path/to/ACCSAP_export.html       # → build/systole.html
-node scripts/verify.js                              # 7245 checks, 158 suites
+node scripts/verify.js                              # 7282 checks, 158 suites
 node scripts/extract-content.js build/systole.html   # refresh content for the split build
 node scripts/verify.js --pwa                        # + 155 more on the split build
 node scripts/verify.js --engine webkit              # the engine an iPad runs
@@ -37,7 +37,7 @@ gitignored.
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 
-**That badge is not the 7245 + 155 checks above — read it as 7162, not 7400.**
+**That badge is not the 7282 + 155 checks above — read it as 7199, not 7437.**
 CI cannot build the app from the real bank: that needs the licensed export,
 which is deliberately never committed here and never will be, on GitHub or
 anywhere else that isn't your own devices. So it builds the real app around

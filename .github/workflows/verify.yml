@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7245 checks in
-# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7162.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7282 checks in
+# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7199.
 # The other 238 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 7162 real checks, up
+#                Across every job but split-build, 7199 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -233,11 +233,11 @@ jobs:
           esac
       - name: cancelled Apex responses cannot execute tools (2 checks)
         run: node tests/verify-apex-cancel.js
-      - name: FSRS-5–derived scheduling (104 checks)
+      - name: FSRS-5–derived scheduling (110 checks)
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)
         run: node tests/verify-oracle.js
-      - name: the Cloudflare Worker request handler (155 checks)
+      - name: the Cloudflare Worker request handler (160 checks)
         run: node tests/verify-worker.js
       - name: the cardiac cycle's physics (23 checks)
         run: node tests/verify-physio-pure.js
@@ -570,7 +570,7 @@ jobs:
         name: the tutor, its tools, and the 3D heart it sits beside (44 checks)
         run: node tests/verify-apex.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage2,') }}
-        name: FSRS-5 scheduling replaces SM-2 (25 checks)
+        name: FSRS-5 scheduling replaces SM-2 (28 checks)
         run: node tests/verify-stage2.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage3,') }}
         name: Apex can read figures and remembers who it teaches (31 checks)
@@ -594,19 +594,19 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
-        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
+        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-homepager,') }}
-        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (112 checks)
+        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (114 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lab,') }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-home,') }}
-        name: the welcome bar, the progress bar, three layouts (68 checks)
+        name: the welcome bar, the progress bar, three layouts (77 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-splash-heart,') }}
         name: the photographed heart paints before the app parses (14 checks)
@@ -645,7 +645,7 @@ jobs:
         name: the big stores live in a database, and nothing is ever in neither place (39 checks)
         run: node tests/verify-store.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quiznav,') }}
-        name: going back never re-grades a question or re-schedules a card (24 checks)
+        name: going back never re-grades a question or re-schedules a card (28 checks)
         run: node tests/verify-quiznav.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quietquiz,') }}
         name: answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to (25 checks)
@@ -690,7 +690,7 @@ jobs:
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
-        name: a restored backup appears now, not only after the next launch (139 checks)
+        name: a restored backup appears now, not only after the next launch (142 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)
@@ -911,7 +911,7 @@ jobs:
         name: the single-file build is stable and works offline (29 checks)
         run: node tests/verify-stage0.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage2,') }}
-        name: FSRS-5 scheduling replaces SM-2 (25 checks)
+        name: FSRS-5 scheduling replaces SM-2 (28 checks)
         run: node tests/verify-stage2.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage3,') }}
         name: Apex can read figures and remembers who it teaches (31 checks)
@@ -932,19 +932,19 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
-        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (77 checks)
+        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
         run: node tests/verify-a11y.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-homepager,') }}
-        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (112 checks)
+        name: the home screen is three pages a swipe apart (Home, Brain, Labs), the pill follows the finger, the off-screen pages are inert, and the page is kept (114 checks)
         run: node tests/verify-homepager.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-lab,') }}
         name: the Practice Lab inside Systole — its door opens it, a redraw keeps it and leaving stops it, the audio played is the item asked, nothing names the answer early, progress is real, and the heart map is drawn from the map (69 checks)
         run: node tests/verify-lab.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-home,') }}
-        name: the welcome bar, the progress bar, three layouts (68 checks)
+        name: the welcome bar, the progress bar, three layouts (77 checks)
         run: node tests/verify-home.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-splash-heart,') }}
         name: the photographed heart paints before the app parses (14 checks)
@@ -983,7 +983,7 @@ jobs:
         name: the big stores live in a database, and nothing is ever in neither place (39 checks)
         run: node tests/verify-store.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quiznav,') }}
-        name: going back never re-grades a question or re-schedules a card (24 checks)
+        name: going back never re-grades a question or re-schedules a card (28 checks)
         run: node tests/verify-quiznav.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-quietquiz,') }}
         name: answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to (25 checks)
@@ -1028,7 +1028,7 @@ jobs:
         name: render() throwing shows a real screen, never a blank or frozen one (7 checks)
         run: node tests/verify-failsafe.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
-        name: a restored backup appears now, not only after the next launch (139 checks)
+        name: a restored backup appears now, not only after the next launch (142 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)
