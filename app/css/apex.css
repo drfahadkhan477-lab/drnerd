@@ -120,7 +120,9 @@
   border-bottom:1.5px solid var(--border);white-space:nowrap}
 .msg td{padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
 .msg tbody tr:last-child td{border-bottom:0}
-.msg.user{align-self:flex-end;background:var(--teal);color:#fff;padding:9px 13px;
+/* A reader's own message: white on the raw accent read 1.9:1 on the light accents (verify-contrast). The accent's ink, set
+   by each theme to read on its ground, fills the bubble, and the text is the ground's colour. */
+.msg.user{align-self:flex-end;background:var(--teal-ink);color:var(--bg);padding:9px 13px;
   border-radius:14px 14px 4px 14px}
 .msg.bot{align-self:flex-start;color:var(--text)}
 .msg.bot h3{font-size:13px;margin:10px 0 4px;color:var(--teal-ink);letter-spacing:-.01em}

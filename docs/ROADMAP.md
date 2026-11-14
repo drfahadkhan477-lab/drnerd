@@ -238,8 +238,11 @@ Parchment's bar (3.2:1), and the study-plan card's grey over its glow in the
 dark themes (4.1:1); all fixed. It now also reads Sessions, the mock exam with
 an answer chosen and its report, and five screens on a phone; the mock exam's
 chosen letter, white on the raw accent, read 1.9:1 to 4.1:1 in nine theme
-states and now fills with the accent's ink. Still not read: other screens,
-other phone sizes, pages scrolled past their top, and moving states.
+states and now fills with the accent's ink. Then a figure question, Apex
+(before a key, and with a conversation) and Settings, on both devices: a
+reader's own Apex message was white on the raw accent (1.9:1 on the light
+accents) and now takes the same ink. Still not read: other screens, other
+phone sizes, pages scrolled past their top, and moving states.
 
 **D3 — Figure questions on iPad landscape.** A figure item shows the figure full
 width and pushes the stem below it. When there is width, default figure items to
