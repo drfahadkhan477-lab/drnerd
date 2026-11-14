@@ -106,7 +106,7 @@ const SUITES = [
   ['windows',      'a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
   ['ink',          'green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are'],
-  ['contrast',     'every text on eleven screens and five on a phone, read against the pixels under it in every theme, clears its contrast'],
+  ['contrast',     'every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast'],
   ['a11y',         'every screen passes axe-core\'s WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through'],
   ['homepager',    'the home screen is three pages a swipe apart (Home, Brain, Labs): the pill follows the finger, the off-screen pages are inert, and the page is kept'],
   /* The three below need no browser and no build — they load a src/ module
