@@ -3,6 +3,9 @@
 .plan-card,.run-card,.voice-card{cursor:default}
 .plan-card>*,.voice-card>*{position:relative;z-index:1}
 .plan-card>.fc-glow{position:absolute;z-index:0;opacity:.9;animation:glowSlide 7s ease-in-out infinite}
+/* On a dark theme the glow lit the ground under the card's grey text to 4.1-4.5:1; dimmer, the text clears 4.5:1. */
+html[data-theme="dark"] .plan-card>.fc-glow{opacity:.45}
+@media (prefers-color-scheme:dark){html:not([data-theme]) .plan-card>.fc-glow{opacity:.45}}
 
 /* the plan card: two rings, a legend, three clock chips, the exam tile */
 .plan-hero{display:flex;align-items:center;gap:16px;margin-top:2px}

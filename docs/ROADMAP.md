@@ -230,6 +230,13 @@ or images, and it mis-read the selected tab, whose ground is a sibling pill. The
 rest of D2 needs pixel sampling: hide the text, screenshot, read the ground
 under each text box. Also seen, not fixed: the mock exam's chosen letter is
 white on the raw accent (about 4.1:1).
+*Done, pixel sampling:* `tests/verify-contrast.js` hides the text, photographs
+eight screens in twelve theme states, and reads every text box against the
+pixels under it (median; 10th percentile reported). It found three more: the
+Apex button's name on a light accent (3.2:1), the score pill's red on
+Parchment's bar (3.2:1), and the study-plan card's grey over its glow in the
+dark themes (4.1:1); all fixed. Still not read: other screens (the mock exam
+among them), phone sizes, and moving states.
 
 **D3 — Figure questions on iPad landscape.** A figure item shows the figure full
 width and pushes the stem below it. When there is width, default figure items to

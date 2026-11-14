@@ -261,6 +261,10 @@
   background:linear-gradient(135deg,var(--navy3),var(--teal));color:#fff;font-weight:700;
   font-size:13px;letter-spacing:-.01em;box-shadow:0 8px 24px rgba(30,58,138,.34);
   display:flex;align-items:center;gap:7px}
+/* Its name is white text, and on the accent end of the gradient a light accent (Monitor's teal, Nocturne's violet) took it
+   to 3.2:1. The gradient ends on the accent darkened toward navy, so the name reads on every theme; the orb keeps the hue. */
+.ai-fab{background:linear-gradient(135deg,var(--navy3),color-mix(in srgb,var(--teal) 55%,var(--navy3)))}
+@supports not (color:color-mix(in srgb,red,blue)){.ai-fab{background:var(--navy3)}}
 .typing{display:inline-flex;gap:3px}
 .typing i{width:5px;height:5px;border-radius:50%;background:var(--dim);
   animation:blink 1.2s infinite}

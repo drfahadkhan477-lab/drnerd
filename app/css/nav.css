@@ -286,5 +286,8 @@ html[data-focus="1"] #focusExit svg{width:19px;height:19px;
 .score-pill{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:20px;
   padding:5px 13px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;
   transition:all .2s;letter-spacing:-.01em}
+/* Off Home the pill sits on the theme's navy bar, which Parchment makes a lighter brown; lightening it further put the red
+   score at 3.3:1. Darkening it keeps every score colour readable on every bar. Home's paper bar keeps its own pill. */
+body:not(.on-home) .score-pill{background:rgba(0,0,0,.24)}
 .score-dot{width:7px;height:7px;border-radius:50%;box-shadow:0 0 6px currentColor}
 
