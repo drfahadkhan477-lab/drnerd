@@ -189,8 +189,13 @@ function, so a screen that has moved is still listed under the fields it reads
 and changes. The Memory screen followed (`src/app/memory.js`,
 `MemoryScreen.screenHtml(all, kit)`, held by `verify-memoryscreen-pure`): its
 builder only, because `memForget()` and `memForgetAll()` ask with `confirm()`,
-which `verify-ui-pure` reads where it is called. Next in the map's order is
-`buildLab`; write the map again before starting.
+which `verify-ui-pure` reads where it is called. Then the Rhythm Lab
+(`src/app/rhythmlab.js`, `RhythmLabScreen.screenHtml(p)`, held by
+`verify-rhythmlab-pure`): `buildLab()` with `buildPhysio()` and
+`buildTwelveLead()`, the first screen with state of its own. `labKind`,
+`setLab()` and the mounts stay in the shell, and the module is handed the
+values. Next in the map's order is `buildAnnotations`; write the map again
+before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
