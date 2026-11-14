@@ -202,7 +202,9 @@ body.voice-on #app{padding-bottom:104px}
 .mock-pace[data-status="behind"]{color:var(--amber-ink)}
 .mock-pace[data-status="ahead"]{color:var(--green-ink)}
 .opt.mock-opt.picked{border-color:var(--teal);background:var(--teal4)}
-.opt.mock-opt.picked .opt-letter{background:var(--teal);color:#fff;border-color:var(--teal)}
+/* The chosen letter: white on the raw accent read 1.9-4.1:1 (verify-contrast). The accent's ink, which each theme sets to read
+   on its own ground, fills the chip, and the letter is the ground's colour: dark on a light chip in the dark themes. */
+.opt.mock-opt.picked .opt-letter{background:var(--teal-ink);color:var(--bg);border-color:var(--teal-ink)}
 .opt.mock-opt.picked::before{background:var(--teal);transform:scaleY(1)}
 .mock-actions .mock-flag{flex:0 0 auto;min-width:112px;padding:15px 16px;background:var(--card);border:1.5px solid var(--border);color:var(--muted)}
 .mock-actions .mock-flag.on{color:var(--amber-ink);border-color:var(--amber-b);background:var(--amber-bg)}
