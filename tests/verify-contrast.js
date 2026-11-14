@@ -13,11 +13,16 @@
  * own box. A text passes on the median of those pixels (the 10th percentile is printed beside it): 4.5:1, or 3:1 for
  * large text (24px, or 18.66px bold).
  *
- * WHAT IT READS: eight screens (Home's three pages, Chapters, a question answered wrong, Progress, Notes, the Rhythm Lab)
- * at 1180x820, in the twelve theme states verify-ink uses, with motion reduced, so an animated glow is read where it rests.
- * WHAT IT LEAVES OUT: text a reader is not given (hidden, screen-reader-only, aria-hidden, on a disabled control) and a
- * text with no letter or digit in it (a separator dot). Text drawn inside a canvas is not a text node and is not read; a
- * canvas under a text is read, as the pixels it painted. Other screens, other sizes and moving states are not read.
+ * WHAT IT READS: eleven screens (Home's three pages, Chapters, a question answered wrong, Progress, Notes, the Rhythm Lab,
+ * Sessions, the mock exam with an answer chosen, and the mock exam's report) at 1180x820, and five of them on a 390x844
+ * touch phone, in the twelve theme states verify-ink uses, with motion reduced, so an animated glow is read where it rests.
+ * WHAT IT LEAVES OUT: text a reader is not given (hidden, screen-reader-only, aria-hidden, on a disabled control), a text
+ * with no letter or digit in it (a separator dot), and text a reader cannot see where it is: cut away by an ancestor that
+ * clips its overflow, under a frosted bar it has scrolled beneath, or under a solid element (one whose pixels did not
+ * change when the text was taken away). A text under a transparent element is read. How many were set aside is printed.
+ * Text drawn inside a canvas is not a text node and is not read; a canvas under a text is read, as the pixels it painted.
+ * Other screens, other phone sizes, a page scrolled anywhere but its top (the mock exam's chosen answer aside), and moving
+ * states are not read.
  *
  * It prints where, the colours and the ratio, never the text: on the owner's build a question's text is licensed.
  */
@@ -53,14 +58,23 @@ const SCREENS = [
   ['Progress', () => { goStats(); }],
   ['the notes', () => { goRefs(); }],
   ['the Rhythm Lab', () => { goLab(); }],
+  ['Sessions', () => { goSessions(); }],
+  /* The clock is stopped once the block is on screen, so a slow run cannot hand it in while the page is photographed. */
+  /* A long stem pushes the options below the fold: the chosen one is scrolled to once the screen is drawn, and must be there. */
+  ['the mock exam, an answer chosen', () => { if (S.mock) resumeMock(); else startMock(); mockStopTicker(); if (S.mock.sel[S.mock.i] !== 1) mockPick(1); },
+    () => { const e = document.querySelector('.mock-opt.picked'); if (!e) return false; e.scrollIntoView({ block: 'center' });
+      const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }],
+  ['the mock exam\'s report', () => { if (!S.mock) startMock(); mockStopTicker(); if (S.mock.sel[S.mock.i] !== 0) mockPick(0); mockSubmit(false); }],
 ];
+/* A phone draws the same colours in another arrangement: a text can land on another part of a glow or a gradient. */
+const PHONE = ['Home', 'Brain', 'Labs', 'a question answered wrong', 'the mock exam, an answer chosen'];
 
 /* In the page: every visible text box, its colour and the opacity it is painted at. Never its text. */
 const COLLECT = () => {
   const parse = s => { let m = /^rgba?\(([^)]+)\)$/.exec(s); if (m) { const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
     m = /^color\(srgb ([^)]+)\)$/.exec(s); if (m) { const p = m[1].split(/[\s/]+/).filter(Boolean).map(Number); return [p[0] * 255, p[1] * 255, p[2] * 255, p.length > 3 ? p[3] : 1]; } return null; };
   const name = e => !e ? '' : e.id ? '#' + e.id : e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
-  const out = [], w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const out = Object.assign([], { clipped: 0 }), w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = w.nextNode(); n; n = w.nextNode()) {
     if (!/[A-Za-z0-9]/.test(n.nodeValue)) continue;
     const el = n.parentElement; if (!el) continue;
@@ -69,20 +83,44 @@ const COLLECT = () => {
     let op = 1; for (let p = el; p && p.nodeType === 1; p = p.parentElement) op *= parseFloat(getComputedStyle(p).opacity);
     const c = parse(cs.color); if (!c || c[3] * op < 0.05) continue;
     const rg = document.createRange(); rg.selectNodeContents(n);
-    for (const r of rg.getClientRects()) {
-      if (r.width < 2 || r.height < 4 || r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) continue;
+    for (const q of rg.getClientRects()) {
+      /* What a reader is shown of the box: cut to the viewport and to every ancestor that clips its overflow (a fixed
+         box escapes the ones above it). A box cut away entirely is not shown, and not read. */
+      let x0 = Math.max(0, q.left), y0 = Math.max(0, q.top), x1 = Math.min(innerWidth, q.right), y1 = Math.min(innerHeight, q.bottom);
+      for (let a = el; a && a !== document.documentElement; a = a.parentElement) {
+        const as = getComputedStyle(a);
+        if (a !== el && (as.overflowX !== 'visible' || as.overflowY !== 'visible')) {
+          const b = a.getBoundingClientRect(); x0 = Math.max(x0, b.left); y0 = Math.max(y0, b.top); x1 = Math.min(x1, b.right); y1 = Math.min(y1, b.bottom);
+        }
+        if (as.position === 'fixed') break;
+      }
+      if (x1 - x0 < 2 || y1 - y0 < 4) {
+        if (q.width >= 2 && q.height >= 4 && q.right > 0 && q.bottom > 0 && q.left < innerWidth && q.top < innerHeight) out.clipped++;
+        continue;
+      }
+      /* Another element on top at the box's middle: a transparent button laid over a label (the label is still read), a
+         frosted bar the text has scrolled under (a blur, not a text: set aside), or a solid card (set aside, by READ, when
+         taking the text away left the pixels under the box as they were). */
+      const top = document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2), cov = !top || !(el.contains(top) || top.contains(el)) ? name(top) || '(nothing)' : null;
+      let blur = false;
+      for (let a = cov && top; a && !a.contains(el); a = a.parentElement) {
+        const as = getComputedStyle(a), f = as.backdropFilter || as.webkitBackdropFilter;
+        if (f && f !== 'none') { blur = true; break; }
+      }
+      const r = { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
       const box = el.closest('[id],[class]'), up = box && box.parentElement && box.parentElement.closest('[id],[class]');
-      out.push({ x: r.left, y: r.top, w: r.width, h: r.height, c, op, px: parseFloat(cs.fontSize), bold: parseInt(cs.fontWeight, 10) >= 700,
+      out.push({ x: r.left, y: r.top, w: r.width, h: r.height, c, op, px: parseFloat(cs.fontSize), bold: parseInt(cs.fontWeight, 10) >= 700, cov, blur,
         where: name(el) + (box && box !== el ? ' < ' + name(box) : '') + (up ? ' < ' + name(up) : '') });
     }
   }
-  return out;
+  return { boxes: [...out], clipped: out.clipped };
 };
 /* In a blank page: decode the photograph and read the pixels under each box. */
-const READ = async ({ png, boxes }) => {
-  const img = new Image(); img.src = 'data:image/png;base64,' + png; await img.decode();
-  const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
-  const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+const READ = async ({ png, shown, boxes }) => {
+  const draw = async src => { const img = new Image(); img.src = 'data:image/png;base64,' + src; await img.decode();
+    const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+    const g = cv.getContext('2d'); g.drawImage(img, 0, 0); return { cv, g }; };
+  const { cv, g } = await draw(png), was = await draw(shown);
   const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
   const L = c => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
   return boxes.map(b => {
@@ -94,6 +132,11 @@ const READ = async ({ png, boxes }) => {
       const x = L(t), y = L(gr); rs.push((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05));
     }
     rs.sort((p, q) => p - q);
+    if (b.cov) {
+      const e = was.g.getImageData(x0, y0, w, h).data;
+      let same = !b.blur; for (let i = 0; i < e.length && same; i++) same = e[i] === d[i];
+      if (same || b.blur) return { where: b.where, under: b.cov + (b.blur ? ' (frosted)' : '') };
+    }
     const mid = Math.floor((w * h) / 2) * 4;
     return { where: b.where, need: (b.px >= 24 || (b.px >= 18.66 && b.bold)) ? 3 : 4.5, r50: rs[Math.floor(rs.length / 2)], r10: rs[Math.floor(rs.length / 10)],
       colour: b.c.slice(0, 3).map(Math.round).join(','), ground: [d[mid], d[mid + 1], d[mid + 2]].join(',') };
@@ -104,63 +147,98 @@ const READ = async ({ png, boxes }) => {
   const browser = await launch();
   const errors = [], events = [];
   onDeath(() => ({ section, checks: passed + failed, errors, events: events.length ? events.join(', ') : 'none' }));
-  const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, reducedMotion: 'reduce', serviceWorkers: 'block' });
-  const page = watch(await ctx.newPage(), events, '1180px');
-  page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
-  page.on('dialog', d => d.dismiss());
-  await watchTransitions(page);
-  await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  await booted(page);
-  const blank = await ctx.newPage();
 
-  /* At rest, as verify-a11y waits: the screen change over, and no transition or finite animation still listed. */
-  const rest = async () => {
-    await settled(page, () => !window.__vtLive, { timeout: 15000, label: 'the screen change to finish' });
-    await settled(page, () => !document.getAnimations().some(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
-      || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity)),
-      { timeout: 15000, label: 'the screen\'s entrances and the theme\'s transitions to end' });
+  /* One device: a page of the app and a blank page to read its photographs in. */
+  const open = async (viewport, tag, touch) => {
+    const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, reducedMotion: 'reduce', serviceWorkers: 'block', hasTouch: touch, isMobile: touch });
+    const page = watch(await ctx.newPage(), events, tag);
+    page.on('pageerror', e => errors.push(tag + ': ' + e.message));
+    page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(tag + ': ' + m.text()); });
+    page.on('dialog', d => d.dismiss());
+    await watchTransitions(page);
+    await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+    return { ctx, page, blank: await ctx.newPage() };
   };
 
-  head('every text on each screen, against what is under it, in every theme');
-  const per = {}, counts = {};
-  let photographed = 0, hiddenWorked = true;
-  for (const [id, scheme, label] of STATES) {
-    await page.emulateMedia({ colorScheme: scheme });
-    await page.evaluate(id => setTheme(id), id);
-    for (const [where, go] of SCREENS) {
-      await page.evaluate(`(${go})()`);
-      await rest();
-      const boxes = await page.evaluate(COLLECT);
-      const shown = (await page.screenshot()).toString('base64');
-      await page.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;transition:none!important}' })
-        .then(h => h.evaluate(e => { e.id = '__contrastHide'; }));
-      const png = (await page.screenshot()).toString('base64');
-      await page.evaluate(() => { const s = document.getElementById('__contrastHide'); if (s) s.remove(); });
-      if (boxes.length && png === shown) hiddenWorked = false;    // the text was never taken away: it would be read against itself
-      photographed++;
-      const read = await blank.evaluate(READ, { png, boxes });
-      counts[where] = (counts[where] || 0) + read.length;
-      for (const r of read) {
-        if (r.r50 >= r.need) continue;
-        const k = where + ': ' + r.where, row = per[k] = per[k] || { worst: Infinity, states: [] };
-        row.states.push(label);
-        if (r.r50 < row.worst) Object.assign(row, { worst: r.r50, r10: r.r10, need: r.need, colour: r.colour, ground: r.ground, at: label });
+  /* Every screen named, in every theme state: the failures by screen, the boxes read, the photographs taken. */
+  const sweep = async ({ page, blank }, screens) => {
+    /* At rest, as verify-a11y waits: the screen change over, and no transition or finite animation still listed. */
+    const rest = async () => {
+      await settled(page, () => !window.__vtLive, { timeout: 15000, label: 'the screen change to finish' });
+      await settled(page, () => !document.getAnimations().some(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
+        || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity)),
+        { timeout: 15000, label: 'the screen\'s entrances and the theme\'s transitions to end' });
+    };
+    const per = {}, counts = {}, skipped = { clipped: 0, covered: 0, under: {} }, missing = [];
+    let photographed = 0, hiddenWorked = true;
+    for (const [id, scheme, label] of STATES) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.evaluate(id => setTheme(id), id);
+      for (const [where, go, shows] of screens) {
+        await page.evaluate(`(${go})()`);
+        await rest();
+        if (shows) { if (!await page.evaluate(`(${shows})()`)) missing.push(`${where} in ${label}`); await rest(); }
+        const got = await page.evaluate(COLLECT), boxes = got.boxes;
+        skipped.clipped += got.clipped;
+        const shown = (await page.screenshot()).toString('base64');
+        await page.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;transition:none!important}' })
+          .then(h => h.evaluate(e => { e.id = '__contrastHide'; }));
+        const png = (await page.screenshot()).toString('base64');
+        await page.evaluate(() => { const s = document.getElementById('__contrastHide'); if (s) s.remove(); });
+        if (boxes.length && png === shown) hiddenWorked = false;    // the text was never taken away: it would be read against itself
+        photographed++;
+        const all = await blank.evaluate(READ, { png, shown, boxes }), read = all.filter(r => !r.under);
+        for (const r of all) if (r.under) { skipped.covered++; skipped.under[r.under] = (skipped.under[r.under] || 0) + 1; }
+        counts[where] = (counts[where] || 0) + read.length;
+        for (const r of read) {
+          if (r.r50 >= r.need) continue;
+          const k = where + ': ' + r.where, row = per[k] = per[k] || { worst: Infinity, states: [] };
+          row.states.push(label);
+          if (r.r50 < row.worst) Object.assign(row, { worst: r.r50, r10: r.r10, need: r.need, colour: r.colour, ground: r.ground, at: label });
+        }
       }
     }
-  }
-  for (const [where] of SCREENS) {
-    const bad = Object.entries(per).filter(([k]) => k.startsWith(where + ': '));
-    ok(`${where}: every text clears its contrast on what is under it, in every theme`, bad.length === 0,
-      bad.length ? bad.slice(0, 4).map(([k, v]) => `${k.slice(where.length + 2)} ${v.worst.toFixed(2)}:1 (needs ${v.need}; 10th pct ${v.r10.toFixed(2)}) `
-        + `rgb(${v.colour}) on rgb(${v.ground}) in ${v.at}${v.states.length > 1 ? ' and ' + (v.states.length - 1) + ' more' : ''}`).join('; ')
-        : `${counts[where]} text boxes read`);
-  }
+    return { per, counts, photographed, hiddenWorked, skipped, missing };
+  };
+  const report = (screens, { per, counts }, suffix) => {
+    for (const [where] of screens) {
+      const bad = Object.entries(per).filter(([k]) => k.startsWith(where + ': '));
+      ok(`${where}${suffix}: every text clears its contrast on what is under it, in every theme`, bad.length === 0,
+        bad.length ? bad.slice(0, 4).map(([k, v]) => `${k.slice(where.length + 2)} ${v.worst.toFixed(2)}:1 (needs ${v.need}; 10th pct ${v.r10.toFixed(2)}) `
+          + `rgb(${v.colour}) on rgb(${v.ground}) in ${v.at}${v.states.length > 1 ? ' and ' + (v.states.length - 1) + ' more' : ''}`).join('; ')
+          : `${counts[where]} text boxes read`);
+    }
+  };
+
+  head('every text on each screen, against what is under it, in every theme (1180x820)');
+  const tablet = await open({ width: 1180, height: 820 }, '1180px', false);
+  const wide = await sweep(tablet, SCREENS);
+  report(SCREENS, wide, '');
+  await tablet.ctx.close();
+
+  head('and on a phone (390x844, touch)');
+  const onPhone = SCREENS.filter(([w]) => PHONE.includes(w));
+  const phone = await open({ width: 390, height: 844 }, '390px', true);
+  const narrow = await sweep(phone, onPhone);
+  report(onPhone, narrow, ', on a phone');
+  await phone.ctx.close();
 
   head('it measured something');
-  ok('every screen was photographed in every theme state (precondition)', photographed === STATES.length * SCREENS.length, `${photographed} of ${STATES.length * SCREENS.length}`);
-  ok('every screen gave it text to read, in every state', SCREENS.every(([w]) => counts[w] >= STATES.length * 5), JSON.stringify(counts));
-  ok('and taking the text away changed the photograph, so no text was read against itself', hiddenWorked);
+  ok('every screen was photographed in every theme state, on both devices (precondition)',
+    wide.photographed === STATES.length * SCREENS.length && narrow.photographed === STATES.length * PHONE.length && onPhone.length === PHONE.length,
+    `${wide.photographed} of ${STATES.length * SCREENS.length}, and ${narrow.photographed} of ${STATES.length * PHONE.length} on a phone`);
+  ok('what a screen is for was on screen when it was photographed, in every state on both devices (precondition)',
+    !wide.missing.length && !narrow.missing.length, [...wide.missing, ...narrow.missing.map(m => m + ' on a phone')].slice(0, 4).join('; '));
+  ok('every screen gave it text to read, in every state', SCREENS.every(([w]) => wide.counts[w] >= STATES.length * 5) && PHONE.every(w => narrow.counts[w] >= STATES.length * 5),
+    JSON.stringify(wide.counts) + ' ' + JSON.stringify(narrow.counts));
+  ok('and taking the text away changed the photograph, so no text was read against itself', wide.hiddenWorked && narrow.hiddenWorked);
+  /* A text set aside as covered is not read at all, so an element laid over the whole screen would empty the sweep. */
+  const sum = o => Object.values(o).reduce((a, b) => a + b, 0), under = d => Object.entries(d.skipped.under).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k || '(nothing)'} ${n}`).join(', ');
+  ok('fewer text boxes were set aside as scrolled out of sight or covered than were read, on each device',
+    wide.skipped.clipped + wide.skipped.covered < sum(wide.counts) && narrow.skipped.clipped + narrow.skipped.covered < sum(narrow.counts),
+    `1180px: ${sum(wide.counts)} read, ${wide.skipped.clipped} clipped, ${wide.skipped.covered} covered (by ${under(wide)}); `
+    + `390px: ${sum(narrow.counts)} read, ${narrow.skipped.clipped} clipped, ${narrow.skipped.covered} covered (by ${under(narrow)})`);
 
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));

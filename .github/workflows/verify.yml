@@ -597,7 +597,7 @@ jobs:
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-contrast,') }}
-        name: every text on eight screens, read against the pixels under it in every theme, clears its contrast (12 checks)
+        name: every text on eleven screens and five on a phone, read against the pixels under it in every theme, clears its contrast (22 checks)
         run: node tests/verify-contrast.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
@@ -938,7 +938,7 @@ jobs:
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-contrast,') }}
-        name: every text on eight screens, read against the pixels under it in every theme, clears its contrast (12 checks)
+        name: every text on eleven screens and five on a phone, read against the pixels under it in every theme, clears its contrast (22 checks)
         run: node tests/verify-contrast.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
