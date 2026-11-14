@@ -106,6 +106,7 @@ const SUITES = [
   ['windows',      'a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
   ['ink',          'green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are'],
+  ['contrast',     'every text on eight screens, read against the pixels under it in every theme, clears its contrast'],
   ['a11y',         'every screen passes axe-core\'s WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through'],
   ['homepager',    'the home screen is three pages a swipe apart (Home, Brain, Labs): the pill follows the finger, the off-screen pages are inert, and the page is kept'],
   /* The three below need no browser and no build — they load a src/ module
@@ -486,7 +487,7 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+const PENDING_RECORD = ['contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
