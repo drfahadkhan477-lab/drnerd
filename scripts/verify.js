@@ -310,6 +310,9 @@ const SUITES = [
   /* The first screen to leave the shell (roadmap E1 step 3): what a finished session ends on was
      buildResults() over the page's globals; it is src/app/results.js now, handed the state and the helpers. */
   ['results-pure', 'the results screen gives the quiz\'s score or the session\'s, changes colour at 80 and 60, draws a row for every chapter answered in the bank\'s order, offers the missed only when something is, restarts what was being done, reads eight names of the state and changes nothing, and the page hands it its own state and helpers'],
+  /* The second screen out of the shell: what Apex has kept about the reader. Its builder is src/app/memory.js;
+     the two handlers that delete stay in the page, where verify-ui-pure reads their confirm(). */
+  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data and never in a handler, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -511,8 +514,8 @@ const SUITES = [
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
-   and since its first screen: results-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure'];
+   and since its screens: results-pure, memoryscreen-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

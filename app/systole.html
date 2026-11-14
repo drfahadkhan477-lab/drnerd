@@ -3121,44 +3121,10 @@ function memForgetAll(){
   if(!confirm('Forget everything Apex knows about you? This cannot be undone.'))return;
   Memory.clear(); render(); toast('Apex has forgotten everything.');
 }
-/* Written silently during teaching, so this is the only place the fellow can
-   see what was kept — and correct it. Same card markup as the note library. */
-function buildMemory(){
-  const KINDS=[['fact','About you'],['gap','Where you keep going wrong'],
-               ['preference','How you like to be taught'],['session','From past sessions']];
-  const all=(typeof Memory!=='undefined')?Memory.all():[];
-  const groups=KINDS.map(([k,label])=>{
-    const rows=all.filter(m=>m.kind===k);
-    if(!rows.length) return '';
-    return `<div class="section-label">${e(label)}</div>`+rows.map(m=>`
-      <div class="ref-card">
-        <div class="ref-top">
-          <div class="ref-title" style="font-weight:500">${e(m.text)}</div>
-          <div class="ref-acts"><button class="chip" data-memory-id="${e(m.id)}" onclick="memForget(this.dataset.memoryId)">Delete</button></div>
-        </div>
-        <div class="ref-src">kept ${e(new Date(m.created||0).toLocaleDateString())}</div>
-      </div>`).join('');
-  }).join('');
-  return `<div class="home-wrap anim-fade">
-    <div class="hero" style="padding:26px 22px">
-      <div class="hero-badge">${icon('book','icon-sm')} What Apex remembers</div>
-      <div class="hero-title" style="font-size:28px">Memory</div>
-      <div class="hero-sub">Everything Apex has kept about you, across every session. It writes
-        these as it teaches, without interrupting — so this is where you check them. Delete
-        anything that is wrong or out of date; it takes effect immediately.</div>
-    </div>
-    <div class="ref-new">
-      <div class="ref-btns">
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-          onclick="memForgetAll()">Forget everything</button>
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-          onclick="goHome()">${icon('arrow-left','icon-sm')} Back</button>
-      </div>
-      <div class="ref-hint">To add one, just tell Apex — "remember that I sit boards in October".</div>
-    </div>
-    ${groups||'<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px">Apex has not kept anything yet. It will as you study.</div>'}
-  </div>`;
-}
+/* The Memory screen is src/app/memory.js. This asks Memory for what Apex has kept and hands it over with the
+   two helpers the markup uses. memForget() and memForgetAll(), which ask before they delete, stay above. */
+@@SLOT[src:src/app/memory.js]@@
+function buildMemory(){ return MemoryScreen.screenHtml((typeof Memory!=='undefined')?Memory.all():[],{e,icon}); }
 
 /* ═══════════ topic search — offline, no API key needed ═══════════ */
 'use strict';

@@ -186,8 +186,11 @@ so the first screen to move is the results screen, now `src/app/results.js`
 (`ResultsScreen.screenHtml(S, CHAPTERS, CH_COLORS, kit)`), held by
 `verify-results-pure`. The map now follows state handed whole to a module's
 function, so a screen that has moved is still listed under the fields it reads
-and changes. Next in the map's order is `buildMemory`; write the map again
-before starting.
+and changes. The Memory screen followed (`src/app/memory.js`,
+`MemoryScreen.screenHtml(all, kit)`, held by `verify-memoryscreen-pure`): its
+builder only, because `memForget()` and `memForgetAll()` ask with `confirm()`,
+which `verify-ui-pure` reads where it is called. Next in the map's order is
+`buildLab`; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

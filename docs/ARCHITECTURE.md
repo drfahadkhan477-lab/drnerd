@@ -32,7 +32,7 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 | `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
-| `src/app/` | Screens that have left the shell, one file each: results | A function of what the page hands it; changes nothing it is given; must run under Node |
+| `src/app/` | Screens that have left the shell, one file each: results, memory | A function of what the page hands it; changes nothing it is given; must run under Node |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
 
 ## The shell's script
@@ -57,6 +57,12 @@ parameters keep the page's names for the same things, so the body moves as it
 stood. The handlers its buttons name stay in the shell: an inline handler is
 read where it is tapped, in the page. The map follows the state into the
 module, so the screen is still listed under each field it reads.
+
+A handler that asks with `confirm()` stays in the shell as it is, even when
+only its screen calls it. `tests/verify-ui-pure.js` lists every native dialog by
+the file that calls it, and reads only a call written out with its message; one
+reached through a part handed to a module would be a dialog that rule could no
+longer see.
 
 ## The clock
 

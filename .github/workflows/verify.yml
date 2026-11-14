@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 84 suites that are pure Node with no Playwright and no
+#   logic        the 85 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -339,6 +339,8 @@ jobs:
         run: node tests/verify-apexloop-pure.js
       - name: the results screen says the score, the chapters answered and what to do next, changes nothing it is given, and the page hands it its own state and helpers (52 checks)
         run: node tests/verify-results-pure.js
+      - name: the Memory screen shows what Apex has kept in four groups, each memory with its words, its day and a Delete that carries its id as data, and the page still asks before it deletes (36 checks)
+        run: node tests/verify-memoryscreen-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (70 checks)
