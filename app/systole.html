@@ -8151,52 +8151,10 @@ function buildQuiz(){
   </div>`;
 }
 
-function buildResults(){
-  const sc=S.quizTotal?S.quizCorrect:S.sessionCorrect, st=S.quizTotal||S.sessionTotal;
-  const p=st>0?Math.round(sc/st*100):0;
-  const col=p>=80?'var(--green)':p>=60?'var(--amber)':'var(--red)';
-  const msgIcon=p>=80?'trophy':p>=60?'target':'book';
-  const msg=p>=80?'Outstanding!':p>=60?'Good Progress!':'Keep Studying!';
-  const r=50,circ=2*Math.PI*r;
-  const svgCircle=`<svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Score ${p} percent">
-    <circle cx="64" cy="64" r="${r}" fill="none" stroke="var(--border)" stroke-width="10"/>
-    <circle cx="64" cy="64" r="${r}" fill="none" stroke="${col}" stroke-width="10"
-      stroke-dasharray="${circ}" stroke-dashoffset="${circ*(1-p/100)}" stroke-linecap="round"
-      transform="rotate(-90 64 64)" style="transition:stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)"/></svg>`;
-  const rows=CHAPTERS.map(ch=>{
-    const s=S.chStats[ch];
-    if(!s||!s.total)return '';
-    const cp=Math.round(s.correct/s.total*100);
-    const cc=cp>=70?'var(--green)':cp>=50?'var(--amber)':'var(--red)';
-    const bc=CH_COLORS[ch]||'var(--teal)';
-    return `<div class="chp-row" style="--accent:${bc}"><span class="chp-icon">${chIcon(ch)}</span>
-      <div class="chp-info"><div class="chp-name">${e(ch)}</div>
-        <div class="chp-bar"><div class="chp-fill" style="transform:scaleX(${cp / 100});background:${cc}"></div></div></div>
-      <div class="chp-score"><div class="chp-pct" style="color:${semText(cc)}">${cp}%</div>
-        <div class="chp-count">${s.correct}/${s.total}</div></div></div>`;
-  }).filter(Boolean).join('');
-
-  const restartLabel=(S.mode==='due'?'Continue Reviewing':S.mode==='flagged'?'Flagged Again':S.chapter?'Restart Chapter':'Restart Quiz');
-  const restartMode=S.mode==='due'?'due':S.mode==='missed'?'missed':S.mode==='flagged'?'flagged':'all';
-  return `<div class="results-wrap anim-fade">
-    <div class="score-hero">
-      <div class="score-circle">${svgCircle}
-        <div class="score-num"><span class="score-pct" style="color:${semText(col)}">${p}%</span>
-        <span class="score-label">Score</span></div></div>
-      <div class="score-msg">${icon(msgIcon,'icon-lg')} ${msg}</div>
-      <div class="score-sub">${sc} correct · ${st-sc} wrong · ${st} answered${
-        S.sessionTotal!==st?` · session total ${S.sessionCorrect}/${S.sessionTotal}`:''}</div>
-    </div>
-    ${rows?`<div class="section-label">Cumulative Chapter Performance</div><div class="ch-perf">${rows}</div>`:''}
-    <div class="results-btns">
-      <button class="btn btn-next" onclick="goHome()" type="button">${icon('arrow-left','icon-sm')} Back to Chapters</button>
-      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red-ink);border:1.5px solid var(--red-b)" onclick="startQuiz(null,'missed')">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
-      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--teal-ink)" onclick="askApexMisses()">${icon('zap','icon-sm')} Explain my misses</button>`:''}
-      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-        onclick="startQuiz(${S.mode==='due'?'null':'S.chapter'},'${restartMode}')">${restartLabel}</button>
-    </div>
-  </div>`;
-}
+/* The results screen is src/app/results.js. This hands it the page's state, the bank's chapters and their
+   accents, and the four helpers its markup uses; the handlers its buttons name stay here. */
+@@SLOT[src:src/app/results.js]@@
+function buildResults(){ return ResultsScreen.screenHtml(S,CHAPTERS,CH_COLORS,{chIcon,e,icon,semText}); }
 
 function attachEvents(){
   document.querySelectorAll('[data-fig]').forEach(fc=>{
