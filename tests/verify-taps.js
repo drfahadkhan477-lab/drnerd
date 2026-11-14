@@ -97,13 +97,14 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     await quiet(page);
     const homeButtons=await under('.nav .icon-btn',21,21);
     ok('Home search and theme controls retain full touch targets',homeButtons.length===3&&homeButtons[0].w>=200&&homeButtons.every(b=>b.h===36&&b.wrong===0)&&homeButtons.slice(1).every(b=>b.w===36),JSON.stringify(homeButtons));
-    /* Round five: Echo left the rail (it is on the Labs page) and Apex took its place, a rail item like the tabs. */
+    /* Tablet Home has horizontal tabs; Apex sits beside them at the top right.
+       Its circular face still takes the same square of nine sampled presses. */
     const rail = await under('#aiFab', 21, 21);
-    const place = await page.evaluate(() => { const f = document.getElementById('aiFab').getBoundingClientRect(), t = [...document.querySelectorAll('.home-tab')].pop().getBoundingClientRect();
-      return { fabLeft: Math.round(f.left), fabTop: Math.round(f.top), tabLeft: Math.round(t.left), tabBottom: Math.round(t.bottom) }; });
-    ok('on Home, Apex is in the rail under the three tabs, and takes a press anywhere within 21 px of its centre',
+    const place = await page.evaluate(() => { const f = document.getElementById('aiFab').getBoundingClientRect(), t = document.querySelector('.home-tabs').getBoundingClientRect();
+      return { fabLeft: f.left, fabRight: f.right, fabTop: f.top, fabBottom: f.bottom, tabRight: t.right, tabTop: t.top, tabBottom: t.bottom, width: innerWidth }; });
+    ok('on Home, Apex is at the top right beside the horizontal tabs, and takes a press anywhere within 21 px of its centre',
        rail.length === 1 && rail[0].w >= 44 && rail[0].h >= 44 && rail[0].wrong === 0 &&
-       Math.abs(place.fabLeft - place.tabLeft) < 40 && place.fabTop > place.tabBottom && place.fabTop < place.tabBottom + 60, JSON.stringify({ rail, place }));
+       place.fabLeft >= place.tabRight && place.fabRight <= place.width && place.fabTop < place.tabBottom && place.fabBottom > place.tabTop, JSON.stringify({ rail, place }));
     const home = await page.evaluate(() => ({ bar: [...document.querySelectorAll('.nav .icon-btn')].map(b => b.getAttribute('onclick') || b.id),
       rail: !!document.getElementById('homeEchoLink'), labs: !!document.querySelector('#homePage2 [onclick*="goEcho"]') }));
     ok('and Echo is neither in the rail nor in the bar there, only on the Labs page', !home.rail && !home.bar.some(c => /goEcho/.test(c)) && home.labs, JSON.stringify(home));

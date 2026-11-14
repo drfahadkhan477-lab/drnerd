@@ -118,8 +118,11 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   await onScreen(page, 'study', { marker: '#planCard' });
   ok('and Study no longer has it, nor the Voice card', await page.evaluate(() => !document.getElementById('mockCard') && !document.getElementById('voiceCard')));
   await page.evaluate(() => goLabs());
-  await page.waitForSelector('#labSessions', { timeout: 8000 }).catch(() => {});
-  await page.click('#labSessions', { timeout: 4000 }).catch(() => {});
+  // Visibility alone does not establish readiness in the nested Labs scroller.
+  // In constrained CI WebKit, stability and scrolling exhausted its 4s budget.
+  // Prepare its viewport within the existing readiness budget, then click it.
+  await page.locator('#labSessions').scrollIntoViewIfNeeded({ timeout: 8000 });
+  await page.click('#labSessions', { timeout: 4000 });
   await onScreen(page, 'sessions', { marker: '#mockCard' });
   ok('the Sessions card in Labs opens it', await page.evaluate(() => S.screen === 'sessions' && !!document.getElementById('mockCard')));
   {
