@@ -6012,49 +6012,9 @@ function buildMockEnd(){
       <button class="btn btn-next" type="button" onclick="mockSubmit()">Hand in ${icon('check','icon-sm')}</button>
     </div></div></div>`;
 }
-function buildMockReport(){
-  const r=S.mockLast;
-  if(!r) return `<div class="mock-wrap"><div class="mock-gone"><p>No block has been handed in yet.</p>
-    <button class="btn btn-next" type="button" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
-  const g=MockExam.grade(r,mockLookup), p=g.pct;
-  const col=p>=80?'var(--green)':p>=60?'var(--amber)':'var(--red)';
-  const msg=p>=80?'Outstanding!':p>=60?'Good Progress!':'Keep Studying!', msgIcon=p>=80?'trophy':p>=60?'target':'book';
-  const rad=50, circ=2*Math.PI*rad;
-  const ring=`<svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Score ${p} percent">
-    <circle cx="64" cy="64" r="${rad}" fill="none" stroke="var(--border)" stroke-width="10"/>
-    <circle cx="64" cy="64" r="${rad}" fill="none" stroke="${col}" stroke-width="10"
-      stroke-dasharray="${circ}" stroke-dashoffset="${circ*(1-p/100)}" stroke-linecap="round"
-      transform="rotate(-90 64 64)" style="transition:stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)"/></svg>`;
-  const rows=g.byCh.slice().sort((a,b)=>(a.correct/a.n)-(b.correct/b.n)||a.ch.localeCompare(b.ch)).map(c=>{
-    const cp=Math.round(c.correct/c.n*100), cc=cp>=70?'var(--green)':cp>=50?'var(--amber)':'var(--red)', bc=CH_COLORS[c.ch]||'var(--teal)';
-    return `<div class="chp-row mock-chrow" data-ch="${e(c.ch)}" style="--accent:${bc}"><span class="chp-icon">${chIcon(c.ch)}</span>
-      <div class="chp-info"><div class="chp-name">${e(c.ch)}</div><div class="chp-bar"><div class="chp-fill" style="transform:scaleX(${cp/100});background:${cc}"></div></div></div>
-      <div class="chp-score"><div class="chp-pct" style="color:${semText(cc)}">${cp}%</div><div class="chp-count">${c.correct}/${c.n}</div></div></div>`;
-  }).join('');
-  const used=MockExam.fmtClock(g.usedMs), lim=g.limitMs!=null?MockExam.fmtClock(g.limitMs,'down'):null;
-  const timeLine=g.expired?'Time ran out at '+lim:lim?used+' of '+lim:used+', no time limit';
-  const per=g.avgMs!=null?' · about '+Math.round(g.avgMs/1000)+' s a question':'';
-  const slow=g.slowest.length?`<div class="mock-slow"><b>Slowest</b> ${g.slowest.map(s=>'Q'+(s.i+1)+' ('+e(CH_SHORT[s.ch]||s.ch)+', '+MockExam.fmtClock(s.ms)+')').join(' · ')}</div>`:'';
-  /* Said of the list as it is now, not of the moment of hand-in: the report is opened again after flags have been taken off. */
-  const kept=g.items.filter(it=>it.flagged&&S.flagged.has(it.id)).length;
-  const flagLine=g.flagged?`<div class="mock-slow"><b>${g.flagged} flagged</b> — ${g.flaggedWrong} of them not right. In your Flagged list: ${kept} of ${g.flagged}.</div>`:'';
-  const missed=MockExam.reviewIds(g,'missed').length;
-  return `<div class="results-wrap mock-report anim-fade">
-    <div class="score-hero">
-      <div class="score-circle">${ring}<div class="score-num"><span class="score-pct" style="color:${semText(col)}">${p}%</span><span class="score-label">Mock block</span></div></div>
-      <div class="score-msg">${icon(msgIcon,'icon-lg')} ${msg}</div>
-      <div class="score-sub" id="mockSummary">${g.correct} correct · ${g.wrong} wrong · ${g.skipped} not answered · of ${g.n}</div>
-      <div class="mock-timeline" id="mockTime">${e(timeLine)}${per}</div>
-    </div>
-    ${flagLine}${slow}
-    ${rows?`<div class="section-label">This block, by chapter</div><div class="ch-perf">${rows}</div>`:''}
-    <div class="results-btns">
-      ${missed?`<button class="btn btn-next" type="button" onclick="mockReview('missed')">${icon('repeat','icon-sm')} Review the ${missed} to learn from</button>`:''}
-      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="mockReview('all')">Review all ${g.n}</button>
-      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button>
-    </div>
-  </div>`;
-}
+/* The report's markup is src/app/mockreport.js. mockReview(), which two of its buttons name, stays here. */
+@@SLOT[src:src/app/mockreport.js]@@
+function buildMockReport(){ return MockReportScreen.screenHtml(S,CH_COLORS,CH_SHORT,{MockExam,mockLookup,chIcon,e,icon,semText}); }
 
 /* The Progress screen's record of the blocks handed in: the last eight, oldest to newest, each a bar as high as its score. */
 function mockPanel(){

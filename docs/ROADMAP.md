@@ -198,8 +198,12 @@ values. Then "Your annotations" (`src/app/annotations.js`,
 `AnnotationsScreen`, held by `verify-annotations-pure`): the screen and the
 three pieces of it that typing repaints, five functions in all. `ANNO`,
 `annoInput()` and `practiceAnnotated()` stay in the shell, and of the page's
-state the module is handed the flagged and the missed and no more. Next in the
-map's order is `buildMockReport`; write the map again before starting.
+state the module is handed the flagged and the missed and no more. Then the
+mock block's report (`src/app/mockreport.js`,
+`MockReportScreen.screenHtml(S, CH_COLORS, CH_SHORT, kit)`, held by
+`verify-mockreport-pure`): its builder only; `mockReview()`, which two of its
+buttons name, stays in the shell. Next in the map's order is `buildSearch`;
+write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
