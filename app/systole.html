@@ -2217,32 +2217,12 @@ function goStats(){ S.screen='stats'; render(); toTop(); }
 
 /* ═══════════ interactive Rhythm Lab ═══════════ */
 let labMon=null, labKind='sinus';
-function buildLab(){
-  const r=RHYTHMS[labKind];
-  return `<div class="home-wrap anim-fade">
-    <div class="stats-head">
-      <div>
-        <div class="stats-title">Rhythm Lab</div>
-        <div class="stats-sub">Live waveforms — tap a rhythm to morph the trace</div>
-      </div>
-      <button class="btn sb-back" onclick="goHome()">${icon('arrow-left','icon-sm')} Home</button>
-    </div>
-    <div class="lab-monitor">
-      <canvas id="labCanvas" aria-label="Live electrocardiogram trace"></canvas>
-      <div class="lab-readout">
-        <span class="lab-name">${e(r.name)}</span>
-        <span class="lab-hr">${r.hr?r.hr+' bpm':'—'}</span>
-      </div>
-    </div>
-    <div class="lab-desc">${e(r.desc)}</div>
-    <div class="chips lab-chips">${RHYTHM_KEYS.map(k=>
-      `<button class="chip${k===labKind?' hot':''}" onclick="setLab('${k}')">${e(RHYTHMS[k].name)}</button>`).join('')}</div>
-    <div class="ref-hint" style="margin-top:12px">Traces are generated from waveform models, not recordings —
-      shapes are schematic and meant for pattern recognition, not measurement.</div>
-    ${buildPhysio()}
-    ${buildTwelveLead()}
-  </div>`;
-}
+/* The Rhythm Lab's markup is src/app/rhythmlab.js: the monitor and its chips, the cardiac cycle panel and the
+   12-lead panel. This hands it what the three read, each as it is when the screen is drawn. What is chosen
+   stays here, with setLab() and the mounts that draw into the canvases. */
+@@SLOT[src:src/app/rhythmlab.js]@@
+function buildLab(){ return RhythmLabScreen.screenHtml({RHYTHMS,RHYTHM_KEYS,labKind,PHYSIO_VIEWS,PHYSIO_SPEEDS,physioView,physioSlow,physioIv,physioIsPlaying,
+  Physio:typeof Physio!=='undefined'?Physio:undefined,LEAD12_MAP,twelveLead,leadCardHtml,e,icon}); }
 
 /* The cardiac cycle. Remembered across sessions like every other lab choice,
    because someone working through the PV loop comes back to the PV loop. */
@@ -2285,27 +2265,6 @@ function setPhysioPlaying(on){
   });
 }
 
-function buildPhysio(){
-  const v=PHYSIO_VIEWS.find(x=>x[0]===physioView)||PHYSIO_VIEWS[0];
-  return `<div class="panel physio-panel">
-    <div class="panel-h"><span>Cardiac cycle · ${e(v[1])}</span>
-      <span class="physio-phase" id="physioPhase">&nbsp;</span></div>
-    <div class="physio-chips speed-chips"><button class="chip mini" data-physio-play
-        title="${physioIsPlaying()?'Pause the cycle':'Play the cycle'}">${physioIsPlaying()?'Pause':'Play'}</button><span class="speed-lbl">speed</span>${
-      PHYSIO_SPEEDS.map(([n,label])=>
-        `<button class="chip mini${physioSlow===n?' hot':''}" data-physio-slow="${n}"
-           title="${n===1?'Real time':'\u0024{label} of real time'}">${e(label)}</button>`).join('')}</div>
-    <div class="physio-chips">${PHYSIO_VIEWS.map(([k,label])=>
-      `<button class="chip${physioView===k?' hot':''}" data-physio-view="${k}">${e(label)}</button>`).join('')}</div>
-    <div class="physio-stage"><canvas id="physioCanvas" aria-label="Cardiac cycle diagram"></canvas></div>
-    ${physioView==='pv'?`<div class="physio-chips iv-chips">${Physio.INTERVENTIONS.map(iv=>
-      `<button class="chip${physioIv===iv.id?' hot':''}" data-physio-iv="${iv.id}">${e(iv.label)}</button>`).join('')}</div>`:''}
-    <div class="physio-note" id="physioNote"></div>
-    <div class="ref-hint physio-model" id="physioModel">A teaching model: every curve is computed from
-      textbook resting values, not recorded from a patient. Use it to understand the cycle, not to
-      measure or interpret one.</div>
-  </div>`;
-}
 function physioNoteHtml(){
   if(physioView==='pv'){
     const iv=Physio.INTERVENTIONS.find(x=>x.id===physioIv)||Physio.INTERVENTIONS[0];
@@ -2420,20 +2379,6 @@ const LEAD12_MAP={sinus:'sinus',brady:'brady',tachy:'tachy',afib:'afib',flutter:
   rbbb:'rbbb',lbbb:'lbbb',hyperk:'hyperk',longqt:'longqt',stemi:'stemi_ant',
   pericarditis:'pericarditis'};
 let twelve=null, twelveLead=null;
-function buildTwelveLead(){
-  const modelled=!!LEAD12_MAP[labKind];
-  return `<div class="panel twelve-panel">
-    <div class="panel-h">12-lead · ${e(RHYTHMS[labKind].name)}</div>
-    ${modelled?`
-      <div class="twelve-stage"><canvas id="twelveCanvas" aria-label="12-lead electrocardiogram"></canvas></div>
-      <div class="twelve-hint">25 mm/s · 10 mm/mV · tap any lead to see what it looks at</div>
-      <div class="lead-card" id="leadCard">${leadCardHtml(twelveLead)}</div>`
-    :`<div class="twelve-none">A distinct 12-lead is modelled for sinus, bradycardia, tachycardia,
-        atrial fibrillation, flutter, RBBB, LBBB, anterior STEMI, pericarditis, hyperkalaemia and long QT.
-        <b>${e(RHYTHMS[labKind].name)}</b> is shown on the single-lead trace above — drawing it here would mean
-        showing normal morphology under an abnormal name, which teaches the wrong pattern.</div>`}
-  </div>`;
-}
 function leadCardHtml(id){
   if(typeof Leads12==='undefined') return '';
   if(!id) return `<div class="lead-empty">Tap a lead above.</div>`;
