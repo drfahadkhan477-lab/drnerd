@@ -194,8 +194,12 @@ which `verify-ui-pure` reads where it is called. Then the Rhythm Lab
 `verify-rhythmlab-pure`): `buildLab()` with `buildPhysio()` and
 `buildTwelveLead()`, the first screen with state of its own. `labKind`,
 `setLab()` and the mounts stay in the shell, and the module is handed the
-values. Next in the map's order is `buildAnnotations`; write the map again
-before starting.
+values. Then "Your annotations" (`src/app/annotations.js`,
+`AnnotationsScreen`, held by `verify-annotations-pure`): the screen and the
+three pieces of it that typing repaints, five functions in all. `ANNO`,
+`annoInput()` and `practiceAnnotated()` stay in the shell, and of the page's
+state the module is handed the flagged and the missed and no more. Next in the
+map's order is `buildMockReport`; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
