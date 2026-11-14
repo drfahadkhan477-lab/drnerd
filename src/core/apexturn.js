@@ -82,7 +82,7 @@ async function run(st, d, q, hist, extra, explainOnly=false){
       if(st.abort.signal.aborted) break;
       if(explainOnly&&turn.calls.length) throw new Error('Explain-only mode cannot run study tools. Use Send if you want Apex to take an action.');
       if(turn.text.trim()||turn.calls.length){
-        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{}),...(turn.finishReason==='MAX_TOKENS'?{incomplete:true}:{})});
+        if(turn.text.trim()) hist.push({role:'assistant',content:turn.text,...(turn.reused?{reused:true}:{}),...(turn.incomplete||turn.finishReason==='MAX_TOKENS'?{incomplete:true}:{})});
         d.save();
       }
       if(!turn.calls.length&&turn.finishReason&&turn.finishReason!=='STOP'&&!(turn.finishReason==='MAX_TOKENS'&&turn.text.trim())){

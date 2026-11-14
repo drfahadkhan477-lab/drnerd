@@ -335,7 +335,7 @@ jobs:
         run: node tests/verify-apexwire-pure.js
       - name: a turn's state is one object the page holds once, and each old name is a view of its own field (28 checks)
         run: node tests/verify-apexturn-pure.js
-      - name: the loop that runs a turn keeps its rules, stopped, explain-only, cut off, interrupted or too long, and the page hands it its own parts (58 checks)
+      - name: the loop that runs a turn keeps its rules, stopped, explain-only, cut off, interrupted or too long, and the page hands it its own parts (60 checks)
         run: node tests/verify-apexloop-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
