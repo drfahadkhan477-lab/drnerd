@@ -162,6 +162,11 @@ head('grounded mode keeps who is taught, and withholds the key');
      ACCSAP 12's (scripts/which-bank.js): the prompt names the bank from it. */
   const code = [
     cut(APP, 'const BANK=(window.SYSTOLE_BANK', '\n/* ═══════════ custom line-icon system'),
+    /* The turn's state, as the page makes it (src/core/apexturn.js, APEX_TURN and the old names as views of it):
+       runTool's grounded search spends groundedTurnLeft. Until the state had one owner this suite got that name
+       from a `let` that happened to stand inside the next cut; with it gone, the search threw inside runTool and
+       came back as "Tool error", citing nothing. `window` is this world itself, as in the page. */
+    cut(APP, '@@SLOT[src:src/core/apexturn.js]@@', "pendingNav:apexTurnView('nav')});", { inclusive: true }),
     cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
     cut(APP, 'function apexAway(){', '\nfunction runTool(name,input){'),
     cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),
@@ -179,11 +184,12 @@ head('grounded mode keeps who is taught, and withholds the key');
      lines. The page's own helpers run over it; nothing here is a copy of what they do. */
   const ctx = { ALL_Q: [q], REF: [{ id: 'r1', title: 'Amyloidosis note', tags: '', body: 'Apical sparing on strain is the amyloidosis pattern.' }],
     Memory: M, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false,
-    window: {}, BANK_INFO: require('../scripts/which-bank.js').ACCSAP,
+    BANK_INFO: require('../scripts/which-bank.js').ACCSAP,
     document: { documentElement: { hasAttribute: () => false } },
     ApexSignals: require('../src/core/apexsignals.js').ApexSignals, LOG: [], QBYID: { ZZ_7: q },
     S: { screen: 'home', questions: [q], qIdx: 0, answered: false, selected: null, answers: {}, flagged: new Set(), missed: new Set(), mocks: [], examDate: null },
     flaggedQs: () => [], FSRS: { todayISO: () => '2026-10-16', daysBetween: (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000) } };
+  ctx.window = ctx;
   vm.runInNewContext(code, ctx);
   /* A note outranks a question on shared words (notes are boosted), so the
      query carries words only the question has: both must come back. */

@@ -287,6 +287,45 @@ const SUITES = [
      it transforms, which is right and was asserted nowhere — and the escaper
      it leans on is not in this repository at all. */
   ['md-pure',      'nothing a model says can become something the page runs'],
+  /* The sentence shown when the provider refuses a request decides what the
+     fellow does next, and a wrong one has cost an evening more than once. It
+     was the body of the shell's apiError() and could only be reached through a
+     browser; it is src/core/providererror.js now (roadmap E1). */
+  ['providererror-pure', 'a refused request is told as what it is: the site\'s refusal, a rejected or blocked key, a daily quota, no allowance or a wait read from the response, a retired model, an outage; the provider\'s words escaped, and the response read no more than it was'],
+  /* What a review session holds was three functions in the shell reading the
+     bank and the cards as globals. Their rule, that due cards are never capped
+     to a round number, had no check that did not need a browser. */
+  ['reviewqueue-pure', 'a review session is every due card, however many, then new questions a round at a time across chapters up to its size; a card for a question the bank lacks is never dealt; nothing handed in is changed; and an interval is said in days, weeks or months'],
+  /* What Apex sends the model and what it reads back: the window, the request
+     and the stream. It was inline in the shell's oneTurnGemini() and around it,
+     so its shape was only ever checked through a browser and a stubbed network.
+     src/core/apexwire.js now (roadmap E1 step 2), the seam a second provider needs. */
+  ['apexwire-pure', 'a request carries a window of the thread that opens on a user turn and no failed turn; it goes to Google with a key and to this site\'s relay without, carrying no secret; its body is the text sent, key for key; the stream is read the same whatever its chunk boundaries, each part kept with its signature; a tool\'s answer goes back with the model\'s own parts'],
+  /* What a turn with the tutor changes was seven script-level names, declared in four places and rebound by
+     whichever function got there, which is why the loop that runs a turn could not leave the shell. They are
+     one object now, src/core/apexturn.js, and the old names are views of it (roadmap E1). */
+  ['apexturn-pure', 'a turn\'s state is one object the page holds once, made by the module, and each of the seven old names reads and writes its own field of it, and nothing else'],
+  /* The loop that runs a turn, streamReply() in the shell until the turn's state had one owner. Its rules are
+     the ones the shell's comments told as stories; here each is a check, and the page's hand-over is one too. */
+  ['apexloop-pure', 'a turn stopped as its reply arrives keeps and runs nothing; explain-only runs no tool; a cut-off reply is kept and marked; a mock block stops the tools; an answer is cut at 9,000 characters but a grounded search\'s; six steps at most; however a turn ends it ends in the same order; and the page hands the loop its own state and parts, each looked up when called'],
+  /* The first screen to leave the shell (roadmap E1 step 3): what a finished session ends on was
+     buildResults() over the page's globals; it is src/app/results.js now, handed the state and the helpers. */
+  ['results-pure', 'the results screen gives the quiz\'s score or the session\'s, changes colour at 80 and 60, draws a row for every chapter answered in the bank\'s order, offers the missed only when something is, restarts what was being done, reads eight names of the state and changes nothing, and the page hands it its own state and helpers'],
+  /* The second screen out of the shell: what Apex has kept about the reader. Its builder is src/app/memory.js;
+     the two handlers that delete stay in the page, where verify-ui-pure reads their confirm(). */
+  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data and never in a handler, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
+     chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
+  ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, and every element the page\'s mounts look up is in the markup under that name'],
+  /* The fourth: "Your annotations", five functions in src/app/annotations.js, because typing repaints three
+     pieces of the screen and leaves the box alone. ANNO, annoInput() and practiceAnnotated() stay in the page. */
+  ['annotations-pure', 'the annotations screen draws a row for each question with a note or pencil marks, says what it carries, hands the note and the stem to FlagSet.highlight() with the page\'s e(), says which of two things no rows means, counts what matches, changes nothing it is given, and the page\'s own lines draw it, repaint it on typing with what the screen itself draws, start a quiz of what is shown and follow a tap by the attribute the row carries'],
+  /* The fifth: the report a mock block ends on, one builder in src/app/mockreport.js. mockReview(), which two of
+     its buttons name, stays in the page. */
+  ['mockreport-pure', 'the mock report gives the grade\'s percent with its colour, words and ring at 80 and 60, the counts, the time in the three ways a block can end, the flags against the Flagged list as it is now, the three slowest, a row for each chapter weakest first, offers what there is to learn from only when there is something, reads two names of the state and changes nothing, and the page\'s own line over the real MockExam grades a block as the arithmetic says'],
+  /* The sixth: the topic search, its builder with hl() and snippet() in src/app/search.js. What is typed, the
+     search, its timer and the handlers its markup names stay in the page. */
+  ['search-pure', 'the topic search marks the words typed in text escaped first, quotes the part of a question where one is found, offers topics before anything is typed, counts and lists the matches with their chapter, flags, figures, stem and right answer, has a chapter choice, Quiz these and Clear, every handler one of seven shapes, reads three names of the search and changes nothing, and the page\'s line over its own helpers draws a search'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -487,7 +526,10 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = ['contrast'];
+/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
+   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
+   search-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

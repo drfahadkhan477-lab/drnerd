@@ -168,6 +168,46 @@ measured rather than reused, and `docs/ARCHITECTURE.md`'s warnings about the
 baked heart mesh respected. *Fable* (very high effort) for the dependency map of
 the globals and the first two moves; *Opus* for each screen after that, following
 the map.
+*Done so far:* the map (`docs/SHELL-MAP.md`, written by `tools/shell-map.js`);
+step 1 (`src/core/markdown.js`, `providererror.js`, `reviewqueue.js`); and the
+wire half of step 2 (`src/core/apexwire.js`: the window, Gemini's request and
+its stream, as `ApexWire.gemini`, which is where A1's second adapter goes).
+Each is held by a pure suite, and the shell keeps a one-line function of each
+old name. Then the rest of step 2: the seven names a turn rebinds (`aiBusy`,
+`aiAbort`, `toolTrace`, `groundedTurnLeft`, `lastHits`, `lastHitsKey`,
+`pendingNav`) became one owner, `APEX_TURN` (`src/core/apexturn.js`), with the
+old names kept as views of its fields; and `streamReply()`, the loop that runs a
+turn, moved there as `ApexTurn.run()`, handed the page's parts. The views go
+when nothing says the old names; the map lists who still does, and fourteen
+browser suites say them from inside the page. Step 3 has begun, in the map's
+order of screens: its first rows were already calls into a module
+(`buildEchoScreen`, `buildNoteSearch`) or one line of markup (`buildPractice`),
+so the first screen to move is the results screen, now `src/app/results.js`
+(`ResultsScreen.screenHtml(S, CHAPTERS, CH_COLORS, kit)`), held by
+`verify-results-pure`. The map now follows state handed whole to a module's
+function, so a screen that has moved is still listed under the fields it reads
+and changes. The Memory screen followed (`src/app/memory.js`,
+`MemoryScreen.screenHtml(all, kit)`, held by `verify-memoryscreen-pure`): its
+builder only, because `memForget()` and `memForgetAll()` ask with `confirm()`,
+which `verify-ui-pure` reads where it is called. Then the Rhythm Lab
+(`src/app/rhythmlab.js`, `RhythmLabScreen.screenHtml(p)`, held by
+`verify-rhythmlab-pure`): `buildLab()` with `buildPhysio()` and
+`buildTwelveLead()`, the first screen with state of its own. `labKind`,
+`setLab()` and the mounts stay in the shell, and the module is handed the
+values. Then "Your annotations" (`src/app/annotations.js`,
+`AnnotationsScreen`, held by `verify-annotations-pure`): the screen and the
+three pieces of it that typing repaints, five functions in all. `ANNO`,
+`annoInput()` and `practiceAnnotated()` stay in the shell, and of the page's
+state the module is handed the flagged and the missed and no more. Then the
+mock block's report (`src/app/mockreport.js`,
+`MockReportScreen.screenHtml(S, CH_COLORS, CH_SHORT, kit)`, held by
+`verify-mockreport-pure`): its builder only; `mockReview()`, which two of its
+buttons name, stays in the shell. Then the topic search
+(`src/app/search.js`, `SearchScreen.screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit)`,
+held by `verify-search-pure`): the builder with `hl()` and `snippet()`, which
+only it used; `SQ`, `runSearch()`, `searchInput()` and its timer and the
+handlers stay in the shell. Next in the map's order is `buildStudy`; write the
+map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
