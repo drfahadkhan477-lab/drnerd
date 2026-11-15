@@ -271,11 +271,11 @@ owner picks, then *Sonnet*.
 
 **D5 — A rule for floating controls.** The pencil and Apex buttons get defined
 safe areas, never cover text, and on tablets fold into the rail. *Sonnet.*
-*Started, the end of every screen:* scrolled to its end, the notes' last
-lines (a phone, an iPad upright) and Sessions' last line (a phone) sat under
-the Apex button. Below 1024px every screen but Home now ends in the button's
-own space; from 1024px the column's padding already clears it.
-`verify-readsize` reads eight screens at three sizes. Still open: text
+*Started, the end of every screen:* scrolled to its end, Sessions' last line
+sat under the Apex button on a phone; the other seven screens read cleared it,
+and an iPad either way up was clear. Below 1024px every screen but Home now
+ends in the button's own space; from 1024px the column's padding already
+clears it. `verify-readsize` reads eight screens at three sizes. Still open: text
 passes under the button while a page scrolls (a sweep counted it on the
 notes, Progress, Chapters and the Lab, mostly on a phone), and folding the
 Apex button into the rail on tablets is a design decision.

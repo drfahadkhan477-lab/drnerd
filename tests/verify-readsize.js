@@ -523,8 +523,15 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
             const cr = el.getBoundingClientRect(), w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
             for (let t = w.nextNode(); t; t = w.nextNode()) {
               const pe = t.parentElement; if (!/[A-Za-z0-9]/.test(t.nodeValue) || !pe || el.contains(pe)) continue;
+              /* What of the text is shown: cut to every ancestor that clips its overflow (a note's own scrolling body), or a
+                 line scrolled out of its card would be counted under the button. */
+              const clips = []; for (let a = pe; a && a !== document.documentElement; a = a.parentElement) {
+                const as = getComputedStyle(a); if (a !== pe && (as.overflowX !== 'visible' || as.overflowY !== 'visible')) clips.push(a.getBoundingClientRect());
+                if (as.position === 'fixed') break; }
               const rg = document.createRange(); rg.selectNodeContents(t);
-              for (const q of rg.getClientRects()) {
+              for (const q0 of rg.getClientRects()) {
+                const q = { left: q0.left, top: q0.top, right: q0.right, bottom: q0.bottom };
+                for (const c of clips) { q.left = Math.max(q.left, c.left); q.top = Math.max(q.top, c.top); q.right = Math.min(q.right, c.right); q.bottom = Math.min(q.bottom, c.bottom); }
                 const ix = Math.min(q.right, cr.right) - Math.max(q.left, cr.left), iy = Math.min(q.bottom, cr.bottom) - Math.max(q.top, cr.top);
                 if (ix > 4 && iy > 4) { const top = document.elementFromPoint(Math.max(q.left, cr.left) + ix / 2, Math.max(q.top, cr.top) + iy / 2);
                   if (top && el.contains(top)) hits.push((el.id || 'rail') + ' over ' + (pe.className || pe.tagName).toString().split(' ')[0]); }
