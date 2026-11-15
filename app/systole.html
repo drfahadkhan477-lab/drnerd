@@ -5610,48 +5610,19 @@ function clearFlags(){
    The rows are made once, as the screen is drawn (nothing on it can change a note); typing filters them and
    repaints the list only, so the keyboard stays in the box. ── */
 const ANNO={q:'',rows:[]};
-function annoCountText(all,shown){
-  return !all?'Nothing is written on any question yet.'
-    :ANNO.q.trim()&&FlagSet.words(ANNO.q).length?shown+' of '+all+' match':all+' question'+(all===1?'':'s')+' with a sticky note or pencil marks';
-}
-function annoRowHtml(r){
-  const q=r.q, col=CH_COLORS[q.ch]||'var(--teal)', w=ANNO.q;
-  return `<button class="hit anno-row" type="button" data-anno="${e(r.id)}" style="border-left-color:${col}">
-    <div class="hit-top"><span class="hit-ch" style="background:${col}1F;color:${chInk(col)}">${e(q.ch)} · ${q.n}</span>
-      ${S.flagged.has(r.id)?'<span class="hit-flag flagged">flagged</span>':''}
-      ${S.missed.has(r.id)?'<span class="hit-flag">previously missed</span>':''}
-      ${r.notes?`<span class="hit-fig">${icon('sticky-note','icon-sm')} ${r.notes>1?r.notes+' notes':'note'}</span>`:''}
-      ${r.ink?`<span class="hit-fig">${icon('pencil','icon-sm')} pencil</span>`:''}</div>
-    ${r.text?`<div class="anno-text">${FlagSet.highlight(clip(r.text,320),w,e)}</div>`:`<div class="anno-text none">${r.notes?'An empty sticky note':'Pencil marks, no words'}</div>`}
-    <div class="anno-stem">${FlagSet.highlight(clip(q.s,150),w,e)}</div>
-  </button>`;
-}
-function annoListHtml(rows){
-  if(rows.length) return rows.map(annoRowHtml).join('');
-  return ANNO.rows.length
-    ?`<div class="sb-none">Nothing matched <b>${e(ANNO.q)}</b>.<br><span>Try fewer or shorter words. It looks in the note, the chapter and the question.</span></div>`
-    :`<div class="sb-none">Nothing is written on any question yet.<br><span>Open a question, choose the pencil, then the sticky note: what you write is kept here.</span></div>`;
-}
+/* The markup is src/app/annotations.js: the whole screen, and the three pieces of it that typing repaints.
+   annoPage() is what they read, as it is when they are asked: of the page's state, the flagged and the missed and
+   no more. ANNO stays here, with the rows the screen makes as it is drawn, annoInput(), which keeps what is typed,
+   and practiceAnnotated(). */
+@@SLOT[src:src/app/annotations.js]@@
+const annoPage=()=>({ANNO,S:{flagged:S.flagged,missed:S.missed},CH_COLORS,FlagSet,chInk,clip,e,icon});
+function annoCountText(all,shown){ return AnnotationsScreen.countText(annoPage(),all,shown); }
+function annoListHtml(rows){ return AnnotationsScreen.listHtml(annoPage(),rows); }
 const annoShown=()=>FlagSet.find(ANNO.rows,ANNO.q);
-const annoPractiseHtml=n=>`Practise these ${n} ${icon('arrow-right','icon-sm')}`;
+const annoPractiseHtml=n=>AnnotationsScreen.practiseHtml(annoPage(),n);
 function buildAnnotations(){
   ANNO.rows=FlagSet.annotated(NOTES,INK,QBYID);
-  const rows=annoShown();
-  return `<div class="home-wrap anim-fade anno-wrap">
-    <div class="search-bar">
-      <div class="sb-row">
-        <span class="sb-icon">${icon('pencil')}</span>
-        <input id="annoQ" type="search" placeholder="Find a note by what it says…" aria-label="Search your annotations"
-          value="${e(ANNO.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="annoInput(this.value)">
-      </div>
-      <div class="sb-row2">
-        <button class="btn btn-next sb-quiz" id="annoPractise" type="button" onclick="practiceAnnotated()"${rows.length?'':' disabled'}>${annoPractiseHtml(rows.length)}</button>
-        <button class="btn sb-back" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Chapters</button>
-      </div>
-    </div>
-    <div class="section-label" id="annoCount" role="status">${e(annoCountText(ANNO.rows.length,rows.length))}</div>
-    <div class="hits" id="annoList">${annoListHtml(rows)}</div>
-  </div>`;
+  return AnnotationsScreen.screenHtml(annoPage(),annoShown());
 }
 function annoInput(v){
   ANNO.q=String(v==null?'':v);

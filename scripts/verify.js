@@ -316,6 +316,9 @@ const SUITES = [
   /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
      chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
   ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, and every element the page\'s mounts look up is in the markup under that name'],
+  /* The fourth: "Your annotations", five functions in src/app/annotations.js, because typing repaints three
+     pieces of the screen and leaves the box alone. ANNO, annoInput() and practiceAnnotated() stay in the page. */
+  ['annotations-pure', 'the annotations screen draws a row for each question with a note or pencil marks, says what it carries, hands the note and the stem to FlagSet.highlight() with the page\'s e(), says which of two things no rows means, counts what matches, changes nothing it is given, and the page\'s own lines draw it, repaint it on typing with what the screen itself draws, start a quiz of what is shown and follow a tap by the attribute the row carries'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -517,8 +520,8 @@ const SUITES = [
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
-   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure'];
+   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
