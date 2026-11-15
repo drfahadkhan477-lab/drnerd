@@ -2968,9 +2968,6 @@ const refsNewestFirst=()=>REF.slice().sort((a,b)=>b.ts-a.ts);
 /* The note being looked at on its own, if it is still there. A note deleted while it was looked at leaves its id in refViewing,
    and an id with no note is no view: the library is what the screen shows then, and what it pages. */
 const refViewed=()=>(refViewing&&REF.find(r=>r.id===refViewing))||null;
-function refPager(left){
-  return left>0?`<div class="ref-pager" id="refPager"><button class="chip" type="button" onclick="refMore()">Show ${Math.min(REF_PAGE,left)} more</button><span>${left} more in your library</span></div>`:'';
-}
 function refMore(){
   const pager=document.getElementById('refPager');
   if(!pager||S.screen!=='refs'||refViewed()) return;
@@ -2993,35 +2990,10 @@ function mountRefPager(){
   refPageWatch=new IntersectionObserver(es=>{ if(es.some(x=>x.isIntersecting)) refMore(); },{root,rootMargin:'0px 0px 900px 0px'});
   refPageWatch.observe(pager);
 }
-function buildRefs(){
-  const viewed=refViewed();
-  const sorted=viewed?[viewed]:refsNewestFirst();
-  const drawn=viewed?sorted:sorted.slice(0,refShown);
-  const rows=drawn.map(refCard).join('')+(viewed?'':refPager(sorted.length-drawn.length));
-  return `<div class="home-wrap anim-fade">
-    <div class="hero" style="padding:26px 22px">
-      <div class="hero-badge">${icon('folder','icon-sm')} Your reference library</div>
-      <div class="hero-title" style="font-size:28px">Reference Notes</div>
-      <div class="hero-sub">Notes you write here are searched alongside the bank's commentary and handed to Apex as context — so the tutor teaches from your understanding, not just the question bank.</div>
-    </div>
-    <div class="ref-new"${viewed&&!refEditing?' hidden style="display:none"':''}>
-      <input id="refT" placeholder="Title — e.g. Cardiac amyloidosis: red flags">
-      <input id="refG" placeholder="Tags, comma separated — amyloid, restrictive, ATTR">
-      <textarea id="refB" rows="6" placeholder="Write the concept in your own words. Summarising what you read is where the learning happens — and it gives the tutor your framing to build on."></textarea>
-      <div class="ref-btns">
-        <button class="btn btn-next" onclick="refSave()">${refEditing?'Save changes':'Add note'}</button>
-        ${refEditing?`<button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="refCancel()">Cancel</button>`:''}
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="refImportText()">⤒ Import .md / .txt / .json</button>
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="refExport()">⤓ Export notes</button>
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goHome()">${icon('arrow-left','icon-sm')} Back</button>
-      </div>
-      <div class="ref-hint">Markdown files split on <code>#</code> headings — one note per section. Nothing you write leaves this device except as context on your own API calls.</div>
-    </div>
-    <div class="section-label">${viewed?'Source note':`${REF.length} note${REF.length===1?'':'s'} indexed`}</div>
-    ${viewed?`<div class="ref-btns"><button class="chip" onclick="goHome()">Back to study</button><button class="chip" onclick="goRefs()">Show all notes</button></div>`:''}
-    ${rows||'<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px">No notes yet. Add one above, or import a markdown file.</div>'}
-  </div>`;
-}
+/* The library's markup, with its pager, is src/app/refs.js. refCard() stays above, because refMore() adds a page of
+   cards with it in place; the handlers the markup names stay here too. */
+@@SLOT[src:src/app/refs.js]@@
+function buildRefs(){ return RefsScreen.screenHtml(REF,{refViewed,refsNewestFirst,refShown,refEditing,refCard,REF_PAGE,icon}); }
 function refSave(){
   const t=document.getElementById('refT').value.trim();
   const g=document.getElementById('refG').value.trim();
