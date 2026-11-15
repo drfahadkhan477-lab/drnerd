@@ -269,7 +269,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     net: (document.getElementById('brainNet') || { getAttribute: () => '' }).getAttribute('transform') || '',
     light: (document.querySelector('#brainArt #sbTissue') || { getAttribute: () => '' }).getAttribute('cx') }));
   const t0 = await turnAt();
-  await settled(page, (f) => brainLiveRun && brainLiveRun.frames > f + 3, { arg: t0.frames, timeout: 5000, label: 'more frames of the turn' }).catch(() => {});
+  /* Some frames on, and turned by at least 0.6 degrees: at the end of the sway the turn is slow, and two readings a few
+     frames apart (5.18 to 5.23 degrees, once in CI) left the wiring's one-decimal transform the same. A wait, not the
+     proposition: if the brain never turns, the readings below still fail. */
+  const y0 = (/rotateY\((-?[\d.]+)deg\)/.exec(t0.tilt) || [])[1];
+  await settled(page, ({ f, y }) => { const el = document.getElementById('brainTilt'), m = el && /rotateY\((-?[\d.]+)deg\)/.exec(el.style.transform);
+    return brainLiveRun && brainLiveRun.frames > f + 3 && !!m && y !== undefined && Math.abs(+m[1] - +y) >= 0.6; },
+    { arg: { f: t0.frames, y: y0 }, timeout: 8000, label: 'the brain to turn by 0.6 degrees' }).catch(() => {});
   const t1 = await turnAt();
   const ang = t => { const m = /rotateY\((-?[\d.]+)deg\)/.exec(t.tilt); return m ? +m[1] : NaN; };
   ok('it turns: the brain is drawn at an angle that changes from frame to frame', Number.isFinite(ang(t0)) && Number.isFinite(ang(t1)) && t0.tilt !== t1.tilt,
