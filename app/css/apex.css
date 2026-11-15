@@ -143,6 +143,10 @@
   background:var(--white)}
 #shell.ai-full #app{visibility:hidden}
 #shell.ai-full .ai-fab{display:none!important}
+/* D5. Below 1024px the Apex button floats over the foot of every screen but Home (which lays it into its own row), and from
+   1024px the column's padding keeps the text clear of it (ipad.css). So below it a screen ends in the button's own space:
+   its height, its distance from the edge and a gap, and the last lines can always be scrolled clear of it. */
+@media(max-width:1023px){body:not(.on-home) #app::after{content:'';display:block;height:calc(max(14px,env(safe-area-inset-bottom)) + 50px + 12px)}}
 /* One centred column for all three stacked regions, so the composer lines up
    under the thread instead of running the width of an iPad. */
 #shell.ai-full .ai-head>div:first-of-type,
