@@ -247,3 +247,24 @@ Upload nothing from it to GitHub. Do not commit its rewritten test-stats record;
 report changed counts for the owner's decision. Compare a failing private suite
 with master c45ea79 in that same temporary workspace, then delete the temporary
 worktree and its outputs when finished. Do not deploy or merge #342 into master.
+
+## Master integration — 15 November
+
+Merged master `1a19b56aef9834b1952bce887b5b67426c15a5a1` in `0d80831`.
+Only `docs/SHELL-MAP.md` conflicted; it was regenerated and checked current.
+The prior 161-suite runs above measure the earlier candidate, not this merge.
+Fresh public runs on the merged source, with Node 24 and the pinned browsers:
+
+```text
+  all 167 no-export suites passed (91 pure, 76 in chromium, 74 of them on a synthetic build), and the split build made from it.
+  all 167 no-export suites passed (91 pure, 76 in webkit, 74 of them on a synthetic build), and the split build made from it.
+  The suites that drive a real build need your export: npm run test:private
+```
+
+Each engine measured 167 suites now, 0 reused. The New York pure run measured
+91 suites now, 0 reused, and ended with the same export notice. The leak guard
+reported `leak-guard: 437 file(s) checked, nothing licensed`. The synthetic
+split shell measured 283,720 bytes against the unchanged 294,912-byte limit.
+These public results do not certify licensed content. Next: push the merge,
+check CI on the pushed head, then run the private gate in a fresh temporary
+worktree as specified above. Do not deploy or merge the PR.
