@@ -1051,6 +1051,12 @@ body.on-home .home-tab[aria-selected="true"] .icon{animation:glassIconIn .45s ea
    disabled, pointer-transparent glass layer, so it cannot supply the hit area. */
 body.on-home .ai-fab::before{content:'';position:absolute;top:calc(50% - 22px);left:calc(50% - 22px);right:auto;width:44px;height:44px;border-radius:0;background:transparent;pointer-events:auto}
 @media(min-width:700px){body.on-home .ai-fab{top:76px;bottom:auto}}
+/* The tablet tabs take 66px from the page. In a short portrait window,
+   recover that space from the hero before the pearl reaches its type floor.
+   Within this compact range, grow back to 240px as height permits. */
+@media(min-width:700px) and (max-height:1100px) and (orientation:portrait){
+ #app[data-screen="home"] #homePage0 .home-wrap.atlas-reading{grid-template-rows:clamp(174px,calc(100vh - 826px),240px) minmax(0,1fr) auto auto}
+}
 /* Short landscape tablets recover the tab row through chapter layout, not smaller text. */
 @media(min-width:1000px) and (max-height:850px) and (orientation:landscape){
  #homePage1 .brain-chs{grid-template-columns:repeat(4,minmax(0,1fr))}

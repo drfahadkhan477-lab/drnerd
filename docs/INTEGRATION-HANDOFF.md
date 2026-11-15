@@ -3,8 +3,10 @@
 **Resumed under the owner's targeted tap/WebKit instructions.** The circular
 Apex hit-area fix and updated horizontal placement check pass in both engines.
 WebKit's swallowed mock-screen click timeout has been reproduced in the pinned
-CI container. Full public validation passed for the final fixes; push/CI and private
-certification remain subsequent steps. No deployment or merge into master is authorized.
+CI container. Those fixes passed public validation and branch CI. The first private
+gate exposed a separate short-portrait Pearl overflow. A bounded hero-height fix
+now passes the targeted private regression in both engines. Fresh Chromium and WebKit both passed after the WebKit runtime prerequisites
+were repaired. No deployment or merge into master has followed this correction.
 
 ## Source and changes
 
@@ -70,9 +72,9 @@ line. The failure was:
 FAIL  on Home, Apex is in the rail under the three tabs, and takes a press anywhere within 21 px of its centre  → {"rail":[{"id":"aiFab","w":52,"h":52,"wrong":4}],"place":{"fabLeft":762,"fabTop":76,"tabLeft":475,"tabBottom":116}}
 ```
 
-These earlier results are not certification of the current fixes. No temporary
-private worktree has been created for #342. Earlier #340 private outputs belong
-to a different source and remain preserved.
+These earlier results are not certification of the current fixes. The subsequent
+private worktrees and outcomes are described below. Earlier #340 private outputs
+belong to a different source and remain preserved.
 
 ## Tap and WebKit diagnosis measured on 14 November
 
@@ -112,7 +114,7 @@ FAIL  on Home, Apex is at the top right beside the horizontal tabs, and takes a 
   `174 passed, 0 failed` in Chromium and WebKit; they are not final-source passes.
 - Ignored evidence is under `build/taps-20261114/`. Raw logs do not belong in Git.
 
-## Remaining sequence and model switch points
+## Public validation at 49626c7, before the portrait correction
 
 Full fresh Chromium and WebKit both completed successfully. Chromium
 measured 159 suites, 0 reused, plus the split build, and printed:
@@ -133,10 +135,98 @@ The split shell measured **282,673 bytes**, below the unchanged **294,912-byte**
 limit (gzip level 6, index.html plus app.js). This supersedes the earlier size
 measurement for the source before the tap fix.
 
-The final-source
+At that source, the
 New York pure run measured 83 suites successfully, 0 reused; its literal final
 line was `  The suites that drive a real build need your export: npm run test:private`.
 The final-source leak guard reported `leak-guard: 421 file(s) checked, nothing licensed`.
+## CI, private regression and current integration
+
+- Branch CI run `43587318438` at `49626c7` completed successfully; the private
+  self-hosted job was skipped. It was a manually dispatched branch run, not PR
+  certification. The PR's merge conflict prevented its automatic workflow.
+- The private Chromium gate at that source failed Pearl's existing
+  `744x1000: no pearl runs past its card` assertion. Running the same suite on
+  pinned master `c45ea79` passed. The top tabs reserve vertical space which the
+  old fixed hero height did not give back. This was not an Apex-turn regression.
+- After the owner continued the proposed short-portrait correction, merged
+  current master `d33cab5` in `ffcccd5`. Only the generated shell map conflicted;
+  regenerated it and checked it is current. This includes the Results and Memory
+  screen extractions and their public checks. The pinned failure-comparison
+  baseline remains `c45ea79`.
+- The CSS gives the Pearl more room by shortening the hero in compact portrait
+  tablet windows, growing it again as height permits. It does not reduce the
+  Pearl's type floor or change any test threshold. A synthetic visual check
+  confirmed that the heart, ECG and both touch controls remain visible.
+- Injecting the former hero height into the current private build reproduced
+  the existing assertion's own failure, then restoring it passed the fit block
+  in Chromium and WebKit. This targeted development check is not a full release
+  gate. Safe numeric results are retained locally under `build/portrait-fix/`;
+  licensed inputs and raw logs are never included in this handoff.
+- All private input hashes matched before and after the development run.
+  Removed its temporary worktree, build, source and content copies after testing;
+  the original private inputs and every pre-existing worktree remain preserved.
+  The development run did not rewrite the test-stats record.
+- The first fresh WebKit run on this candidate stopped after 144 passing suites,
+  with no failure line and no final verdict. Its process was absent after the
+  connection gap; that run is incomplete, not a pass. A replacement fresh run
+  uses the pinned Playwright container and Node 24, detached from the chat's
+  command session. Its logs stay under `build/portrait-fix/webkit-recovery/`.
+  That replacement subsequently stopped at the missing Python prerequisite
+  described below; it did not complete the full run either.
+- During recovery, origin/master advanced to `caafb4a` with the Rhythm Lab
+  extraction. That change is not included in this candidate. Do not silently
+  advance the source during certification; report mergeability against the newer
+  master separately from the candidate's CI and private validation.
+
+## Remaining sequence and model switch points
+
+The combined source's fresh Chromium run completed successfully: **161 measured
+now, 0 reused**, plus the split build. Its summary and literal final line were:
+
+```text
+  all 161 no-export suites passed (85 pure, 76 in chromium, 74 of them on a synthetic build), and the split build made from it.
+  The suites that drive a real build need your export: npm run test:private
+```
+
+The split shell measured **282,848 bytes** against the unchanged **294,912-byte**
+limit (gzip level 6, index.html plus app.js). The New York pure run measured
+85 suites successfully, 0 reused. Its literal final line was the same export
+notice above. The leak guard printed:
+
+```text
+leak-guard: 425 file(s) checked, nothing licensed
+```
+
+Replacement WebKit measured **146 suites now, 0 reused**: 145 passed and
+`verify-figreview` failed its setup check before measuring its assertions. The
+remaining 15 suites and split build did not run. Its literal final line was:
+
+```text
+  FAIL  verify-figreview                         exit 1  0.1s
+```
+
+The diagnostic was `Python is here but PIL is not`. `docs/BUILD.md` documents
+Python with Pillow and numpy, and this branch's CI installs `Pillow==12.3.0`
+and `numpy==2.4.6` separately from the pinned Playwright image. The recovery
+container was missing that installation. No application assertion failed in
+that suite, but this remains a failed, incomplete validation run. Stopped under
+the owner's rule for an unexpected suite failure; no threshold, timeout,
+expected count or skipped-test workaround was used.
+
+A new fresh WebKit run with Pillow 12.3.0 and numpy 2.4.6 completed:
+
+```text
+  all 161 no-export suites passed (85 pure, 76 in webkit, 74 of them on a synthetic build), and the split build made from it.
+  The suites that drive a real build need your export: npm run test:private
+```
+
+That run measured 161 suites now, 0 reused, plus the split build. Next, commit
+and push the owned branch and wait for CI on that exact head. After CI passes,
+use a new temporary worktree outside the checkout for the full private gate.
+The corrected source has not yet been pushed, and its full private gate has
+not started. The temporary private development worktree is already removed;
+the original private inputs and all pre-existing worktrees remain preserved.
+
 Recommended models and effort for the requested stages:
 
 | Stage | Recommended model | Effort / switch point |
@@ -148,9 +238,9 @@ Recommended models and effort for the requested stages:
 | Private gate and final certification review | GPT-6 Astra | Extra high, only after public validation and CI pass |
 
 These are recommendations, not claims that the chat's model was changed.
-After full public validation, commit/push the owned branch and wait for green CI.
-Do not integrate newer master changes without a new instruction: this task pins
-its comparison to c45ea79; origin/master was observed at d33cab5 on 14 November.
+Do not integrate further master changes without a new instruction; the current
+combined source includes master through d33cab5, and failure comparisons stay
+pinned to c45ea79.
 The private gate must use a fresh temporary worktree outside the repository,
 Node 24 and `npm ci`, actual licensed inputs, and `npm run release-check`.
 Upload nothing from it to GitHub. Do not commit its rewritten test-stats record;
