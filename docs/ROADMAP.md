@@ -214,8 +214,13 @@ shell and happens before the module is asked. Then the reference library
 (`src/app/refs.js`, `RefsScreen.screenHtml(REF, kit)`, held by
 `verify-refs-pure`): the builder and its pager; `refCard()` stays in the shell
 because `refMore()` adds cards with it, and the import, export and edit
-handlers stay there too. Next in the map's order is `buildQuiz`; write the map
-again before starting.
+handlers stay there too. Then the question screen (`src/app/quiz.js`,
+`QuizScreen.screenHtml(S, LOG, CH_COLORS, kit)`, held by `verify-quiz-pure`):
+the builder with its confidence and miss rows; `fsrsPreview()`,
+`fmtInterval()`, `hasPeers` and every handler stay in the shell, and so do
+`setConfidence()` and `setMissReason()`, which repaint those rows' chips in
+place. Next in the map's order is `buildMock`; write the map again before
+starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
