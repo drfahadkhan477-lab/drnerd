@@ -210,8 +210,12 @@ handlers stay in the shell. Then the Study screen (`src/app/study.js`,
 `StudyScreen.screenHtml(S, CHAPTERS, CH_COLORS, kit)`, held by
 `verify-study-pure`): the builder with `arc()` and `examLeftText()`. Its one
 write, the topic runs into `_runsShown`, which `startRun()` reads, stays in the
-shell and happens before the module is asked. Next in the map's order is
-`buildRefs`; write the map again before starting.
+shell and happens before the module is asked. Then the reference library
+(`src/app/refs.js`, `RefsScreen.screenHtml(REF, kit)`, held by
+`verify-refs-pure`): the builder and its pager; `refCard()` stays in the shell
+because `refMore()` adds cards with it, and the import, export and edit
+handlers stay there too. Next in the map's order is `buildQuiz`; write the map
+again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
