@@ -21,8 +21,8 @@
  *     a phone on its side it waits under the sheet as it did; with Apex full screen it is put away; and open, with Apex
  *     shut, it fits the screen on a phone, on an iPad on its side and in a short window, every tool reachable;
  *   · at Largest a word longer than its line breaks inside the stem, an option and the explanation;
- *   · a figure question on an iPad on its side draws the figure beside the stem, the first option on the screen, answered
- *     or not; upright, on a phone, with Apex's column open or at Largest the figure stays above, and with the split
+ *   · a figure question on an iPad on its side, in a quiz or a mock block, draws the figure beside the stem, the first
+ *     option on the screen, answered or not; upright, on a phone, with Apex's column open or at Largest the figure stays above, and with the split
  *     preference the explanation takes the second column, never a third; a question with no figure has no figure column;
  *   · nothing throws.
  */
@@ -499,6 +499,12 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
      Where two columns of 28em fit, the figure stands on the left and the stem and options on the right; where they do not
      (portrait, a phone, Apex's column, the largest text) it stays above, and with the explanation already beside the
      question (the split preference) the figure does not make a third column. */
+  const mockFig = async page => {
+    await page.evaluate(() => { const ids = POOL.filter(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1).slice(0, 3).map(x => x.id);
+      if (S.mock) { mockStopTicker(); S.mock = null; } const was = MockExam.build; MockExam.build = () => ids.slice(); startMock(); MockExam.build = was; mockStopTicker(); });
+    await page.waitForFunction(() => S.screen === 'mock' && !!document.querySelector('.mock-wrap .fig-img') && !!document.querySelector('.mock-wrap .q-card'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+  };
   {
     const figQuiz = async (page, answer) => {
       await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
@@ -550,6 +556,10 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     await quiet(page);
     const plain = await page.evaluate(() => ({ figs: !!document.querySelector('.reading-figs'), split: document.getElementById('app').classList.contains('fig-split') }));
     ok('a question with no figure has no figure column', !plain.figs && !plain.split, JSON.stringify(plain));
+    /* A mock block draws its question its own way (a clock above, the actions below); its figure stands beside it too. */
+    await mockFig(page);
+    const mock = await lay(page);
+    ok('a mock block on its side: the stem beside the figure, the first option on the screen', beside(mock) && mock.opt.b <= mock.vh, JSON.stringify(mock));
     await page.context().close();
   }
   {
@@ -575,6 +585,10 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     const d = await page.evaluate(() => { const f = document.querySelector('.fig-slot'), c = document.querySelector('.q-card');
       return f && c ? { split: document.getElementById('app').classList.contains('fig-split'), figBottom: Math.round(f.getBoundingClientRect().bottom), cardTop: Math.round(c.getBoundingClientRect().top) } : null; });
     ok(what + ': the figure stays above the stem', !!d && !d.split && d.cardTop >= d.figBottom, JSON.stringify(d));
+    await mockFig(page);
+    const m = await page.evaluate(() => { const f = document.querySelector('.mock-wrap .fig-slot'), c = document.querySelector('.mock-wrap .q-card');
+      return f && c ? { split: document.getElementById('app').classList.contains('fig-split'), figBottom: Math.round(f.getBoundingClientRect().bottom), cardTop: Math.round(c.getBoundingClientRect().top) } : null; });
+    ok(what + ', in a mock block: the figure stays above the stem', !!m && !m.split && m.cardTop >= m.figBottom, JSON.stringify(m));
     await page.context().close();
   }
 
