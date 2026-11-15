@@ -191,7 +191,7 @@ const READ = async ({ png, shown, boxes }) => {
         || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity)),
         { timeout: 15000, label: 'the screen\'s entrances and the theme\'s transitions to end' });
     };
-    const per = {}, counts = {}, skipped = { clipped: 0, covered: 0, inert: 0, under: {} }, missing = [];
+    const per = {}, counts = {}, skipped = { clipped: 0, covered: 0, inert: 0, under: {} }, missing = [], thin = [];
     let photographed = 0, hiddenWorked = true;
     for (const [id, scheme, label] of STATES) {
       await page.emulateMedia({ colorScheme: scheme });
@@ -213,6 +213,7 @@ const READ = async ({ png, shown, boxes }) => {
         const all = await blank.evaluate(READ, { png, shown, boxes }), read = all.filter(r => !r.under);
         for (const r of all) if (r.under) { skipped.covered++; skipped.under[r.under] = (skipped.under[r.under] || 0) + 1; }
         counts[where] = (counts[where] || 0) + read.length;
+        if (read.length < 5) thin.push(`${where} in ${label} (${read.length})`);    // judged per state: a sum would hide one that read nothing
         for (const r of read) {
           if (r.r50 >= r.need) continue;
           const k = where + ': ' + r.where, row = per[k] = per[k] || { worst: Infinity, states: [] };
@@ -221,7 +222,7 @@ const READ = async ({ png, shown, boxes }) => {
         }
       }
     }
-    return { per, counts, photographed, hiddenWorked, skipped, missing };
+    return { per, counts, photographed, hiddenWorked, skipped, missing, thin };
   };
   const report = (screens, { per, counts }, suffix) => {
     for (const [where] of screens) {
@@ -252,8 +253,8 @@ const READ = async ({ png, shown, boxes }) => {
     `${wide.photographed} of ${STATES.length * SCREENS.length}, and ${narrow.photographed} of ${STATES.length * PHONE.length} on a phone`);
   ok('what a screen is for was on screen when it was photographed, in every state on both devices (precondition)',
     !wide.missing.length && !narrow.missing.length, [...wide.missing, ...narrow.missing.map(m => m + ' on a phone')].slice(0, 4).join('; '));
-  ok('every screen gave it text to read, in every state', SCREENS.every(([w]) => wide.counts[w] >= STATES.length * 5) && PHONE.every(w => narrow.counts[w] >= STATES.length * 5),
-    JSON.stringify(wide.counts) + ' ' + JSON.stringify(narrow.counts));
+  ok('every screen gave it text to read (at least five boxes) in each state on its own, on both devices', !wide.thin.length && !narrow.thin.length,
+    wide.thin.length || narrow.thin.length ? [...wide.thin, ...narrow.thin.map(t => t + ' on a phone')].slice(0, 4).join('; ') : JSON.stringify(wide.counts) + ' ' + JSON.stringify(narrow.counts));
   ok('and taking the text away changed the photograph, so no text was read against itself', wide.hiddenWorked && narrow.hiddenWorked);
   /* A text set aside as covered is not read at all, so an element laid over the whole screen would empty the sweep. */
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0), under = d => Object.entries(d.skipped.under).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k || '(nothing)'} ${n}`).join(', ');
