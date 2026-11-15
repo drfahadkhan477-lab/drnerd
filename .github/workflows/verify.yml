@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 87 suites that are pure Node with no Playwright and no
+#   logic        the 88 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -345,6 +345,8 @@ jobs:
         run: node tests/verify-rhythmlab-pure.js
       - name: the annotations screen draws a row for each annotated question, says which of two things no rows means, and the page repaints on typing what the screen itself draws (54 checks)
         run: node tests/verify-annotations-pure.js
+      - name: the mock report says the score, the time, the flags as the Flagged list is now, the slowest and each chapter weakest first, and the page's line grades a block through the real MockExam (50 checks)
+        run: node tests/verify-mockreport-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (70 checks)
