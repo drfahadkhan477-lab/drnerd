@@ -120,7 +120,9 @@
   border-bottom:1.5px solid var(--border);white-space:nowrap}
 .msg td{padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
 .msg tbody tr:last-child td{border-bottom:0}
-.msg.user{align-self:flex-end;background:var(--teal);color:#fff;padding:9px 13px;
+/* A reader's own message: white on the raw accent read 1.9:1 on the light accents (verify-contrast). The accent's ink, set
+   by each theme to read on its ground, fills the bubble, and the text is the ground's colour. */
+.msg.user{align-self:flex-end;background:var(--teal-ink);color:var(--bg);padding:9px 13px;
   border-radius:14px 14px 4px 14px}
 .msg.bot{align-self:flex-start;color:var(--text)}
 .msg.bot h3{font-size:13px;margin:10px 0 4px;color:var(--teal-ink);letter-spacing:-.01em}
@@ -261,6 +263,10 @@
   background:linear-gradient(135deg,var(--navy3),var(--teal));color:#fff;font-weight:700;
   font-size:13px;letter-spacing:-.01em;box-shadow:0 8px 24px rgba(30,58,138,.34);
   display:flex;align-items:center;gap:7px}
+/* Its name is white text, and on the accent end of the gradient a light accent (Monitor's teal, Nocturne's violet) took it
+   to 3.2:1. The gradient ends on the accent darkened toward navy, so the name reads on every theme; the orb keeps the hue. */
+.ai-fab{background:linear-gradient(135deg,var(--navy3),color-mix(in srgb,var(--teal) 55%,var(--navy3)))}
+@supports not (color:color-mix(in srgb,red,blue)){.ai-fab{background:var(--navy3)}}
 .typing{display:inline-flex;gap:3px}
 .typing i{width:5px;height:5px;border-radius:50%;background:var(--dim);
   animation:blink 1.2s infinite}

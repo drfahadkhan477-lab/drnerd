@@ -278,6 +278,19 @@ or images, and it mis-read the selected tab, whose ground is a sibling pill. The
 rest of D2 needs pixel sampling: hide the text, screenshot, read the ground
 under each text box. Also seen, not fixed: the mock exam's chosen letter is
 white on the raw accent (about 4.1:1).
+*Done, pixel sampling:* `tests/verify-contrast.js` hides the text, photographs
+eight screens in twelve theme states, and reads every text box against the
+pixels under it (median; 10th percentile reported). It found three more: the
+Apex button's name on a light accent (3.2:1), the score pill's red on
+Parchment's bar (3.2:1), and the study-plan card's grey over its glow in the
+dark themes (4.1:1); all fixed. It now also reads Sessions, the mock exam with
+an answer chosen and its report, and five screens on a phone; the mock exam's
+chosen letter, white on the raw accent, read 1.9:1 to 4.1:1 in nine theme
+states and now fills with the accent's ink. Then a figure question, Apex
+(before a key, and with a conversation) and Settings, on both devices: a
+reader's own Apex message was white on the raw accent (1.9:1 on the light
+accents) and now takes the same ink. Still not read: other screens, other
+phone sizes, pages scrolled past their top, and moving states.
 
 **D3 — Figure questions on iPad landscape.** A figure item shows the figure full
 width and pushes the stem below it. When there is width, default figure items to
