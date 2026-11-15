@@ -24,6 +24,8 @@
  *   · a figure question on an iPad on its side, in a quiz or a mock block, draws the figure beside the stem, the first
  *     option on the screen, answered or not; upright, on a phone, with Apex's column open or at Largest the figure stays above, and with the split
  *     preference the explanation takes the second column, never a third; a question with no figure has no figure column;
+ *   · scrolled to its end, no screen leaves text under the Apex button or the pencil's rail, on a phone and an iPad either
+ *     way up (eight screens; Home lays the button into its own row and has its own checks);
  *   · nothing throws.
  */
 'use strict';
@@ -590,6 +592,65 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
       return f && c ? { split: document.getElementById('app').classList.contains('fig-split'), figBottom: Math.round(f.getBoundingClientRect().bottom), cardTop: Math.round(c.getBoundingClientRect().top) } : null; });
     ok(what + ', in a mock block: the figure stays above the stem', !!m && !m.split && m.cardTop >= m.figBottom, JSON.stringify(m));
     await page.context().close();
+  }
+
+  head('the floating controls leave the end of every screen readable');
+  /* D5. The Apex button and the pencil's rail float over the screen. Text can pass under them while it scrolls, but the end
+     of every screen must scroll clear: on a phone the last line of Sessions stayed under the Apex button. Read where the
+     page is scrolled to its end: every text under a visible floating control, as the engine hit-tests it. */
+  {
+    const SCREENS = [['Chapters', () => goStudy()], ['a question', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); }],
+      ['a question answered', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); selectOpt((q.ci + 1) % q.o.length); }],
+      ['a figure question', () => { const q = POOL.find(x => !x.bad && x.img); startAdhocQuiz([q], q.ch); }],
+      ['Progress', () => goStats()], ['the notes', () => goRefs()], ['the Rhythm Lab', () => goLab()], ['Sessions', () => goSessions()]];
+    for (const [w, h, what] of [[390, 844, 'a phone'], [820, 1180, 'an iPad Air upright'], [1180, 820, 'an iPad Air on its side']]) {
+      /* Motion reduced, so what scrolls into view is drawn where it rests, not part-way through its entrance. */
+      const page = await open({ width: w, height: h }, { hasTouch: true, isMobile: w < 600, reducedMotion: 'reduce' });
+      const under = [], seen = [];
+      for (const [name, go] of SCREENS) {
+        await page.evaluate(`(${go})()`);
+        await quiet(page);
+        const r = await page.evaluate(async () => {
+          /* The end of the screen: the document's and #app's own (on an iPad upright #app is the scroller), again until the
+             height stops growing (the notes draw more as they are reached). */
+          const se = document.scrollingElement, app = document.getElementById('app'), frame = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+          for (let i = 0, was = -1; i < 40 && se.scrollHeight + app.scrollHeight !== was; i++) {
+            was = se.scrollHeight + app.scrollHeight; se.scrollTop = se.scrollHeight; app.scrollTop = app.scrollHeight; await frame(); await frame(); }
+          const ctl = [document.querySelector('#rail:not(.hidden)'), document.getElementById('aiFab')].filter(el => {
+            if (!el) return false; const cs = getComputedStyle(el), b = el.getBoundingClientRect();
+            return cs.display !== 'none' && cs.visibility === 'visible' && +cs.opacity > 0 && b.width > 2; });
+          const hits = [];
+          for (const el of ctl) {
+            const cr = el.getBoundingClientRect(), w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            for (let t = w.nextNode(); t; t = w.nextNode()) {
+              const pe = t.parentElement; if (!/[A-Za-z0-9]/.test(t.nodeValue) || !pe || el.contains(pe)) continue;
+              /* What of the text is shown: cut to every ancestor that clips its overflow (a note's own scrolling body), or a
+                 line scrolled out of its card would be counted under the button. */
+              const clips = []; for (let a = pe; a && a !== document.documentElement; a = a.parentElement) {
+                const as = getComputedStyle(a); if (a !== pe && (as.overflowX !== 'visible' || as.overflowY !== 'visible')) clips.push(a.getBoundingClientRect());
+                if (as.position === 'fixed') break; }
+              const rg = document.createRange(); rg.selectNodeContents(t);
+              for (const q0 of rg.getClientRects()) {
+                const q = { left: q0.left, top: q0.top, right: q0.right, bottom: q0.bottom };
+                for (const c of clips) { q.left = Math.max(q.left, c.left); q.top = Math.max(q.top, c.top); q.right = Math.min(q.right, c.right); q.bottom = Math.min(q.bottom, c.bottom); }
+                const ix = Math.min(q.right, cr.right) - Math.max(q.left, cr.left), iy = Math.min(q.bottom, cr.bottom) - Math.max(q.top, cr.top);
+                if (ix > 4 && iy > 4) { const top = document.elementFromPoint(Math.max(q.left, cr.left) + ix / 2, Math.max(q.top, cr.top) + iy / 2);
+                  if (top && el.contains(top)) hits.push((el.id || 'rail') + ' over ' + (pe.className || pe.tagName).toString().split(' ')[0]); }
+              }
+            }
+          }
+          const atEnd = se.scrollTop + innerHeight >= se.scrollHeight - 2 && app.scrollTop + app.clientHeight >= app.scrollHeight - 2;
+          se.scrollTop = 0; app.scrollTop = 0;
+          return { hits, controls: ctl.length, screen: S.screen, atEnd };
+        });
+        seen.push(name + ':' + r.controls + (r.atEnd ? '' : ' (not at its end)'));
+        for (const x of r.hits) under.push(name + ': ' + x);
+      }
+      ok(what + ': at the end of every screen, no text is under the Apex button or the pencil\'s rail', under.length === 0,
+        under.length ? under.slice(0, 4).join('; ') : seen.join(' '));
+      ok(what + ': and each was scrolled to its end with the Apex button on screen (precondition)', seen.every(x => !/:0/.test(x) && !/not at its end/.test(x)), seen.join(' '));
+      await page.context().close();
+    }
   }
 
   head('hygiene');
