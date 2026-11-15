@@ -202,8 +202,20 @@ state the module is handed the flagged and the missed and no more. Then the
 mock block's report (`src/app/mockreport.js`,
 `MockReportScreen.screenHtml(S, CH_COLORS, CH_SHORT, kit)`, held by
 `verify-mockreport-pure`): its builder only; `mockReview()`, which two of its
-buttons name, stays in the shell. Next in the map's order is `buildSearch`;
-write the map again before starting.
+buttons name, stays in the shell. Then the topic search
+(`src/app/search.js`, `SearchScreen.screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit)`,
+held by `verify-search-pure`): the builder with `hl()` and `snippet()`, which
+only it used; `SQ`, `runSearch()`, `searchInput()` and its timer and the
+handlers stay in the shell. Then the Study screen (`src/app/study.js`,
+`StudyScreen.screenHtml(S, CHAPTERS, CH_COLORS, kit)`, held by
+`verify-study-pure`): the builder with `arc()` and `examLeftText()`. Its one
+write, the topic runs into `_runsShown`, which `startRun()` reads, stays in the
+shell and happens before the module is asked. Then the reference library
+(`src/app/refs.js`, `RefsScreen.screenHtml(REF, kit)`, held by
+`verify-refs-pure`): the builder and its pager; `refCard()` stays in the shell
+because `refMore()` adds cards with it, and the import, export and edit
+handlers stay there too. Next in the map's order is `buildQuiz`; write the map
+again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
@@ -258,6 +270,14 @@ files, with an allowlist for illustration, and watch it fail on an injected one.
 node on each landing and study screen in every theme state, against its effective
 ground (composite translucent layers; read a backdrop-filtered layer as the page
 under it). F1 is what the list missed. *Opus.*
+*Started:* a probe that composites background colours read 3,704 texts across
+nine screens and twelve theme states and found one real failure: an unchosen
+option's letter, the accent at 3.5-3.9:1 (fixed; verify-ink holds it, and its
+scan now sees the `--acc` alias). It could not measure 2,319 texts on gradients
+or images, and it mis-read the selected tab, whose ground is a sibling pill. The
+rest of D2 needs pixel sampling: hide the text, screenshot, read the ground
+under each text box. Also seen, not fixed: the mock exam's chosen letter is
+white on the raw accent (about 4.1:1).
 
 **D3 — Figure questions on iPad landscape.** A figure item shows the figure full
 width and pushes the stem below it. When there is width, default figure items to
