@@ -101,7 +101,8 @@ const TOOLS = () => {
     const accent = [];
     for (const f of files) {
       const src = blankComments(fs.readFileSync(path.join(dir, f), 'utf8'));
-      for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
+      /* --acc is the option letters' local name for the accent; reaching the accent through it is still the accent. */
+      for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2|acc)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
     }
     const accentInline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
     ok('no stylesheet or inline style is written color:var(--teal), var(--teal2) or var(--accent); accent text takes --teal-ink', accent.length === 0 && accentInline.length === 0,
@@ -154,7 +155,10 @@ const TOOLS = () => {
       return { name, ratio: Math.round(T.contrast(c, g) * 100) / 100, inked: T.same(c, T.token('--' + k + '-ink')) }; }); }, probes);
   const sweep = async (probes, where) => {
     const per = {};
-    for (const [id, scheme, label] of STATES) { await theme(id, scheme); for (const r of await measure(probes)) (per[r.name] = per[r.name] || []).push([label, r]); }
+    /* Read at rest: a theme change starts colour transitions, and text read mid-way is the last theme's colour on this
+       theme's ground (an option's letter read 1.05:1 so). Each finite animation is put at its end first, as below. */
+    const settle = () => page.evaluate(() => { for (let k = 0; k < 4; k++) { const a = document.getAnimations().filter(x => x.playState === 'running' && x.effect && x.effect.getComputedTiming().iterations !== Infinity); if (!a.length) break; a.forEach(x => { try { x.finish(); } catch (_) {} }); } });
+    for (const [id, scheme, label] of STATES) { await theme(id, scheme); await settle(); for (const r of await measure(probes)) (per[r.name] = per[r.name] || []).push([label, r]); }
     for (const [name] of probes) {
       const rows = per[name], bad = rows.filter(([, r]) => r.missing || !(r.ratio >= 4.5));
       ok(`${where}: ${name} clears 4.5:1 in every theme`, bad.length === 0,
@@ -173,7 +177,7 @@ const TOOLS = () => {
   await quiet(page);
   ok('the quiz is up, answered wrong, and flagged (precondition)', up && await page.evaluate(() => S.answered === true && !!document.querySelector('.btn-flag.on')));
   await sweep([['the wrong option\'s peer figure', '.opt.wrong .opt-pct', 'red'], ['the right option\'s peer figure', '.opt.correct .opt-pct', 'green'],
-    ['the Flag button, on', '.btn-flag.on', 'amber']], 'quiz');
+    ['the Flag button, on', '.btn-flag.on', 'amber'], ['an option\'s letter, not chosen', '.opt:not(.correct):not(.wrong) .opt-letter', 'teal']], 'quiz');
   await theme('midnight', 'light');
   const badge = await page.evaluate(() => { const T = window.__ink, el = document.querySelector('.opt.correct .opt-letter'); if (!el) return null;
     const cs = getComputedStyle(el); return { bg: T.same(T.parse(cs.backgroundColor), T.token('--success')), white: T.same(T.parse(cs.color), [255, 255, 255]) }; });

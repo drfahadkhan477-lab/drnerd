@@ -43,7 +43,7 @@ const block = over => Object.assign({ ids: ['a', 'b', 'c'], i: 1, sel: { 0: 1 },
 const Q = { s: 'the stem', o: [{ l: 'A', t: 'one' }, { l: 'B', t: 'two' }] };
 const kitOf = (over, cells) => Object.assign({
   MockExam: { states: () => ({ n: 3, answered: 1, flagged: 1, cells: cells || CELLS }), pace: () => ({ status: 'behind' }), urgency: () => 'URG' },
-  mockQ: () => Q, mockClockText: () => 'CLOCK', mockPaceText: () => 'PACE', mockCellLabel: c => 'CELL ' + c.n,
+  IMGS: { a: ['f1'], b: [] }, mockQ: () => Q, mockClockText: () => 'CLOCK', mockPaceText: () => 'PACE', mockCellLabel: c => 'CELL ' + c.n,
   e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']', window: { innerWidth: 1194 },
 }, over);
 const draw = (bOver, kOver, view, cells) => run(() => M.screenHtml({ mock: bOver === null ? null : block(bOver), mockView: view || 'q' }, kitOf(kOver, cells)));
@@ -79,7 +79,17 @@ head('the block');
   ok('an option for each, by index, letter and words through e(), none chosen here', J(opts) === J([['opt mock-opt', '0', '0', 'false', 'E(A)', 'E(one)'], ['opt mock-opt', '1', '1', 'false', 'E(B)', 'E(two)']]), J(opts));
   const picked = [...draw({ i: 0 }).matchAll(/class="(opt mock-opt[^"]*)"[^>]*aria-pressed="([^"]*)"/g)].map(m => [m[1], m[2]]);
   ok('the chosen option is picked and pressed', J(picked) === J([['opt mock-opt', 'false'], ['opt mock-opt picked', 'true']]), J(picked));
-  ok('a figure\'s panels are marked, and the question\'s notice through e()', draw({}, { mockQ: () => Object.assign({}, Q, { imgopt: true, flag: 'N<x>' }) }).includes('class="opt mock-opt img-opt"') && draw({}, { mockQ: () => Object.assign({}, Q, { flag: 'N<x>' }) }).includes('<span>E(N<x>)</span>'));
+  ok('a figure\'s panels are marked, and the question\'s notice through e()', draw({}, { mockQ: () => Object.assign({}, Q, { imgopt: true, flag: 'N<x>' }) }).includes('class="opt mock-opt img-opt"') && draw({}, { mockQ: () => Object.assign({}, Q, { imgopt: true }) }).includes('Answer options refer to the labelled panels in the figure.</div>') && draw({}, { mockQ: () => Object.assign({}, Q, { flag: 'N<x>' }) }).includes('<span>E(N<x>)</span>'));
+  const withQ = over => draw({}, { mockQ: () => Object.assign({}, Q, over) });
+  const pair = h => g1(h, /(<div class="fig-pair">[\s\S]*?<div class="reading-text">)/);
+  ok('a figure question\'s figure has a column of its own, the stem and options another', pair(withQ({ id: 'a', img: true })) === '<div class="fig-pair"><div class="reading-figs"><div class="fig-zone"></div></div><div class="reading-text">', pair(withQ({ id: 'a', img: true })));
+  ok('no figure column for a question without a figure, whose figures are missing or whose list is empty', [{ id: 'a' }, { id: 'c', img: true }, { id: 'b', img: true }].every(o => pair(withQ(o)) === '<div class="fig-pair"><div class="fig-zone"></div><div class="reading-text">'), [{ id: 'c', img: true }, { id: 'b', img: true }].map(o => pair(withQ(o))).join(' | '));
+  /* Where the element that opens at i closes: the end of its own </div>, counting the divs between. */
+  const closeOf = (h, i) => { let depth = 0; const re = /<(\/?)div\b[^>]*>/g; re.lastIndex = i; for (let m; (m = re.exec(h));) { depth += m[1] ? -1 : 1; if (!depth) return re.lastIndex; } return -1; };
+  const cols = h => { const i = h.indexOf('<div class="reading-text">'), end = closeOf(h, i), p = h.indexOf('<div class="fig-pair">'), pEnd = closeOf(h, p);
+    return i < 0 || end < 0 || p < 0 ? null : { inner: h.slice(i, end), between: h.slice(end, pEnd), after: h.slice(pEnd, pEnd + 40) }; };
+  const tc = [html, withQ({ id: 'a', img: true })].map(cols);
+  ok('the text column holds the card, the options and the hint, and the pair closes with it, before the actions', tc.every(t => t && /^<div class="reading-text">\n    <div class="q-card/.test(t.inner) && t.inner.includes('<div class="opts" role="group"') && t.inner.includes('kb-hint') && t.between === '</div>' && /^\n    <div class="actions mock-actions">/.test(t.after)), tc.map(t => t && J(t.between) + ' ' + J(t.after)).join(' | '));
   ok('back is disabled on the first question only', /onclick="mockPrev\(\)" aria-label="Previous question" disabled>/.test(draw({ i: 0 })) && !/aria-label="Previous question" disabled/.test(html));
   ok('the flag is a toggle, pressed when this question is flagged', draw({ i: 0 }).includes('class="btn mock-flag on" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="true"') && html.includes('class="btn mock-flag" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="false"'));
   ok('"Next", and on the last question "Review and hand in"', html.includes('onclick="mockNext()">Next [icon arrow-right') && draw({ i: 2 }).includes('onclick="mockNext()">Review and hand in [icon arrow-right'));
@@ -117,7 +127,7 @@ const KIT_READS = new Set(), S_READS = new Set();
   const outs = [['q', {}], ['q', { paused: true }], ['end', {}]].map(([v, b]) => run(() => M.screenHtml(watched({ mock: watched(block(b), new Set(), 'block'), mockView: v, screen: 'mock', mocks: [] }, S_READS, 'S'), watched(kitOf(), KIT_READS, 'kit'))));
   const names = s => [...s].sort().join(' ');
   ok('of the state it reads the block and which view, and nothing else', !outs.some(o => o.startsWith('THREW')) && names(S_READS) === 'mock mockView', names(S_READS));
-  ok('of the kit, eight names', names(KIT_READS) === 'MockExam e icon mockCellLabel mockClockText mockPaceText mockQ window', names(KIT_READS));
+  ok('of the kit, nine names', names(KIT_READS) === 'IMGS MockExam e icon mockCellLabel mockClockText mockPaceText mockQ window', names(KIT_READS));
   ok('it sets, deletes and defines nothing on the state, the block or the kit', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object') { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.screenHtml(deep({ mock: block(), mockView: 'q' }), deep(kitOf())));
@@ -130,11 +140,11 @@ head('the page hands the module what it has, and keeps what the markup names');
   const page = blankComments(raw);
   const count = text => page.split(text).length - 1;
   const SLOT = '@@SLOT[src:src/app/mock.js]@@';
-  const LINE = 'function buildMock(){ return MockScreen.screenHtml(S,{MockExam,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}); }';
+  const LINE = 'function buildMock(){ return MockScreen.screenHtml(S,{MockExam,IMGS,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}); }';
   ok('buildMock() is one line: the state and the kit', count(LINE) === 1 && count('function buildMock(') === 1);
   ok('the module is written into the page once, above that line', count(SLOT) === 1 && page.indexOf(LINE) > page.indexOf(SLOT));
   const handed = String(g1(page, /MockScreen\.screenHtml\(S,\{([^}]*)\}\); \}/));
-  ok('the kit is the eight names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 8 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
+  ok('the kit is the nine names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 9 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
   ok('buildMockEnd() is no longer the page\'s; the four mock helpers the ticker and keys use are', count('function buildMockEnd(') === 0 && !/[^.\w$]buildMockEnd\(/.test(page) && ['function mockQ(', 'function mockClockText(', 'function mockPaceText(', 'function mockCellLabel('].every(t => count(t) === 1));
   const WORDS = ['No block is open.', 'Hand in this block?', 'Every question has an answer.', 'Review and hand in', 'The clock is stopped and the question is hidden.'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
@@ -152,13 +162,13 @@ head('the page hands the module what it has, and keeps what the markup names');
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const parts = [read('src/core/mockexam.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function mockQ(){', '\n'), whole('function mockClockText(r){', '\n'),
     whole('function mockPaceText(r){', '\n}'), whole('function mockCellLabel(c){', '\n'), read('src/app/mock.js'), whole('function buildMock(){', '\n')].join('\n');
-  const ctx = { innerWidth: 1194, QBYID: { a: { id: 'a', s: 'A <b>stem</b>', o: [{ l: 'A', t: 'One' }, { l: 'B', t: 'Two & three' }] }, b: { id: 'b', s: 'Second', o: [{ l: 'A', t: 'x' }, { l: 'B', t: 'y' }] } },
+  const ctx = { innerWidth: 1194, IMGS: { a: ['f1'] }, QBYID: { a: { id: 'a', img: true, s: 'A <b>stem</b>', o: [{ l: 'A', t: 'One' }, { l: 'B', t: 'Two & three' }] }, b: { id: 'b', s: 'Second', o: [{ l: 'A', t: 'x' }, { l: 'B', t: 'y' }] } },
     S: { mockView: 'q', mock: { v: 1, ids: ['a', 'b'], i: 0, far: 0, sel: { 0: 1 }, flag: {}, ms: {}, secPerQ: 90, chapter: null, startedAt: 0, elapsedMs: 30000, paused: false, done: false, submittedAt: null, expired: false, last: null } } };
   ctx.window = ctx; vm.createContext(ctx);
   const ask = code => { try { return vm.runInContext(code, ctx); } catch (err) { return 'THREW ' + err.message; } };
   const loaded = ask(parts + '\n"loaded"');
   const html = String(ask('buildMock()'));
-  ok('the page\'s own line draws the block, its words escaped by the page\'s e()', loaded === 'loaded' && html.includes('A &lt;b&gt;stem&lt;/b&gt;') && html.includes('<span class="opt-text">Two &amp; three</span>'), String(loaded).slice(0, 60) + ' · ' + html.slice(0, 60));
+  ok('the page\'s own line draws the block, its words escaped by the page\'s e(), its figure in a column of its own', loaded === 'loaded' && html.includes('A &lt;b&gt;stem&lt;/b&gt;') && html.includes('<span class="opt-text">Two &amp; three</span>') && html.includes('<div class="fig-pair"><div class="reading-figs"><div class="fig-zone"></div></div>'), String(loaded).slice(0, 60) + ' · ' + html.slice(0, 60));
   ok('the clock is the real one: two questions at 90 s, thirty seconds in, 2:30 left', g1(html, /id="mockClock"[^>]*>([^<]*)</) === '02:30', g1(html, /id="mockClock"[^>]*>([^<]*)</));
   ok('the grid is the real states: the first answered and current, the second not', html.includes('<button class="mock-cell done cur" type="button"') && html.includes('aria-label="Question 1, answered, current" aria-current="true">1</button>') && html.includes('aria-label="Question 2, not answered">2</button>'));
   ask('S.mockView = "end"');

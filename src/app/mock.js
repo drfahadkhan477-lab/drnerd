@@ -61,7 +61,7 @@ function endHtml(S, kit){
 }
 
 function screenHtml(S, kit){
-  const {MockExam,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}=kit;
+  const {MockExam,IMGS,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}=kit;
   /* The summary, under the name the body below calls it by. */
   const buildMockEnd=()=>endHtml(S,kit);
   const r=S.mock, q=mockQ();
@@ -92,15 +92,16 @@ function screenHtml(S, kit){
       <div class="prog-track"><div class="prog-fill" id="mockProg" style="transform:scaleX(${(st.answered/n).toFixed(4)})"></div></div>
       <div class="mock-subrow"><span id="mockSub">${st.answered} answered · ${st.flagged} flagged</span><span class="mock-pace" id="mockPace" data-status="${pace?pace.status:''}">${e(mockPaceText(r))}</span></div>
     </div>
-    <div class="fig-zone"></div>
+    <div class="fig-pair">${q.img&&IMGS[q.id]&&IMGS[q.id].length?'<div class="reading-figs"><div class="fig-zone"></div></div>':'<div class="fig-zone"></div>'}<div class="reading-text">
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:var(--teal)">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:var(--teal-ink)"></span>Question ${r.i+1}</div>
       ${e(q.s)}
-      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
+      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure.</div>':''}
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
     </div>
     <div class="opts" role="group" aria-label="Answer options">${opts}</div>
     ${isMobile?'':'<div class="kb-hint kbd-row">Press <kbd>A</kbd>–<kbd>E</kbd> to answer · <kbd>F</kbd> to flag · <kbd>←</kbd> <kbd>→</kbd> to move</div>'}
+    </div></div>
     <div class="actions mock-actions">
       <button class="btn btn-prev" type="button" onclick="mockPrev()" aria-label="Previous question"${r.i===0?' disabled':''}>${icon('arrow-left','icon-sm')}</button>
       <button class="btn mock-flag${flagged?' on':''}" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="${flagged}">${icon('flag','icon-sm')} <span class="mock-flag-l">Flag</span></button>

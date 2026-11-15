@@ -75,7 +75,7 @@ function missRow(S,LOG,kit,wasCorrect){
 }
 
 function screenHtml(S, LOG, CH_COLORS, kit){
-  const {BANK,RATINGS,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}=kit;
+  const {BANK,RATINGS,IMGS,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}=kit;
   /* The two rows, under the names the body below calls them by. */
   const cfRowHtml=()=>cfRow(S,kit), missRowHtml=wasCorrect=>missRow(S,LOG,kit,wasCorrect);
   const {questions,qIdx,selected,answered}=S;
@@ -87,6 +87,8 @@ function screenHtml(S, LOG, CH_COLORS, kit){
   const prog=(qIdx+1)/questions.length*100;
   const chColor=CH_COLORS[q.ch]||'var(--teal)';
   const figHtml='<div class="fig-zone"></div>';
+  /* render() fills the zone after the layout is decided; whether there will be figures is buildFigures' own test. */
+  const hasFigs=!!(q.img&&IMGS[q.id]&&IMGS[q.id].length);
 
   const opts=q.o.map((o,i)=>{
     let cls='opt'+(q.imgopt?' img-opt':'');
@@ -169,18 +171,18 @@ function screenHtml(S, LOG, CH_COLORS, kit){
       <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>
       <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:''}</div>
     </div>
-    <div class="reading-columns"><div class="reading-question">${figHtml}
+    <div class="reading-columns"><div class="reading-question">${hasFigs?`<div class="reading-figs">${figHtml}</div>`:figHtml}<div class="reading-text">
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}
         <span class="src-badge flag-badge" id="qFlagBadge"${flagOn?'':' hidden'}>${icon('flag','icon-sm')} flagged</span>
         ${typeof hasMarkup==='function'&&hasMarkup(q.id)?`<span class="src-badge" style="color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-b)">${icon('pencil','icon-sm')} annotated</span>`:''}</div>
       ${e(q.s)}
-      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
+      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure.</div>':''}
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
     </div>
     ${cfRowHtml()}
     <div class="opts">${opts}</div>
-    ${kbHint}</div>
+    ${kbHint}</div></div>
     <div class="reading-explanation">${revealHtml}</div></div>
     ${rateRow}
     <div class="actions">${actions}</div>

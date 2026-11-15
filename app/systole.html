@@ -4966,6 +4966,11 @@ function applyDisplaySettings(){
   const app=document.getElementById('app'),card=document.querySelector('.q-card');
   const size=card?parseFloat(getComputedStyle(card).fontSize):16;
   if(app){app.classList.toggle('reading-wide-layout',v.layout==='split'&&!!document.querySelector('.reveal-card'));app.classList.toggle('reading-split',v.layout==='split'&&!!document.querySelector('.reveal-card')&&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);}
+  /* A figure question, where two columns of 28em each fit: the figure on the left, the stem and the options beside it, so
+     the question is read with the figure in view (D3). Measured as the split above is, so it follows the text size, the
+     reading width, Split View and Apex's panel; not while the explanation stands beside the question, three columns. */
+  if(app)app.classList.toggle('fig-split',!!app.querySelector('.reading-figs')&&!app.classList.contains('reading-split')
+    &&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);
 }
 function updateDisplaySetting(key,value){
   if(key==='width'){setReadWidth(['narrow','standard','wide','full'].indexOf(value));return;}
@@ -5064,6 +5069,9 @@ let displayRaf=0;
 const scheduleDisplaySettings=()=>{ if(!displayRaf) displayRaf=requestAnimationFrame(()=>{ displayRaf=0; applyDisplaySettings(); }); };
 window.addEventListener('resize',scheduleDisplaySettings);
 if(document.getElementById('shell'))new MutationObserver(scheduleDisplaySettings).observe(document.getElementById('shell'),{attributes:true,attributeFilter:['class']});
+/* Apex's column opens over a transition, so the class change above comes before the width it makes: the column's own size
+   decides again once it has moved (the next frame, never inside the observer, so no ResizeObserver loop). */
+if(typeof ResizeObserver!=='undefined'&&document.getElementById('app'))new ResizeObserver(scheduleDisplaySettings).observe(document.getElementById('app'));
 
 function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
@@ -5820,7 +5828,7 @@ function mockReview(which){
 /* The block's markup, with its summary before handing in, is src/app/mock.js. mockQ(), mockClockText(),
    mockPaceText() and mockCellLabel() stay above, because the ticker and the keys repaint with them too. */
 @@SLOT[src:src/app/mock.js]@@
-function buildMock(){ return MockScreen.screenHtml(S,{MockExam,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}); }
+function buildMock(){ return MockScreen.screenHtml(S,{MockExam,IMGS,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}); }
 /* The report's markup is src/app/mockreport.js. mockReview(), which two of its buttons name, stays here. */
 @@SLOT[src:src/app/mockreport.js]@@
 function buildMockReport(){ return MockReportScreen.screenHtml(S,CH_COLORS,CH_SHORT,{MockExam,mockLookup,chIcon,e,icon,semText}); }
@@ -7544,7 +7552,7 @@ function buildSessions(){
 /* The question screen's markup, with the confidence and miss rows, is src/app/quiz.js. setConfidence() and
    setMissReason(), which repaint those rows' chips in place, stay where the rows were, with every other handler. */
 @@SLOT[src:src/app/quiz.js]@@
-function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }
+function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }
 
 /* The results screen is src/app/results.js. This hands it the page's state, the bank's chapters and their
    accents, and the four helpers its markup uses; the handlers its buttons name stay here. */

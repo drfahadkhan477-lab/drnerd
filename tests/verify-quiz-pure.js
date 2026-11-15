@@ -43,7 +43,7 @@ const times = (html, text) => html.split(text).length - 1;
 const RATINGS = Object.freeze([['again', 'Again', 1, '#E00'], ['good', 'Good', 3, '#0A0']]);
 const CALIB = Object.freeze({ BANDS: [{ id: 0, label: 'Guess' }, { id: 2, label: 'Sure' }], REASONS: [{ id: 'gap', label: 'Did not know' }, { id: 'slip', label: 'Slipped' }] });
 const kitOf = over => Object.assign({
-  BANK: { name: 'Bank<1>' }, RATINGS, Calib: CALIB, hasPeers: q => q.o.every(o => typeof o.p === 'number'), hasMarkup: () => false,
+  BANK: { name: 'Bank<1>' }, RATINGS, IMGS: { q1: ['f1'], q2: [] }, Calib: CALIB, hasPeers: q => q.o.every(o => typeof o.p === 'number'), hasMarkup: () => false,
   fmtInterval: d => 'IVL(' + d + ')', fsrsPreview: (card, g) => ({ ivl: (card ? card.tag : 'new') + '/' + g }),
   chInk: c => 'INK(' + c + ')', e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']', window: { innerWidth: 1194 },
 }, over);
@@ -71,7 +71,16 @@ head('the question');
   ok('its words, through e(), with its number and chapter', html.includes('E(the stem)') && html.includes('Question 7 · E(Rhythm)'));
   ok('the flagged badge is hidden unless flagged', html.includes('id="qFlagBadge" hidden>') && draw({ flagged: new Set(['q1']) }).includes('id="qFlagBadge">'));
   ok('"annotated" when the reader has marked it', draw({}, { hasMarkup: id => id === 'q1' }).includes('[icon pencil icon-sm] annotated') && !html.includes('annotated</span>'));
-  ok('a note that the options are the figure\'s panels, and a question\'s notice, through e()', draw({ questions: [question('q1', { imgopt: true, flag: 'Corrected <x>' })] }).includes('Answer options refer to the labelled panels') && draw({ questions: [question('q1', { flag: 'Corrected <x>' })] }).includes('<span>E(Corrected <x>)</span>'));
+  ok('a note that the options are the figure\'s panels, and a question\'s notice, through e()', draw({ questions: [question('q1', { imgopt: true, flag: 'Corrected <x>' })] }).includes('Answer options refer to the labelled panels in the figure.</div>') && draw({ questions: [question('q1', { flag: 'Corrected <x>' })] }).includes('<span>E(Corrected <x>)</span>'));
+  const cols = h => g1(h, /<div class="reading-question">([\s\S]*?)<div class="q-card/);
+  ok('a figure question\'s figure has a column of its own, the stem and options another', cols(draw({ questions: [question('q1', { img: true })] })) === '<div class="reading-figs"><div class="fig-zone"></div></div><div class="reading-text">\n    ', cols(draw({ questions: [question('q1', { img: true })] })));
+  ok('no figure column for a question without a figure, whose figures are missing or whose list is empty', [{ questions: [question('q1')] }, { questions: [question('q3', { img: true })] }, { questions: [question('q2', { img: true })] }].every(o => cols(draw(o)) === '<div class="fig-zone"></div><div class="reading-text">\n    '), [{ questions: [question('q3', { img: true })] }, { questions: [question('q2', { img: true })] }].map(o => cols(draw(o))).join(' | '));
+  /* Where the element that opens at i closes: the end of its own </div>, counting the divs between. */
+  const closeOf = (h, i) => { let depth = 0; const re = /<(\/?)div\b[^>]*>/g; re.lastIndex = i; for (let m; (m = re.exec(h));) { depth += m[1] ? -1 : 1; if (!depth) return re.lastIndex; } return -1; };
+  const textCol = h => { const i = h.indexOf('<div class="reading-text">'), end = closeOf(h, i), q = h.indexOf('<div class="reading-question">'), qEnd = closeOf(h, q);
+    return i < 0 || end < 0 || q < 0 ? null : { inner: h.slice(i, end), between: h.slice(end, qEnd), after: h.slice(qEnd, qEnd + 40) }; };
+  const tc = [draw(), draw({ questions: [question('q1', { img: true })], answered: true, selected: 0 })].map(textCol);
+  ok('the text column holds the card, the options and the hint, and the question column closes with it, before the explanation', tc.every(t => t && /^<div class="reading-text">\n    <div class="q-card/.test(t.inner) && t.inner.includes('<div class="opts">') && t.inner.includes('kb-hint') && t.between === '</div>' && /^\n    <div class="reading-explanation">/.test(t.after)), tc.map(t => t && J(t.between) + ' ' + J(t.after)).join(' | '));
   ok('with no questions, one line says so', draw({ questions: [] }) === '<div style="padding:60px;text-align:center;color:var(--muted)">No questions found.</div>');
 }
 
@@ -157,11 +166,11 @@ const KIT_READS = new Set(), S_READS = new Set();
     defineProperty(t, k) { wrote.push(name + ' define ' + String(k)); return true; },
   });
   const LOG = [{ q: 'q1', why: 'gap' }];
-  const sts = [{}, { answered: true, selected: 0, quizTotal: 2, quizCorrect: 1, resumed: true }, { mode: 'due', answered: true, selected: 1, srs: { q1: { tag: 'c' } } }];
+  const sts = [{ questions: [question('q1', { img: true })] }, { answered: true, selected: 0, quizTotal: 2, quizCorrect: 1, resumed: true }, { mode: 'due', answered: true, selected: 1, srs: { q1: { tag: 'c' } } }];
   const outs = sts.map(o => run(() => M.screenHtml(watched(state(Object.assign({ screen: 'quiz', chapter: 'x' }, o)), S_READS, 'S'), watched(LOG, new Set(), 'LOG'), { Rhythm: '#112233' }, watched(kitOf(), KIT_READS, 'kit'))));
   const names = s => [...s].sort().join(' ');
   ok('of the state it reads the names below and nothing else', !outs.some(o => o.startsWith('THREW')) && names(S_READS) === 'answered answers flagged mode qIdx questions quizCorrect quizTotal resumed selected srs', names(S_READS));
-  ok('of the kit, eleven names', names(KIT_READS) === 'BANK Calib RATINGS chInk e fmtInterval fsrsPreview hasMarkup hasPeers icon window', names(KIT_READS));
+  ok('of the kit, twelve names', names(KIT_READS) === 'BANK Calib IMGS RATINGS chInk e fmtInterval fsrsPreview hasMarkup hasPeers icon window', names(KIT_READS));
   ok('it sets, deletes and defines nothing on any of them', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object' && !(o instanceof Set)) { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.screenHtml(deep(state({ answered: true, selected: 0, answers: { 0: { cf: 2 } } })), deep([{ q: 'q1', why: 'gap' }]), deep({ Rhythm: '#112233' }), deep(kitOf())));
@@ -174,11 +183,11 @@ head('the page hands the module what it has, and keeps what the markup names');
   const page = blankComments(raw);
   const count = text => page.split(text).length - 1;
   const SLOT = '@@SLOT[src:src/app/quiz.js]@@';
-  const LINE = 'function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }';
+  const LINE = 'function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }';
   ok('buildQuiz() is one line: the state, the log, the colours and the kit', count(LINE) === 1 && count('function buildQuiz(') === 1);
   ok('the module is written into the page once, above that line', count(SLOT) === 1 && page.indexOf(LINE) > page.indexOf(SLOT));
   const handed = String(g1(page, /QuizScreen\.screenHtml\(S,LOG,CH_COLORS,\{([^}]*)\}\); \}/));
-  ok('the kit is the eleven names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 11 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
+  ok('the kit is the twelve names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 12 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
   ok('cfRowHtml() and missRowHtml() are no longer the page\'s; fsrsPreview(), fmtInterval() and hasPeers are', count('function cfRowHtml(') === 0 && count('function missRowHtml(') === 0 && count('function fsrsPreview(card,rating){') === 1 && count('function fmtInterval(days){') === 1 && count('const hasPeers=q=>') === 1);
   const WORDS = ['How sure?', 'Why did you miss it?', 'Answer Distribution', 'Resumed · start over', 'How well did you know this'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
@@ -199,13 +208,13 @@ head('the page hands the module what it has, and keeps what the markup names');
     whole('function fmtInterval(days){', '\n'), read('src/app/quiz.js'), whole('function buildQuiz(){', '\n')]).join('\n');
   const NOW = new Date(2026, 10, 15, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
-  const ctx = { Date: FixedDate, innerWidth: 1194, BANK: { name: 'Test Bank' }, CH_COLORS: {}, LOG: [], themeIsDark: () => false, hasMarkup: () => false,
-    S: { questions: [{ id: 'a1', ch: 'Valves & more', n: 3, s: 'A <b>stem</b>', ex: 'Why.', o: [{ l: 'A', t: 'One', p: 30 }, { l: 'B', t: 'Two & three', p: 70 }], ci: 1 }], qIdx: 0, selected: 1, answered: true, answers: {}, mode: 'due', flagged: new Set(), srs: {}, resumed: false, quizCorrect: 1, quizTotal: 1 } };
+  const ctx = { Date: FixedDate, innerWidth: 1194, BANK: { name: 'Test Bank' }, IMGS: { a1: ['f1'] }, CH_COLORS: {}, LOG: [], themeIsDark: () => false, hasMarkup: () => false,
+    S: { questions: [{ id: 'a1', ch: 'Valves & more', n: 3, s: 'A <b>stem</b>', ex: 'Why.', o: [{ l: 'A', t: 'One', p: 30 }, { l: 'B', t: 'Two & three', p: 70 }], ci: 1, img: true }], qIdx: 0, selected: 1, answered: true, answers: {}, mode: 'due', flagged: new Set(), srs: {}, resumed: false, quizCorrect: 1, quizTotal: 1 } };
   ctx.window = ctx; vm.createContext(ctx);
   const ask = code => { try { return vm.runInContext(code, ctx); } catch (err) { return 'THREW ' + err.message; } };
   const loaded = ask(parts + '\n"loaded"');
   const html = String(ask('buildQuiz()'));
-  ok('the page\'s own line draws the question over the real modules, its words escaped by the page\'s e()', loaded === 'loaded' && html.includes('A &lt;b&gt;stem&lt;/b&gt;') && html.includes('<span class="opt-text">Two &amp; three</span>'), String(loaded).slice(0, 60) + ' · ' + html.slice(0, 60));
+  ok('the page\'s own line draws the question over the real modules, its words escaped by the page\'s e(), its figure in a column of its own', loaded === 'loaded' && html.includes('A &lt;b&gt;stem&lt;/b&gt;') && html.includes('<span class="opt-text">Two &amp; three</span>') && html.includes('<div class="reading-figs"><div class="fig-zone"></div></div>'), String(loaded).slice(0, 60) + ' · ' + html.slice(0, 60));
   const scheds = [...html.matchAll(/<span class="rate-label">([^<]*)<\/span>\s*<span class="rate-sched">([^<]*)<\/span>/g)].map(m => [m[1], m[2]]);
   const want = String(ask('JSON.stringify(RATINGS.map(([k,l,g])=>[l, ReviewQueue.fmtInterval(FSRS.update(undefined,g,todayISO()).ivl)]))'));
   ok('a new card\'s four ratings, each with when the real FSRS would bring it back, as the real ReviewQueue says it', scheds.length === 4 && J(scheds) === want, J(scheds));
