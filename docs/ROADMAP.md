@@ -189,8 +189,33 @@ function, so a screen that has moved is still listed under the fields it reads
 and changes. The Memory screen followed (`src/app/memory.js`,
 `MemoryScreen.screenHtml(all, kit)`, held by `verify-memoryscreen-pure`): its
 builder only, because `memForget()` and `memForgetAll()` ask with `confirm()`,
-which `verify-ui-pure` reads where it is called. Next in the map's order is
-`buildLab`; write the map again before starting.
+which `verify-ui-pure` reads where it is called. Then the Rhythm Lab
+(`src/app/rhythmlab.js`, `RhythmLabScreen.screenHtml(p)`, held by
+`verify-rhythmlab-pure`): `buildLab()` with `buildPhysio()` and
+`buildTwelveLead()`, the first screen with state of its own. `labKind`,
+`setLab()` and the mounts stay in the shell, and the module is handed the
+values. Then "Your annotations" (`src/app/annotations.js`,
+`AnnotationsScreen`, held by `verify-annotations-pure`): the screen and the
+three pieces of it that typing repaints, five functions in all. `ANNO`,
+`annoInput()` and `practiceAnnotated()` stay in the shell, and of the page's
+state the module is handed the flagged and the missed and no more. Then the
+mock block's report (`src/app/mockreport.js`,
+`MockReportScreen.screenHtml(S, CH_COLORS, CH_SHORT, kit)`, held by
+`verify-mockreport-pure`): its builder only; `mockReview()`, which two of its
+buttons name, stays in the shell. Then the topic search
+(`src/app/search.js`, `SearchScreen.screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit)`,
+held by `verify-search-pure`): the builder with `hl()` and `snippet()`, which
+only it used; `SQ`, `runSearch()`, `searchInput()` and its timer and the
+handlers stay in the shell. Then the Study screen (`src/app/study.js`,
+`StudyScreen.screenHtml(S, CHAPTERS, CH_COLORS, kit)`, held by
+`verify-study-pure`): the builder with `arc()` and `examLeftText()`. Its one
+write, the topic runs into `_runsShown`, which `startRun()` reads, stays in the
+shell and happens before the module is asked. Then the reference library
+(`src/app/refs.js`, `RefsScreen.screenHtml(REF, kit)`, held by
+`verify-refs-pure`): the builder and its pager; `refCard()` stays in the shell
+because `refMore()` adds cards with it, and the import, export and edit
+handlers stay there too. Next in the map's order is `buildQuiz`; write the map
+again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

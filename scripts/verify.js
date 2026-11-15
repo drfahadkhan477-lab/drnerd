@@ -313,6 +313,24 @@ const SUITES = [
   /* The second screen out of the shell: what Apex has kept about the reader. Its builder is src/app/memory.js;
      the two handlers that delete stay in the page, where verify-ui-pure reads their confirm(). */
   ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data and never in a handler, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
+     chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
+  ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, and every element the page\'s mounts look up is in the markup under that name'],
+  /* The fourth: "Your annotations", five functions in src/app/annotations.js, because typing repaints three
+     pieces of the screen and leaves the box alone. ANNO, annoInput() and practiceAnnotated() stay in the page. */
+  ['annotations-pure', 'the annotations screen draws a row for each question with a note or pencil marks, says what it carries, hands the note and the stem to FlagSet.highlight() with the page\'s e(), says which of two things no rows means, counts what matches, changes nothing it is given, and the page\'s own lines draw it, repaint it on typing with what the screen itself draws, start a quiz of what is shown and follow a tap by the attribute the row carries'],
+  /* The fifth: the report a mock block ends on, one builder in src/app/mockreport.js. mockReview(), which two of
+     its buttons name, stays in the page. */
+  ['mockreport-pure', 'the mock report gives the grade\'s percent with its colour, words and ring at 80 and 60, the counts, the time in the three ways a block can end, the flags against the Flagged list as it is now, the three slowest, a row for each chapter weakest first, offers what there is to learn from only when there is something, reads two names of the state and changes nothing, and the page\'s own line over the real MockExam grades a block as the arithmetic says'],
+  /* The sixth: the topic search, its builder with hl() and snippet() in src/app/search.js. What is typed, the
+     search, its timer and the handlers its markup names stay in the page. */
+  ['search-pure', 'the topic search marks the words typed in text escaped first, quotes the part of a question where one is found, offers topics before anything is typed, counts and lists the matches with their chapter, flags, figures, stem and right answer, has a chapter choice, Quiz these and Clear, every handler one of seven shapes, reads three names of the search and changes nothing, and the page\'s line over its own helpers draws a search'],
+  /* The seventh: the Study screen, its builder with arc() and examLeftText() in src/app/study.js. The page works
+     out the topic runs into _runsShown first, which startRun() reads; the handlers its markup names stay there. */
+  ['study-pure', 'the Study screen draws a ring and a tile for each chapter as full as it is mastered, the review queue in its three states, the study plan with its two rings, pace, three plans and the exam date in the reader\'s days, topic runs, missed, flagged and annotated only when there are any, reads five names of the state and changes nothing, and the page works out the runs first and draws them over the real core modules'],
+  /* The eighth: the reference library, its builder and pager in src/app/refs.js. refCard() stays in the page,
+     because refMore() adds a page of cards with it in place. */
+  ['refs-pure', 'the reference library shows the newest page of notes in the order given with a pager for the rest, one note on its own with the way back and the form hidden unless it is edited, Save changes and Cancel while editing, reads only how many notes there are and changes nothing, and the page\'s line draws a library through its own refCard() and the real Markdown'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -514,8 +532,9 @@ const SUITES = [
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
-   and since its screens: results-pure, memoryscreen-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure'];
+   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
+   search-pure, study-pure, refs-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
