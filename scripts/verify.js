@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 158 suites and roughly 7245 checks, and they
+ * WHY THIS EXISTS. There are 158 suites and roughly 7282 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -106,6 +106,7 @@ const SUITES = [
   ['windows',      'a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
   ['ink',          'green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are'],
+  ['contrast',     'every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast'],
   ['a11y',         'every screen passes axe-core\'s WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through'],
   ['homepager',    'the home screen is three pages a swipe apart (Home, Brain, Labs): the pill follows the finger, the off-screen pages are inert, and the page is kept'],
   /* The three below need no browser and no build — they load a src/ module
@@ -536,8 +537,8 @@ const SUITES = [
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
-   search-pure, study-pure, refs-pure, quiz-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure'];
+   search-pure, study-pure, refs-pure, quiz-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
