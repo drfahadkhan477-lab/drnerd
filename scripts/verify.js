@@ -322,6 +322,9 @@ const SUITES = [
   /* The fifth: the report a mock block ends on, one builder in src/app/mockreport.js. mockReview(), which two of
      its buttons name, stays in the page. */
   ['mockreport-pure', 'the mock report gives the grade\'s percent with its colour, words and ring at 80 and 60, the counts, the time in the three ways a block can end, the flags against the Flagged list as it is now, the three slowest, a row for each chapter weakest first, offers what there is to learn from only when there is something, reads two names of the state and changes nothing, and the page\'s own line over the real MockExam grades a block as the arithmetic says'],
+  /* The sixth: the topic search, its builder with hl() and snippet() in src/app/search.js. What is typed, the
+     search, its timer and the handlers its markup names stay in the page. */
+  ['search-pure', 'the topic search marks the words typed in text escaped first, quotes the part of a question where one is found, offers topics before anything is typed, counts and lists the matches with their chapter, flags, figures, stem and right answer, has a chapter choice, Quiz these and Clear, every handler one of seven shapes, reads three names of the search and changes nothing, and the page\'s line over its own helpers draws a search'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -523,8 +526,9 @@ const SUITES = [
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
-   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure'];
+   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
+   search-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

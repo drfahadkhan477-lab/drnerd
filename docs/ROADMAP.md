@@ -202,8 +202,12 @@ state the module is handed the flagged and the missed and no more. Then the
 mock block's report (`src/app/mockreport.js`,
 `MockReportScreen.screenHtml(S, CH_COLORS, CH_SHORT, kit)`, held by
 `verify-mockreport-pure`): its builder only; `mockReview()`, which two of its
-buttons name, stays in the shell. Next in the map's order is `buildSearch`;
-write the map again before starting.
+buttons name, stays in the shell. Then the topic search
+(`src/app/search.js`, `SearchScreen.screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit)`,
+held by `verify-search-pure`): the builder with `hl()` and `snippet()`, which
+only it used; `SQ`, `runSearch()`, `searchInput()` and its timer and the
+handlers stay in the shell. Next in the map's order is `buildStudy`; write the
+map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

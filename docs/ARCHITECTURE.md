@@ -32,7 +32,7 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 | `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
-| `src/app/` | Screens that have left the shell, one file each: results, memory, rhythmlab, annotations, mockreport | A function of what the page hands it; changes nothing it is given; must run under Node |
+| `src/app/` | Screens that have left the shell, one file each: results, memory, rhythmlab, annotations, mockreport, search | A function of what the page hands it; changes nothing it is given; must run under Node |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
 
 ## The shell's script
