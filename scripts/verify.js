@@ -331,6 +331,9 @@ const SUITES = [
   /* The eighth: the reference library, its builder and pager in src/app/refs.js. refCard() stays in the page,
      because refMore() adds a page of cards with it in place. */
   ['refs-pure', 'the reference library shows the newest page of notes in the order given with a pager for the rest, one note on its own with the way back and the form hidden unless it is edited, Save changes and Cancel while editing, reads only how many notes there are and changes nothing, and the page\'s line draws a library through its own refCard() and the real Markdown'],
+  /* The ninth: the question screen, its builder with the confidence and miss rows in src/app/quiz.js. The handlers,
+     and setConfidence() and setMissReason(), which repaint those rows' chips in place, stay in the page. */
+  ['quiz-pure', 'the question screen shows the chapter, place and score, the question and its options before and after answering, the reveal with the commentary and peer figures where every option has one, how sure and why missed with the one chosen marked, the review ratings with when each card comes back until it is rated, home, back, flag and next or skip, reads the state it is given and changes nothing, and the page\'s line draws a review over the real FSRS and ReviewQueue'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -533,8 +536,8 @@ const SUITES = [
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
-   search-pure, study-pure, refs-pure. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure'];
+   search-pure, study-pure, refs-pure, quiz-pure. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
