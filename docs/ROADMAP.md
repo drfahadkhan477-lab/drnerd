@@ -219,8 +219,12 @@ handlers stay there too. Then the question screen (`src/app/quiz.js`,
 the builder with its confidence and miss rows; `fsrsPreview()`,
 `fmtInterval()`, `hasPeers` and every handler stay in the shell, and so do
 `setConfidence()` and `setMissReason()`, which repaint those rows' chips in
-place. Next in the map's order is `buildMock`; write the map again before
-starting.
+place. Then a mock exam block (`src/app/mock.js`,
+`MockScreen.screenHtml(S, kit)`, held by `verify-mock-pure`): the builder and
+its summary before handing in; `mockQ()`, `mockClockText()`, `mockPaceText()`
+and `mockCellLabel()` stay in the shell, because the ticker and the keys
+repaint the clock, the pace line and the grid with them. Next in the map's
+order is `buildSessions`; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

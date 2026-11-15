@@ -5817,74 +5817,10 @@ function mockReview(which){
 }
 
 /* ── the screens ── */
-function buildMock(){
-  const r=S.mock, q=mockQ();
-  if(!r||!q) return `<div class="mock-wrap"><div class="mock-gone"><p>No block is open.</p>
-    <button class="btn btn-next" type="button" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
-  if(S.mockView==='end') return buildMockEnd();
-  const n=r.ids.length, st=MockExam.states(r), chosen=r.sel[r.i], lab=r.secPerQ?'left':'elapsed';
-  if(r.paused) return `<div class="quiz-wrap mock-wrap"><div class="mock-paused" role="status">
-      <span class="mock-pause-ic">${icon('pause')}</span><h2>Paused</h2>
-      <p>The clock is stopped and the question is hidden. Nothing is scored until you hand the block in.</p>
-      <div class="mock-clockbox big"><span class="mock-clock" id="mockClock" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span><span class="mock-clock-lab">${lab}</span></div>
-      <button class="btn btn-next" type="button" onclick="mockUnpause()">${icon('play','icon-sm')} Resume</button></div></div>`;
-  const pace=MockExam.pace(r);
-  const opts=q.o.map((o,i)=>`<button class="opt mock-opt${q.imgopt?' img-opt':''}${chosen===i?' picked':''}" type="button" data-mi="${i}"
-      onclick="mockPick(${i})" aria-pressed="${chosen===i}" style="--acc:var(--teal)">
-      <span class="opt-letter">${e(o.l)}</span><span class="opt-text">${e(o.t)}</span></button>`).join('');
-  const cells=st.cells.map(c=>`<button class="mock-cell${c.answered?' done':''}${c.flagged?' flag':''}${c.current?' cur':''}" type="button"
-      data-mc="${c.n-1}" onclick="mockGo(${c.n-1})" aria-label="${mockCellLabel(c)}"${c.current?' aria-current="true"':''}>${c.n}</button>`).join('');
-  const flagged=!!r.flag[r.i], lastQ=r.i>=n-1;
-  const isMobile=window.innerWidth<768;
-  return `<div class="quiz-wrap mock-wrap">
-    <div class="qbar mock-bar anim-slide">
-      <div class="mock-top">
-        <div class="mock-clockbox"><span class="mock-clock" id="mockClock" role="timer" aria-live="off" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span><span class="mock-clock-lab">${lab}</span></div>
-        <span class="q-counter">Question ${r.i+1} of ${n}</span>
-        <button class="mock-mini" type="button" onclick="mockPause()" aria-label="Pause the block">${icon('pause','icon-sm')}<span>Pause</span></button>
-      </div>
-      <div class="prog-track"><div class="prog-fill" id="mockProg" style="transform:scaleX(${(st.answered/n).toFixed(4)})"></div></div>
-      <div class="mock-subrow"><span id="mockSub">${st.answered} answered · ${st.flagged} flagged</span><span class="mock-pace" id="mockPace" data-status="${pace?pace.status:''}">${e(mockPaceText(r))}</span></div>
-    </div>
-    <div class="fig-zone"></div>
-    <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:var(--teal)">
-      <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:var(--teal-ink)"></span>Question ${r.i+1}</div>
-      ${e(q.s)}
-      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
-      ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
-    </div>
-    <div class="opts" role="group" aria-label="Answer options">${opts}</div>
-    ${isMobile?'':'<div class="kb-hint kbd-row">Press <kbd>A</kbd>–<kbd>E</kbd> to answer · <kbd>F</kbd> to flag · <kbd>←</kbd> <kbd>→</kbd> to move</div>'}
-    <div class="actions mock-actions">
-      <button class="btn btn-prev" type="button" onclick="mockPrev()" aria-label="Previous question"${r.i===0?' disabled':''}>${icon('arrow-left','icon-sm')}</button>
-      <button class="btn mock-flag${flagged?' on':''}" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="${flagged}">${icon('flag','icon-sm')} <span class="mock-flag-l">Flag</span></button>
-      <button class="btn btn-next" type="button" onclick="mockNext()">${lastQ?'Review and hand in':'Next'} ${icon('arrow-right','icon-sm')}</button>
-    </div>
-    <div class="mock-navcard">
-      <div class="mock-navh"><span>Questions</span><button class="mock-mini" type="button" onclick="mockEnd()">${icon('check','icon-sm')}<span>End block</span></button></div>
-      <div class="mock-nav" role="group" aria-label="Questions in this block">${cells}</div>
-      <div class="mock-key"><span><i class="k done"></i>answered</span><span><i class="k flag"></i>flagged</span><span><i class="k"></i>not answered</span></div>
-    </div>
-  </div>`;
-}
-function buildMockEnd(){
-  const r=S.mock, st=MockExam.states(r), n=st.n;
-  const chip=(c,cls)=>`<button class="mock-chip ${cls}" type="button" onclick="mockGo(${c.n-1})" aria-label="Go to question ${c.n}">${c.n}</button>`;
-  const blank=st.cells.filter(c=>!c.answered), flagged=st.cells.filter(c=>c.flagged);
-  const left=r.secPerQ?`<span class="mock-clock sm" id="mockClock" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span> left`
-    :`<span class="mock-clock sm" id="mockClock" data-urgency="none">${mockClockText(r)}</span> so far`;
-  return `<div class="quiz-wrap mock-wrap"><div class="mock-end">
-    <h2 tabindex="-1">Hand in this block?</h2>
-    <div class="mock-end-sub">${st.answered} of ${n} answered · ${left}</div>
-    ${blank.length?`<div class="mock-end-sec"><b>${blank.length} not answered</b> — counted as wrong
-      <div class="mock-chips">${blank.map(c=>chip(c,'')).join('')}</div></div>`:'<div class="mock-end-sec ok">Every question has an answer.</div>'}
-    ${flagged.length?`<div class="mock-end-sec"><b>${flagged.length} flagged</b> — to look at again
-      <div class="mock-chips">${flagged.map(c=>chip(c,'flag')).join('')}</div></div>`:''}
-    <div class="actions mock-end-actions">
-      <button class="btn btn-prev wide" type="button" onclick="mockGo(S.mock.i)">${icon('arrow-left','icon-sm')} Back to the block</button>
-      <button class="btn btn-next" type="button" onclick="mockSubmit()">Hand in ${icon('check','icon-sm')}</button>
-    </div></div></div>`;
-}
+/* The block's markup, with its summary before handing in, is src/app/mock.js. mockQ(), mockClockText(),
+   mockPaceText() and mockCellLabel() stay above, because the ticker and the keys repaint with them too. */
+@@SLOT[src:src/app/mock.js]@@
+function buildMock(){ return MockScreen.screenHtml(S,{MockExam,mockQ,mockClockText,mockPaceText,mockCellLabel,e,icon,window}); }
 /* The report's markup is src/app/mockreport.js. mockReview(), which two of its buttons name, stays here. */
 @@SLOT[src:src/app/mockreport.js]@@
 function buildMockReport(){ return MockReportScreen.screenHtml(S,CH_COLORS,CH_SHORT,{MockExam,mockLookup,chIcon,e,icon,semText}); }
