@@ -255,6 +255,14 @@ under it). F1 is what the list missed. *Opus.*
 width and pushes the stem below it. When there is width, default figure items to
 side by side (figure left; stem and options right), keeping the reading measure;
 the split control already exists. Check in WebKit at iPad sizes. *Opus.*
+*Done, on the quiz screen:* where two columns of 28em fit (an iPad on its side
+at Standard text, Apex closed), a figure question draws the figure on the left
+and the stem and options on the right; on an iPad Air on its side the options
+had begun at 911px of 820. Upright, on a phone, with Apex's column open or at
+the Largest text the figure stays above. With the split preference the
+explanation takes the second column once answered, never a third.
+`verify-readsize` holds it. The mock exam draws its figure its own way and is
+not changed yet.
 
 **D4 — One focal point on Home.** The pearl teaches; the heart decorates unless
 touched. Candidates to try in a real session: the heart still until tapped, the

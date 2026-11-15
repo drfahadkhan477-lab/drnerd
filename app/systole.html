@@ -5082,6 +5082,11 @@ function applyDisplaySettings(){
   const app=document.getElementById('app'),card=document.querySelector('.q-card');
   const size=card?parseFloat(getComputedStyle(card).fontSize):16;
   if(app){app.classList.toggle('reading-wide-layout',v.layout==='split'&&!!document.querySelector('.reveal-card'));app.classList.toggle('reading-split',v.layout==='split'&&!!document.querySelector('.reveal-card')&&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);}
+  /* A figure question, where two columns of 28em each fit: the figure on the left, the stem and the options beside it, so
+     the question is read with the figure in view (D3). Measured as the split above is, so it follows the text size, the
+     reading width, Split View and Apex's panel; not while the explanation stands beside the question, three columns. */
+  if(app)app.classList.toggle('fig-split',!!app.querySelector('.reading-figs')&&!app.classList.contains('reading-split')
+    &&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);
 }
 function updateDisplaySetting(key,value){
   if(key==='width'){setReadWidth(['narrow','standard','wide','full'].indexOf(value));return;}
@@ -5180,6 +5185,9 @@ let displayRaf=0;
 const scheduleDisplaySettings=()=>{ if(!displayRaf) displayRaf=requestAnimationFrame(()=>{ displayRaf=0; applyDisplaySettings(); }); };
 window.addEventListener('resize',scheduleDisplaySettings);
 if(document.getElementById('shell'))new MutationObserver(scheduleDisplaySettings).observe(document.getElementById('shell'),{attributes:true,attributeFilter:['class']});
+/* Apex's column opens over a transition, so the class change above comes before the width it makes: the column's own size
+   decides again once it has moved (the next frame, never inside the observer, so no ResizeObserver loop). */
+if(typeof ResizeObserver!=='undefined'&&document.getElementById('app'))new ResizeObserver(scheduleDisplaySettings).observe(document.getElementById('app'));
 
 function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
@@ -6006,7 +6014,7 @@ function buildMock(){
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:var(--teal)">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:var(--teal-ink)"></span>Question ${r.i+1}</div>
       ${e(q.s)}
-      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
+      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure.</div>':''}
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
     </div>
     <div class="opts" role="group" aria-label="Answer options">${opts}</div>
@@ -7962,6 +7970,8 @@ function buildQuiz(){
   const prog=(qIdx+1)/questions.length*100;
   const chColor=CH_COLORS[q.ch]||'var(--teal)';
   const figHtml='<div class="fig-zone"></div>';
+  /* render() fills the zone after the layout is decided; whether there will be figures is buildFigures' own test. */
+  const hasFigs=!!(q.img&&IMGS[q.id]&&IMGS[q.id].length);
 
   const opts=q.o.map((o,i)=>{
     let cls='opt'+(q.imgopt?' img-opt':'');
@@ -8044,18 +8054,18 @@ function buildQuiz(){
       <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>
       <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:''}</div>
     </div>
-    <div class="reading-columns"><div class="reading-question">${figHtml}
+    <div class="reading-columns"><div class="reading-question">${hasFigs?`<div class="reading-figs">${figHtml}</div>`:figHtml}<div class="reading-text">
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}
         <span class="src-badge flag-badge" id="qFlagBadge"${flagOn?'':' hidden'}>${icon('flag','icon-sm')} flagged</span>
         ${typeof hasMarkup==='function'&&hasMarkup(q.id)?`<span class="src-badge" style="color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-b)">${icon('pencil','icon-sm')} annotated</span>`:''}</div>
       ${e(q.s)}
-      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure above.</div>':''}
+      ${q.imgopt?'<div class="q-imgnote">Answer options refer to the labelled panels in the figure.</div>':''}
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
     </div>
     ${cfRowHtml()}
     <div class="opts">${opts}</div>
-    ${kbHint}</div>
+    ${kbHint}</div></div>
     <div class="reading-explanation">${revealHtml}</div></div>
     ${rateRow}
     <div class="actions">${actions}</div>

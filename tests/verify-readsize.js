@@ -21,6 +21,9 @@
  *     a phone on its side it waits under the sheet as it did; with Apex full screen it is put away; and open, with Apex
  *     shut, it fits the screen on a phone, on an iPad on its side and in a short window, every tool reachable;
  *   · at Largest a word longer than its line breaks inside the stem, an option and the explanation;
+ *   · a figure question on an iPad on its side draws the figure beside the stem, the first option on the screen, answered
+ *     or not; upright, on a phone, with Apex's column open or at Largest the figure stays above, and with the split
+ *     preference the explanation takes the second column, never a third; a question with no figure has no figure column;
  *   · nothing throws.
  */
 'use strict';
@@ -488,6 +491,90 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
       seen.push(await page.evaluate(() => S.screen + ':' + document.querySelectorAll('#navbar [onclick="goEcho()"]').length));
     }
     ok('on Study, note search and Echo itself, the bar offers no Echo button', seen.every(x => /:0$/.test(x)) && seen.length === 3, seen.join());
+    await page.context().close();
+  }
+
+  head('a figure question on an iPad on its side: the figure beside the stem');
+  /* D3. A figure drawn full width pushed the stem below it: on an iPad Air on its side the options began at 911px of 820.
+     Where two columns of 28em fit, the figure stands on the left and the stem and options on the right; where they do not
+     (portrait, a phone, Apex's column, the largest text) it stays above, and with the explanation already beside the
+     question (the split preference) the figure does not make a third column. */
+  {
+    const figQuiz = async (page, answer) => {
+      await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
+      await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img') && !!document.querySelector('.q-card'), null, { timeout: 8000 }).catch(() => {});
+      await quiet(page);
+      if (answer) {
+        await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci));
+        await page.waitForFunction(() => S.answered === true && !!document.querySelector('.reveal-card'), null, { timeout: 6000 }).catch(() => {});
+        await quiet(page);
+      }
+    };
+    /* The question's entrance (anim-pop) moves the stem while it runs: measure where it comes to rest. */
+    const rest = page => page.waitForFunction(() => !document.getAnimations().some(a => a.playState === 'running'
+      && a.effect && a.effect.getComputedTiming().iterations !== Infinity), null, { timeout: 6000 }).catch(() => {});
+    const lay = async page => { await rest(page); return page.evaluate(() => {
+      const R = s => { const el = document.querySelector(s); if (!el) return null; const r = el.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width) }; };
+      return { split: document.getElementById('app').classList.contains('fig-split'), readingSplit: document.getElementById('app').classList.contains('reading-split'),
+        fig: R('.fig-slot'), card: R('.q-card'), opt: R('.opt'), exp: R('.reading-explanation'), em: parseFloat(getComputedStyle(document.querySelector('.q-card')).fontSize), vh: innerHeight };
+    }); };
+    const beside = d => !!(d.fig && d.card && d.opt) && d.split && d.card.l >= d.fig.r && Math.abs(d.card.t - d.fig.t) <= 2 && d.card.w >= 28 * d.em;
+    const above = d => !!(d.fig && d.card) && !d.split && d.card.t >= d.fig.b;
+
+    const page = await open({ width: 1180, height: 820 }, { hasTouch: true });
+    await figQuiz(page, false);
+    const air = await lay(page);
+    ok('an iPad Air on its side: the stem stands beside the figure, at its top, in a column of at least 28em', beside(air), JSON.stringify(air));
+    ok('and the first option is on the screen without scrolling', !!air.opt && air.opt.b <= air.vh, JSON.stringify(air.opt));
+    await page.evaluate(() => toggleAI());
+    await page.waitForFunction(() => document.getElementById('shell').classList.contains('ai-open'), null, { timeout: 4000 }).catch(() => {});
+    await quiet(page);
+    await page.waitForFunction(() => !document.getElementById('app').classList.contains('fig-split'), null, { timeout: 3000 }).catch(() => {});
+    const withApex = await lay(page);
+    ok('with Apex\'s column open there is no room for two: the figure goes back above the stem', above(withApex), JSON.stringify(withApex));
+    await page.evaluate(() => toggleAI());
+    await page.waitForFunction(() => document.getElementById('app').classList.contains('fig-split'), null, { timeout: 3000 }).catch(() => {});
+    ok('and beside it again when Apex is closed', beside(await lay(page)));
+    await setSize(page, 3);
+    await quiet(page);
+    const largest = await lay(page);
+    ok('at the Largest text the two columns would be too narrow: above', above(largest), JSON.stringify(largest));
+    await setSize(page, 0);
+    await quiet(page);
+    await figQuiz(page, true);
+    const answered = await lay(page);
+    ok('answered, the figure stays beside the stem and the explanation comes below both', beside(answered) && !!answered.exp
+      && answered.exp.t >= Math.max(answered.fig.b, answered.opt.b), JSON.stringify(answered));
+    await page.evaluate(() => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.q-card') && !document.querySelector('.fig-img'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const plain = await page.evaluate(() => ({ figs: !!document.querySelector('.reading-figs'), split: document.getElementById('app').classList.contains('fig-split') }));
+    ok('a question with no figure has no figure column', !plain.figs && !plain.split, JSON.stringify(plain));
+    await page.context().close();
+  }
+  {
+    const page = await open({ width: 1366, height: 1024 }, { hasTouch: true });
+    await page.evaluate(() => updateDisplaySetting('layout', 'split'));
+    await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const before = await page.evaluate(() => document.getElementById('app').classList.contains('fig-split'));
+    await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci));
+    await page.waitForFunction(() => S.answered === true && !!document.querySelector('.reveal-card'), null, { timeout: 6000 }).catch(() => {});
+    await quiet(page);
+    const after = await page.evaluate(() => ({ fig: document.getElementById('app').classList.contains('fig-split'), reading: document.getElementById('app').classList.contains('reading-split') }));
+    ok('with the split preference, the figure stands beside the stem until the answer, then the explanation takes the second column (never three)',
+      before && after.reading && !after.fig, JSON.stringify({ before, after }));
+    await page.context().close();
+  }
+  for (const [w, h, what] of [[820, 1180, 'an iPad Air upright'], [390, 844, 'a phone']]) {
+    const page = await open({ width: w, height: h }, { hasTouch: true, isMobile: w < 600 });
+    await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img') && !!document.querySelector('.q-card'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const d = await page.evaluate(() => { const f = document.querySelector('.fig-slot'), c = document.querySelector('.q-card');
+      return f && c ? { split: document.getElementById('app').classList.contains('fig-split'), figBottom: Math.round(f.getBoundingClientRect().bottom), cardTop: Math.round(c.getBoundingClientRect().top) } : null; });
+    ok(what + ': the figure stays above the stem', !!d && !d.split && d.cardTop >= d.figBottom, JSON.stringify(d));
     await page.context().close();
   }
 

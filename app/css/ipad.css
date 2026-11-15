@@ -125,6 +125,10 @@ html[data-reading-width="wide"]{--reading-measure:80ch}
 html[data-width] #app[data-screen="quiz"].reading-wide-layout{max-width:none}
 .reading-split .reading-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
 .reading-columns{max-width:100%;margin:auto}
+/* A figure question with room for two columns (applyDisplaySettings): the figure on the left, the stem and options on the
+   right. The text column keeps a reading line of its own; the explanation stays below at the reading measure. */
+.reading-figs,.reading-text{min-width:0}
+.fig-split .reading-question{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start;max-width:none}
 .exp-text,.msg.bot,.pearl-card.pearl-all .pearl-main{max-width:var(--reading-measure)}
 html[data-read] #app[data-screen="home"] .pearl-card .pearl-txt{font-size:calc(var(--t-body) * var(--read))}
 html[data-read] #app[data-screen="home"] .pearl-card .pearl-step[data-kind="core"] .pearl-txt,
