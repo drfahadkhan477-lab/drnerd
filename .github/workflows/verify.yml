@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 93 suites that are pure Node with no Playwright and no
+#   logic        the 94 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -353,10 +353,12 @@ jobs:
         run: node tests/verify-study-pure.js
       - name: the reference library shows a page of notes and a pager, one note on its own, and the form as editing needs it, and the page's line draws it through its own refCard() (36 checks)
         run: node tests/verify-refs-pure.js
-      - name: the question screen shows the question before and after answering, the reveal, how sure and why missed, and the review ratings with when each card comes back over the real FSRS (62 checks)
+      - name: the question screen shows the question before and after answering, the reveal, how sure and why missed, and the review ratings with when each card comes back over the real FSRS (63 checks)
         run: node tests/verify-quiz-pure.js
       - name: a mock block shows the question, clock, pace, flag and grid, paused or not, and the summary before handing in, and the page's line draws a block over the real MockExam (48 checks)
         run: node tests/verify-mock-pure.js
+      - name: the Sessions screen shows the mock exam's card, a block in progress or one to set up, and the voice card, and the page's lines draw it over its own setMockCfg() and the real MockExam (60 checks)
+        run: node tests/verify-sessions-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (70 checks)

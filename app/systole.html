@@ -5853,40 +5853,11 @@ function mockPanel(){
     <div class="ref-hint">Last: ${pc(last)}%, ${last.correct} of ${last.n} in ${e(MockExam.fmtClock(last.ms))}, about ${per} s a question. A question left blank counts as wrong, as it does in the real exam.</div></div>`;
 }
 
-/* The card on the Study screen: set a block up, or carry on the one in progress. */
-function mockCardInner(){
-  const r=S.mock, lastH=S.mocks.length?S.mocks[S.mocks.length-1]:null;
-  /* The report kept is the last block's only if it was handed in at the moment the history says: an import replaces the
-     history and leaves the report, and a report that could not be written leaves the one before it. */
-  const hasReport=!!(lastH&&S.mockLast&&S.mockLast.submittedAt===lastH.ts);
-  const lastLine=lastH?`<button class="mock-quiet" type="button" onclick="openMockReport()"${hasReport?'':' disabled'}>Last block: ${Math.round(100*lastH.correct/lastH.n)}%${hasReport?' · see the report':''}</button>`:'';
-  if(r){
-    const st=MockExam.states(r), left=r.secPerQ?MockExam.fmtClock(MockExam.remainingMs(r),'down')+' left':MockExam.fmtClock(r.elapsedMs)+' so far';
-    return `<div class="fc-glow" aria-hidden="true"></div>
-      <div class="fc-top"><span class="fc-badge">${icon('alarm')} MOCK EXAM</span><span class="pace-pill ok">In progress</span></div>
-      <div class="fc-title">A block is open</div>
-      <div class="fc-sub" id="mockLive">${st.answered} of ${st.n} answered · ${left} · ${st.flagged} flagged</div>
-      <button class="mock-go" id="mockResume" type="button" onclick="resumeMock()">${icon('play')}<span>Resume the block</span></button>
-      <button class="mock-quiet${_mockArm?' arm':''}" id="mockDiscard" type="button" onclick="discardMock()">${_mockArm?'Tap again to discard it':'Discard this block'}</button>`;
-  }
-  const sizes=mockSizes();
-  const chip=(k,v,on,label)=>`<button class="mock-pick${on?' on':''}" type="button" data-${k}="${v}" aria-pressed="${on}" onclick="setMockCfg('${k}','${v}')">${label}</button>`;
-  return `<div class="fc-glow" aria-hidden="true"></div>
-    <div class="fc-top"><span class="fc-badge">${icon('alarm')} MOCK EXAM</span></div>
-    <div class="fc-title">A timed block, no feedback until you hand it in</div>
-    <div class="fc-sub">Like the real thing: choose, move on, come back, find out at the end. Questions you have not met come first.</div>
-    <div class="mock-row" role="group" aria-label="Questions in the block">${sizes.map(n=>chip('n',n,mockSize()===n,'<b>'+n+'</b><span>questions</span>')).join('')}</div>
-    <div class="mock-row" role="group" aria-label="Time for each question">${[...MockExam.PACES,0].map(s=>chip('sec',s,_mockCfg.sec===s,s?'<b>'+s+'</b><span>sec each</span>':'<b>No</b><span>limit</span>')).join('')}</div>
-    <label class="mock-chsel"><span>Chapter</span><select id="mockCh" onchange="setMockCfg('ch',this.value)">
-      <option value="">All chapters</option>${CHAPTERS.map(c=>`<option value="${e(c)}"${_mockCfg.ch===c?' selected':''}>${e(c)}</option>`).join('')}</select></label>
-    <button class="mock-go" id="mockStart" type="button" onclick="startMock()">${icon('alarm')}<span>${e(mockStartText())}</span></button>
-    <div class="mock-note">The clock runs only while Systole is on screen. Search, Echo and Apex are off while you are in the block.</div>
-    ${_mockLost?'<div class="mock-note lost">The block that was open could not be carried on, so it was set aside.</div>':''}
-    ${lastLine}`;
-}
-function mockCard(){
-  return `<div class="feed-card mock-card${S.mock?' live':''}" id="mockCard" role="group" aria-label="Mock exam">${mockCardInner()}</div>`;
-}
+/* The card on the Sessions screen, to set a block up or carry on the one in progress, is drawn by src/app/sessions.js.
+   What is inside it stays a function here, because setMockCfg() draws it again in place. sessionsKit() is what that
+   module is handed, as it stands at the moment of drawing. */
+const sessionsKit=()=>({MockExam,_mockCfg,_mockArm,_mockLost,mockSize,mockSizes,mockStartText,voiceAvailable,e,icon});
+function mockCardInner(){ return SessionsScreen.mockInnerHtml(S,CHAPTERS,sessionsKit()); }
 
 function toggleZoom(i){
   S.zoomed = (S.zoomed===i) ? -1 : i;
@@ -7529,27 +7500,10 @@ function goStudy(){ S.screen='study'; render(); toTop(); }
    you do rather than read. */
 function goSessions(){ S.screen='sessions'; render(); toTop(); }
 function goLabs(){ homePage=2; goHome(); }
-function voiceCardHtml(){
-  return voiceAvailable()?`<div class="feed-card voice-card" id="voiceCard" role="group" aria-label="Voice session">
-    <div class="fc-top"><span class="fc-badge">${icon('mic')} VOICE</span></div>
-    <div class="voice-hero">
-      <span class="voice-orb" aria-hidden="true"><span class="vo-ring"></span><span class="vo-ring r2"></span>${icon('mic')}</span>
-      <div><div class="fc-title">Hands full? Answer out loud</div>
-      <div class="fc-sub">Ten questions, read aloud. Needs the microphone.</div></div>
-    </div>
-    <div class="voice-wave" aria-hidden="true">${Array.from({length:28},(_,k)=>`<i style="--k:${k}"></i>`).join('')}</div>
-    <div class="voice-say">Say <kbd>A</kbd>–<kbd>E</kbd> <kbd>repeat</kbd> <kbd>skip</kbd> <kbd>explain</kbd> <kbd>stop</kbd></div>
-    <button class="voice-go" id="voiceStart" onclick="startVoice()">${icon('mic')}<span>Start a voice session</span></button>
-  </div>`:'';
-}
-function buildSessions(){
-  return `<div class="sessions-page" id="sessionsPage">
-    <button class="btn sb-back" type="button" onclick="goLabs()">${icon('arrow-left','icon-sm')} Labs</button>
-    <header class="page-head"><span class="page-eyebrow">${icon('alarm','icon-sm')} Sessions</span>
-      <h1 class="page-title">Practise under pressure</h1>
-      <p class="page-sub">A timed block like the real exam, or ten questions answered out loud.</p></header>
-    <div class="feed sessions-feed">${mockCard()}${voiceCardHtml()}</div></div>`;
-}
+/* The Sessions screen's markup, with the mock exam's card and the voice card, is src/app/sessions.js. The handlers its
+   buttons name stay here: goLabs() above, the mock block's beside its state, and startVoice() with the voice loop. */
+@@SLOT[src:src/app/sessions.js]@@
+function buildSessions(){ return SessionsScreen.screenHtml(S,CHAPTERS,sessionsKit()); }
 
 /* The question screen's markup, with the confidence and miss rows, is src/app/quiz.js. setConfidence() and
    setMissReason(), which repaint those rows' chips in place, stay where the rows were, with every other handler. */

@@ -223,8 +223,17 @@ place. Then a mock exam block (`src/app/mock.js`,
 `MockScreen.screenHtml(S, kit)`, held by `verify-mock-pure`): the builder and
 its summary before handing in; `mockQ()`, `mockClockText()`, `mockPaceText()`
 and `mockCellLabel()` stay in the shell, because the ticker and the keys
-repaint the clock, the pace line and the grid with them. Next in the map's
-order is `buildSessions`; write the map again before starting.
+repaint the clock, the pace line and the grid with them. Then the Sessions
+screen (`src/app/sessions.js`, `SessionsScreen.screenHtml(S, CHAPTERS, kit)`,
+held by `verify-sessions-pure`): the screen, the mock exam's card and the voice
+card. `mockCardInner()` stays in the shell as one line, because `setMockCfg()`
+draws the card's inside again in place; `_mockCfg`, `_mockArm` and `_mockLost`
+are handed over as they stand at each drawing, and every handler that writes
+them stays in the shell. The row after it, `buildNoteSearch`, was already a
+call into a module before step 3 began (`NoteSearch.screenHtml`, in
+`src/core/notesearch.js`), so two screens are left in the shell: `buildStats`
+and then `buildHome`. Each has much state of its own, and needs its plan read
+from the map before it moves; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
