@@ -155,6 +155,12 @@ head('the bug this suite was written to catch');
   });
   ok('and never pushes it further away than it already was', pushed.length === 0,
      `${pushed.length} of ${STATES.length} states`);
+  /* The same, for a card the app names (S4 fuzzes named cards, never on Again). */
+  const pushedNamed = STATES.filter((st, k) => {
+    const c = card(st.S, st.D);
+    return F.update(c, 1, plus(DAY0, st.el), 'q' + k).ivl > c.ivl;
+  });
+  ok('nor does it for a named card, whose other ratings are fuzzed', pushedNamed.length === 0, `${pushedNamed.length} of ${STATES.length} states`);
   /* NOT "Again always means tomorrow" — that was an overreach, and the code was
      right to refuse it. A card you have known for six months and have just
      forgotten is not a new card: FSRS gives it a few days, not one. What must
@@ -339,10 +345,72 @@ function history(seed, steps) {
   ok('every step of every generated history leaves a card the next step can use',
      !bad, bad ? JSON.stringify(bad).slice(0, 300) : `${SEEDS} histories, ${n} reviews`);
 
-  /* Upstream FSRS fuzzes intervals with a random draw; this module does not
-     (see its header), so a stored history is a function of its inputs alone. */
+  /* Upstream FSRS fuzzes intervals with a random draw; this module draws from a hash, and an unnamed card is not fuzzed
+     at all (see its header), so a stored history is a function of its inputs alone. */
   const a = JSON.stringify(history(7, STEPS)), b = JSON.stringify(history(7, STEPS));
   ok('and replaying a history gives the identical schedule, day for day', a === b);
+}
+
+head('spreading the load (roadmap S4)');
+/* Cards learned together came due together. A named card's interval now moves within the range upstream FSRS-5 draws
+   from, by a hash of its id, review count and lapse count; an unnamed card is not moved. The ranges are ts-fsrs's own
+   (tests/fixtures/fsrs-fuzz-oracle.json, from tools/gen-fsrs-fuzz-oracle.js), not a second reading of the same source. */
+{
+  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'fsrs-fuzz-oracle.json'), 'utf8'));
+  ok('the fuzz fixture names its generator and covers short, middling and capped intervals (precondition)',
+     fx.generator && fx.generator.name === 'ts-fsrs' && fx.generator.fn === 'get_fuzz_range' && fx.maximum_interval === F.MAX_IVL
+       && fx.rows.length > 200 && fx.rows.some(r => r[0] === 3) && fx.rows.some(r => r[0] > 1000) && fx.rows.some(r => r[0] === F.MAX_IVL),
+     `${fx.rows.length} rows`);
+  /* Forty cards for each day the range is wide (at least 400, at most 100,000), so both ends are drawn: a wide range
+     sampled by a few hundred cards would miss an end whatever the code did. */
+  const keys = n => Array.from({ length: n }, (_, i) => `Q${i}:${i % 7}:${i % 3}`), KEYS = keys(400);
+  let outside = null, narrow = null, drawn = 0;
+  for (const [ivl, elapsed, lo, hi] of fx.rows) {
+    const got = keys(Math.min(100000, Math.max(400, 40 * (hi - lo + 1)))).map(k => F.fuzz(ivl, elapsed, k));
+    drawn += got.length;
+    const bad = got.find(v => !(Number.isInteger(v) && v >= lo && v <= hi));
+    if (bad !== undefined && !outside) outside = { ivl, elapsed, lo, hi, got: bad };
+    if (!narrow && (!got.includes(lo) || !got.includes(hi))) narrow = { ivl, elapsed, lo, hi, min: Math.min(...got), max: Math.max(...got) };
+  }
+  ok('a named card\'s interval always falls within the range ts-fsrs draws from, for every interval and elapsed time in the fixture',
+     !outside, outside ? JSON.stringify(outside) : `${fx.rows.length} rows, ${drawn} draws`);
+  ok('and drawn often enough, it reaches both ends of that range, so the range is not narrower than upstream\'s',
+     !narrow, narrow ? JSON.stringify(narrow) : 'every row');
+  ok('under 2.5 days nothing moves, named or not, as upstream', [1, 2].every(ivl => KEYS.every(k => F.fuzz(ivl, 0, k) === ivl)));
+
+  /* The same card, rating and day, twice: the same day. Unnamed: exactly the interval the oracle checks. */
+  let drift = null, unnamedMoved = null, memoryMoved = null;
+  for (const g of [1, 2, 3, 4]) for (let i = 0; i < 60 && !(drift && unnamedMoved && memoryMoved); i++) {
+    let c = null, day = DAY0;
+    for (let n = 0; n < 6; n++) {
+      const named = F.update(c, g === 1 && n % 2 ? 3 : g, day, 'q' + i), again = F.update(c, g === 1 && n % 2 ? 3 : g, day, 'q' + i);
+      const plain = F.update(c, g === 1 && n % 2 ? 3 : g, day);
+      if (!drift && JSON.stringify(named) !== JSON.stringify(again)) drift = { g, i, n };
+      if (!unnamedMoved && plain.ivl !== Math.min(F.MAX_IVL, Math.max(1, Math.ceil(plain.stability)))) unnamedMoved = { g, i, n, ivl: plain.ivl, s: plain.stability };
+      if (!memoryMoved && (named.stability !== plain.stability || named.difficulty !== plain.difficulty)) memoryMoved = { g, i, n };
+      c = named; day = named.due;
+    }
+  }
+  ok('the same card, rating and day give the same due day every time', !drift, JSON.stringify(drift));
+  ok('an unnamed card is not fuzzed: its interval is its stability rounded up, as the oracle checks', !unnamedMoved, JSON.stringify(unnamedMoved));
+  ok('and naming a card moves its day, never what the model knows of it (stability, difficulty)', !memoryMoved, JSON.stringify(memoryMoved));
+
+  /* What S4 is for: forty cards learned on one day, answered Good on the day each comes due, twice more. */
+  const spread = named => {
+    const due = [];
+    for (let i = 0; i < 40; i++) {
+      let c = F.update(null, 3, DAY0, named ? 'card' + i : undefined);
+      c = F.update(c, 3, c.due, named ? 'card' + i : undefined);
+      c = F.update(c, 3, c.due, named ? 'card' + i : undefined);
+      due.push(c.due);
+    }
+    const n = {}; for (const d of due) n[d] = (n[d] || 0) + 1;
+    return { days: Object.keys(n).length, most: Math.max(...Object.values(n)) };
+  };
+  const together = spread(false), apart = spread(true);
+  ok('forty cards learned together, unnamed, all come due on one day (the load S4 spreads)', together.days === 1 && together.most === 40, JSON.stringify(together));
+  ok('named, the same forty come due over at least five days, no day holding more than a third of them',
+     apart.days >= 5 && apart.most <= 40 / 3, JSON.stringify(apart));
 }
 
 head('long horizons');
@@ -367,6 +435,11 @@ for (const [label, g] of [['Easy', 4], ['Good', 3]]) {
   ok('a restored card with an absurd stability is still due inside a century',
      c.ivl === F.MAX_IVL && ISO.test(c.due) && c.due > '2026-08-30' && c.due < '2127-01-01',
      `ivl ${c.ivl}, due ${c.due}`);
+}
+{
+  const c = F.update({ difficulty: 1, stability: 1e9, ivl: 1e9, reps: 9, lapses: 0, last: '2026-08-20' }, 4, '2026-08-30', 'q1');
+  ok('and so is the same card when the app names it (fuzzed, at most the cap)',
+     c.ivl <= F.MAX_IVL && c.ivl > F.MAX_IVL - 2000 && ISO.test(c.due) && c.due > '2026-08-30' && c.due < '2127-01-01', `ivl ${c.ivl}, due ${c.due}`);
 }
 ok('the cap is upstream FSRS\'s own default, one hundred years of days', F.MAX_IVL === 36500, String(F.MAX_IVL));
 
