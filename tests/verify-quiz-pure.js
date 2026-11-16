@@ -188,7 +188,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('the module is written into the page once, above that line', count(SLOT) === 1 && page.indexOf(LINE) > page.indexOf(SLOT));
   const handed = String(g1(page, /QuizScreen\.screenHtml\(S,LOG,CH_COLORS,\{([^}]*)\}\); \}/));
   ok('the kit is the twelve names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 12 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
-  ok('cfRowHtml() and missRowHtml() are no longer the page\'s; fsrsPreview(), fmtInterval() and hasPeers are', count('function cfRowHtml(') === 0 && count('function missRowHtml(') === 0 && count('function fsrsPreview(card,rating){') === 1 && count('function fmtInterval(days){') === 1 && count('const hasPeers=q=>') === 1);
+  ok('cfRowHtml() and missRowHtml() are no longer the page\'s; fsrsPreview(), fmtInterval() and hasPeers are', count('function cfRowHtml(') === 0 && count('function missRowHtml(') === 0 && count('function fsrsPreview(card,rating,id){') === 1 && count('function fmtInterval(days){') === 1 && count('const hasPeers=q=>') === 1);
   const WORDS = ['How sure?', 'Why did you miss it?', 'Answer Distribution', 'Resumed · start over', 'How well did you know this'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw({ resumed: true, qIdx: 1 }) + draw({ answered: true, selected: 0 }, {}, [{ q: 'q1', why: null }]) + draw({ mode: 'due', answered: true, selected: 1 });
@@ -204,7 +204,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const parts = ['calib', 'fsrs', 'reviewqueue'].map(m => read('src/core/' + m + '.js')).concat([whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chInk(hex){', '\n}'),
-    whole('const hasPeers=q=>', '\n'), whole("const RATINGS=[['again'", '];'), whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function fsrsPreview(card,rating){', '\n'),
+    whole('const hasPeers=q=>', '\n'), whole("const RATINGS=[['again'", '];'), whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function fsrsPreview(card,rating,id){', '\n'),
     whole('function fmtInterval(days){', '\n'), read('src/app/quiz.js'), whole('function buildQuiz(){', '\n')]).join('\n');
   const NOW = new Date(2026, 10, 15, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
@@ -216,8 +216,11 @@ head('the page hands the module what it has, and keeps what the markup names');
   const html = String(ask('buildQuiz()'));
   ok('the page\'s own line draws the question over the real modules, its words escaped by the page\'s e(), its figure in a column of its own', loaded === 'loaded' && html.includes('A &lt;b&gt;stem&lt;/b&gt;') && html.includes('<span class="opt-text">Two &amp; three</span>') && html.includes('<div class="reading-figs"><div class="fig-zone"></div></div>'), String(loaded).slice(0, 60) + ' · ' + html.slice(0, 60));
   const scheds = [...html.matchAll(/<span class="rate-label">([^<]*)<\/span>\s*<span class="rate-sched">([^<]*)<\/span>/g)].map(m => [m[1], m[2]]);
-  const want = String(ask('JSON.stringify(RATINGS.map(([k,l,g])=>[l, ReviewQueue.fmtInterval(FSRS.update(undefined,g,todayISO()).ivl)]))'));
-  ok('a new card\'s four ratings, each with when the real FSRS would bring it back, as the real ReviewQueue says it', scheds.length === 4 && J(scheds) === want, J(scheds));
+  /* Named by the question's id, as a rating names it (S4): the day a button shows is the day a tap gives. */
+  const want = String(ask('JSON.stringify(RATINGS.map(([k,l,g])=>[l, ReviewQueue.fmtInterval(FSRS.update(undefined,g,todayISO(),"a1").ivl)]))'));
+  const unnamed = String(ask('JSON.stringify(RATINGS.map(([k,l,g])=>[l, ReviewQueue.fmtInterval(FSRS.update(undefined,g,todayISO()).ivl)]))'));
+  ok('for this question, naming the card changes at least one rating\'s day, so the next check can tell (precondition)', want !== unnamed, want + ' vs ' + unnamed);
+  ok('a new card\'s four ratings, each with when the real FSRS would bring this card back, as the real ReviewQueue says it', scheds.length === 4 && J(scheds) === want, J(scheds));
   ok('the bar and the score are the page\'s', html.includes('<span class="q-counter">1 of 1') && html.includes('This quiz: 1/1 (100%)'));
 }
 

@@ -149,7 +149,7 @@ function screenHtml(S, LOG, CH_COLORS, kit){
       <div class="rate-row">${RATINGS.map(([key,label,grade,col])=>
         `<button class="rate-btn" style="--rc:${col}" onclick="rateReview(${grade})">
            <span class="rate-label">${label}</span>
-           <span class="rate-sched">${fmtInterval(fsrsPreview(S.srs[q.id],grade).ivl)}</span>
+           <span class="rate-sched">${fmtInterval(fsrsPreview(S.srs[q.id],grade,q.id).ivl)}</span>
          </button>`).join('')}</div>
       <div class="rate-flag">${flagBtn}</div>
     </div>` : '';

@@ -425,6 +425,13 @@ implement.
 **S4 — Spread the load.** Without fuzz, cards learned together come due together.
 Add a small fuzz seeded by card id and review count, so the same inputs still give
 the same day and tests stay deterministic. *Sonnet.*
+*Done:* a named card's interval of 2.5 days or more moves within the range
+upstream FSRS-5 draws from (ts-fsrs's own ranges, recorded in a fixture), by a
+hash of its id, review count and lapse count; Again is not moved, and an
+unnamed card is not either, which is what the oracle compares. Forty cards
+learned on one day and answered Good twice came due on one day; named, over 22.
+The rating, its preview and the first-answer card all pass the question's id.
+The Practice Lab's drill cards are not named yet.
 
 **S5 — Calibration as a skill.** `src/core/calib.js` measures it; make it
 trainable: a queue of answers marked Certain and wrong, and a Brier-score trend on
