@@ -161,6 +161,24 @@ head('the bug this suite was written to catch');
     return F.update(c, 1, plus(DAY0, st.el), 'q' + k).ivl > c.ivl;
   });
   ok('nor does it for a named card, whose other ratings are fuzzed', pushedNamed.length === 0, `${pushedNamed.length} of ${STATES.length} states`);
+  /* Nor from a card whose last interval was fuzzed DOWN: its day is then earlier than its stability rounded up, and an
+     unfuzzed Again could land after it (Codex review on #358: a card at 3 days came back in 4). The states above are
+     built with ivl = ceil(S), so they cannot show it; these are made by the scheduler itself. */
+  let afterFuzz = 0, fuzzedDown = 0; const firstPushed = [];
+  for (let i = 0; i < 300; i++) {
+    let c = F.update(null, 3, DAY0, 'card' + i);
+    for (let n = 0; n < 3; n++) {
+      if (c.ivl < Math.ceil(c.stability)) fuzzedDown++;
+      for (const late of [0, 1, 3 * c.ivl, 100]) {
+        const a = F.update(c, 1, plus(c.last, c.ivl + late), 'card' + i);
+        if (a.ivl > c.ivl) { afterFuzz++; if (firstPushed.length < 2) firstPushed.push({ id: 'card' + i, before: c.ivl, after: a.ivl, late }); }
+      }
+      c = F.update(c, 3, c.due, 'card' + i);
+    }
+  }
+  ok('and the scheduler\'s own named cards include some fuzzed below their stability (precondition)', fuzzedDown > 50, `${fuzzedDown} of 900`);
+  ok('nor from a named card whose last interval was fuzzed down: Again is never later than the day before it',
+     afterFuzz === 0, afterFuzz ? `${afterFuzz} Again ratings pushed later, e.g. ${JSON.stringify(firstPushed)}` : '3600 Again ratings');
   /* NOT "Again always means tomorrow" — that was an overreach, and the code was
      right to refuse it. A card you have known for six months and have just
      forgotten is not a new card: FSRS gives it a few days, not one. What must

@@ -324,9 +324,12 @@ function fsrsUpdate(card, rating, today, id) {
   const reps = rating === 1 ? 0 : (card && card.reps || 0) + 1;
   const lapses = (card && card.lapses || 0) + (rating === 1 ? 1 : 0);
   /* Again is not fuzzed: Again never makes a card more durable, and its day must not come later than the card's day
-     before it either (verify-fsrs reads both, named and unnamed); a lapse is not where the load piles up. */
-  const ivl = fsrsFuzz(fsrsIvl(stability), Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
+     before it either (verify-fsrs reads both, named and unnamed); a lapse is not where the load piles up. A day the
+     fuzz set earlier than the card's stability rounded up would let an unfuzzed Again land after it (3 days, then 4),
+     so Again is also held to the card's own interval before it. */
+  let ivl = fsrsFuzz(fsrsIvl(stability), Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
     rating === 1 || id === undefined || id === null || id === '' ? null : `${id}:${reps}:${lapses}`);
+  if (rating === 1 && prev && card && Number.isInteger(card.ivl) && card.ivl >= 1) ivl = Math.min(ivl, card.ivl);
   /* setDate() rolls months and years for us and steps whole calendar days, so
      a DST boundary inside the interval does not shift the due date — which
      adding ivl * 86400000 milliseconds would. */
