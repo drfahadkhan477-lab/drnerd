@@ -30,7 +30,10 @@
        steps, and no same-day short-term stability update;
      · interval = stability rounded UP (fsrsIvl), never down or to nearest;
      · interval capped at 36500 days, the same as upstream's default;
-     · no interval fuzz, so the same card and rating always give the same day;
+     · interval fuzz (S4) only when the caller names the card, never on Again,
+       and drawn from a hash of its id, review count and lapse count rather
+       than at random, so the same card, rating and day always give the same
+       due day; unnamed, there is no fuzz at all (fsrsFuzz);
      · Again never raises stability above what the card had
        (fsrsNextStabilityFail) — upstream's formula can;
      · a legacy SM-2 card is seeded from its old interval at difficulty 5
@@ -248,9 +251,39 @@ function fsrsSeed(card) {
   return null;
 }
 
+/* SPREAD THE LOAD (roadmap S4). Without fuzz, cards learned on one day with one
+   rating come due on one day, and keep coming due together: a fortnight's new
+   cards turn into a single heavy morning. Upstream FSRS-5 (ts-fsrs) moves an
+   interval of 2.5 days or more to a random day within a range that widens with
+   it: one day, plus 15% of the part between 2.5 and 7 days, 10% between 7 and
+   20, and 5% beyond 20; never under 2 days, never past the cap, and never back
+   to or before the day of the review that set it. This takes the same range.
+   The draw is not random: it is a hash of the card's id, its review count and
+   its lapse count (FNV-1a), so a stored history is still a function of its
+   inputs, a preview shows the day the rating will give, and a test can replay
+   it. With no id there is no fuzz, which is what the oracle compares. */
+const FSRS_FUZZ_RANGES = [[2.5, 7, 0.15], [7, 20, 0.1], [20, Infinity, 0.05]];
+function fsrsFuzzFactor(key) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h / 4294967296;
+}
+function fsrsFuzz(ivl, elapsed, key) {
+  if (typeof key !== 'string' || !key || ivl < 2.5) return ivl;
+  let delta = 1;
+  for (const [start, end, factor] of FSRS_FUZZ_RANGES) delta += factor * Math.max(Math.min(ivl, end) - start, 0);
+  let lo = Math.max(2, Math.round(ivl - delta));
+  const hi = Math.min(Math.round(ivl + delta), FSRS_MAX_IVL);
+  if (ivl > elapsed) lo = Math.max(lo, elapsed + 1);
+  lo = Math.min(lo, hi);
+  return Math.min(Math.floor(fsrsFuzzFactor(key) * (hi - lo + 1) + lo), FSRS_MAX_IVL);
+}
+
 /* Pure — safe to call repeatedly (e.g. once per rating button, every render,
-   to preview each button's resulting interval) without mutating the card. */
-function fsrsUpdate(card, rating, today) {
+   to preview each button's resulting interval) without mutating the card.
+   `id`, when given, names the card and turns on the deterministic fuzz above;
+   a preview and the rating it previews must pass the same one. */
+function fsrsUpdate(card, rating, today, id) {
   /* Math.round(NaN) is NaN, and Math.max(1, Math.min(4, NaN)) is NaN too — the
      clamp does not clamp. A NaN rating then failed the `rating === 1` test,
      skipped the hard and easy multipliers, and came out the far side looking
@@ -267,13 +300,13 @@ function fsrsUpdate(card, rating, today) {
      thought today was yesterday. */
   const now = (today && isoToLocalDate(today)) ? today : todayISO();
   const prev = fsrsSeed(card);
-  let difficulty, stability;
+  let difficulty, stability, elapsed = 0;
   if (!prev) {
     difficulty = fsrsInitDifficulty(rating);
     stability = fsrsInitStability(rating);
   } else {
     const lastDay = (card && card.last) ? card.last : now;
-    const elapsed = daysBetween(lastDay, now);
+    elapsed = daysBetween(lastDay, now);
     const r = elapsed > 0 ? fsrsRetrievability(prev.stability, elapsed) : 1;
     difficulty = fsrsNextDifficulty(prev.difficulty, rating);
     stability = rating === 1
@@ -288,9 +321,15 @@ function fsrsUpdate(card, rating, today) {
      defensible, and above all finite. */
   if (!Number.isFinite(stability) || stability <= 0) stability = fsrsInitStability(rating);
   if (!Number.isFinite(difficulty)) difficulty = fsrsInitDifficulty(rating);
-  const ivl = fsrsIvl(stability);
   const reps = rating === 1 ? 0 : (card && card.reps || 0) + 1;
   const lapses = (card && card.lapses || 0) + (rating === 1 ? 1 : 0);
+  /* Again is not fuzzed: Again never makes a card more durable, and its day must not come later than the card's day
+     before it either (verify-fsrs reads both, named and unnamed); a lapse is not where the load piles up. A day the
+     fuzz set earlier than the card's stability rounded up would let an unfuzzed Again land after it (3 days, then 4),
+     so Again is also held to the card's own interval before it. */
+  let ivl = fsrsFuzz(fsrsIvl(stability), Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
+    rating === 1 || id === undefined || id === null || id === '' ? null : `${id}:${reps}:${lapses}`);
+  if (rating === 1 && prev && card && Number.isInteger(card.ivl) && card.ivl >= 1) ivl = Math.min(ivl, card.ivl);
   /* setDate() rolls months and years for us and steps whole calendar days, so
      a DST boundary inside the interval does not shift the due date — which
      adding ivl * 86400000 milliseconds would. */
@@ -316,7 +355,7 @@ function fsrsFirstRating(ok, cf) {
 root.FSRS = {
   update: fsrsUpdate, firstRating: fsrsFirstRating, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
-  ivl: fsrsIvl, daysBetween, todayISO, isoToLocalDate, localDateToISO,
+  ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO,
   W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };

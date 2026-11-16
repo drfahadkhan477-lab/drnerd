@@ -1873,7 +1873,9 @@ function addDays(iso,n){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''
 /* rateReview() and the rate-row preview call FSRS.update(card, rating, today)
    directly — see src/core/fsrs.js. Rating scale is FSRS's own: 1 Again,
    2 Hard, 3 Good, 4 Easy (RATINGS below carries these, not SM-2's 0/3/4/5). */
-function fsrsPreview(card,rating){ return FSRS.update(card,rating,todayISO()); }
+/* The card's id spreads its due day within FSRS's fuzz range (S4); a preview and the rating it previews pass the same
+   id, so the day a button shows is the day a tap gives. */
+function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),id); }
 
 @@SLOT[src:src/core/reviewqueue.js]@@
 /* What is due, the new questions that top a session up, and the session itself: the rules are
@@ -1889,7 +1891,7 @@ function rateReview(grade){
   const q=S.questions[S.qIdx]; if(!q||!S.answered) return;
   const ans=S.answers[S.qIdx]; if(ans&&ans.rated) return;   // the rate-row is gone once true; this is the second line of defence
   logReview(q,grade,grade>=2,'review');
-  S.srs[q.id]=FSRS.update(S.srs[q.id],grade,todayISO());
+  S.srs[q.id]=FSRS.update(S.srs[q.id],grade,todayISO(),q.id);
   if(ans) ans.rated=true;
   logRated();
   bumpStreak();
@@ -5379,7 +5381,7 @@ function recordAnswer(q,ok,mode,extra){
    only that); never over a card that exists. */
 function seedFirstCard(q,ok,cf,mode){
   if(mode==='due'||mode==='exam'||mode==='mockreview'||!q||Object.prototype.hasOwnProperty.call(S.srs,q.id)) return;
-  S.srs[q.id]=FSRS.update(null,FSRS.firstRating(ok,cf),todayISO());
+  S.srs[q.id]=FSRS.update(null,FSRS.firstRating(ok,cf),todayISO(),q.id);
 }
 function selectOpt(idx){
   if(S.answered)return;
