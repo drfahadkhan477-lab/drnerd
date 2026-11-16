@@ -338,6 +338,10 @@ const SUITES = [
   /* The tenth: a mock exam block, its builder and summary in src/app/mock.js. The four mock helpers the ticker and the
      keys repaint with stay in the page. */
   ['mock-pure', 'a mock block shows none open, paused with the clock stopped, or the question with the clock, place, progress, answered and flagged, pace, options with the chosen one pressed, back, flag, next or hand in and a grid of the questions, and the summary of the blank and flagged before handing in, reads two names of the state and changes nothing, and the page\'s line draws a block over the real MockExam'],
+  /* The eleventh: the Sessions screen, with the mock exam's card and the voice card, in src/app/sessions.js. What is
+     inside the mock card stays a function of the page, because setMockCfg() draws it again in place; the page hands
+     over its three variables as they stand at each drawing. */
+  ['sessions-pure', 'the Sessions screen shows the way back to Labs, the mock exam\'s card and the voice card where the browser can speak and listen: a block in progress with how far it is, resume and a discard that asks twice, or the sizes, paces and chapters to set one up with the chosen ones pressed, the start button, and the last block\'s score as the way to its own report, reads three names of the state and changes nothing, and the page\'s lines draw it over the page\'s own setMockCfg() and the real MockExam'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -540,8 +544,9 @@ const SUITES = [
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
-   search-pure, study-pure, refs-pure, quiz-pure, mock-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'contrast'];
+   search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
+   sessions-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
