@@ -67,7 +67,7 @@ function record(state, o) {
   const s = sanitise(state);
   if (typeof o.id !== 'string' || !o.id) return s;
   const today = isDay(o.today) ? o.today : FSRS.todayISO();
-  s.cards[o.id] = Drill.grade({ card: s.cards[o.id] || null, correct: !!o.correct, today });
+  s.cards[o.id] = Drill.grade({ card: s.cards[o.id] || null, correct: !!o.correct, today, id: o.id });
   s.recent = s.recent.concat(o.id).slice(-KEEP_RECENT);
   const d = s.days[today] || { n: 0, c: 0 };
   s.days[today] = { n: d.n + 1, c: d.c + (o.correct ? 1 : 0) };
