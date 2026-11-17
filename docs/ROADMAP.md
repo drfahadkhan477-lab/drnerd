@@ -263,6 +263,12 @@ screen after E1. The split build can then ship `script-src 'self'` with the hash
 of its boot script. Checks: a scan that no `on*` attribute remains in emitted
 markup, and `tests/verify-csp.js` extended to show an injected inline handler is
 blocked. *Opus.*
+*Done so far:* the listener. `src/core/actions.js` installs one delegated
+listener that calls a `data-action` by name from the page's `ACTIONS` table,
+which is the allowlist (`verify-actions-pure`). The Memory screen is the first
+to carry no inline handler (`verify-memoryscreen-pure` scans what it draws for
+any `on*` attribute; `verify-memory` and `verify-backup-ids` tap it through the
+real page). Next: the other screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express

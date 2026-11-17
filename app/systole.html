@@ -5370,6 +5370,20 @@ document.addEventListener('click',ev=>{
   const b=ev.target&&ev.target.closest?ev.target.closest('[data-anno]'):null;
   if(b) jumpTo(b.getAttribute('data-anno'));
 });
+/* ══════════════ Actions ══════════════
+   docs/ROADMAP.md, E2: a button names an action with data-action instead of carrying an inline handler, and this one
+   listener on the document calls it from the table below (src/core/actions.js). The table is the allowlist: markup
+   that names anything else does nothing. Each action calls the page's function by name when it is tapped, as the
+   handler it replaces did, and reads what it needs from the element. Screens move here one at a time; when none has
+   an inline handler left, the split build can ship scripts/csp.js's scriptPolicy. */
+@@SLOT[src:src/core/actions.js]@@
+const ACTIONS={
+  /* the Memory screen (src/app/memory.js) */
+  goHome:()=>goHome(),
+  memForget:el=>memForget(el.dataset.memoryId),
+  memForgetAll:()=>memForgetAll(),
+};
+Actions.install(document,ACTIONS);
 /* In a stacked split the document does not scroll — #app does. Every "go to
    the top of this screen" has to ask the right one, or it quietly does nothing
    and you arrive halfway down. Both are scrolled because only one of them is

@@ -52,12 +52,16 @@ const mem = (id, kind, text, created) => ({ id, kind, text, created });
 /* The parts of the markup a reader sees. */
 const g = (s, re) => (s.match(re) || [])[1];
 const cardsIn = s => s.split('<div class="ref-card">').slice(1).map(c => ({
-  words: g(c, /class="ref-title"[^>]*>([^<]*)</), id: g(c, /data-memory-id="([^"]*)"/), does: g(c, /onclick="([^"]*)"/),
+  words: g(c, /class="ref-title"[^>]*>([^<]*)</), id: g(c, /data-memory-id="([^"]*)"/), does: g(c, /data-action="([^"]*)"/),
   says: g(c, /<button[^>]*>([^<]*)<\/button>/), kept: g(c, /class="ref-src">([^<]*)</) }));
 /* [[heading, [cards]], …] in the order drawn. */
 const groupsOf = html => html.split('<div class="section-label">').slice(1).map(s => [s.slice(0, s.indexOf('</div>')), cardsIn(s)]);
-const handlersOf = html => [...html.matchAll(/onclick="([^"]*)"/g)].map(m => m[1]);
-const buttonsOf = html => [...html.matchAll(/<button\b[^>]*\bonclick="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].map(m => [m[1], m[2].trim()]);
+/* docs/ROADMAP.md, E2: the screen names actions (data-action) and carries no inline handler. */
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
+/* Attribute names, read tag by tag with each value consumed whole, so text inside a value is never taken for a name. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const buttonsOf = html => [...html.matchAll(/<button\b[^>]*\bdata-action="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].map(m => [m[1], m[2].trim()]);
 const NOTHING = 'Apex has not kept anything yet. It will as you study.';
 const HEADINGS = { fact: 'E(About you)', gap: 'E(Where you keep going wrong)', preference: 'E(How you like to be taught)', session: 'E(From past sessions)' };
 const ORDER = ['fact', 'gap', 'preference', 'session'];
@@ -88,11 +92,12 @@ head('a memory, as its card');
   const card = (groupsOf(draw([mem('m7', 'gap', 'Reads constrictive as restrictive')]))[0] || [0, [{}]])[1][0] || {};
   ok('its words go through e()', card.words === 'E(Reads constrictive as restrictive)', card.words);
   ok('its Delete button carries the id as data, through e(), and says Delete', card.id === 'E(m7)' && card.says === 'Delete', card.id + ' · ' + card.says);
-  ok('and the button calls memForget() with what the data holds', card.does === 'memForget(this.dataset.memoryId)', card.does);
+  ok('and the button names the memForget action, which reads the id from that data', card.does === 'memForget', card.does);
   const hostile = draw([mem('x\');alert(1);(\'', 'fact', 'a fact'), mem('ok', 'gap', 'a gap')]);
-  const allowed = ['memForget(this.dataset.memoryId)', 'memForgetAll()', 'goHome()'];
-  ok('an id is never written into a handler: every handler on the screen is one of three fixed calls',
-     !hostile.startsWith('THREW') && handlersOf(hostile).length === 4 && handlersOf(hostile).every(h => allowed.includes(h)), handlersOf(hostile).join(' | '));
+  const allowed = ['memForget', 'memForgetAll', 'goHome'];
+  ok('an id is never written into an action: every action on the screen is one of three fixed names',
+     !hostile.startsWith('THREW') && actionsOf(hostile).length === 4 && actionsOf(hostile).every(h => allowed.includes(h)), actionsOf(hostile).join(' | '));
+  ok('and the screen carries no inline handler', inlineOf(hostile).length === 0 && inlineOf(draw([])).length === 0 && actionsOf(draw([])).length === 2, inlineOf(hostile).join(' ') || 'none');
 
   /* The reader's own calendar. 23:30 on the 8th of March is, in New York, 03:30 on the 9th by UTC's clock. */
   const evening = new Date(2026, 2, 8, 23, 30), small = new Date(2026, 2, 9, 0, 30);
@@ -112,10 +117,10 @@ head('what is there with nothing kept, and what is there either way');
   ok('with nothing kept, one line says so, and there is no heading and no card', !empty.startsWith('THREW') && empty.includes(NOTHING) && groupsOf(empty).length === 0 && cardsIn(empty).length === 0);
   ok('with something kept, that line is not there', cardsIn(some).length === 1 && !some.includes(NOTHING));
   for (const [name, html] of [['with nothing kept', empty], ['with something kept', some]]) {
-    const b = buttonsOf(html).filter(x => x[0] !== 'memForget(this.dataset.memoryId)');
+    const b = buttonsOf(html).filter(x => x[0] !== 'memForget');
     ok(`${name}: the screen is named, and "Forget everything" and "Back" are there`,
        html.includes('<div class="hero-badge">[icon book icon-sm] What Apex remembers</div>') && html.includes('<div class="hero-title" style="font-size:28px">Memory</div>')
-       && J(b) === J([['memForgetAll()', 'Forget everything'], ['goHome()', '[icon arrow-left icon-sm] Back']]), J(b));
+       && J(b) === J([['memForgetAll', 'Forget everything'], ['goHome', '[icon arrow-left icon-sm] Back']]), J(b));
   }
   ok('and how to add a memory is said', empty.includes('<div class="ref-hint">To add one, just tell Apex') && some.includes('<div class="ref-hint">To add one, just tell Apex'));
 }
@@ -155,9 +160,14 @@ head('the page asks Memory for the list and hands over its own helpers');
   ok('and the screen\'s own words are no longer in the page', count('What Apex remembers') === 0 && count('has not kept anything') === 0 && count('How you like to be taught') === 0,
      ['What Apex remembers', 'has not kept anything', 'How you like to be taught'].map(t => count(t)).join(' '));
 
-  const handlers = [...new Set(handlersOf(draw([mem('f1', 'fact', 'a fact')])).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its buttons name three handlers', J(handlers) === J(['goHome', 'memForget', 'memForgetAll']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const handlers = [...new Set(actionsOf(draw([mem('f1', 'fact', 'a fact')])))].sort();
+  ok('its buttons name three actions', J(handlers) === J(['goHome', 'memForget', 'memForgetAll']), handlers.join(' '));
+  const TABLE = { goHome: 'goHome:()=>goHome(),', memForget: 'memForget:el=>memForget(el.dataset.memoryId),', memForgetAll: 'memForgetAll:()=>memForgetAll(),' };
+  const table = (page.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
+  ok('each is in the page\'s ACTIONS table once, calling the page\'s function of that name, which the page declares once; Delete passes the id from the button\'s data',
+     handlers.length > 0 && handlers.every(n => table.split(TABLE[n]).length === 2 && count('function ' + n + '(') === 1), handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1) + '/' + count('function ' + n + '(')).join(' '));
+  ok('and the page installs the one listener over that table on the document, with src/core/actions.js written in above it',
+     count('Actions.install(document,ACTIONS);') === 1 && count('@@SLOT[src:src/core/actions.js]@@') === 1 && page.indexOf('@@SLOT[src:src/core/actions.js]@@') < page.indexOf('const ACTIONS={') && page.indexOf('const ACTIONS={') < page.indexOf('Actions.install(document,ACTIONS);'));
   /* The module's header says the two that delete ask first. That is the page's to keep, so it is held here. */
   ok('Delete asks before it deletes, then draws the screen again',
      count('function memForget(id){\n  if(!confirm(\'Delete this memory? Apex will stop knowing it.\'))return;\n  Memory.remove(id); render();\n}') === 1);
@@ -189,6 +199,30 @@ head('the page asks Memory for the list and hands over its own helpers');
   ok('a memory removed from Memory is gone from the next drawing, and the other stays', J(after.map(x => x[0])) === J(['About you']) && after[0][1].length === 1, J(after.map(x => x[0])));
   ask('Memory.clear()');
   ok('and with Memory cleared the screen is the empty one again', String(ask('buildMemory()')).includes(NOTHING));
+
+  /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document, the page's own ACTIONS
+     table over stand-ins for its three functions that record their calls, and each button the page's line drew, with
+     the attributes it drew, as the element tapped. */
+  ask('Memory.add("first", "fact"); Memory.add("second", "gap");');
+  const drawn = String(ask('buildMemory()'));
+  const calls = [];
+  const tctx = { calls }; tctx.window = tctx; vm.createContext(tctx);
+  vm.runInContext(read('src/core/actions.js') + '\nfunction goHome(){ calls.push("goHome"); }\nfunction memForget(id){ calls.push("memForget " + id); }\nfunction memForgetAll(){ calls.push("memForgetAll"); }\n'
+    + (page.match(/const ACTIONS=\{[\s\S]*?\n\};/) || ['const ACTIONS={};'])[0].replace(/^const /, 'var ') + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);', tctx);
+  const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const buttons = [...drawn.matchAll(/<button\b([^>]*)>/g)].map(m => Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], unescape(x[2])])));
+  for (const at of buttons) {
+    const el = { nodeType: 1, getAttribute: k => (k in at ? at[k] : null), dataset: { memoryId: at['data-memory-id'] }, closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ target: el }));
+  }
+  const ids = ask('Memory.all().map(m => m.id)');
+  const wantIds = Array.isArray(ids) ? ids.map(String).sort() : [];
+  ok('tapped through the real Actions and the page\'s table, each button the page drew calls its function: Forget everything, Back, and each Delete with that memory\'s own id',
+     calls.length === 4 && J(calls.slice(0, 2)) === J(['memForgetAll', 'goHome']) && calls.slice(2).every(c => c.startsWith('memForget ')) && J(calls.slice(2).map(c => c.slice('memForget '.length)).sort()) === J(wantIds), J(calls));
+  const planted = String(ask('MemoryScreen.screenHtml([{ id: \'x" onclick="alert(2)\', kind: "fact", text: "t", created: 0 }], { e, icon })'));
+  ok('and over the page\'s own e(), an id that tries to write a handler stays in the data: the screen carries no inline handler',
+     !planted.startsWith('THREW') && inlineOf(planted).length === 0 && planted.includes('data-memory-id="x&quot; onclick=&quot;alert(2)" data-action="memForget"'), inlineOf(planted).join(' ') || g(planted, /(data-memory-id="[^>]*)>/));
+  ask('Memory.clear()');
 
   /* A page with no Memory at all: the line's own guard, which the page had before the screen moved. */
   const bare = {}; bare.window = bare; vm.createContext(bare);
