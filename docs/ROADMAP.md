@@ -239,8 +239,18 @@ this device, which is the page's doing and not the markup's; the export,
 import, reset and download handlers stay in the shell, and so do the functions
 the screen is handed, which read the page's state, storage and browser. One
 screen is left in the shell, `buildHome`, with the Apex panel's `buildAI`
-listed apart. `buildHome` has much state of its own, and needs its plan read
-from the map before it moves; write the map again before starting.
+listed apart. It is three pages and leaves in three parts, into
+`src/app/home.js`, held by `verify-homescreen-pure`. The Labs page is the
+first (`HomeScreen.labsHtml(S, CHAPTERS, dueN, kit)`): `buildLabs()` stays one
+line, and hands the notes and Apex's memory only where the app has them. Next
+is the Brain page: `buildBrain()`, `buildBrainArt()` and `brainInfoHtml()`,
+which `brainPick()` repaints in place, with `brainLayoutNow()`'s kept layout
+staying the page's. Last is the Home page itself, the hero and the pearl:
+`buildHome()` writes `atlasReading` as it draws, which stays in the shell, and
+its markup holds two asset slots, which stay there too and are handed over.
+#342 and #339 change lines of that page's markup, so whichever lands second
+carries the other's change across. Write the map again before
+each part.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
