@@ -223,8 +223,39 @@ place. Then a mock exam block (`src/app/mock.js`,
 `MockScreen.screenHtml(S, kit)`, held by `verify-mock-pure`): the builder and
 its summary before handing in; `mockQ()`, `mockClockText()`, `mockPaceText()`
 and `mockCellLabel()` stay in the shell, because the ticker and the keys
-repaint the clock, the pace line and the grid with them. Next in the map's
-order is `buildSessions`; write the map again before starting.
+repaint the clock, the pace line and the grid with them. Then the Sessions
+screen (`src/app/sessions.js`, `SessionsScreen.screenHtml(S, CHAPTERS, kit)`,
+held by `verify-sessions-pure`): the screen, the mock exam's card and the voice
+card. `mockCardInner()` stays in the shell as one line, because `setMockCfg()`
+draws the card's inside again in place; `_mockCfg`, `_mockArm` and `_mockLost`
+are handed over as they stand at each drawing, and every handler that writes
+them stays in the shell. The row after it, `buildNoteSearch`, was already a
+call into a module before step 3 began (`NoteSearch.screenHtml`, in
+`src/core/notesearch.js`). Then the Progress screen (`src/app/stats.js`,
+`StatsScreen.screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit)`, held by
+`verify-statsscreen-pure`): the screen with its calibration, retention and mock
+panels. `buildStats()` keeps the line that starts the survey of the figures on
+this device, which is the page's doing and not the markup's; the export,
+import, reset and download handlers stay in the shell, and so do the functions
+the screen is handed, which read the page's state, storage and browser. That left
+one screen in the shell, `buildHome`, with the Apex panel's `buildAI`
+listed apart. It was three pages and left in three parts, into
+`src/app/home.js`, held by `verify-homescreen-pure`. The Labs page is the
+first (`HomeScreen.labsHtml(S, CHAPTERS, dueN, kit)`): `buildLabs()` stays one
+line, and hands the notes and Apex's memory only where the app has them. The
+Brain page is the second (`HomeScreen.brainHtml`, `.brainArtHtml` and
+`.brainInfoHtml`): `buildBrain()`, `buildBrainArt()` and `brainInfoHtml()` each
+stay one line, the last because `brainPick()` repaints the info in place, and
+the Brain page is handed the other two, which it draws art first, because the
+art can lay the brain out anew and the info reads that layout.
+`brainLayoutNow()` and the layout it keeps stay the page's. The Home page is
+the last (`HomeScreen.homeHtml(S, CHAPTERS, kit)`), the hero and the pearl:
+`buildHome()` keeps its one write, `atlasReading`, set before the page is
+drawn, and the two inlined heart images, whose asset slots the assembler fills
+in the shell only, are handed over as whole elements. The pearl's and the
+greeting's helpers, and every handler the page names, stay in the shell. With
+it the screens of step 3 have left the shell; `buildAI`, the Apex panel, is
+what is left of the screens table, listed apart.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
