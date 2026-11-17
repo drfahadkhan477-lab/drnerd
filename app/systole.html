@@ -6965,50 +6965,10 @@ function buildBrain(dueN,seenN,covered,masteryPct,today){
     <h3 class="page-h3">Chapters</h3>
     <div class="brain-chs">${rows}</div>`;
 }
-function buildLabs(dueN){
-  return `<header class="page-head"><span class="page-eyebrow">${icon('activity','icon-sm')} Labs</span>
-      <h1 class="page-title">Hear it, see it, read it</h1>
-      <p class="page-sub">Traces drawn live, echo views to explore, and sounds and strips to practise on.</p></header>
-    <div class="labs-grid">
-      <button class="lab-card lab-rhythm" onclick="goLab()">
-        <svg class="lab-art" viewBox="0 0 240 60" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M0 34h46l6-3 6 3h14l5 6 6-36 6 44 5-14h16l8-6 9 6h40l6-3 6 3h14l5 6 6-36 6 44 5-14h14"/></svg>
-        <span class="lab-ic" aria-hidden="true">${icon('activity')}</span>
-        <span class="lab-txt"><b>Rhythm Lab</b><i>Every trace, drawn live</i></span>
-        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
-      </button>
-      <button class="lab-card lab-echo" onclick="goEcho()">
-        <svg class="lab-art lab-art-echo" viewBox="0 0 240 120" aria-hidden="true"><path d="M120 6 30 114M120 6l90 108"/><path class="la-w1" d="M66 70a70 70 0 0 1 108 0"/><path class="la-w2" d="M48 92a96 96 0 0 1 144 0"/><path class="la-w3" d="M84 48a44 44 0 0 1 72 0"/></svg>
-        <span class="lab-ic" aria-hidden="true">${icon('waveform')}</span>
-        <span class="lab-txt"><b>Echo Studio</b><i>Views, findings and the arithmetic</i></span>
-        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
-      </button>
-      <button class="lab-card lab-practice" onclick="goPractice()">
-        <span class="lab-art lab-art-beat" aria-hidden="true">${icon('heart-solid')}</span>
-        <span class="lab-ic" aria-hidden="true">${icon('heart-pulse')}</span>
-        <span class="lab-txt"><b>Practice Lab</b><i>Sounds, tracings, strips</i></span>
-        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
-      </button>
-      <button class="lab-card lab-sessions" id="labSessions" onclick="goSessions()">
-        <span class="lab-art lab-art-beat" aria-hidden="true">${icon('alarm')}</span>
-        <span class="lab-ic" aria-hidden="true">${icon('alarm')}</span>
-        <span class="lab-txt"><b>Sessions</b><i>${S.mock?'A mock block is open · resume it':'Timed mock exam · voice drill'}</i></span>
-        <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
-      </button>
-    </div>
-    <h3 class="page-h3">Study tools</h3>
-    <div class="door-row lab-doors">
-      <button class="door door-wide" onclick="goStudy()">
-        <span class="door-ic">${icon("book")}</span>
-        <span class="door-txt"><b>Chapters</b><i>${`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
-        <span class="door-go">${icon('arrow-right','icon-sm')}</span>
-      </button>
-      <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
-      <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
-      <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
-      <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
-      <button class="door" onclick="goAnnotations()"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
-    </div>`;
-}
+/* The Labs page's markup is src/app/home.js, the first of the home screen's three pages to leave. It is handed the
+   notes and Apex's memory only where the app has them, as the page itself asked before reading either. */
+@@SLOT[src:src/app/home.js]@@
+function buildLabs(dueN){ return HomeScreen.labsHtml(S,CHAPTERS,dueN,{REF:typeof REF!=='undefined'?REF:undefined,Memory:typeof Memory!=='undefined'?Memory:undefined,TOTAL_Q,icon}); }
 /* ═══════════ The brain on the Brain page ═══════════
    Memorizer's brain (src/core/brain.js: the geometry, the lobes, the live impulses), drawn from the bank: each chapter is
    a lobe, and its questions are split into up to BRAIN_PER neurons, each lit by what FSRS predicts of the questions in it

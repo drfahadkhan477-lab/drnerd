@@ -346,6 +346,9 @@ const SUITES = [
      keeps the line that starts its survey of the figures on this device, the handlers, and the functions it hands
      over, which read its state, storage and browser. Named for the screen: verify-stats holds the record's numbers. */
   ['statsscreen-pure', 'the Progress screen shows whether progress is saved, the streak, answers, accuracy and cards due, the card for figures kept on this device, predicted retention and the week ahead, calibration by band with the pace and where the misses come from, the mock blocks handed in, the last thirty days as a line and a heat map, a ring for each chapter\'s mastery, and the reader\'s data with the pending backup\'s confirmation and the Safari tab\'s warning, reads four names of the state and changes nothing, and the page\'s line draws it over the real Calib, FSRS, ReviewQueue and MockExam and starts the survey after the paint'],
+  /* The thirteenth, in parts: the home screen's three pages leave one at a time into src/app/home.js. The Labs page is
+     the first; the Brain page and the Home page, with the hero and the pearl, are still the page's own functions. */
+  ['homescreen-pure', 'the home screen\'s Labs page shows a card for each of the four labs, Sessions saying when a mock block is open, and the six study tools, Chapters with how many are due or how many questions there are, Notes and Memory with their counts or without where the app has neither, reads one name of the state and changes nothing, and the page\'s line draws it without reading notes or memory the app does not have'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -549,8 +552,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'contrast'];
+   sessions-pure, statsscreen-pure, homescreen-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
