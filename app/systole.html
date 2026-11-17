@@ -3575,51 +3575,30 @@ function apexLocalHtml(){
       `<button type="button" class="src-pill" onclick="apexLocalAction('${action}')" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
   </div>`;
 }
+/* The Apex panel's markup is src/app/apexpanel.js. buildAI() keeps what touches the page: it reads what
+   was being typed and where the panel was scrolled, draws the head and then the panel, puts them in, wires
+   the questions drawn on and the chat (bindChat()), restores what it read, and starts the avatar again.
+   The figures from the notes drawn on are found here (apexFigsFor()), where their last answer is kept. */
+@@SLOT[src:src/app/apexpanel.js]@@
+const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,
+  apexIsFull,apexHosted,apexLocalHtml,setupHtml,visionBadge,cur,clip,md,e,icon});
 function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=chatFor(q);
-  const head=`<div class="ai-head">
-      <div class="ai-avatar"><canvas id="apexAvatar" aria-hidden="true"></canvas></div>
-      <div style="flex:1;min-width:0">
-        <div class="ai-title">Apex</div>
-        <div class="ai-sub">${AI_GROUNDED
-          ? `<span class="grounded-tag">grounded · ${REF.length} note${REF.length===1?'':'s'}</span>`
-          : (q?e(q.ch)+' · item '+q.n+visionBadge(q):'Cardiology tutor')}</div>
-      </div>
-      <button class="icon-btn grounded-btn${AI_GROUNDED?' on':''}"
-        onclick="toggleGrounded()" aria-pressed="${AI_GROUNDED?'true':'false'}"
-        title="${AI_GROUNDED?'Grounded: answering only from your reference library':'Open: Apex uses its own knowledge'}">${icon("folder")}</button>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-        onclick="toggleApexFull()" aria-pressed="${apexIsFull()?'true':'false'}"
-        title="${apexIsFull()?'Back to the side panel':'Open Apex full screen'}"
-        aria-label="${apexIsFull()?'Back to the side panel':'Open Apex full screen'}">${icon(apexIsFull()?"collapse":"expand")}</button>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-        onclick="aiSettings()" title="Settings">${icon("settings")}</button>
-      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-        onclick="toggleAI()" title="Close">${icon("x")}</button>
-    </div>`;
+  const kit=apexKit(), head=ApexPanel.headHtml(q,kit);
   /* Hosted Gemini needs nothing typed, so the setup screen would be a door
      with no lock on it. Every other provider still asks. */
   if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
-    wrap.innerHTML=head+apexLocalHtml()+setupHtml()+`<div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div>`; bindSetup(); mountApexAvatar(); return; }
-  const msgs=hist.length
-    ? hist.map(m=>m.role==='user'
-        ? `<div class="msg user">${e(m.content)}</div>`
-        : `<div class="msg bot">${m.reused?'<p class="src-lbl">Reused explanation · matching context</p>':''}${m.err?icon('alert','icon-sm')+' '+e(m.content):md(m.content)}${m.incomplete?'<p class="src-lbl">Response reached its output limit and may be incomplete. Ask Apex to continue.</p>':''}</div>`).join('')
-    : `<div class="msg bot"><p>Ask me anything about the item you're on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>, <b>read your score history</b>, <b>explain your misses</b>, <b>plan a session</b>, <b>build you a quiz</b>, and <b>save notes</b> into your reference library. Try <i>"where am I weakest?"</i> or <i>"why do I keep missing these?"</i>.</p></div>`;
-  /* Only the notes retrieved for THIS conversation — see lastHitsKey. */
-  const hits=(lastHitsKey===(q?q.id:'_general'))?lastHits:[];
-  const srcStrip=hits.length?`<div class="src-strip" data-apex-sources><span class="src-lbl">drawing on</span>${
-    hits.map(h=>h.kind==='r'
-      ? `<span class="src-pill ref">${icon('folder','icon-sm')} ${e(clip(h.title,26))}</span>`
-      : `<button class="src-pill" data-jump="${h.id}">${e(h.ch.split(' ')[0])} · ${h.n}</button>`).join('')}</div>`:'';
-  /* Only while a reply is on screen: a figure hanging under an empty thread,
-     or under the setup screen, is furniture rather than evidence. Suppressed
-     when the model already placed the same figure inline, so it is never shown
-     twice in one answer. */
-  const lastBot=hist.length&&hist[hist.length-1].role!=='user'?String(hist[hist.length-1].content||''):'';
+    wrap.innerHTML=ApexPanel.setupPanelHtml(head,kit); bindSetup(); mountApexAvatar(); return; }
+  wrap.innerHTML=ApexPanel.panelHtml(head,q,hist,kit);
+  wrap.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>peekQuestion(b.dataset.jump));
+  bindChat(q);
+  apexPanelRestore(panelWas);
+  mountApexAvatar();
+}
+function apexFigsFor(hits,lastBot,hist){
   /* refFiguresForHits walks REF and resolves a data: URL per figure, and the
      strip it feeds is several hundred KB of base64 in the HTML string. buildAI
      runs after every tool step, so all of that was being redone to show a chip.
@@ -3630,36 +3609,7 @@ function buildAI(){
       ? refFiguresForHits(hits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)
       : [] };
   }
-  const figs=apexFigMemo.figs;
-  const figStrip=figs.length?`<div class="fig-strip${apexFigsOpen?' open':''}" id="aiFigWrap">
-    <button class="src-lbl fig-toggle" type="button" id="aiFigs" aria-controls="aiFigList"
-      aria-expanded="${apexFigsOpen?'true':'false'}">${icon('chevron-down','icon-sm')}${figs.length} figure${figs.length===1?'':'s'} from those notes</button>
-    <div class="fig-list" id="aiFigList">
-    ${figs.map(f=>`<figure class="ai-fig" onclick="openFigureFrom(this)" role="button" tabindex="0"
-      title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}" loading="lazy">
-      <figcaption>${e(clip(f.caption,150))}<span class="ai-fig-src">${e(clip(f.noteTitle,44))}</span></figcaption></figure>`).join('')}</div></div>`:'';
-  wrap.innerHTML=head+
-    `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${apexLocalHtml()}${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
-     ${srcStrip}
-     ${figStrip}
-     <div class="chips${apexChipsOpen?' open':''}" id="aiChips">${CHIPS.map((c,i)=>(!c[2]||c[2](q))?`<button class="chip${i<2?' hot':''}" data-chip="${i}">${e(c[0])}</button>`:'').join('')}
-       <button class="chip" data-chip="explain" title="Explain your draft using supplied context, without study tools">Explain draft · no tools</button>
-       ${hist.length?'<button class="chip" data-chip="clear">Clear thread</button>':''}</div>
-     <div class="ai-foot"><div class="ai-input">
-       <button class="ai-more${apexChipsOpen?' on':''}" id="aiMore" type="button"
-         aria-controls="aiChips" aria-expanded="${apexChipsOpen?'true':'false'}"
-         title="Suggested prompts" aria-label="Suggested prompts">${icon('zap','icon-sm')}</button>
-       <textarea id="aiIn" rows="1" placeholder="Ask about this question…"></textarea>
-       <button class="ai-send${aiBusy?' stopping':''}" id="aiSend" type="button"
-         title="${aiBusy?'Stop':'Send'}" aria-label="${aiBusy?'Stop generating':'Send'}"
-         >${aiBusy?'■':icon('send','icon-sm')}</button>
-     </div><div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div><div class="ai-powered">Powered by <b>${e(((MODELS[AI.provider]||[]).find(m=>m[0]===cur().model)||['',cur().model||'—'])[1].split(' — ')[0])}</b> on ${e((PROVIDERS.find(p=>p[0]===AI.provider)||['',AI.provider])[1])} · ${(AI.provider==='gemini'&&apexHosted())
-        ?'hosted key, called through this site'
-        :'your own key, called directly from this device'}</div></div>`;
-  wrap.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>peekQuestion(b.dataset.jump));
-  bindChat(q);
-  apexPanelRestore(panelWas);
-  mountApexAvatar();
+  return apexFigMemo.figs;
 }
 /* ── the live avatar: one instance, recreated whenever buildAI() re-renders
    the panel (a few times per exchange, not per token — see fire()/streamReply

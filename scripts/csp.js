@@ -111,4 +111,17 @@ const HEADERS_FILE = `/*
   X-Content-Type-Options: nosniff
 `;
 
-module.exports = { CONNECT, IMG, DIRECTIVES, POLICY, HEADER_POLICY, META, HEADERS_FILE };
+/* ── WHAT E2 IS FOR: A script-src, ONCE THE HANDLERS ARE GONE ─────────────
+ *
+ * Not shipped. docs/ROADMAP.md, E2: every onclick="fn(this)" becomes a
+ * data-action attribute read by one delegated listener per root, screen by
+ * screen; then the split build can add the directive below, with 'self' for
+ * app.js and the worker's scripts and the hash of each inline script it keeps
+ * (its boot). Until no inline handler is left, adding it would stop every
+ * button in the app, which is why nothing calls this yet but
+ * tests/verify-csp.js, which shows what it would refuse and what it keeps
+ * working, so the step that ships it does not have to find that out. */
+const scriptSrc = hashes => `script-src 'self'${hashes.map(h => ` 'sha256-${h}'`).join('')}`;
+const scriptPolicy = hashes => `${POLICY}; ${scriptSrc(hashes)}`;
+
+module.exports = { CONNECT, IMG, DIRECTIVES, POLICY, HEADER_POLICY, META, HEADERS_FILE, scriptSrc, scriptPolicy };
