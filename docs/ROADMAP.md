@@ -242,10 +242,14 @@ screen is left in the shell, `buildHome`, with the Apex panel's `buildAI`
 listed apart. It is three pages and leaves in three parts, into
 `src/app/home.js`, held by `verify-homescreen-pure`. The Labs page is the
 first (`HomeScreen.labsHtml(S, CHAPTERS, dueN, kit)`): `buildLabs()` stays one
-line, and hands the notes and Apex's memory only where the app has them. Next
-is the Brain page: `buildBrain()`, `buildBrainArt()` and `brainInfoHtml()`,
-which `brainPick()` repaints in place, with `brainLayoutNow()`'s kept layout
-staying the page's. Last is the Home page itself, the hero and the pearl:
+line, and hands the notes and Apex's memory only where the app has them. The
+Brain page is the second (`HomeScreen.brainHtml`, `.brainArtHtml` and
+`.brainInfoHtml`): `buildBrain()`, `buildBrainArt()` and `brainInfoHtml()` each
+stay one line, the last because `brainPick()` repaints the info in place, and
+the Brain page is handed the other two, which it draws art first, because the
+art can lay the brain out anew and the info reads that layout.
+`brainLayoutNow()` and the layout it keeps stay the page's. Last is the Home
+page itself, the hero and the pearl:
 `buildHome()` writes `atlasReading` as it draws, which stays in the shell, and
 its markup holds two asset slots, which stay there too and are handed over.
 #342 and #339 change lines of that page's markup, so whichever lands second
