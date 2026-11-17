@@ -231,8 +231,15 @@ draws the card's inside again in place; `_mockCfg`, `_mockArm` and `_mockLost`
 are handed over as they stand at each drawing, and every handler that writes
 them stays in the shell. The row after it, `buildNoteSearch`, was already a
 call into a module before step 3 began (`NoteSearch.screenHtml`, in
-`src/core/notesearch.js`), so two screens are left in the shell: `buildStats`
-and then `buildHome`. Each has much state of its own, and needs its plan read
+`src/core/notesearch.js`). Then the Progress screen (`src/app/stats.js`,
+`StatsScreen.screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit)`, held by
+`verify-statsscreen-pure`): the screen with its calibration, retention and mock
+panels. `buildStats()` keeps the line that starts the survey of the figures on
+this device, which is the page's doing and not the markup's; the export,
+import, reset and download handlers stay in the shell, and so do the functions
+the screen is handed, which read the page's state, storage and browser. One
+screen is left in the shell, `buildHome`, with the Apex panel's `buildAI`
+listed apart. `buildHome` has much state of its own, and needs its plan read
 from the map before it moves; write the map again before starting.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`

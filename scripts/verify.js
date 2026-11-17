@@ -342,6 +342,10 @@ const SUITES = [
      inside the mock card stays a function of the page, because setMockCfg() draws it again in place; the page hands
      over its three variables as they stand at each drawing. */
   ['sessions-pure', 'the Sessions screen shows the way back to Labs, the mock exam\'s card and the voice card where the browser can speak and listen: a block in progress with how far it is, resume and a discard that asks twice, or the sizes, paces and chapters to set one up with the chosen ones pressed, the start button, and the last block\'s score as the way to its own report, reads three names of the state and changes nothing, and the page\'s lines draw it over the page\'s own setMockCfg() and the real MockExam'],
+  /* The twelfth: the Progress screen, with its calibration, retention and mock panels, in src/app/stats.js. The page
+     keeps the line that starts its survey of the figures on this device, the handlers, and the functions it hands
+     over, which read its state, storage and browser. Named for the screen: verify-stats holds the record's numbers. */
+  ['statsscreen-pure', 'the Progress screen shows whether progress is saved, the streak, answers, accuracy and cards due, the card for figures kept on this device, predicted retention and the week ahead, calibration by band with the pace and where the misses come from, the mock blocks handed in, the last thirty days as a line and a heat map, a ring for each chapter\'s mastery, and the reader\'s data with the pending backup\'s confirmation and the Safari tab\'s warning, reads four names of the state and changes nothing, and the page\'s line draws it over the real Calib, FSRS, ReviewQueue and MockExam and starts the survey after the paint'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -545,8 +549,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'contrast'];
+   sessions-pure, statsscreen-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

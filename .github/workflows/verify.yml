@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 94 suites that are pure Node with no Playwright and no
+#   logic        the 95 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -359,6 +359,8 @@ jobs:
         run: node tests/verify-mock-pure.js
       - name: the Sessions screen shows the mock exam's card, a block in progress or one to set up, and the voice card, and the page's lines draw it over its own setMockCfg() and the real MockExam (60 checks)
         run: node tests/verify-sessions-pure.js
+      - name: the Progress screen shows the tiles, retention, calibration, the mock blocks, thirty days, mastery and the reader's data, and the page's line draws it over the real Calib, FSRS, ReviewQueue and MockExam (88 checks)
+        run: node tests/verify-statsscreen-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js
       - name: a splash that cannot load the bank says which failure it was (70 checks)
