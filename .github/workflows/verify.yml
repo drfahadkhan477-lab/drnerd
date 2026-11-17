@@ -55,7 +55,7 @@
 #                error nobody would notice until running the full chain by
 #                hand.
 #
-#   logic        the 97 suites that are pure Node with no Playwright and no
+#   logic        the 98 suites that are pure Node with no Playwright and no
 #                built artifact at all. It started at nine and this sentence
 #                still said nine at eighteen, because the list was maintained
 #                by hand and nothing read it; the count is now checked in
@@ -339,8 +339,10 @@ jobs:
         run: node tests/verify-apexloop-pure.js
       - name: the results screen says the score, the chapters answered and what to do next, changes nothing it is given, and the page hands it its own state and helpers (52 checks)
         run: node tests/verify-results-pure.js
-      - name: the Memory screen shows what Apex has kept in four groups, each memory with its words, its day and a Delete that carries its id as data, and the page still asks before it deletes (36 checks)
+      - name: the Memory screen shows what Apex has kept in four groups, each memory with its words, its day and a Delete that carries its id as data, names actions where it had inline handlers, and the page still asks before it deletes (40 checks)
         run: node tests/verify-memoryscreen-pure.js
+      - name: a tap on a data-action calls that action from the page's table, the nearest one winning, and nothing outside the table or the root (13 checks)
+        run: node tests/verify-actions-pure.js
       - name: the Rhythm Lab's markup says what is chosen, offers what the view allows, draws a 12-lead only where one is modelled, and names every element the page's mounts look up (43 checks)
         run: node tests/verify-rhythmlab-pure.js
       - name: the annotations screen draws a row for each annotated question, says which of two things no rows means, and the page repaints on typing what the screen itself draws (54 checks)

@@ -271,14 +271,20 @@ screen after E1. The split build can then ship `script-src 'self'` with the hash
 of its boot script. Checks: a scan that no `on*` attribute remains in emitted
 markup, and `tests/verify-csp.js` extended to show an injected inline handler is
 blocked. *Opus.*
-*Done so far:* the check. `scripts/csp.js` holds the policy E2 aims at
-(`scriptPolicy(hashes)`: today's directives and a `script-src` of `'self'` and
-the boot's hash), shipped nowhere yet. `tests/verify-csp.js` shows, in
-Chromium and WebKit, that under today's policy an injected `onclick` runs, and
-that under the E2 policy the hashed boot and a same-origin script run and a
-delegated `data-action` listener hears its button, while a written-in
-`onclick`, an injected one and an injected unhashed script are each refused
-with a `script-src` report. Next: the screens, one at a time, to `data-action`.
+*Done so far:* the check, then the listener. `scripts/csp.js` holds the policy
+E2 aims at (`scriptPolicy(hashes)`: today's directives and a `script-src` of
+`'self'` and the boot's hash), shipped nowhere yet. `tests/verify-csp.js`
+shows, in Chromium and WebKit, that under today's policy an injected `onclick`
+runs, and that under the E2 policy the hashed boot and a same-origin script
+run and a delegated `data-action` listener hears its button, while a
+written-in `onclick`, an injected one and an injected unhashed script are each
+refused with a `script-src` report. `src/core/actions.js` installs one
+delegated listener that calls a `data-action` by name from the page's
+`ACTIONS` table, which is the allowlist (`verify-actions-pure`). The Memory
+screen is the first to carry no inline handler (`verify-memoryscreen-pure`
+scans what it draws for any `on*` attribute; `verify-memory` and
+`verify-backup-ids` tap it through the real page). Next: the other screens,
+one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express

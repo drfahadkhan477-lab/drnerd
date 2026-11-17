@@ -313,7 +313,10 @@ const SUITES = [
   ['results-pure', 'the results screen gives the quiz\'s score or the session\'s, changes colour at 80 and 60, draws a row for every chapter answered in the bank\'s order, offers the missed only when something is, restarts what was being done, reads eight names of the state and changes nothing, and the page hands it its own state and helpers'],
   /* The second screen out of the shell: what Apex has kept about the reader. Its builder is src/app/memory.js;
      the two handlers that delete stay in the page, where verify-ui-pure reads their confirm(). */
-  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data and never in a handler, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data, no inline handler but an action for each button that the page\'s ACTIONS table calls, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  /* Roadmap E2: one delegated listener in place of inline handlers, in src/core/actions.js. The Memory screen is the
+     first to name actions instead; verify-memory and verify-backup-ids tap it through the real page. */
+  ['actions-pure', 'a tap on an element with data-action, or inside one, calls the action of that name from the page\'s table once, with the element and the event, the nearest such element winning; nothing is called outside every data-action or the root, or for a name the table does not have as its own function, and what install() returns removes its listener'],
   /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
      chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
   ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, and every element the page\'s mounts look up is in the markup under that name'],
@@ -556,8 +559,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'contrast'];
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

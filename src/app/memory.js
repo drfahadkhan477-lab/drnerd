@@ -22,14 +22,15 @@
         sessions" (session). These are Memory.KINDS; a group with nothing in it has no heading.
      2. Within a group, the memories in the order they were given. Each is its words, the day it was
         kept as the reader's own calendar says it, and a Delete button that carries the memory's id.
-     3. The id is written into the button's data, never into the handler: the handler says
-        this.dataset.memoryId, so an id cannot be read as code.
+     3. The id is written into the button's data and nowhere else: the page's memForget action reads
+        el.dataset.memoryId, so an id cannot be read as code.
      4. With nothing kept, one line says so. "Forget everything", "Back" and how to add a memory are
         there either way.
 
-   The buttons name memForget(), memForgetAll() and goHome(). They stay the page's: an inline handler
-   is read where it is tapped, and the first two ask before they delete with confirm(), which
-   tests/verify-ui-pure.js holds to the page that calls it.
+   The buttons carry no inline handler (docs/ROADMAP.md, E2): each names an action, memForget,
+   memForgetAll or goHome, which the page's one delegated listener (src/core/actions.js) finds in its
+   ACTIONS table and calls. The functions stay the page's, and the first two ask before they delete with
+   confirm(), which tests/verify-ui-pure.js holds to the page that calls it.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -45,7 +46,7 @@ function screenHtml(all, kit){
       <div class="ref-card">
         <div class="ref-top">
           <div class="ref-title" style="font-weight:500">${e(m.text)}</div>
-          <div class="ref-acts"><button class="chip" data-memory-id="${e(m.id)}" onclick="memForget(this.dataset.memoryId)">Delete</button></div>
+          <div class="ref-acts"><button class="chip" data-memory-id="${e(m.id)}" data-action="memForget">Delete</button></div>
         </div>
         <div class="ref-src">kept ${e(new Date(m.created||0).toLocaleDateString())}</div>
       </div>`).join('');
@@ -61,9 +62,9 @@ function screenHtml(all, kit){
     <div class="ref-new">
       <div class="ref-btns">
         <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-          onclick="memForgetAll()">Forget everything</button>
+          data-action="memForgetAll">Forget everything</button>
         <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-          onclick="goHome()">${icon('arrow-left','icon-sm')} Back</button>
+          data-action="goHome">${icon('arrow-left','icon-sm')} Back</button>
       </div>
       <div class="ref-hint">To add one, just tell Apex — "remember that I sit boards in October".</div>
     </div>
