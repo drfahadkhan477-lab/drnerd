@@ -254,8 +254,16 @@ the last (`HomeScreen.homeHtml(S, CHAPTERS, kit)`), the hero and the pearl:
 drawn, and the two inlined heart images, whose asset slots the assembler fills
 in the shell only, are handed over as whole elements. The pearl's and the
 greeting's helpers, and every handler the page names, stay in the shell. With
-it the screens of step 3 have left the shell; `buildAI`, the Apex panel, is
-what is left of the screens table, listed apart.
+it the screens of step 3 have left the shell. Last is the Apex panel, which
+the screens table lists apart (`src/app/apexpanel.js`, held by
+`verify-apexpanel-pure`): its head, the setup it shows where there is no key,
+and the conversation leave as `ApexPanel.headHtml`, `.setupPanelHtml` and
+`.panelHtml`. `buildAI()` stays the page's, because it is what touches the
+page: it reads what was being typed and where the panel was scrolled, draws the
+head before it asks whether there is a key, puts the markup in, wires the chat
+and the avatar, and restores what it read. The figures from the notes drawn on
+are found by the page's `apexFigsFor()`, which keeps the last answer
+(`apexFigMemo`), and handed in.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
