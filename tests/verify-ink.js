@@ -94,9 +94,15 @@ const TOOLS = () => {
     }
     ok('the stylesheets were read', files.length >= 10, files.length + ' files');
     ok('no stylesheet sets color: to --green, --red, --amber or their semantic names; text takes the -ink', hits.length === 0, hits.join('; ') || 'none');
-    const shell = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
-    const inline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(green|red|amber|success|danger|warning)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
-    ok('nor does any inline style the shell writes', inline.length === 0, inline.length ? 'lines ' + inline.join(', ') : 'none');
+    /* The shell's inline styles, and the screens' markup that has left it for src/app/ (roadmap E1 step 3): each screen
+       there is the markup the shell used to write, and writes the same inline styles. */
+    const appDir = path.join(__dirname, '..', 'src', 'app');
+    const markup = [['systole.html', path.join(__dirname, '..', 'app', 'systole.html')]].concat(fs.readdirSync(appDir).filter(f => f.endsWith('.js')).map(f => ['src/app/' + f, path.join(appDir, f)]))
+      .map(([name, file]) => [name, blankComments(fs.readFileSync(file, 'utf8'))]);
+    const inlineOf = re => markup.flatMap(([name, src]) => [...src.matchAll(re)].map(m => name + ':' + src.slice(0, m.index).split('\n').length));
+    const inline = inlineOf(/(?<![-\w])color\s*:\s*var\(--(green|red|amber|success|danger|warning)\)/g);
+    ok('the shell and the screens that have left it were read', markup.length >= 10 && markup.some(([n]) => n === 'src/app/stats.js'), markup.length + ' files');
+    ok('nor does any inline style the shell or a screen writes', inline.length === 0, inline.length ? inline.join(', ') : 'none');
     /* The accent the same way: as text it read at 3.6-4.1:1 in Daylight and 3.7-4.4:1 in Midnight. */
     const accent = [];
     for (const f of files) {
@@ -104,9 +110,9 @@ const TOOLS = () => {
       /* --acc is the option letters' local name for the accent; reaching the accent through it is still the accent. */
       for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2|acc)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
     }
-    const accentInline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
+    const accentInline = inlineOf(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g);
     ok('no stylesheet or inline style is written color:var(--teal), var(--teal2) or var(--accent); accent text takes --teal-ink', accent.length === 0 && accentInline.length === 0,
-      accent.concat(accentInline.map(l => 'systole.html:' + l)).slice(0, 6).join('; ') || 'none');
+      accent.concat(accentInline).slice(0, 6).join('; ') || 'none');
   }
 
   const browser = await launch();
