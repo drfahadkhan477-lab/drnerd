@@ -123,8 +123,9 @@ try {
   pieces = {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
       '/* ══════════ Search your notes — see src/core/notesearch.js').replace(/@@SLOT\[asset:(assets\/echo\/[^\]]+)\]@@/g, (_, file) => fs.readFileSync(path.join(ROOT, file)).toString('base64')),
-    /* The way in is the Labs card (the bar lost its Echo button); here it is put in the scaffold's bar. */
-    door: cut('app/systole.html', '      <button class="lab-card lab-echo" onclick="goEcho()">',
+    /* The way in is the Labs card (the bar lost its Echo button); here it is put in the scaffold's bar. The Labs page's
+       markup left the shell for src/app/home.js (roadmap E1 step 3), so the card is cut from there. */
+    door: cut('src/app/home.js', '      <button class="lab-card lab-echo" onclick="goEcho()">',
       '      <button class="lab-card lab-practice" onclick="goPractice()">'),
     css: cutStylesheet('.echo-studio{', '.ns-screen{'),
   };
