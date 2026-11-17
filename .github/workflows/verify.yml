@@ -361,7 +361,7 @@ jobs:
         run: node tests/verify-sessions-pure.js
       - name: the Progress screen shows the tiles, retention, calibration, the mock blocks, thirty days, mastery and the reader's data, and the page's line draws it over the real Calib, FSRS, ReviewQueue and MockExam (88 checks)
         run: node tests/verify-statsscreen-pure.js
-      - name: the home screen's Labs and Brain pages show the labs and study tools, the brain and its chosen neuron, the gauge and a row for each chapter, and the page's lines draw them over the real FSRS and BrainMap (85 checks)
+      - name: the home screen's three pages show the pearl, the hero and the session strip, the labs and study tools, the brain and its chosen neuron, and the page's lines draw them over its own pearl, the real FSRS and BrainMap (129 checks)
         run: node tests/verify-homescreen-pure.js
       - name: a big square is 0.2 s, on every canvas the panel is given (66 checks)
         run: node tests/verify-ecg12-pure.js

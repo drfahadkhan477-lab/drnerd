@@ -237,9 +237,9 @@ call into a module before step 3 began (`NoteSearch.screenHtml`, in
 panels. `buildStats()` keeps the line that starts the survey of the figures on
 this device, which is the page's doing and not the markup's; the export,
 import, reset and download handlers stay in the shell, and so do the functions
-the screen is handed, which read the page's state, storage and browser. One
-screen is left in the shell, `buildHome`, with the Apex panel's `buildAI`
-listed apart. It is three pages and leaves in three parts, into
+the screen is handed, which read the page's state, storage and browser. That left
+one screen in the shell, `buildHome`, with the Apex panel's `buildAI`
+listed apart. It was three pages and left in three parts, into
 `src/app/home.js`, held by `verify-homescreen-pure`. The Labs page is the
 first (`HomeScreen.labsHtml(S, CHAPTERS, dueN, kit)`): `buildLabs()` stays one
 line, and hands the notes and Apex's memory only where the app has them. The
@@ -248,13 +248,14 @@ Brain page is the second (`HomeScreen.brainHtml`, `.brainArtHtml` and
 stay one line, the last because `brainPick()` repaints the info in place, and
 the Brain page is handed the other two, which it draws art first, because the
 art can lay the brain out anew and the info reads that layout.
-`brainLayoutNow()` and the layout it keeps stay the page's. Last is the Home
-page itself, the hero and the pearl:
-`buildHome()` writes `atlasReading` as it draws, which stays in the shell, and
-its markup holds two asset slots, which stay there too and are handed over.
-#342 and #339 change lines of that page's markup, so whichever lands second
-carries the other's change across. Write the map again before
-each part.
+`brainLayoutNow()` and the layout it keeps stay the page's. The Home page is
+the last (`HomeScreen.homeHtml(S, CHAPTERS, kit)`), the hero and the pearl:
+`buildHome()` keeps its one write, `atlasReading`, set before the page is
+drawn, and the two inlined heart images, whose asset slots the assembler fills
+in the shell only, are handed over as whole elements. The pearl's and the
+greeting's helpers, and every handler the page names, stay in the shell. With
+it the screens of step 3 have left the shell; `buildAI`, the Apex panel, is
+what is left of the screens table, listed apart.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
