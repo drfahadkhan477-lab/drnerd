@@ -297,7 +297,10 @@ the Sessions screen (`verify-sessions-pure`; `verify-mockscreen` and
 `verify-voicescreen` tap its controls), and the quiz (`verify-quiz-pure`;
 `verify-quiznav`, `verify-flags`, `verify-apexask` and `verify-mockscreen` tap
 its buttons) and the mock block (`verify-mock-pure`; `verify-mockscreen` taps
-its buttons). An action that needs state reads it when
+its buttons) and the Study screen (`verify-study-pure`; `verify-chapters`
+taps its rings, tiles, review, missed, every-question and back buttons,
+`verify-planscreen` a plan, `verify-topicrunscreen` a run, `verify-examdate`
+the date and its clear, and `verify-flags` the flagged and annotated cards). An action that needs state reads it when
 tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
 input only, so a tap on a field calls nothing and a key in a button calls

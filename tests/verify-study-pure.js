@@ -18,8 +18,10 @@
  *   - the plan card: the two rings, the pace, the three plans, the exam date and the days left;
  *   - the topic runs, missed, flagged and annotated cards, each only when there is something to show;
  *   - that it reads five names of the state and the names of the kit it is given, and changes nothing;
- *   - the page's lines: the runs worked out first into _runsShown, the kit, the handlers, and the page's own
- *     line over the real src/core modules and the page's own helpers on a bank made here.
+ *   - the page's lines: the runs worked out first into _runsShown, the kit, the actions its markup names (no
+ *     inline handler, each in the page's table for its event as written), the page's own line over the real
+ *     src/core modules and the page's own helpers on a bank made here, and every control it drew tapped and
+ *     chosen from through the real src/core/actions.js.
  *
  * A day is built from the reader's own calendar (new Date(y, m, d)) and stepped with setDate, never by a count
  * of milliseconds; CI's logic job runs the pure suites a second time in New York.
@@ -62,7 +64,9 @@ function kitOf(over, asked) {
 const state = over => Object.assign({ chStats: { Rhythm: { correct: 3, total: 4 } }, examDate: null, missed: new Set(), reviewStreak: 0, srs: {} }, over);
 const draw = (over, sOver, asked) => run(() => M.screenHtml(state(sOver), CHAPTERS, COLORS, kitOf(over, asked)));
 const card = (html, cls) => { const a = html.indexOf('feed-card ' + cls); if (a < 0) return ''; const b = html.indexOf('feed-card ', a + 10); return html.slice(a, b < 0 ? undefined : b); };
-const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
 
 head('arc(): a fraction of a circle');
 {
@@ -88,18 +92,18 @@ head('examLeftText(): the days to the exam, on the reader\'s calendar');
 head('the chapters: a ring and a tile each');
 {
   const html = draw();
-  const rings = [...html.matchAll(/<button class="story" onclick="startQuiz\(([^)]*)\)"\s+style="--accent:([^"]*)" aria-label="([^"]*)">/g)].map(m => m.slice(1));
-  ok('a ring for each chapter, in order, each starting that chapter, named with how much is mastered',
-     J(rings) === J([['&quot;Rhythm&quot;', '#112233', 'E(Rhythm), 25 percent mastered'], ['&quot;Valves&quot;', 'var(--teal)', 'E(Valves), 0 percent mastered']]), J(rings));
+  const rings = [...html.matchAll(/<button class="story" data-action="startChapter" data-ch="([^"]*)"\s+style="--accent:([^"]*)" aria-label="([^"]*)">/g)].map(m => m.slice(1));
+  ok('a ring for each chapter, in order, each starting that chapter, named through e(), named with how much is mastered',
+     J(rings) === J([['E(Rhythm)', '#112233', 'E(Rhythm), 25 percent mastered'], ['E(Valves)', 'var(--teal)', 'E(Valves), 0 percent mastered']]), J(rings));
   const C = 2 * Math.PI * 27, offs = [...html.matchAll(/stroke-dasharray="([^"]*)" stroke-dashoffset="([^"]*)"/g)].map(m => [+m[1], +m[2]]);
   ok('each ring is drawn as full as the chapter is mastered', offs.length === 2 && Math.abs(offs[0][0] - C) < 1e-9 && Math.abs(offs[0][1] - C * 0.75) < 1e-9 && Math.abs(offs[1][1] - C) < 1e-9, J(offs));
   const labels = [...html.matchAll(/<span class="story-lbl">([^<]*)<\/span>/g)].map(m => m[1]);
   const third = draw({ masteryFor: () => 1 / 3 });
   ok('the percent mastered is rounded: a third is 33', third.includes('aria-label="E(Rhythm), 33 percent mastered"') && third.includes('data-w="33"'), g1(third, /aria-label="(E\(Rhythm\)[^"]*)"/));
   ok('a ring is labelled by the chapter\'s short name, or its first word, through e()', J(labels) === J(['E(Rh)', 'E(Valves)']), J(labels));
-  const tiles = html.split('<button class="ch-tile"').slice(1).map(t => ({ go: g1(t, /^ onclick="([^"]*)"/), style: g1(t, /style="([^"]*)"/), name: g1(t, /class="ct-name">([^<]*)</), meta: g1(t, /class="ct-meta">([^<]*)</), w: g1(t, /data-w="([^"]*)"/), foot: g1(t, /class="ct-foot">([\s\S]*?)<\/span>/) }));
-  ok('a tile for each chapter, starting it, its accent the chapter\'s colour or a lighter teal, its ink chInk()\'s',
-     J(tiles.map(t => [t.go, t.style])) === J([['startQuiz(&quot;Rhythm&quot;)', '--accent:#112233;--ch-ink:INK(#112233)'], ['startQuiz(&quot;Valves&quot;)', '--accent:#5EEAD4;--ch-ink:INK(#5EEAD4)']]), J(tiles.map(t => t.style)));
+  const tiles = html.split('<button class="ch-tile"').slice(1).map(t => ({ go: g1(t, /^ data-action="startChapter" data-ch="([^"]*)"/), style: g1(t, /style="([^"]*)"/), name: g1(t, /class="ct-name">([^<]*)</), meta: g1(t, /class="ct-meta">([^<]*)</), w: g1(t, /data-w="([^"]*)"/), foot: g1(t, /class="ct-foot">([\s\S]*?)<\/span>/) }));
+  ok('a tile for each chapter, starting it by its name through e(), its accent the chapter\'s colour or a lighter teal, its ink chInk()\'s',
+     J(tiles.map(t => [t.go, t.style])) === J([['E(Rhythm)', '--accent:#112233;--ch-ink:INK(#112233)'], ['E(Valves)', '--accent:#5EEAD4;--ch-ink:INK(#5EEAD4)']]), J(tiles.map(t => t.style)));
   ok('it says how many questions and figures the chapter has', (tiles[0] || {}).meta === '3 Q · 1 figures' && (tiles[1] || {}).meta === '2 Q', J(tiles.map(t => t.meta)));
   ok('how many were right, or that it is begun or not, and how much is mastered', (tiles[0] || {}).foot === '75% correct<b>25%</b>' && (tiles[0] || {}).w === '25' && (tiles[1] || {}).foot === 'not started<b>0%</b>', J(tiles.map(t => t.foot)));
   const oneTile = draw({}, { chStats: { Rhythm: { correct: 1, total: 1 } } }).split('<button class="ch-tile"')[1] || '';
@@ -115,7 +119,7 @@ head('the review queue');
   ok('with cards due: live, "DUE NOW", how many, and "Review now"', due.startsWith('feed-card review-card live"') && due.includes('DUE NOW') && due.includes('3 cards ready') && due.includes('Review now'), due.slice(0, 60));
   ok('one card is "1 card ready"', rc({ dueQuestions: () => [1] }).includes('1 card ready'));
   ok('none due and some seen: "All caught up", "Begin"; none seen: "Start your review queue"', done.includes('All caught up') && done.includes('Begin') && !done.includes(' live') && fresh.includes('Start your review queue'), done.slice(0, 40));
-  ok('it starts the review queue', draw().includes('<button class="feed-card review-card live" onclick="startQuiz(null,\'due\')">'));
+  ok('it starts the review queue, by the startDue action', draw().includes('<button class="feed-card review-card live" data-action="startDue">'));
   ok('a streak is shown in days, and none when there is none', card(draw({}, { reviewStreak: 7 }), 'review-card').includes('<span class="fc-streak">7d [icon flame icon-sm]</span>') && !due.includes('fc-streak'));
 }
 
@@ -134,16 +138,16 @@ head('the study plan');
   ok('the pace: ahead, on track, behind, and none without data or an exam date', pace('ahead') === '<span class="pace-pill good" id="pacePill" data-status="ahead">Ahead' && pace('on-track').includes('ok') && pace('behind') === '<span class="pace-pill warn" id="pacePill" data-status="behind">Behind' && pace('no-data') === undefined && pace('no-exam') === undefined, [pace('ahead'), pace('behind')].join(' · '));
   ok('the plan for twenty minutes is said, through e()', g1(pc, /id="planSub">([^<]*)</) === 'E(Ten minutes on "what" & is due)' && asked.some(a => a[0] === 'planNow' && a[1] === 20));
   ok('readiness is said, through e(), and not when there is no data', g1(pc, /id="planReady">([^<]*)</) === 'E(You are on track.)' && !card(draw({ StudyPlan: { readiness: () => Object.assign({}, READY, { status: 'no-data' }) } }), 'plan-card').includes('planReady'));
-  const chips = [...pc.matchAll(/data-plan="(\d+)" onclick="startPlan\((\d+)\)" aria-label="(\d+) minutes"[\s\S]*?data-frac="([^"]*)"/g)].map(m => m.slice(1));
-  ok('three plans, of 10, 20 and 40 minutes, each a ring as long as its share of 40', J(chips) === J([['10', '10', '10', '0.2500'], ['20', '20', '20', '0.5000'], ['40', '40', '40', '1.0000']]), J(chips));
+  const chips = [...pc.matchAll(/data-plan="(\d+)" data-action="startPlan" aria-label="(\d+) minutes"[\s\S]*?data-frac="([^"]*)"/g)].map(m => m.slice(1));
+  ok('three plans, of 10, 20 and 40 minutes, each the startPlan action with its minutes in data-plan, a ring as long as its share of 40', J(chips) === J([['10', '10', '0.2500'], ['20', '20', '0.5000'], ['40', '40', '1.0000']]), J(chips));
 }
 
 head('the exam date');
 {
   const tile = (days, date) => card(draw({ examDaysLeft: () => days }, { examDate: date }), 'plan-card');
   const set = tile(12, '2026-11-27'), one = tile(1, '2026-11-16'), past = tile(-2, '2026-11-13'), none = tile(null, null);
-  ok('the date box holds the date and tells setExamDate()', set.includes('<input type="date" id="examDate" value="2026-11-27" onchange="setExamDate(this.value)">') && none.includes('<input type="date" id="examDate" value="" onchange="setExamDate(this.value)">'));
-  ok('with a date, a way to clear it', set.includes('<button class="exam-x" id="examClear" onclick="setExamDate(\'\')" aria-label="Clear the exam date" title="Clear">[icon x]</button>') && !none.includes('examClear'));
+  ok('the date box holds the date and is the setExamDate action', set.includes('<input type="date" id="examDate" value="2026-11-27" data-action="setExamDate">') && none.includes('<input type="date" id="examDate" value="" data-action="setExamDate">'));
+  ok('with a date, a way to clear it', set.includes('<button class="exam-x" id="examClear" data-action="clearExamDate" aria-label="Clear the exam date" title="Clear">[icon x]</button>') && !none.includes('examClear'));
   ok('days ahead: the tile is set and counts them, "day" for one', set.includes('exam-tile set"') && set.includes('<b id="examDays">12</b><span>days</span>') && one.includes('<b id="examDays">1</b><span>day</span>'));
   ok('a date passed, or none: no count, and the tile is not set', !past.includes('examDays') && !past.includes('exam-tile set') && !none.includes('examDays'), past.slice(past.indexOf('exam-tile'), past.indexOf('exam-tile') + 20));
   ok('the words under the box are examLeftText()\'s, through e()', g1(tile(12, '2026-11-27'), /id="examLeft">([^<]*)</) === 'E(12 days to your exam)' && g1(none, /id="examLeft">([^<]*)</) === 'E()', g1(set, /id="examLeft">([^<]*)</));
@@ -153,21 +157,21 @@ head('topic runs, missed, flagged and annotated: only when there is something');
 {
   const runs = [{ ch: 'Rhythm', shared: ['amiodarone', 'qt', 'torsade', 'extra'], ids: ['r1', 'r2', 'r3'] }, { ch: 'Odd <b>', shared: [], ids: ['x', 'y', 'z', 'w'] }];
   const rc = card(draw({ _runsShown: runs }), 'run-card');
-  const btns = [...rc.matchAll(/<button class="run-btn" data-run="(\d+)" data-ch="([^"]*)" style="--ch:([^"]*)" onclick="startRun\((\d+)\)">/g)].map(m => m.slice(1));
-  ok('a button for each run the page worked out, in order, each starting its own', J(btns) === J([['0', 'E(Rhythm)', '#112233', '0'], ['1', 'E(Odd <b>)', 'var(--teal)', '1']]), J(btns));
+  const btns = [...rc.matchAll(/<button class="run-btn" data-run="(\d+)" data-ch="([^"]*)" style="--ch:([^"]*)" data-action="startRun">/g)].map(m => m.slice(1));
+  ok('a button for each run the page worked out, in order, each the startRun action with its own number in data-run', J(btns) === J([['0', 'E(Rhythm)', '#112233'], ['1', 'E(Odd <b>)', 'var(--teal)']]), J(btns));
   ok('it names the chapter short, and three of the words they share, through e()', rc.includes('<b>E(Rh)</b><span class="run-w"> — E(amiodarone · qt · torsade)</span>') && rc.includes('<b>E(Odd <b>)</b></span>'), g1(rc, /<span class="run-t">([\s\S]*?)<\/span>\s*<span class="run-side">/));
   ok('and a pip and the count for each question', times(rc, '<i></i>') === 7 && rc.includes('<span class="run-n">3 questions</span>') && rc.includes('<span class="run-n">4 questions</span>'));
   ok('with no runs there is no card', !draw().includes('run-card'));
   const miss = card(draw({}, { missed: new Set(['a', 'b']) }), 'miss-card');
-  ok('missed: how many to reclaim, drilling them; none, no card', miss.startsWith('feed-card miss-card" onclick="startQuiz(null,\'missed\')"') && miss.includes('2 to reclaim') && !draw().includes('miss-card'), miss.slice(0, 60));
+  ok('missed: how many to reclaim, drilling them; none, no card', miss.startsWith('feed-card miss-card" data-action="retryMissed">') && miss.includes('2 to reclaim') && !draw().includes('miss-card'), miss.slice(0, 60));
   const fl = card(draw({ flaggedQs: () => [1, 2] }), 'flag-card'), armed = card(draw({ flaggedQs: () => [1, 2], _flagArm: true }), 'flag-card');
-  ok('flagged: FlagSet\'s phrase, through e(), going through them', g1(fl, /id="flagCount">([^<]*)</) === 'E(PHRASE(2))' && fl.includes('onclick="startQuiz(null,\'flagged\')"') && !draw().includes('flag-card'));
-  ok('"Clear all flags", and once tapped, "Tap again to clear all 2"', fl.includes('<button class="flag-quiet" id="flagClear" type="button" onclick="clearFlags()">Clear all flags</button>') && armed.includes('<button class="flag-quiet arm" id="flagClear" type="button" onclick="clearFlags()">Tap again to clear all 2</button>'));
+  ok('flagged: FlagSet\'s phrase, through e(), going through them by startFlagged', g1(fl, /id="flagCount">([^<]*)</) === 'E(PHRASE(2))' && fl.includes('<button class="flag-go" id="flagGo" type="button" data-action="startFlagged">') && !draw().includes('flag-card'));
+  ok('"Clear all flags", and once tapped, "Tap again to clear all 2"', fl.includes('<button class="flag-quiet" id="flagClear" type="button" data-action="clearFlags">Clear all flags</button>') && armed.includes('<button class="flag-quiet arm" id="flagClear" type="button" data-action="clearFlags">Tap again to clear all 2</button>'));
   const asked = [], an = card(draw({ FlagSet: { annotated: (...a) => { asked.push(a); return [1, 2, 3]; }, phrase: String } }), 'anno-card'), one = card(draw({ FlagSet: { annotated: () => [1], phrase: String } }), 'anno-card');
-  ok('annotated: FlagSet is asked of the notes, the ink and the bank; how many, opening them', an.includes('3 questions you wrote on') && one.includes('1 question you wrote on') && an.includes('onclick="goAnnotations()"') && asked.length === 1 && asked[0].length === 3 && !draw().includes('anno-card'));
+  ok('annotated: FlagSet is asked of the notes, the ink and the bank; how many, opening them', an.includes('3 questions you wrote on') && one.includes('1 question you wrote on') && an.startsWith('feed-card anno-card" id="annoCard" type="button" data-action="goAnnotations">') && asked.length === 1 && asked[0].length === 3 && !draw().includes('anno-card'));
   const all = card(draw(), 'all-card');
-  ok('shuffle the whole bank, by how many', all.startsWith('feed-card all-card" onclick="startQuiz(null)"') && all.includes('Shuffle all 5'));
-  ok('the head goes home, and says how many questions and chapters', draw().includes('<button class="study-back" onclick="goHome()">[icon arrow-left icon-sm] Home</button>') && draw().includes('<p>5 questions across 2 chapters'));
+  ok('shuffle the whole bank, by startAll, saying how many', all.startsWith('feed-card all-card" data-action="startAll">') && all.includes('Shuffle all 5'));
+  ok('the head goes home, and says how many questions and chapters', draw().includes('<button class="study-back" data-action="goHome">[icon arrow-left icon-sm] Home</button>') && draw().includes('<p>5 questions across 2 chapters'));
   const order = ['review-card', 'plan-card', 'run-card', 'miss-card', 'flag-card', 'anno-card', 'all-card'].map(c => draw({ _runsShown: runs, flaggedQs: () => [1], FlagSet: { annotated: () => [1], phrase: String } }, { missed: new Set(['a']) }).indexOf('feed-card ' + c));
   ok('the cards come in one order', order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), J(order));
 }
@@ -214,9 +218,23 @@ head('the page works the runs out, hands the module what it has, and keeps what 
   const WORDS = ['SPACED REPETITION', 'Same topic, back to back', 'to reclaim', 'Tap again to clear all', 'you wrote on', 'Shuffle all', 'Your exam is tomorrow', 'data-frac="${f.toFixed(4)}"'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw({ _runsShown: [{ ch: 'Rhythm', shared: [], ids: ['r1', 'r2', 'r3'] }], flaggedQs: () => [1], FlagSet: { annotated: () => [1], phrase: String } }, { missed: new Set(['a']), examDate: '2026-12-01' });
-  const handlers = [...new Set(handlersOf(all).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names seven handlers', J(handlers) === J(['clearFlags', 'goAnnotations', 'goHome', 'setExamDate', 'startPlan', 'startQuiz', 'startRun']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const actions = [...new Set(actionsOf(all))].sort();
+  ok('its markup names twelve actions and carries no inline handler', J(actions) === J(['clearExamDate', 'clearFlags', 'goAnnotations', 'goHome', 'retryMissed', 'setExamDate', 'startAll', 'startChapter', 'startDue', 'startFlagged', 'startPlan', 'startRun']) && inlineOf(all).length === 0,
+     actions.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  /* A tap is looked up in ACTIONS and a choice made in CHANGE_ACTIONS: each action is held to the table for its event. */
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
+  const ENTRY = { goHome: ['ACTIONS', 'goHome:()=>goHome(),'], retryMissed: ['ACTIONS', "retryMissed:()=>startQuiz(null,'missed'),"], startChapter: ['ACTIONS', 'startChapter:el=>startQuiz(el.dataset.ch),'],
+    startDue: ['ACTIONS', "startDue:()=>startQuiz(null,'due'),"], startFlagged: ['ACTIONS', "startFlagged:()=>startQuiz(null,'flagged'),"], startAll: ['ACTIONS', 'startAll:()=>startQuiz(null),'],
+    startPlan: ['ACTIONS', 'startPlan:el=>startPlan(Number(el.dataset.plan)),'], startRun: ['ACTIONS', 'startRun:el=>startRun(Number(el.dataset.run)),'], clearExamDate: ['ACTIONS', "clearExamDate:()=>setExamDate(''),"],
+    clearFlags: ['ACTIONS', 'clearFlags:()=>clearFlags(),'], goAnnotations: ['ACTIONS', 'goAnnotations:()=>goAnnotations(),'], setExamDate: ['CHANGE_ACTIONS', 'setExamDate:el=>setExamDate(el.value),'] };
+  const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
+  ok('each is in the page\'s table for its event once, as written, and in no other: the taps in ACTIONS, the exam date in CHANGE_ACTIONS',
+     actions.length === 12 && actions.every(n => ENTRY[n] && TABLES.every(t => keyed(t, n) === (ENTRY[n][0] === t ? 1 : 0)) && tableOf(ENTRY[n][0]).split(ENTRY[n][1]).length === 2),
+     actions.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf(ENTRY[n][0]).split(ENTRY[n][1]).length === 2 ? '' : ' (not as written)')).join(' '));
+  const CALLS = ['clearFlags', 'goAnnotations', 'goHome', 'setExamDate', 'startPlan', 'startQuiz', 'startRun'];
+  ok('they call seven functions the page declares, once each, and the page listens for taps and for choices on the document',
+     CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,CHANGE_ACTIONS,'change');") === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   const ids = ['planCard', 'pacePill', 'planGauge', 'planSub', 'planReady', 'examDate', 'examClear', 'examLeft', 'examDays', 'runCard', 'flagCard', 'flagCount', 'flagGo', 'flagClear', 'annoCard'];
   const lookedUp = ids.filter(id => count("'#" + id + "'") + count("getElementById('" + id + "')") > 0);
   ok('every id the page looks up is drawn once', lookedUp.length > 0 && lookedUp.every(id => times(all, 'id="' + id + '"') === 1), lookedUp.map(id => id + ':' + times(all, 'id="' + id + '"')).join(' '));
@@ -249,6 +267,33 @@ head('the page works the runs out, hands the module what it has, and keeps what 
   const drawnRuns = [...html.matchAll(/data-run="(\d+)"/g)].map(m => +m[1]);
   ok('the page worked out topic runs into _runsShown, and the screen drew those, one for each',
      ask('_runsShown.length') > 0 && J(drawnRuns) === J(ask('_runsShown.map((r,i)=>i)')) && J([...html.matchAll(/<span class="run-n">(\d+) questions/g)].map(m => +m[1])) === J(ask('_runsShown.map(r=>r.ids.length)')), J(ask('_runsShown.map(r=>r.ids)')));
+
+  /* A tap and a choice, as the page takes them: the real src/core/actions.js listening on a stand-in document over the
+     page's three tables, with a recording stand-in for each function they call, and as the element each control the
+     page's own line drew, its attributes read back as a browser reads them (so a chapter's name is the name, not its
+     escaped text). Every control is tapped, typed in and chosen from, in the order drawn. The date box holds a new date. */
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const tables = TABLES.map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
+  const called = [...new Set([...tables.matchAll(/([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].filter(n => n !== 'Number');
+  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null,mock:{i:0}}, offlineJob={busy:false};\n'
+    + called.map(n => `function ${n}(){ tcalls.push(${J(n)} + (arguments.length ? " " + JSON.stringify([].slice.call(arguments)) : "")); }`).join('\n') + '\n' + tables
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
+  const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const controls = h => [...h.matchAll(/<(button|select|input)\b([^>]*)>/g)].map(m => {
+    const at = Object.fromEntries([...m[2].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], unescape(x[2])]));
+    const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
+    const el = { nodeType: 1, value: m[1] === 'input' ? '2026-12-24' : '', dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    return el; });
+  const fire = (type, h) => { tcalls.length = 0; controls(h).forEach(el => tctx.listeners.filter(l => l[0] === type).forEach(l => l[1]({ type, target: el }))); return tcalls.slice(); };
+  const runs = ask('_runsShown.length');
+  const taps = fire('click', html);
+  ok('tapped: home, each chapter\'s ring, the review, each plan with its minutes, the exam date cleared, each run by its number, the missed, the flagged, flags cleared, the notes, every question, and each chapter\'s tile',
+     runs > 0 && J(taps) === J(['goHome', 'startQuiz ["Rhythm"]', 'startQuiz ["Valves & more"]', 'startQuiz [null,"due"]', 'startPlan [10]', 'startPlan [20]', 'startPlan [40]', 'setExamDate [""]']
+       .concat(Array.from({ length: runs }, (_, i) => 'startRun [' + i + ']'), ['startQuiz [null,"missed"]', 'startQuiz [null,"flagged"]', 'clearFlags', 'goAnnotations', 'startQuiz [null]', 'startQuiz ["Rhythm"]', 'startQuiz ["Valves & more"]'])), J(taps));
+  const chose = fire('change', html), keyedIn = fire('input', html);
+  ok('chosen: the date box sets the date it holds, and nothing else answers a choice or a key', J(chose) === J(['setExamDate ["2026-12-24"]']) && J(keyedIn) === J([]), J(chose) + ' · ' + J(keyedIn));
+
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

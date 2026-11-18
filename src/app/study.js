@@ -38,8 +38,12 @@
      5. Shuffle the whole bank, and a tile for each chapter: how many questions and figures, how many
         right, and how much is mastered.
 
-   The buttons name startQuiz, startPlan, setExamDate, startRun, clearFlags, goAnnotations and goHome: an
-   inline handler is read where it is tapped, in the page, so those stay the page's.
+   The controls name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's tables call
+   (src/core/actions.js): a chapter's story and tile startChapter, with the chapter in data-ch through e();
+   the review, missed, flagged and every-question cards startDue, retryMissed, startFlagged and startAll;
+   a plan chip startPlan and a topic run startRun, with the number in data-plan or data-run; the exam date
+   setExamDate when another is chosen, and its clear button clearExamDate; and clearFlags, goAnnotations and
+   goHome. The functions stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -68,7 +72,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
   const stories=CHAPTERS.map(ch=>{
     const m=masteryFor(ch), col=CH_COLORS[ch]||'var(--teal)';
     const R=27,C=2*Math.PI*R;
-    return `<button class="story" onclick="startQuiz(${JSON.stringify(ch).replace(/"/g,'&quot;')})"
+    return `<button class="story" data-action="startChapter" data-ch="${e(ch)}"
         style="--accent:${col}" aria-label="${e(ch)}, ${Math.round(m*100)} percent mastered">
       <span class="story-ring">
         <svg viewBox="0 0 64 64">
@@ -83,7 +87,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
     </button>`;
   }).join('');
 
-  const reviewCard=`<button class="feed-card review-card${dueN?' live':''}" onclick="startQuiz(null,'due')">
+  const reviewCard=`<button class="feed-card review-card${dueN?' live':''}" data-action="startDue">
     <div class="fc-glow"></div>
     <div class="fc-top">
       <span class="fc-badge">${dueN?'DUE NOW':'SPACED REPETITION'}</span>
@@ -119,15 +123,15 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
       </div>
     </div>
     ${readyLine?`<div class="fc-sub plan-ready" id="planReady">${e(readyLine)}</div>`:''}
-    <div class="chips plan-chips">${[10,20,40].map(m=>`<button class="chip plan-chip" data-plan="${m}" onclick="startPlan(${m})" aria-label="${m} minutes">
+    <div class="chips plan-chips">${[10,20,40].map(m=>`<button class="chip plan-chip" data-plan="${m}" data-action="startPlan" aria-label="${m} minutes">
       <svg class="mini-ring" viewBox="0 0 24 24" aria-hidden="true"><circle class="mr-track" cx="12" cy="12" r="9"/>${arc('mr-arc',12,12,9,m/40)}</svg>
       <b>${m}</b><span>min</span></button>`).join('')}</div>
     <div class="exam-tile${daysLeft!=null&&daysLeft>0?' set':''}">
       <span class="exam-ico" aria-hidden="true">${icon('calendar')}</span>
       <div class="exam-main">
         <label for="examDate">Exam date</label>
-        <div class="exam-ctl"><input type="date" id="examDate" value="${S.examDate||''}" onchange="setExamDate(this.value)">
-          ${S.examDate?`<button class="exam-x" id="examClear" onclick="setExamDate('')" aria-label="Clear the exam date" title="Clear">${icon('x')}</button>`:''}</div>
+        <div class="exam-ctl"><input type="date" id="examDate" value="${S.examDate||''}" data-action="setExamDate">
+          ${S.examDate?`<button class="exam-x" id="examClear" data-action="clearExamDate" aria-label="Clear the exam date" title="Clear">${icon('x')}</button>`:''}</div>
         <span class="exam-left" id="examLeft">${e(examLeftText())}</span>
       </div>
       ${daysLeft!=null&&daysLeft>0?`<div class="exam-count" aria-hidden="true"><b id="examDays">${daysLeft}</b><span>${daysLeft===1?'day':'days'}</span></div>`:''}
@@ -140,7 +144,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
     <div class="fc-sub">Three to five questions about one thing, from what you most need.</div>
     <div class="run-list">${_runsShown.map((r,i)=>{
       const words=r.shared.slice(0,3).join(' · ');
-      return `<button class="run-btn" data-run="${i}" data-ch="${e(r.ch)}" style="--ch:${CH_COLORS[r.ch]||'var(--teal)'}" onclick="startRun(${i})">
+      return `<button class="run-btn" data-run="${i}" data-ch="${e(r.ch)}" style="--ch:${CH_COLORS[r.ch]||'var(--teal)'}" data-action="startRun">
         <span class="run-ico" aria-hidden="true">${icon(CH_ICONS[r.ch]||'layers')}</span>
         <span class="run-t"><b>${e(CH_SHORT[r.ch]||r.ch)}</b>${words?`<span class="run-w"> — ${e(words)}</span>`:''}</span>
         <span class="run-side"><span class="run-pips" aria-hidden="true">${'<i></i>'.repeat(r.ids.length)}</span><span class="run-n">${r.ids.length} questions</span></span>
@@ -148,7 +152,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
   </div>`:'';
 
 
-  const missCard=S.missed.size>0?`<button class="feed-card miss-card" onclick="startQuiz(null,'missed')">
+  const missCard=S.missed.size>0?`<button class="feed-card miss-card" data-action="retryMissed">
     <div class="fc-top"><span class="fc-badge red">WEAK SPOTS</span></div>
     <div class="fc-title">${S.missed.size} to reclaim</div>
     <div class="fc-sub">Questions you have missed at least once</div>
@@ -161,10 +165,10 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
     <div class="fc-top"><span class="fc-badge amber">${icon('flag')} FLAGGED</span></div>
     <div class="fc-title" id="flagCount">${e(FlagSet.phrase(flagN))}</div>
     <div class="fc-sub">The ones you marked to come back to. A flag stays until you take it off.</div>
-    <button class="flag-go" id="flagGo" type="button" onclick="startQuiz(null,'flagged')">${icon('play')}<span>Go through them</span></button>
-    <button class="flag-quiet${_flagArm?' arm':''}" id="flagClear" type="button" onclick="clearFlags()">${_flagArm?'Tap again to clear all '+flagN:'Clear all flags'}</button>
+    <button class="flag-go" id="flagGo" type="button" data-action="startFlagged">${icon('play')}<span>Go through them</span></button>
+    <button class="flag-quiet${_flagArm?' arm':''}" id="flagClear" type="button" data-action="clearFlags">${_flagArm?'Tap again to clear all '+flagN:'Clear all flags'}</button>
   </div>`:'';
-  const annoCard=annoN>0?`<button class="feed-card anno-card" id="annoCard" type="button" onclick="goAnnotations()">
+  const annoCard=annoN>0?`<button class="feed-card anno-card" id="annoCard" type="button" data-action="goAnnotations">
     <div class="fc-top"><span class="fc-badge amber">${icon('pencil')} ANNOTATED</span></div>
     <div class="fc-title">${annoN} question${annoN===1?'':'s'} you wrote on</div>
     <div class="fc-sub">Your sticky notes and pencil marks. Find one by what you wrote.</div>
@@ -178,7 +182,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
     const cp=st.total>0?Math.round(st.correct/st.total*100):-1;
     const m=masteryFor(ch);
     const col=CH_COLORS[ch]||'#5EEAD4';
-    return `<button class="ch-tile" onclick="startQuiz(${JSON.stringify(ch).replace(/"/g,'&quot;')})"
+    return `<button class="ch-tile" data-action="startChapter" data-ch="${e(ch)}"
         style="--accent:${col};--ch-ink:${chInk(col)}">
       <span class="ct-ico">${chIcon(ch)}</span>
       <span class="ct-name">${e(ch)}</span>
@@ -190,7 +194,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
 
   return `<div class="home-wrap anim-fade study-wrap">
     <div class="study-head">
-      <button class="study-back" onclick="goHome()">${icon('arrow-left','icon-sm')} Home</button>
+      <button class="study-back" data-action="goHome">${icon('arrow-left','icon-sm')} Home</button>
     </div>
 
     <div class="study-title">
@@ -208,7 +212,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
       ${missCard}
       ${flagCard}
       ${annoCard}
-      <button class="feed-card all-card" onclick="startQuiz(null)">
+      <button class="feed-card all-card" data-action="startAll">
         <div class="fc-top"><span class="fc-badge">FULL BANK</span></div>
         <div class="fc-title">Shuffle all ${TOTAL_Q}</div>
         <div class="fc-sub">Every chapter, random order</div>
