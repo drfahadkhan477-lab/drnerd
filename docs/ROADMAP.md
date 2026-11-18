@@ -486,8 +486,8 @@ upstream FSRS-5 draws from (ts-fsrs's own ranges, recorded in a fixture), by a
 hash of its id, review count and lapse count; Again is not moved, and an
 unnamed card is not either, which is what the oracle compares. Forty cards
 learned on one day and answered Good twice came due on one day; named, over 22.
-The rating, its preview and the first-answer card all pass the question's id.
-The Practice Lab's drill cards are not named yet.
+The rating, its preview and the first-answer card all pass the question's id,
+and the Practice Lab's drill items pass theirs.
 
 **S5 — Calibration as a skill.** `src/core/calib.js` measures it; make it
 trainable: a queue of answers marked Certain and wrong, and a Brier-score trend on

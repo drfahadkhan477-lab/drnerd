@@ -96,11 +96,12 @@ function options(o) {
   return shuffle(chosen, rand);
 }
 
-/* grade({ card, correct, today }) → the next card: "good" if right, "again" if wrong. */
+/* grade({ card, correct, today, id }) → the next card: "good" if right, "again" if wrong. With the item's id the day is
+   spread within FSRS's fuzz range (roadmap S4), so items learned together do not all come back together. */
 function grade(o) {
   o = obj(o);
   const today = typeof o.today === 'string' ? o.today : FSRS.todayISO();
-  return FSRS.update(o.card || null, o.correct ? 3 : 1, today);
+  return FSRS.update(o.card || null, o.correct ? 3 : 1, today, typeof o.id === 'string' && o.id ? o.id : undefined);
 }
 
 root.Drill = { next, options, grade, recall };
