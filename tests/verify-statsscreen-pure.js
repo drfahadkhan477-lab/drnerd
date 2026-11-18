@@ -18,8 +18,10 @@
  *   - calibration: the bands, the pace, where the misses come from, and when nothing is said;
  *   - the mock blocks handed in: the last eight as bars, and the last in words;
  *   - that it reads four names of the state and eighteen of the kit, and changes nothing;
- *   - the page's line, the survey it starts after drawing, the handlers and elements the markup names,
- *     and that line over the page's own helpers and the real Calib, FSRS, ReviewQueue and MockExam.
+ *   - the page's line, the survey it starts after drawing, the actions and elements the markup names, with no
+ *     inline handler, each action in the page's ACTIONS table over the page's function, and that line over the
+ *     page's own helpers and the real Calib, FSRS, ReviewQueue and MockExam, its buttons tapped through the real
+ *     src/core/actions.js.
  */
 'use strict';
 const fs = require('fs');
@@ -38,7 +40,11 @@ const J = v => JSON.stringify(v);
 const run = f => { try { return String(f()); } catch (err) { return 'THREW ' + err.message; } };
 const g1 = (s, re) => (s.match(re) || [])[1];
 const times = (html, text) => html.split(text).length - 1;
-const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
+/* docs/ROADMAP.md, E2. Attribute names, read tag by tag with each value consumed whole, so text inside a value is never
+   taken for a name; and the actions the markup names, in the order drawn. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
 
 /* Thirty days, oldest first. What was answered on each walks through every heat level's edge. */
 const ANSWERED = [0, 1, 4, 5, 14, 15, 29, 30, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2];
@@ -69,7 +75,7 @@ head('the head and the four tiles');
   const html = draw();
   ok('it says progress is saved on this device', html.includes('<div class="stats-title">Your Progress</div>') && html.includes('<div class="stats-sub">[icon check icon-sm] Saved locally on this device</div>'));
   ok('or that it cannot be, where the device will not save', draw({}, { storageOK: () => false }).includes('<div class="stats-sub">[icon alert icon-sm] Local storage unavailable — use Export</div>'));
-  ok('the way home, by goHome()', html.includes('<button class="btn sb-back" onclick="goHome()">[icon arrow-left icon-sm] Home</button>'));
+  ok('the way home, by the goHome action', html.includes('<button class="btn sb-back" data-action="goHome">[icon arrow-left icon-sm] Home</button>'));
   const tiles = h => [...h.matchAll(/<div class="stat-tile"><div class="st-v">([^<]*)<\/div><div class="st-l">([^<]*)/g)].map(m => [m[1], m[2].trim()]);
   ok('the streak, every answer ever recorded, the accuracy over them, and how many are due now', J(tiles(html)) === J([['12', 'day streak [icon flame icon-sm]'], ['200', 'answered'], ['25%', 'accuracy'], ['3', 'due now']]), J(tiles(html)));
   const tileAt = (h, i) => (tiles(h)[i] || [])[0];
@@ -81,9 +87,9 @@ head('the head and the four tiles');
 head('figures kept on this device');
 {
   const html = draw({}, { offlineCapable: () => true });
-  ok('no card where they cannot be kept', !draw().includes('off-card') && !draw().includes('offlineDownload'));
+  ok('no card where they cannot be kept', !draw().includes('off-card') && !draw().includes('offlineButton'));
   ok('where they can, the card the page\'s survey fills in: found by its id, "checking…", an empty bar', html.includes('<div class="off-card" id="offlineCard">') && html.includes('<span class="off-val">checking…</span>') && html.includes('<div class="off-track"><span class="off-fill" style="width:0%"></span></div>'));
-  ok('and the download, by offlineDownload()', html.includes('<button class="off-btn" onclick="offlineDownload()">Download the rest</button>'));
+  ok('and its one button, by the offlineButton action', html.includes('<button class="off-btn" data-action="offlineButton">Download the rest</button>'));
 }
 
 head('the panels, in their order');
@@ -116,10 +122,12 @@ head('chapter mastery');
 {
   const html = draw();
   ok('how many cards are started, of the bank', html.includes('<div class="panel-h">Chapter mastery · 12/50 cards started</div>'));
-  const rings = [...html.matchAll(/<button class="mast" style="--accent:([^"]*)" onclick="startQuiz\(([^)]*)\)">[\s\S]*?stroke="([^"]*)" stroke-width="5"\s+stroke-dasharray="([^"]*)" stroke-dashoffset="([^"]*)"[\s\S]*?<span class="mast-ico">([^<]*)<\/span>\s*<span class="mast-pct">([^<]*)<\/span>\s*<span class="mast-name">(.*?)<\/span>\s*<\/button>/g)].map(m => m.slice(1));
+  const rings = [...html.matchAll(/<button class="mast" style="--accent:([^"]*)" data-action="startChapter" data-ch="(.*?)">[\s\S]*?stroke="([^"]*)" stroke-width="5"\s+stroke-dasharray="([^"]*)" stroke-dashoffset="([^"]*)"[\s\S]*?<span class="mast-ico">([^<]*)<\/span>\s*<span class="mast-pct">([^<]*)<\/span>\s*<span class="mast-name">(.*?)<\/span>\s*<\/button>/g)].map(m => m.slice(1));
   const C = 2 * Math.PI * 26;
   ok('a ring for each chapter, in the bank\'s order, in its accent or the teal', J(rings.map(r => [r[0], r[2]])) === J([['#112233', '#112233'], ['#445566', '#445566'], ['var(--teal)', 'var(--teal)']]), J(rings.map(r => [r[0], r[2]])));
-  ok('each starts a quiz in its chapter, the name\'s quotes written as entities', J(rings.map(r => r[1])) === J(['&quot;Alpha beta&quot;', '&quot;Say \\&quot;x\\&quot;&quot;', '&quot;Plain&quot;']), J(rings.map(r => r[1])));
+  /* The stand-in e() escapes nothing, so the second chapter's quotes stand as they are; its round trip through the page's
+     own e() is held in the last part. */
+  ok('each names startChapter and carries its chapter, through e()', J(rings.map(r => r[1])) === J(['E(Alpha beta)', 'E(Say "x")', 'E(Plain)']), J(rings.map(r => r[1])));
   ok('the ring is drawn as far round as the mastery: two thirds, none, all', rings.length === 3 && rings.every(r => +r[3] === C) && Math.abs(+rings[0][4] - C * (1 - 0.666)) < 1e-9 && +rings[1][4] === C && +rings[2][4] === 0, rings.map(r => (+r[4]).toFixed(2)).join(' '));
   ok('with the mastery rounded to a percentage', J(rings.map(r => r[6])) === J(['67%', '0%', '100%']), J(rings.map(r => r[6])));
   ok('the chapter\'s own icon, and its short name or its first word, through e()', J(rings.map(r => [r[5], r[7]])) === J([['[ch Alpha beta]', 'E(Al<b>)'], ['[ch Say "x"]', 'E(Say)'], ['[ch Plain]', 'E(Plain)']]), J(rings.map(r => [r[5], r[7]])));
@@ -130,9 +138,9 @@ head('the reader\'s data');
 {
   const html = draw();
   const data = h => h.slice(h.indexOf('Your data'));
-  ok('export, import and reset, each by its own handler', J(handlersOf(data(html))) === J(['exportMarkup()', 'importMarkup()', 'resetProgress()']), J(handlersOf(data(html))));
+  ok('export, import and reset, each by its own action', J(actionsOf(data(html))) === J(['exportMarkup', 'importMarkup', 'resetProgress']), J(actionsOf(data(html))));
   const pending = draw({}, { pendingBackupSave: { at: 1, reviews: 2 } });
-  ok('while a backup is written and not confirmed, the button that confirms it, between export and import', J(handlersOf(data(pending))) === J(['exportMarkup()', 'confirmBackupSaved()', 'importMarkup()', 'resetProgress()']) && pending.includes('<button class="btn sb-back" onclick="confirmBackupSaved()">I saved the backup file</button>'), J(handlersOf(data(pending))));
+  ok('while a backup is written and not confirmed, the button that confirms it, between export and import', J(actionsOf(data(pending))) === J(['exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress']) && pending.includes('<button class="btn sb-back" data-action="confirmBackupSaved">I saved the backup file</button>'), J(actionsOf(data(pending))));
   const tab = draw({}, { safariTabStorage: () => true });
   ok('in a Safari tab, the warning that the data has seven days, found by its id; elsewhere none', tab.includes('<div class="notice" id="safariTabNote"><span>[icon alert]</span><span><b>Add Systole to your Home Screen to keep this.</b>') && tab.includes('seven days of use without a visit here') && !html.includes('safariTabNote'));
   ok('how many reviews are logged, and what the page says of its storage', html.includes('<div class="ref-hint">9 reviews logged · STORAGE<br>') && draw({}, {}, []).includes('<div class="ref-hint">0 reviews logged · STORAGE<br>'));
@@ -254,9 +262,23 @@ head('the page hands the module what it has, and keeps what the markup names');
   const WORDS = ['Your Progress', 'Predicted retention', 'Calibration ·', 'Certain, and wrong', 'Mock exam blocks ·', 'Chapter mastery ·', 'reviews logged', 'Last 30 days', 'day streak'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw({ mocks: [{ ts: 0, n: 20, correct: 10, ms: 60000 }] }, { offlineCapable: () => true, safariTabStorage: () => true, pendingBackupSave: { at: 1, reviews: 2 } });
-  const handlers = [...new Set(handlersOf(all).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names seven handlers', J(handlers) === J(['confirmBackupSaved', 'exportMarkup', 'goHome', 'importMarkup', 'offlineDownload', 'resetProgress', 'startQuiz']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const actions = [...new Set(actionsOf(all))].sort();
+  ok('its markup, with every button it can show, names seven actions and carries no inline handler',
+     J(actions) === J(['confirmBackupSaved', 'exportMarkup', 'goHome', 'importMarkup', 'offlineButton', 'resetProgress', 'startChapter']) && inlineOf(all).length === 0, actions.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  const TABLE = { goHome: 'goHome:()=>goHome(),', startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', offlineButton: 'offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),', exportMarkup: 'exportMarkup:()=>exportMarkup(),',
+    confirmBackupSaved: 'confirmBackupSaved:()=>confirmBackupSaved(),', importMarkup: 'importMarkup:()=>importMarkup(),', resetProgress: 'resetProgress:()=>resetProgress(),' };
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
+  const CALLS = ['goHome', 'startQuiz', 'offlineStop', 'offlineDownload', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress'];
+  ok('each is in the page\'s ACTIONS table once, as written, and in neither of the others; each calls the page\'s function, declared once, and the listener is installed',
+     actions.length === 7 && actions.every(n => TABLE[n] && tableOf('ACTIONS').split(TABLE[n]).length === 2 && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0)
+     && CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1,
+     actions.map(n => n + ':' + keyed('ACTIONS', n) + (TABLE[n] && tableOf('ACTIONS').split(TABLE[n]).length === 2 ? '' : ' (not as written)')).join(' ') + ' · ' + CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  /* The figures card's button had two owners once it named an action: the inline handler it replaced was overwritten by
+     the paint's onclick, and the action was not, so one tap downloaded twice. The action alone owns it now. */
+  const paint = (() => { const a = page.indexOf('function offlinePaint(){'); return a < 0 ? '' : page.slice(a, page.indexOf('\n}', a)); })();
+  ok('the paint writes the figures button\'s words and whether it can be tapped, and gives it no handler of its own',
+     paint.includes("btn.textContent=offlineJob.busy?'Stop':done?'Up to date':'Download the rest';") && paint.includes('btn.disabled=') && !/\.on[a-z]+\s*=|addEventListener/.test(paint), paint ? (paint.match(/\.on[a-z]+\s*=[^;]*|addEventListener[^;]*/) || ['no handler'])[0] : 'no offlinePaint()');
   const LOOKS = ["document.getElementById('offlineCard')", "card.querySelector('.off-fill')", "card.querySelector('.off-val')", "card.querySelector('.off-btn')"];
   ok('the survey fills in the card by the id and the three classes the module draws', LOOKS.every(t => count(t) === 1) && ['id="offlineCard"', 'class="off-fill"', 'class="off-val"', 'class="off-btn"'].every(t => times(all, t) === 1), LOOKS.map(t => count(t)).join(' '));
 
@@ -296,12 +318,42 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('the real Calib over the log: twenty-eight rated, and "Certain" wrong half the time', html.includes('Calibration · 28 rated') && html.includes('Certain, and wrong: <b>50%</b>'), g1(html, /Certain, and wrong: <b>([^<]*)</));
   ok('the real MockExam\'s clock: fifteen of twenty in twenty minutes of thirty, a minute a question', /title="[^"]*: 15 of 20, 75%, 20:00 of 30:00"/.test(html) && html.includes('Last: 75%, 15 of 20 in 20:00, about 60 s a question.'), g1(html, /class="ref-hint">(Last:[^<]*)</));
   const pcts = [...html.matchAll(/<span class="mast-pct">([^<]*)<\/span>\s*<span class="mast-name">([^<]*)</g)].map(m => [m[1], m[2]]);
-  ok('mastery as the page computes it: one of two cards certain is 50%; one practised twice and one reviewed once before the scheduler is 39%; three of the four started; names through the page\'s e()', J(pcts) === J([['50%', 'Valves'], ['39%', 'Rhythm']]) && html.includes('onclick="startQuiz(&quot;Valves & more&quot;)"') && html.includes('3/4 cards started'), J(pcts) + ' · ' + g1(html, /Chapter mastery · ([^<]*)</));
+  ok('mastery as the page computes it: one of two cards certain is 50%; one practised twice and one reviewed once before the scheduler is 39%; three of the four started; names through the page\'s e()', J(pcts) === J([['50%', 'Valves'], ['39%', 'Rhythm']]) && html.includes('data-action="startChapter" data-ch="Valves &amp; more"') && html.includes('3/4 cards started'), J(pcts) + ' · ' + g1(html, /Chapter mastery · ([^<]*)</));
   ok('the storage as the page says it, and the Safari tab\'s warning for a tab that is not installed', html.includes('28 reviews logged · storage granted eviction protection (not permanent — keep exporting backups) · last backup 3d ago<br>') && html.includes('id="safariTabNote"') && html.includes('Saved locally on this device'), g1(html, /class="ref-hint">(\d+ reviews[^<]*)</));
   flags.installed = true;
   ok('installed to the Home Screen, the same browser is not warned', !String(ask('buildStats()')).includes('safariTabNote'));
   ask('pendingBackupSave={at:1,reviews:2}');
-  ok('and once the page holds a backup to confirm, the next drawing asks for it', !html.includes('confirmBackupSaved') && String(ask('buildStats()')).includes('onclick="confirmBackupSaved()"'));
+  ok('and once the page holds a backup to confirm, the next drawing asks for it', !html.includes('confirmBackupSaved') && String(ask('buildStats()')).includes('data-action="confirmBackupSaved"'));
+
+  /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document over the page's own
+     tables, with a recording stand-in for each function they call, and as the element each button the page's own line
+     drew over its own e(), its attributes read back as a browser reads them. A chapter whose name tries to close its
+     attribute and write a handler is among them. Every button is tapped, in the order drawn. */
+  const HOSTILE = 'X" onclick="alert(1)';
+  ask(`CHAPTERS.push(${J(HOSTILE)})`);
+  const drawn = String(ask('buildStats()'));
+  ok('over the page\'s own e(), a chapter that tries to write a handler leaves no on* attribute, and its ring carries it',
+     drawn.includes('data-ch="X&quot; onclick=&quot;alert(1)"') && inlineOf(drawn).length === 0, inlineOf(drawn).join(' ') || 'no on* attribute');
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const tables = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'].map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
+  const called = [...new Set([...tables.matchAll(/([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))];
+  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null}, offlineJob={busy:false};\n'
+    + called.map(n => `function ${n}(){ tcalls.push(${J(n)} + (arguments.length ? " " + JSON.stringify([].slice.call(arguments)) : "")); }`).join('\n') + '\n' + tables
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
+  const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const buttons = [...drawn.matchAll(/<button\b([^>]*)>/g)].map(m => {
+    const at = Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], unescape(x[2])]));
+    const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
+    const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    return el; });
+  tctx.listeners.filter(l => l[0] === 'click').forEach(l => buttons.forEach(el => l[1]({ type: 'click', target: el })));
+  ok('tapped through the real Actions and the page\'s tables: Home, the download, each ring with its own chapter as it is, export, the confirmation, import and reset, each its own function, once',
+     J(tcalls) === J(['goHome', 'offlineDownload', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz [' + J(HOSTILE) + ']', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress']), J(tcalls));
+  tcalls.length = 0; vm.runInContext('offlineJob.busy=true', tctx);
+  const off = buttons.filter(el => el.getAttribute('data-action') === 'offlineButton');
+  tctx.listeners.filter(l => l[0] === 'click').forEach(l => off.forEach(el => l[1]({ type: 'click', target: el })));
+  ok('and while a download runs, the figures button stops it, and starts none', off.length === 1 && J(tcalls) === J(['offlineStop']), J(tcalls));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -5351,6 +5351,14 @@ const ACTIONS={
   searchClear:()=>searchGo(''),
   jumpTo:el=>jumpTo(el.dataset.qid),
   quizFromSearch:()=>quizFromSearch(),
+  /* the Progress screen (src/app/stats.js): a ring carries its chapter */
+  startChapter:el=>startQuiz(el.dataset.ch),
+  /* the figures card's one button, which says Stop while a download runs (offlinePaint() writes its words) */
+  offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),
+  exportMarkup:()=>exportMarkup(),
+  confirmBackupSaved:()=>confirmBackupSaved(),
+  importMarkup:()=>importMarkup(),
+  resetProgress:()=>resetProgress(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -6722,7 +6730,6 @@ function offlinePaint(){
   if(btn){
     btn.textContent=offlineJob.busy?'Stop':done?'Up to date':'Download the rest';
     btn.disabled=!offlineJob.busy&&done;
-    btn.onclick=offlineJob.busy?offlineStop:offlineDownload;
   }
 }
 /* TRUE on failure, deliberately: if the dismissal cannot be remembered then

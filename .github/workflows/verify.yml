@@ -361,7 +361,7 @@ jobs:
         run: node tests/verify-mock-pure.js
       - name: the Sessions screen shows the mock exam's card, a block in progress or one to set up, and the voice card, and the page's lines draw it over its own setMockCfg() and the real MockExam (60 checks)
         run: node tests/verify-sessions-pure.js
-      - name: the Progress screen shows the tiles, retention, calibration, the mock blocks, thirty days, mastery and the reader's data, and the page's line draws it over the real Calib, FSRS, ReviewQueue and MockExam (88 checks)
+      - name: the Progress screen shows the tiles, retention, calibration, the mock blocks, thirty days, mastery and the reader's data, the page's line draws it over the real Calib, FSRS, ReviewQueue and MockExam, and its buttons name actions where they had inline handlers (92 checks)
         run: node tests/verify-statsscreen-pure.js
       - name: the home screen's three pages show the pearl, the hero and the session strip, the labs and study tools, the brain and its chosen neuron, and the page's lines draw them over its own pearl, the real FSRS and BrainMap (129 checks)
         run: node tests/verify-homescreen-pure.js

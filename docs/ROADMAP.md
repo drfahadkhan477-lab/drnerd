@@ -289,8 +289,9 @@ results screen (`verify-results-pure`; `verify-flags` taps Flagged Again and
 `verify-apexask` Explain my misses), the annotations screen
 (`verify-annotations-pure`; `verify-flags` types into its box and taps
 Practise), the mock report (`verify-mockreport-pure`; `verify-mockscreen`
-taps its review) and the topic search (`verify-search-pure`; `verify-searchwarm`
-taps, types into and chooses from it). An action that needs state reads it when
+taps its review), the topic search (`verify-search-pure`; `verify-searchwarm`
+taps, types into and chooses from it) and the Progress screen
+(`verify-statsscreen-pure`; `verify-backup` taps each of its buttons). An action that needs state reads it when
 tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
 input only, so a tap on a field calls nothing and a key in a button calls
