@@ -5366,6 +5366,15 @@ const ACTIONS={
   refImportText:()=>refImportText(),
   refExport:()=>refExport(),
   goRefs:()=>goRefs(),
+  /* the Sessions screen (src/app/sessions.js): a chip carries which setting it sets (data-cfg) and its value under that
+     setting's own name (data-n, data-sec), which setMockCfg() looks for again to put the keyboard back on it */
+  goLabs:()=>goLabs(),
+  setMockCfg:el=>setMockCfg(el.dataset.cfg,el.dataset[el.dataset.cfg]),
+  startMock:()=>startMock(),
+  resumeMock:()=>resumeMock(),
+  discardMock:()=>discardMock(),
+  openMockReport:()=>openMockReport(),
+  startVoice:()=>startVoice(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5382,6 +5391,8 @@ Actions.install(document,INPUT_ACTIONS,'input');
 const CHANGE_ACTIONS={
   /* the topic search's chapter */
   searchChapter:el=>searchChapter(el.value),
+  /* the mock block's chapter, on the Sessions screen */
+  mockChapter:el=>setMockCfg('ch',el.value),
 };
 Actions.install(document,CHANGE_ACTIONS,'change');
 /* In a stacked split the document does not scroll — #app does. Every "go to

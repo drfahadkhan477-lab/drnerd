@@ -359,7 +359,7 @@ jobs:
         run: node tests/verify-quiz-pure.js
       - name: a mock block shows the question, clock, pace, flag and grid, paused or not, and the summary before handing in, and the page's line draws a block over the real MockExam (48 checks)
         run: node tests/verify-mock-pure.js
-      - name: the Sessions screen shows the mock exam's card, a block in progress or one to set up, and the voice card, and the page's lines draw it over its own setMockCfg() and the real MockExam (60 checks)
+      - name: the Sessions screen shows the mock exam's card, a block in progress or one to set up, and the voice card, the page's lines draw it over its own setMockCfg() and the real MockExam, and its controls name actions where they had inline handlers (64 checks)
         run: node tests/verify-sessions-pure.js
       - name: the Progress screen shows the tiles, retention, calibration, the mock blocks, thirty days, mastery and the reader's data, the page's line draws it over the real Calib, FSRS, ReviewQueue and MockExam, and its buttons name actions where they had inline handlers (92 checks)
         run: node tests/verify-statsscreen-pure.js
