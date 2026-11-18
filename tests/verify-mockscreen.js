@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, onScreen, quiet } = require('./_render.js');
+const { booted, onScreen, quiet, settled } = require('./_render.js');
 const { blankComments } = require('./_source.js');
 
 const target = process.argv[2];
@@ -943,6 +943,43 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await page.setViewportSize({ width: 834, height: 1194 });
     ok('on a phone the flag button shows its icon and the word stays for a screen reader; on anything wider the word is shown', flagWord.length === sizes.length && flagWord.every(([w, lw, sr]) => sr && (w <= 380 ? lw <= 1 : lw > 10)), JSON.stringify(flagWord));
     ok('the card, the block, the hand-in page, the pause and the report never run past the screen, and every control on them is at least 44 px tall', bad.length === 0, bad.join(' | ').slice(0, 400));
+  }
+
+  /* docs/ROADMAP.md, E2. The block's buttons name actions, not inline handlers, which the page's ACTIONS table calls
+     through one listener on the document (src/core/actions.js). The options, Flag, a cell, Next, a summary chip and Hand
+     in are clicked above. Pause, Resume, Previous, End block, Back to the block and, with no block, Back to Sessions are
+     clicked here, through the real functions, each on a screen waited for drawn and quiet first. A click that cannot be
+     made, or a state that never comes, is FAIL. */
+  head('the block\'s other buttons, clicked');
+  {
+    const act = f => f().then(() => true, () => false);
+    const until = (fn, arg) => page.waitForFunction(fn, arg === undefined ? null : arg, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    const drawn = async (pred, label) => { await settled(page, pred, { label }); await quiet(page); };
+    const state = () => page.evaluate(() => JSON.stringify(S.mock ? { screen: S.screen, view: S.mockView, i: S.mock.i, paused: S.mock.paused } : { screen: S.screen, mock: null }));
+    await page.evaluate(() => { goSessions(); startMock(); });
+    await drawn(() => S.screen === 'mock' && !!S.mock && !!document.querySelector('.mock-actions'), 'a block open');
+    await page.evaluate(() => mockGo(1));
+    await drawn(() => S.mock.i === 1 && !document.querySelector('.mock-actions .btn-prev[disabled]'), 'the second question');
+    const prev = await act(() => page.click('.mock-actions .btn-prev', { timeout: 5000 })) && await until(() => S.mock.i === 0);
+    ok('Previous goes back a question', prev, await state());
+    await drawn(() => S.mock.i === 0 && !!document.querySelector('.mock-mini[aria-label="Pause the block"]'), 'the first question');
+    const pause = await act(() => page.click('.mock-mini[aria-label="Pause the block"]', { timeout: 5000 })) && await until(() => S.mock.paused === true);
+    ok('Pause stops the clock and hides the question', pause, await state());
+    await drawn(() => !!document.querySelector('.mock-paused .btn-next'), 'the paused screen');
+    const resume = await act(() => page.click('.mock-paused .btn-next', { timeout: 5000 })) && await until(() => S.mock.paused === false);
+    ok('Resume starts it again', resume, await state());
+    await drawn(() => !S.mock.paused && !!document.querySelector('.mock-navh .mock-mini'), 'the block again');
+    await page.evaluate(() => mockGo(1));
+    await drawn(() => S.mock.i === 1 && S.mockView !== 'end', 'the second question again');
+    const end = await act(() => page.click('.mock-navh .mock-mini', { timeout: 5000 })) && await until(() => S.mockView === 'end');
+    ok('End block opens the summary', end, await state());
+    await drawn(() => !!document.querySelector('.mock-end .btn-prev.wide'), 'the summary');
+    const back = await act(() => page.click('.mock-end .btn-prev.wide', { timeout: 5000 })) && await until(() => S.mockView !== 'end' && S.mock.i === 1);
+    ok('Back to the block goes back to the question it was on', back, await state());
+    await page.evaluate(() => { S.mock = null; S.screen = 'mock'; render(); });
+    await drawn(() => !!document.querySelector('.mock-gone .btn-next'), 'no block open');
+    const gone = await act(() => page.click('.mock-gone .btn-next', { timeout: 5000 })) && await until(() => S.screen === 'sessions');
+    ok('with no block open, Back to Sessions goes there', gone, await state());
   }
 
   ok('and nothing threw throughout', errors.length === 0, errors.join(' | '));

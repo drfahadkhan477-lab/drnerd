@@ -5386,6 +5386,18 @@ const ACTIONS={
   prevQ:()=>prevQ(),
   nextQ:()=>nextQ(),
   quizStartOver:()=>restartQuiz(),
+  /* the mock block (src/app/mock.js): an option carries its index and a chip or a cell its question's, read back as the
+     numbers the handlers were given; Back to the block goes to the question the block is on as it stands when tapped */
+  mockPick:el=>mockPick(Number(el.dataset.mi)),
+  mockGo:el=>mockGo(Number(el.dataset.q)),
+  mockBack:()=>mockGo(S.mock.i),
+  mockPrev:()=>mockPrev(),
+  mockNext:()=>mockNext(),
+  mockFlag:()=>mockFlag(),
+  mockPause:()=>mockPause(),
+  mockUnpause:()=>mockUnpause(),
+  mockEnd:()=>mockEnd(),
+  mockSubmit:()=>mockSubmit(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
