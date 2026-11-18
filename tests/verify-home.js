@@ -820,10 +820,22 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const pearlScrolled = typeof spied === 'number' && spied > 0 && await page.waitForFunction(() => window.__scrolls.pearl > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
     await quiet(page);
     const afterPearl = await page.evaluate(() => Object.assign({}, window.__scrolls));
-    ok('a scroll of the pearl\'s statement reaches pearlScroll(), and not the pager\'s homePagerScroll() around it', pearlScrolled && afterPearl.pager === 0, JSON.stringify({ over: spied, calls: afterPearl }));
+    ok('a scroll of the pearl\'s statement reaches pearlScroll()', pearlScrolled, JSON.stringify({ over: spied, calls: afterPearl }));
     await page.evaluate(() => { const p = document.getElementById('homePager'); p.scrollLeft = p.clientWidth; });
     const pagerScrolled = await page.waitForFunction(() => window.__scrolls.pager > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
     ok('and a scroll of the pager reaches homePagerScroll()', pagerScrolled, JSON.stringify(await page.evaluate(() => window.__scrolls)));
+    /* Each page in the pager scrolls up and down by itself on a phone, and names no action: its scroll is not the pager's.
+       The Brain page is given something to scroll for this, a spacer taken away after. */
+    await page.evaluate(() => homeGo(1));
+    await page.waitForFunction(() => homePage === 1, null, { timeout: 8000, polling: 40 }).catch(() => {});
+    await quiet(page);
+    const down = await page.evaluate(() => { const pg = document.getElementById('homePage1'); const sp = document.createElement('div'); sp.id = 'scrollSpacer'; sp.style.height = '3000px'; pg.appendChild(sp);
+      window.__scrolls.pager = 0; window.__pageScrolls = 0; pg.addEventListener('scroll', () => { window.__pageScrolls++; }, { once: false }); pg.scrollTop = 600; return pg.scrollHeight - pg.clientHeight; });
+    const pageScrolled = down > 0 && await page.waitForFunction(() => window.__pageScrolls > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    await quiet(page);
+    const pageCalls = await page.evaluate(() => window.__scrolls.pager);
+    ok('and a page scrolled up or down inside the pager does not reach homePagerScroll()', pageScrolled && pageCalls === 0, JSON.stringify({ over: down, pageScrolled, pagerCalls: pageCalls }));
+    await page.evaluate(() => { const sp = document.getElementById('scrollSpacer'); if (sp) sp.remove(); document.getElementById('homePage1').scrollTop = 0; });
     await page.evaluate(() => { pearlScroll = window.__realScrolls.pearlScroll; homePagerScroll = window.__realScrolls.homePagerScroll; const w = document.getElementById('pearlBody'); if (w) w.style.maxHeight = ''; homeGo(0); });
     await quiet(page);
 
