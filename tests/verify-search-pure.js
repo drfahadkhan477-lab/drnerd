@@ -21,11 +21,13 @@
  *     word found, in the stem or the commentary, cut at a word;
  *   - before anything is typed: the topics, the one typed marked, and the hint with the bank's numbers;
  *   - once something is typed: the count, the chapter, nothing matched, and a row for each match;
- *   - the chapter choice, Quiz these N, Clear, and every handler on the screen;
+ *   - the chapter choice, Quiz these N, Clear, and every action on the screen, with no inline handler;
  *   - that it reads three names of the search, two of the page's state and seven of the kit, and
  *     changes nothing it is given;
- *   - the page's one line: what it hands over is what the module asks for, the handlers are the page's,
- *     and that line over the page's own helpers draws a search the suite makes and marks what was typed.
+ *   - the page's one line: what it hands over is what the module asks for, each action is in the page's table for
+ *     its event and calls the page's function, and that line over the page's own helpers draws a search the suite
+ *     makes, marks what was typed, and, tapped, typed in and chosen from through the real src/core/actions.js,
+ *     calls each function with what its control carries.
  */
 'use strict';
 const fs = require('fs');
@@ -73,11 +75,16 @@ const g1 = (s, re) => (s.match(re) || [])[1];
 const times = (html, text) => html.split(text).length - 1;
 const rowsOf = html => html.split('<button class="hit"').slice(1).map(s => {
   s = s.slice(0, s.indexOf('</button>'));
-  return { go: g1(s, /^ onclick="([^"]*)"/), edge: g1(s, /border-left-color:([^"]*)"/), tint: g1(s, /class="hit-ch" style="background:([^;]*);/), ink: g1(s, /class="hit-ch" style="[^"]*;color:([^"]*)"/),
+  return { go: g1(s, /^ data-action="jumpTo" data-qid="([^"]*)"/), edge: g1(s, /border-left-color:([^"]*)"/), tint: g1(s, /class="hit-ch" style="background:([^;]*);/), ink: g1(s, /class="hit-ch" style="[^"]*;color:([^"]*)"/),
     chip: g1(s, /class="hit-ch"[^>]*>([^<]*)</), flags: [...s.matchAll(/<span class="hit-flag[^"]*">([^<]*)<\/span>/g)].map(m => m[1]), fig: g1(s, /<span class="hit-fig">([^<]*)<\/span>/),
     stem: g1(s, /<div class="hit-stem">([\s\S]*?)<\/div>/), ans: g1(s, /<div class="hit-ans">([\s\S]*?)<\/div>/) };
 });
-const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
+/* docs/ROADMAP.md, E2. Attribute names, read tag by tag with each value consumed whole, so text inside a value is never
+   taken for a name. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
+const ACTION_NAMES = ['goHome', 'jumpTo', 'quizFromSearch', 'searchChapter', 'searchClear', 'searchGo', 'searchInput'];
 const labelOf = html => g1(html, /<div class="section-label">([^<]*)<\/div>/);
 
 head('hl(): the words typed, marked in text escaped first');
@@ -114,8 +121,10 @@ head('snippet(): where in a question the word typed is');
 head('before anything is typed');
 {
   const html = draw(sq('', []));
-  const chips = [...html.matchAll(/<button class="chip( hot)?" onclick="searchGo\(([^)]*)\)">([^<]*)<\/button>/g)].map(m => [!!m[1], m[2], m[3]]);
-  ok('a chip for each topic, through e(), each searching for itself', J(chips) === J([[false, '&quot;aortic valve&quot;', 'E(aortic valve)'], [false, '&quot;long QT&quot;', 'E(long QT)'], [false, '&quot;it\'s \\&quot;x\\&quot;&quot;', 'E(it\'s "x")']]), J(chips));
+  /* The stand-in e() escapes nothing, so the third topic's quotes stand as they are; the topic is read up to the end of
+     the tag. Its round trip through the page's own e() is held below. */
+  const chips = [...html.matchAll(/<button class="chip( hot)?" data-action="searchGo" data-topic="(.*?)">([^<]*)<\/button>/g)].map(m => [!!m[1], m[2], m[3]]);
+  ok('a chip for each topic, through e(), each naming searchGo and carrying itself', J(chips) === J([[false, 'E(aortic valve)', 'E(aortic valve)'], [false, 'E(long QT)', 'E(long QT)'], [false, 'E(it\'s "x")', 'E(it\'s "x")']]), J(chips));
   ok('they are headed "Try a topic", and no count is given', labelOf(html) === 'Try a topic' && !/ match/.test(html));
   ok('the hint says what the search looks in, whose commentary through e(), and how many questions',
      html.includes('<div class="sb-hint">Searches every stem, answer option and the full E(ACC )commentary across all 1200 questions. Runs entirely offline — no API key needed.</div>'), g1(html, /<div class="sb-hint">([^<]*)</));
@@ -141,7 +150,7 @@ head('a row for each match');
 {
   const hits = [question('a', { s: 'stem', o: [{ t: 'one' }, { t: 'two' }, { t: 'the right one' }], ci: 2 }), question('b', { ch: 'Valves', n: 4, img: 2 }), question('c')];
   const rows = rowsOf(draw(sq('word', hits), { flagged: ['a', 'c'], missed: ['b', 'c'] }));
-  ok('a row for each, in the order found, each going to its question', J(rows.map(r => r.go)) === J(['jumpTo(\'a\')', 'jumpTo(\'b\')', 'jumpTo(\'c\')']), J(rows.map(r => r.go)));
+  ok('a row for each, in the order found, each naming jumpTo and carrying its question\'s id through e()', J(rows.map(r => r.go)) === J(['E(a)', 'E(b)', 'E(c)']), J(rows.map(r => r.go)));
   const [a, b, c] = rows.concat([{}, {}, {}]);
   ok('its edge is the chapter\'s colour, its chip that colour at a tint in chInk()\'s ink; a chapter with none takes the teal',
      a.edge === '#112233' && a.tint === '#1122331F' && a.ink === 'INK(#112233)' && b.edge === 'var(--teal)' && b.ink === 'INK(var(--teal))', [a.edge, a.tint, a.ink, b.edge, b.ink].join(' · '));
@@ -156,23 +165,23 @@ head('a row for each match');
   ok('and what is typed is marked in both', marked.ans === '[icon check icon-sm] the <mark>right</mark> one' && marked.stem === 'stem', marked.ans + ' · ' + marked.stem);
 }
 
-head('the controls, and every handler on the screen');
+head('the controls, and every action on the screen');
 {
   const html = draw(sq('word', [question('a'), question('b')], 'Valves'));
   const select = g1(html, /(<select id="sCh"[^>]*>)/);
   const opts = [...html.matchAll(/<option value="([^"]*)"( selected)?>([^<]*)<\/option>/g)].map(m => [m[1], !!m[2], m[3]]);
-  ok('the chapter choice has a name, tells searchChapter(), and lists every chapter after "All chapters", through e()',
-     select === '<select id="sCh" aria-label="Chapter" onchange="searchChapter(this.value)">' && J(opts) === J([['', false, 'All chapters'], ['E(Arrhythmias)', false, 'E(Arrhythmias)'], ['E(Valves)', true, 'E(Valves)']]), J(opts));
+  ok('the chapter choice has a name, names searchChapter, and lists every chapter after "All chapters", through e()',
+     select === '<select id="sCh" aria-label="Chapter" data-action="searchChapter">' && J(opts) === J([['', false, 'All chapters'], ['E(Arrhythmias)', false, 'E(Arrhythmias)'], ['E(Valves)', true, 'E(Valves)']]), J(opts));
   ok('with all chapters, none of them is selected', !draw(sq('word', [])).includes(' selected'));
-  ok('"Quiz these N" with matches, by quizFromSearch()', html.includes('<button class="btn btn-next sb-quiz" onclick="quizFromSearch()">Quiz these 2 [icon arrow-right icon-sm]</button>') && !draw(sq('word', [])).includes('quizFromSearch'));
-  ok('Clear only when something is typed, and it searches for nothing', html.includes('<button class="sb-x" onclick="searchGo(\'\')" aria-label="Clear">[icon x icon-sm]</button>') && !draw(sq('', [])).includes('sb-x'));
+  ok('"Quiz these N" with matches, by the quizFromSearch action', html.includes('<button class="btn btn-next sb-quiz" data-action="quizFromSearch">Quiz these 2 [icon arrow-right icon-sm]</button>') && !draw(sq('word', [])).includes('quizFromSearch'));
+  ok('Clear only when something is typed, by the searchClear action', html.includes('<button class="sb-x" data-action="searchClear" aria-label="Clear">[icon x icon-sm]</button>') && !draw(sq('', [])).includes('sb-x'));
   const box = g1(html, /(<input id="sQ"[^>]*>)/) || '';
-  ok('the box holds what is typed, through e(), tells searchInput() as a key goes down, and corrects nothing',
-     box.includes(' type="search"') && box.includes(' value="E(word)"') && box.includes(' oninput="searchInput(this.value)"') && box.includes(' autocomplete="off"') && box.includes(' autocapitalize="off"') && box.includes(' spellcheck="false"'), box);
-  ok('Home goes home', html.includes('<button class="btn sb-back" onclick="goHome()">[icon arrow-left icon-sm] Home</button>'));
+  ok('the box holds what is typed, through e(), names searchInput, and corrects nothing',
+     box.includes(' type="search"') && box.includes(' value="E(word)"') && box.includes(' data-action="searchInput"') && box.includes(' autocomplete="off"') && box.includes(' autocapitalize="off"') && box.includes(' spellcheck="false"'), box);
+  ok('Home goes home, by the goHome action', html.includes('<button class="btn sb-back" data-action="goHome">[icon arrow-left icon-sm] Home</button>'));
   const all = draw(sq('word', [question('a')], 'Valves')) + draw(sq('', []));
-  const fixed = [/^jumpTo\('[^']*'\)$/, /^searchGo\(&quot;.*&quot;\)$/, /^searchGo\(''\)$/, /^searchChapter\(this\.value\)$/, /^quizFromSearch\(\)$/, /^searchInput\(this\.value\)$/, /^goHome\(\)$/];
-  ok('every handler on the screen is one of seven shapes', handlersOf(all).length > 0 && handlersOf(all).every(h => fixed.some(re => re.test(h))), handlersOf(all).filter(h => !fixed.some(re => re.test(h))).join(' | ') || handlersOf(all).length + ' handlers');
+  ok('the screen, with something typed and with nothing, names seven actions and carries no inline handler',
+     J([...new Set(actionsOf(all))].sort()) === J(ACTION_NAMES) && inlineOf(all).length === 0, [...new Set(actionsOf(all))].sort().join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
 }
 
 head('it reads what it is given, and changes nothing');
@@ -212,9 +221,23 @@ head('the page hands the module what it has, and keeps what the markup names');
   /* The mock block's set-up offers "All chapters" too, so the search's choice is known by its id. */
   const WORDS = ['Try a topic', 'Searches every stem', 'Try a broader term', 'Quiz these ', 'id="sCh"'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
-  const handlers = [...new Set(handlersOf(draw(sq('word', [question('a')]))).concat(handlersOf(draw(sq('', [])))).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names six handlers', J(handlers) === J(['goHome', 'jumpTo', 'quizFromSearch', 'searchChapter', 'searchGo', 'searchInput']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  /* docs/ROADMAP.md, E2. A tap is looked up in ACTIONS, a key typed in INPUT_ACTIONS and a choice made in
+     CHANGE_ACTIONS, so each action is held to the one table for its event, as the page writes it. */
+  const TABLES = { ACTIONS: 'click', INPUT_ACTIONS: 'input', CHANGE_ACTIONS: 'change' };
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const ENTRY = { goHome: ['ACTIONS', 'goHome:()=>goHome(),'], searchGo: ['ACTIONS', 'searchGo:el=>searchGo(el.dataset.topic),'], searchClear: ['ACTIONS', 'searchClear:()=>searchGo(\'\'),'],
+    jumpTo: ['ACTIONS', 'jumpTo:el=>jumpTo(el.dataset.qid),'], quizFromSearch: ['ACTIONS', 'quizFromSearch:()=>quizFromSearch(),'],
+    searchInput: ['INPUT_ACTIONS', 'searchInput:el=>searchInput(el.value),'], searchChapter: ['CHANGE_ACTIONS', 'searchChapter:el=>searchChapter(el.value),'] };
+  const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
+  ok('each of the seven actions is in the page\'s table for its event once and in no other: the taps in ACTIONS, the box in INPUT_ACTIONS, the chapter in CHANGE_ACTIONS',
+     ACTION_NAMES.every(n => ENTRY[n] && Object.keys(TABLES).every(t => keyed(t, n) === (ENTRY[n][0] === t ? 1 : 0)) && tableOf(ENTRY[n][0]).split(ENTRY[n][1]).length === 2),
+     ACTION_NAMES.map(n => n + ':' + Object.keys(TABLES).map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf(ENTRY[n][0]).split(ENTRY[n][1]).length === 2 ? '' : ' (not as written)')).join(' '));
+  const FUNCS = ['goHome', 'searchGo', 'jumpTo', 'quizFromSearch', 'searchInput', 'searchChapter'];
+  const INSTALL = { ACTIONS: 'Actions.install(document,ACTIONS);', INPUT_ACTIONS: "Actions.install(document,INPUT_ACTIONS,'input');", CHANGE_ACTIONS: "Actions.install(document,CHANGE_ACTIONS,'change');" };
+  const ACT_SLOT = page.indexOf('@@SLOT[src:src/core/actions.js]@@');
+  ok('they call six functions the page declares, once each, and the page listens on the document over each table for its event, below the listener\'s module',
+     FUNCS.every(n => count('function ' + n + '(') === 1) && Object.keys(TABLES).every(t => count(INSTALL[t]) === 1 && count('const ' + t + '={') === 1 && ACT_SLOT >= 0 && ACT_SLOT < page.indexOf('const ' + t + '={') && page.indexOf('const ' + t + '={') < page.indexOf(INSTALL[t])),
+     FUNCS.map(n => n + ':' + count('function ' + n + '(')).join(' ') + ' · ' + Object.keys(TABLES).map(t => t + ':' + count(INSTALL[t])).join(' '));
   ok('the box the markup draws is the one the page looks for, by its id, after typing and on opening', count('document.getElementById(\'sQ\')') >= 3, count('document.getElementById(\'sQ\')') + ' look-ups');
 
   /* The page's own line and helpers, with this module where its slot stands, in a context that has nothing
@@ -230,9 +253,46 @@ head('the page hands the module what it has, and keeps what the markup names');
   ask(`SQ.q = 'Aortic'; SQ.hits = [{ q: { id: 'v1', ch: 'Valves & more', n: 7, s: 'Severe <b>aortic</b> stenosis & syncope', ex: 'x', o: [{ t: 'TAVR' }, { t: 'Aortic valve replacement' }], ci: 1, img: 0 }, score: 1 }];`);
   const html = String(ask('buildSearch()')), row = rowsOf(html)[0] || {};
   ok('with one match: "1 match", its row going to it, flagged, its chapter escaped by the page\'s e() and in the teal\'s ink',
-     labelOf(html) === '1 match' && row.go === 'jumpTo(\'v1\')' && J(row.flags) === J(['flagged']) && row.chip === 'Valves &amp; more · 7' && row.ink === 'var(--teal-ink)', J([labelOf(html), row.go, row.chip, row.ink]));
+     labelOf(html) === '1 match' && row.go === 'v1' && J(row.flags) === J(['flagged']) && row.chip === 'Valves &amp; more · 7' && row.ink === 'var(--teal-ink)', J([labelOf(html), row.go, row.chip, row.ink]));
   ok('the stem and the answer are escaped by the page\'s e(), with the word typed marked in each, whatever its case',
      row.stem === 'Severe &lt;b&gt;<mark>aortic</mark>&lt;/b&gt; stenosis &amp; syncope —…' && row.ans === '<svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"></use></svg> <mark>Aortic</mark> valve replacement', row.stem + ' · ' + row.ans);
+
+  /* A tap, a key and a choice, as the page takes them: the real src/core/actions.js listening on a stand-in document
+     over the page's three tables, with a recording stand-in for each function the tables call, and as the element each
+     control the page's own line drew over its own e(), its attributes read back as a browser reads them. A topic and an
+     id that try to close their attribute and write a handler are among them. Every control is tapped, typed in and
+     chosen from, in the order drawn; the box holds what was typed and the choice the chapter chosen. */
+  const TOPIC = 'it\'s "x" <b> & onclick="no()"', ID = 'v2" onclick="alert(1)';
+  ask(`TOPIC_SUGGEST.push(${J(TOPIC)}); SQ.hits.push({ q: { id: ${J(ID)}, ch: 'Arrhythmias', n: 8, s: 's', ex: 'x', o: [{ t: 'a' }], ci: 0, img: 0 }, score: 1 });`);
+  const typed = String(ask('buildSearch()'));
+  ask(`SQ.q = ''; SQ.hits = [];`);
+  const none = String(ask('buildSearch()'));
+  ok('over the page\'s own e(), a topic and an id that try to write a handler leave no on* attribute', typed.includes('2 matches') && none.includes('Try a topic') && inlineOf(typed + none).length === 0, inlineOf(typed + none).join(' ') || 'no on* attribute');
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const tables = Object.keys(TABLES).map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
+  const called = [...new Set([...tables.matchAll(/=>\s*([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))];
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'actions.js'), 'utf8') + '\nvar S={chapter:null};\n'
+    + called.map(n => `function ${n}(){ tcalls.push(${J(n)} + (arguments.length ? " " + JSON.stringify([].slice.call(arguments)) : "")); }`).join('\n') + '\n' + tables
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\n'
+    + Object.keys(TABLES).map(t => `Actions.install(doc,${t},${J(TABLES[t])});`).join('\n'), tctx);
+  const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const VALUE = { input: 'long qt', select: 'Valves & more' };
+  const controls = html => [...html.matchAll(/<(button|input|select)\b([^>]*)>/g)].map(m => {
+    const at = Object.fromEntries([...m[2].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], unescape(x[2])]));
+    const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
+    const el = { nodeType: 1, tagName: m[1].toUpperCase(), value: VALUE[m[1]], dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    return el; });
+  const fire = (type, html) => { tcalls.length = 0; controls(html).forEach(el => tctx.listeners.filter(l => l[0] === type).forEach(l => l[1]({ type, target: el }))); return tcalls.slice(); };
+  const tapsTyped = fire('click', typed), tapsNone = fire('click', none);
+  ok('tapped, with something typed: Clear searches for nothing, Quiz these quizzes, Home goes home, and each row goes to its own question by its id as it is; a tap on the box or the choice calls nothing',
+     J(tapsTyped) === J(['searchGo [""]', 'quizFromSearch', 'goHome', 'jumpTo ["v1"]', 'jumpTo [' + J(ID) + ']']), J(tapsTyped));
+  ok('tapped, with nothing typed: Home goes home, and each topic searches for itself as it is',
+     J(tapsNone) === J(['goHome', 'searchGo ["aortic valve"]', 'searchGo [' + J(TOPIC) + ']']), J(tapsNone));
+  const keys = fire('input', typed).concat(fire('input', none));
+  ok('typed in: the box calls searchInput() with what it holds, each time it is drawn, and a key in any other control calls nothing', J(keys) === J(['searchInput ["long qt"]', 'searchInput ["long qt"]']), J(keys));
+  const chose = fire('change', typed).concat(fire('change', none));
+  ok('chosen from: the chapter calls searchChapter() with the chapter chosen, and a change anywhere else, the box\'s among them, calls nothing', J(chose) === J(['searchChapter ["Valves & more"]', 'searchChapter ["Valves & more"]']), J(chose));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

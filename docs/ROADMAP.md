@@ -288,12 +288,14 @@ scans what it draws for any `on*` attribute; `verify-memory` and
 results screen (`verify-results-pure`; `verify-flags` taps Flagged Again and
 `verify-apexask` Explain my misses), the annotations screen
 (`verify-annotations-pure`; `verify-flags` types into its box and taps
-Practise) and the mock report (`verify-mockreport-pure`; `verify-mockscreen`
-taps its review). An action that needs state reads it when tapped, as its handler
-did: Restart reads the chapter then. What a field does as it is typed in is in
-a table of its own, `INPUT_ACTIONS`, listened to for input only, so a tap on a
-field calls nothing and a key in a button calls nothing. Next: the other
-screens, one at a time.
+Practise), the mock report (`verify-mockreport-pure`; `verify-mockscreen`
+taps its review) and the topic search (`verify-search-pure`; `verify-searchwarm`
+taps, types into and chooses from it). An action that needs state reads it when
+tapped, as its handler did: Restart reads the chapter then. What a field does
+as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
+input only, so a tap on a field calls nothing and a key in a button calls
+nothing; what a choice does when another is chosen is in `CHANGE_ACTIONS`,
+listened to for change only. Next: the other screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express

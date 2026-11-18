@@ -328,7 +328,7 @@ const SUITES = [
   ['mockreport-pure', 'the mock report gives the grade\'s percent with its colour, words and ring at 80 and 60, the counts, the time in the three ways a block can end, the flags against the Flagged list as it is now, the three slowest, a row for each chapter weakest first, offers what there is to learn from only when there is something, reads two names of the state and changes nothing, the page\'s own line over the real MockExam grades a block as the arithmetic says, and its buttons name actions the page\'s ACTIONS table calls, with no inline handler'],
   /* The sixth: the topic search, its builder with hl() and snippet() in src/app/search.js. What is typed, the
      search, its timer and the handlers its markup names stay in the page. */
-  ['search-pure', 'the topic search marks the words typed in text escaped first, quotes the part of a question where one is found, offers topics before anything is typed, counts and lists the matches with their chapter, flags, figures, stem and right answer, has a chapter choice, Quiz these and Clear, every handler one of seven shapes, reads three names of the search and changes nothing, and the page\'s line over its own helpers draws a search'],
+  ['search-pure', 'the topic search marks the words typed in text escaped first, quotes the part of a question where one is found, offers topics before anything is typed, counts and lists the matches with their chapter, flags, figures, stem and right answer, has a chapter choice, Quiz these and Clear, reads three names of the search and changes nothing, the page\'s line over its own helpers draws a search, and its controls name seven actions the page\'s ACTIONS, INPUT_ACTIONS and CHANGE_ACTIONS tables call, each from the table for its event, with no inline handler'],
   /* The seventh: the Study screen, its builder with arc() and examLeftText() in src/app/study.js. The page works
      out the topic runs into _runsShown first, which startRun() reads; the handlers its markup names stay there. */
   ['study-pure', 'the Study screen draws a ring and a tile for each chapter as full as it is mastered, the review queue in its three states, the study plan with its two rings, pace, three plans and the exam date in the reader\'s days, topic runs, missed, flagged and annotated only when there are any, reads five names of the state and changes nothing, and the page works out the runs first and draws them over the real core modules'],
@@ -439,7 +439,7 @@ const SUITES = [
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['cssdocs-pure', 'the split build omits CSS documentation while preserving strings, URLs and token boundaries'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
-  ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it'],
+  ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, a query or a note written while it is built is not lost to it, and the screen\'s chips, Clear, box, chapter, rows, Quiz these and Home do what they say when tapped, typed in and chosen from'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */

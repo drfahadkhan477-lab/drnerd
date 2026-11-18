@@ -5346,6 +5346,11 @@ const ACTIONS={
   /* the mock exam's report (src/app/mockreport.js): a review button carries the set to review */
   mockReview:el=>mockReview(el.dataset.mode),
   goSessions:()=>goSessions(),
+  /* the topic search (src/app/search.js): a topic carries what it searches for, a row its question's id */
+  searchGo:el=>searchGo(el.dataset.topic),
+  searchClear:()=>searchGo(''),
+  jumpTo:el=>jumpTo(el.dataset.qid),
+  quizFromSearch:()=>quizFromSearch(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5353,8 +5358,17 @@ Actions.install(document,ACTIONS);
 const INPUT_ACTIONS={
   /* the annotations screen's search: what is in the box as it stands */
   annoInput:el=>annoInput(el.value),
+  /* the topic search's box, the same */
+  searchInput:el=>searchInput(el.value),
 };
 Actions.install(document,INPUT_ACTIONS,'input');
+/* What a choice does when another is chosen: the change event, as its onchange was. A table of its own too, so the
+   input a select also fires calls nothing here, and a change that a field fires on losing focus calls nothing above. */
+const CHANGE_ACTIONS={
+  /* the topic search's chapter */
+  searchChapter:el=>searchChapter(el.value),
+};
+Actions.install(document,CHANGE_ACTIONS,'change');
 /* In a stacked split the document does not scroll — #app does. Every "go to
    the top of this screen" has to ask the right one, or it quietly does nothing
    and you arrive halfway down. Both are scrolled because only one of them is

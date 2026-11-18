@@ -33,7 +33,13 @@
      4. "Quiz these N" with matches only; a way to clear what is typed only when something is.
 
    The search itself (runSearch()), what is typed as it is typed (searchInput(), and its timer) and the
-   handlers the markup names (searchGo, searchChapter, quizFromSearch, jumpTo, goHome) stay the page's.
+   functions the markup's actions call (searchGo, searchChapter, quizFromSearch, jumpTo, goHome) stay the page's.
+
+   No inline handler (docs/ROADMAP.md, E2). Each control names an action the page's tables call
+   (src/core/actions.js): a tap, from ACTIONS; the box, from INPUT_ACTIONS as it is typed in; the chapter, from
+   CHANGE_ACTIONS when another is chosen. A topic carries what it searches for in data-topic, and a row its
+   question's id in data-qid, each through e(); the box and the choice are read for their value when the event
+   comes, as this.value was.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -67,8 +73,8 @@ function screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit){
   const hl=(text,query)=>hlText(kit,text,query), snippet=(q,query)=>snippetText(kit,q,query);
   const total=SQ.hits.length;
   const chips=TOPIC_SUGGEST.map(t=>
-    `<button class="chip${SQ.q===t?' hot':''}" onclick="searchGo(${JSON.stringify(t).replace(/"/g,'&quot;')})">${e(t)}</button>`).join('');
-  const chSel=`<select id="sCh" aria-label="Chapter" onchange="searchChapter(this.value)">
+    `<button class="chip${SQ.q===t?' hot':''}" data-action="searchGo" data-topic="${e(t)}">${e(t)}</button>`).join('');
+  const chSel=`<select id="sCh" aria-label="Chapter" data-action="searchChapter">
       <option value="">All chapters</option>
       ${CHAPTERS.map(c=>`<option value="${e(c)}"${SQ.ch===c?' selected':''}>${e(c)}</option>`).join('')}
     </select>`;
@@ -76,7 +82,7 @@ function screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit){
   const rows=SQ.hits.map(h=>{
     const q=h.q, col=CH_COLORS[q.ch]||'var(--teal)';
     const missed=S.missed.has(q.id);
-    return `<button class="hit" onclick="jumpTo('${q.id}')" style="border-left-color:${col}">
+    return `<button class="hit" data-action="jumpTo" data-qid="${e(q.id)}" style="border-left-color:${col}">
       <div class="hit-top">
         <span class="hit-ch" style="background:${col}1F;color:${chInk(col)}">${e(q.ch)} · ${q.n}</span>
         ${missed?'<span class="hit-flag">previously missed</span>':''}
@@ -94,12 +100,12 @@ function screenHtml(SQ, S, CHAPTERS, CH_COLORS, kit){
         <span class="sb-icon">${icon('search')}</span>
         <input id="sQ" type="search" placeholder="Search by topic — aortic valve, amyloidosis, long QT…"
           value="${e(SQ.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"
-          oninput="searchInput(this.value)">
-        ${SQ.q?`<button class="sb-x" onclick="searchGo('')" aria-label="Clear">${icon('x','icon-sm')}</button>`:''}
+          data-action="searchInput">
+        ${SQ.q?`<button class="sb-x" data-action="searchClear" aria-label="Clear">${icon('x','icon-sm')}</button>`:''}
       </div>
       <div class="sb-row2">${chSel}
-        ${total?`<button class="btn btn-next sb-quiz" onclick="quizFromSearch()">Quiz these ${total} ${icon('arrow-right','icon-sm')}</button>`:''}
-        <button class="btn sb-back" onclick="goHome()">${icon('arrow-left','icon-sm')} Home</button>
+        ${total?`<button class="btn btn-next sb-quiz" data-action="quizFromSearch">Quiz these ${total} ${icon('arrow-right','icon-sm')}</button>`:''}
+        <button class="btn sb-back" data-action="goHome">${icon('arrow-left','icon-sm')} Home</button>
       </div>
     </div>
     ${!SQ.q?`<div class="section-label">Try a topic</div><div class="chips sug">${chips}</div>
