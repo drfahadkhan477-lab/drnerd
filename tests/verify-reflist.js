@@ -18,7 +18,8 @@
  *   · leaving and coming back starts again at the first page; deleting a note keeps what was loaded; a note
  *     added from the form is at the top; one note opened from its source link is one card and no button, and
  *     if that note is deleted while it is looked at, the library that is left still pages;
- *   · nothing keeps watching the end of a list once the screen is left, and nothing throws.
+ *   · nothing keeps watching the end of a list once the screen is left, and nothing throws;
+ *   · Cancel, Import, Export, Back, Back to study and Show all notes each reach their function when tapped.
  */
 'use strict';
 const path = require('path');
@@ -172,6 +173,47 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await onScreen(page, 'home', { marker: '.hero-h1' });
     ok('once the screen is left nothing is', await page.evaluate(() => refPageWatch === null));
     ok('no page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
+  }
+
+  /* docs/ROADMAP.md, E2. The screen's buttons name actions, not inline handlers, which the page's ACTIONS table calls
+     through one listener on the document (src/core/actions.js). The pager and Add note are pressed above through the
+     real functions. The rest are tapped here, on a page of their own, with each function the table calls replaced by a
+     recorder that the page's own scope is seen to find, so each tap must reach one call of its function, with nothing,
+     and no other. What those functions then do is held in their own suites. A tap that cannot be made is a FAIL. */
+  head('the library\'s other buttons, tapped');
+  {
+    const context = await browser.newContext({ viewport: { width: 1194, height: 834 } }), p = watch(await context.newPage(), events, 'refs-taps');
+    const tapErrors = []; p.on('pageerror', e => { errors.push(e.message); tapErrors.push(e.message); });
+    await p.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await booted(p);
+    const NAMES = ['refCancel', 'refImportText', 'refExport', 'goHome', 'goRefs'];
+    const one = await p.evaluate(() => REF[0] && REF[0].id);
+    const draw = (editing, viewing) => p.evaluate(([editing, viewing]) => { refEditing = editing; refViewing = viewing; S.screen = 'refs'; render(); }, [editing, viewing]);
+    const set = await p.evaluate(names => {
+      const ok = names.every(n => typeof window[n] === 'function');
+      window.__taps = [];
+      for (const n of names) window[n] = function () { window.__taps.push([n].concat([].slice.call(arguments))); };
+      return { ok, reached: names.every(n => (0, eval)(n) === window[n]) };
+    }, NAMES);
+    ok('each function the buttons call is the page\'s, and the page finds its recorder by that name', set.ok && set.reached && !!one, JSON.stringify(set));
+    const tap = async sel => { await p.evaluate(() => { window.__taps = []; });
+      const made = await p.locator(sel).first().click({ timeout: 5000 }).then(() => true, () => false);
+      return { made, taps: await p.evaluate(() => window.__taps) }; };
+    await draw(one, null);
+    await onScreen(p, 'refs', { marker: '.ref-new' }); await quiet(p);
+    const rows = [
+      [await tap('.ref-new button:has-text("Cancel")'), 'refCancel', 'with a note edited, Cancel stops editing'],
+      [await tap('.ref-new button:has-text("Import")'), 'refImportText', 'Import reads a file'],
+      [await tap('.ref-new button:has-text("Export notes")'), 'refExport', 'Export writes the notes'],
+      [await tap('.ref-new button:has-text("Back")'), 'goHome', 'Back goes home'],
+    ];
+    await draw(null, one);
+    await onScreen(p, 'refs', { marker: '.ref-btns .chip' }); await quiet(p);
+    rows.push([await tap('.ref-btns .chip:has-text("Back to study")'), 'goHome', 'with one note looked at, Back to study goes home']);
+    rows.push([await tap('.ref-btns .chip:has-text("Show all notes")'), 'goRefs', 'and Show all notes opens the whole library']);
+    for (const [r, want, label] of rows) ok(label + ', by one call with nothing, and no other', r.made && JSON.stringify(r.taps) === JSON.stringify([[want]]), (r.made ? '' : 'the tap could not be made; ') + JSON.stringify(r.taps));
+    ok('and nothing throws on that page', tapErrors.length === 0, tapErrors.slice(0, 3).join(' | '));
+    await context.close();
   }
 
   await browser.close();
