@@ -47,8 +47,12 @@ const kitOf = (over, cells) => Object.assign({
   e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']', window: { innerWidth: 1194 },
 }, over);
 const draw = (bOver, kOver, view, cells) => run(() => M.screenHtml({ mock: bOver === null ? null : block(bOver), mockView: view || 'q' }, kitOf(kOver, cells)));
-const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
-const GONE = '<div class="mock-wrap"><div class="mock-gone"><p>No block is open.</p>\n    <button class="btn btn-next" type="button" onclick="goSessions()">[icon arrow-left icon-sm] Back to Sessions</button></div></div>';
+/* docs/ROADMAP.md, E2. Attribute names, read tag by tag with each value consumed whole, so text inside a value is never
+   taken for a name; and the actions the markup names, in the order drawn. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
+const GONE = '<div class="mock-wrap"><div class="mock-gone"><p>No block is open.</p>\n    <button class="btn btn-next" type="button" data-action="goSessions">[icon arrow-left icon-sm] Back to Sessions</button></div></div>';
 
 head('no block, or no question');
 {
@@ -62,21 +66,21 @@ head('paused');
   ok('it says so, and the question is hidden', html.includes('<h2>Paused</h2>') && !html.includes('the stem') && !html.includes('mock-opt'));
   ok('the clock is shown big, with its urgency, "left" for a timed block', html.includes('<div class="mock-clockbox big"><span class="mock-clock" id="mockClock" data-urgency="URG">CLOCK</span><span class="mock-clock-lab">left</span></div>'));
   ok('"elapsed" for an untimed one', draw({ paused: true, secPerQ: 0 }).includes('<span class="mock-clock-lab">elapsed</span>'));
-  ok('Resume, by mockUnpause()', J(handlersOf(html)) === J(['mockUnpause()']) && html.includes('[icon play icon-sm] Resume'));
+  ok('Resume, by the mockUnpause action, and no other, and no inline handler', J(actionsOf(html)) === J(['mockUnpause']) && inlineOf(html).length === 0 && html.includes('[icon play icon-sm] Resume'));
 }
 
 head('the block');
 {
   const html = draw();
   ok('the clock, as a timer that does not speak each second, with its urgency', html.includes('<span class="mock-clock" id="mockClock" role="timer" aria-live="off" data-urgency="URG">CLOCK</span><span class="mock-clock-lab">left</span>'));
-  ok('the place, the pause and the progress', html.includes('<span class="q-counter">Question 2 of 3</span>') && html.includes('onclick="mockPause()" aria-label="Pause the block"') && html.includes('style="transform:scaleX(0.3333)"'));
+  ok('the place, the pause and the progress', html.includes('<span class="q-counter">Question 2 of 3</span>') && html.includes('data-action="mockPause" aria-label="Pause the block"') && html.includes('style="transform:scaleX(0.3333)"'));
   ok('how many are answered and flagged, and the pace through e(), with its status', html.includes('<span id="mockSub">1 answered · 1 flagged</span>') && html.includes('id="mockPace" data-status="behind">E(PACE)</span>'));
   const two = draw({}, { MockExam: { states: () => ({ n: 3, answered: 2, flagged: 0, cells: CELLS }), pace: () => ({ status: 'ahead' }), urgency: () => 'URG' } });
   ok('answered and flagged are each their own count', two.includes('<span id="mockSub">2 answered · 0 flagged</span>') && two.includes('data-status="ahead"'));
   ok('no pace status when there is no pace', draw({}, { MockExam: { states: () => ({ n: 3, answered: 1, flagged: 1, cells: CELLS }), pace: () => null, urgency: () => 'URG' } }).includes('id="mockPace" data-status="">'));
   ok('the question, through e(), numbered by its place', html.includes('Question 2</div>\n      E(the stem)'));
-  const opts = [...html.matchAll(/<button class="(opt mock-opt[^"]*)" type="button" data-mi="(\d)"\s+onclick="mockPick\((\d)\)" aria-pressed="([^"]*)"[^>]*>\s*<span class="opt-letter">([^<]*)<\/span><span class="opt-text">([^<]*)</g)].map(m => m.slice(1));
-  ok('an option for each, by index, letter and words through e(), none chosen here', J(opts) === J([['opt mock-opt', '0', '0', 'false', 'E(A)', 'E(one)'], ['opt mock-opt', '1', '1', 'false', 'E(B)', 'E(two)']]), J(opts));
+  const opts = [...html.matchAll(/<button class="(opt mock-opt[^"]*)" type="button" data-mi="(\d)"\s+data-action="(mockPick)" aria-pressed="([^"]*)"[^>]*>\s*<span class="opt-letter">([^<]*)<\/span><span class="opt-text">([^<]*)</g)].map(m => m.slice(1));
+  ok('an option for each, by index, letter and words through e(), none chosen here', J(opts) === J([['opt mock-opt', '0', 'mockPick', 'false', 'E(A)', 'E(one)'], ['opt mock-opt', '1', 'mockPick', 'false', 'E(B)', 'E(two)']]), J(opts));
   const picked = [...draw({ i: 0 }).matchAll(/class="(opt mock-opt[^"]*)"[^>]*aria-pressed="([^"]*)"/g)].map(m => [m[1], m[2]]);
   ok('the chosen option is picked and pressed', J(picked) === J([['opt mock-opt', 'false'], ['opt mock-opt picked', 'true']]), J(picked));
   ok('a figure\'s panels are marked, and the question\'s notice through e()', draw({}, { mockQ: () => Object.assign({}, Q, { imgopt: true, flag: 'N<x>' }) }).includes('class="opt mock-opt img-opt"') && draw({}, { mockQ: () => Object.assign({}, Q, { imgopt: true }) }).includes('Answer options refer to the labelled panels in the figure.</div>') && draw({}, { mockQ: () => Object.assign({}, Q, { flag: 'N<x>' }) }).includes('<span>E(N<x>)</span>'));
@@ -90,13 +94,13 @@ head('the block');
     return i < 0 || end < 0 || p < 0 ? null : { inner: h.slice(i, end), between: h.slice(end, pEnd), after: h.slice(pEnd, pEnd + 40) }; };
   const tc = [html, withQ({ id: 'a', img: true })].map(cols);
   ok('the text column holds the card, the options and the hint, and the pair closes with it, before the actions', tc.every(t => t && /^<div class="reading-text">\n    <div class="q-card/.test(t.inner) && t.inner.includes('<div class="opts" role="group"') && t.inner.includes('kb-hint') && t.between === '</div>' && /^\n    <div class="actions mock-actions">/.test(t.after)), tc.map(t => t && J(t.between) + ' ' + J(t.after)).join(' | '));
-  ok('back is disabled on the first question only', /onclick="mockPrev\(\)" aria-label="Previous question" disabled>/.test(draw({ i: 0 })) && !/aria-label="Previous question" disabled/.test(html));
-  ok('the flag is a toggle, pressed when this question is flagged', draw({ i: 0 }).includes('class="btn mock-flag on" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="true"') && html.includes('class="btn mock-flag" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="false"'));
-  ok('"Next", and on the last question "Review and hand in"', html.includes('onclick="mockNext()">Next [icon arrow-right') && draw({ i: 2 }).includes('onclick="mockNext()">Review and hand in [icon arrow-right'));
-  const cells = [...html.matchAll(/<button class="(mock-cell[^"]*)" type="button"\s+data-mc="(\d+)" onclick="mockGo\((\d+)\)" aria-label="([^"]*)"( aria-current="true")?>(\d+)<\/button>/g)].map(m => m.slice(1));
+  ok('back is disabled on the first question only', /data-action="mockPrev" aria-label="Previous question" disabled>/.test(draw({ i: 0 })) && !/aria-label="Previous question" disabled/.test(html));
+  ok('the flag is a toggle, pressed when this question is flagged', draw({ i: 0 }).includes('class="btn mock-flag on" id="mockFlagBtn" type="button" data-action="mockFlag" aria-pressed="true"') && html.includes('class="btn mock-flag" id="mockFlagBtn" type="button" data-action="mockFlag" aria-pressed="false"'));
+  ok('"Next", and on the last question "Review and hand in"', html.includes('data-action="mockNext">Next [icon arrow-right') && draw({ i: 2 }).includes('data-action="mockNext">Review and hand in [icon arrow-right'));
+  const cells = [...html.matchAll(/<button class="(mock-cell[^"]*)" type="button"\s+data-mc="(\d+)" data-action="mockGo" data-q="(\d+)" aria-label="([^"]*)"( aria-current="true")?>(\d+)<\/button>/g)].map(m => m.slice(1));
   ok('a cell for each question, marked answered, flagged and current, each going to it, named for a screen reader',
      J(cells) === J([['mock-cell done flag', '0', '0', 'CELL 1', undefined, '1'], ['mock-cell cur', '1', '1', 'CELL 2', ' aria-current="true"', '2'], ['mock-cell', '2', '2', 'CELL 3', undefined, '3']]), J(cells));
-  ok('"End block", by mockEnd()', html.includes('onclick="mockEnd()">[icon check icon-sm]<span>End block</span>'));
+  ok('"End block", by the mockEnd action', html.includes('data-action="mockEnd">[icon check icon-sm]<span>End block</span>'));
   ok('a wide screen is told the keys; a screen under 768 is not', html.includes('Press <kbd>A</kbd>–<kbd>E</kbd> to answer') && !draw({}, { window: { innerWidth: 767 } }).includes('kb-hint') && draw({}, { window: { innerWidth: 768 } }).includes('kb-hint'));
 }
 
@@ -105,12 +109,12 @@ head('the summary before handing in');
   const html = draw({}, {}, 'end');
   ok('it asks, and says how many are answered and the time left', html.includes('<h2 tabindex="-1">Hand in this block?</h2>') && html.includes('1 of 3 answered · <span class="mock-clock sm" id="mockClock" data-urgency="URG">CLOCK</span> left'));
   ok('for an untimed block, the time so far, with no urgency', draw({ secPerQ: 0 }, {}, 'end').includes('<span class="mock-clock sm" id="mockClock" data-urgency="none">CLOCK</span> so far'));
-  const blank = [...(g1(html, /<b>2 not answered<\/b> — counted as wrong\s*<div class="mock-chips">([\s\S]*?)<\/div>/) || '').matchAll(/onclick="mockGo\((\d+)\)" aria-label="Go to question (\d+)">(\d+)</g)].map(m => m.slice(1));
+  const blank = [...(g1(html, /<b>2 not answered<\/b> — counted as wrong\s*<div class="mock-chips">([\s\S]*?)<\/div>/) || '').matchAll(/data-action="mockGo" data-q="(\d+)" aria-label="Go to question (\d+)">(\d+)</g)].map(m => m.slice(1));
   ok('the questions not answered, counted as wrong, each a way back to it', J(blank) === J([['1', '2', '2'], ['2', '3', '3']]), J(blank));
-  ok('the flagged, to look at again, each a way back', html.includes('<b>1 flagged</b> — to look at again') && html.includes('<button class="mock-chip flag" type="button" onclick="mockGo(0)" aria-label="Go to question 1">1</button>'));
+  ok('the flagged, to look at again, each a way back', html.includes('<b>1 flagged</b> — to look at again') && html.includes('<button class="mock-chip flag" type="button" data-action="mockGo" data-q="0" aria-label="Go to question 1">1</button>'));
   const all = draw({}, {}, 'end', CELLS.map(c => Object.assign({}, c, { answered: true, flagged: false })));
   ok('with every question answered and none flagged, it says so, and lists none', all.includes('<div class="mock-end-sec ok">Every question has an answer.</div>') && !all.includes('not answered</b>') && !all.includes('flagged</b>'));
-  ok('back to the block, at the question it was on, and "Hand in"', html.includes('onclick="mockGo(S.mock.i)">[icon arrow-left icon-sm] Back to the block</button>') && html.includes('onclick="mockSubmit()">Hand in [icon check icon-sm]</button>'));
+  ok('back to the block, by the mockBack action, and "Hand in", by mockSubmit', html.includes('data-action="mockBack">[icon arrow-left icon-sm] Back to the block</button>') && html.includes('data-action="mockSubmit">Hand in [icon check icon-sm]</button>'));
   ok('the summary is what endHtml() draws for the same block', html === run(() => M.endHtml({ mock: block(), mockView: 'end' }, kitOf())));
 }
 
@@ -149,9 +153,18 @@ head('the page hands the module what it has, and keeps what the markup names');
   const WORDS = ['No block is open.', 'Hand in this block?', 'Every question has an answer.', 'Review and hand in', 'The clock is stopped and the question is hidden.'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw() + draw({ paused: true }) + draw({}, {}, 'end') + draw(null);
-  const handlers = [...new Set(handlersOf(all).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names ten handlers', J(handlers) === J(['goSessions', 'mockEnd', 'mockFlag', 'mockGo', 'mockNext', 'mockPause', 'mockPick', 'mockPrev', 'mockSubmit', 'mockUnpause']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const named = [...new Set(actionsOf(all))].sort();
+  ok('its markup names eleven actions and carries no inline handler', J(named) === J(['goSessions', 'mockBack', 'mockEnd', 'mockFlag', 'mockGo', 'mockNext', 'mockPause', 'mockPick', 'mockPrev', 'mockSubmit', 'mockUnpause']) && inlineOf(all).length === 0, named.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
+  const ENTRY = { mockPick: 'mockPick:el=>mockPick(Number(el.dataset.mi)),', mockGo: 'mockGo:el=>mockGo(Number(el.dataset.q)),', mockBack: 'mockBack:()=>mockGo(S.mock.i),', goSessions: 'goSessions:()=>goSessions(),' };
+  ['mockPrev', 'mockNext', 'mockFlag', 'mockPause', 'mockUnpause', 'mockEnd', 'mockSubmit'].forEach(n => { ENTRY[n] = n + ':()=>' + n + '(),'; });
+  ok('each is in the page\'s ACTIONS table once, as written, and in neither of the others: the indices read back as numbers, and back to the block reading where it is when tapped',
+     named.length === 11 && named.every(n => ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0),
+     named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 ? '' : ' (not as written)')).join(' '));
+  const CALLS = ['goSessions', 'mockEnd', 'mockFlag', 'mockGo', 'mockNext', 'mockPause', 'mockPick', 'mockPrev', 'mockSubmit', 'mockUnpause'];
+  ok('they call ten functions the page declares, once each, and the page listens for taps on the document', CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   const ids = ['mockClock', 'mockPace', 'mockSub', 'mockProg', 'mockFlagBtn'];
   ok('the five elements the ticker and the keys repaint are each looked up by the page, and drawn once, by those ids',
      ids.every(id => count("getElementById('" + id + "')") === 1 && times(draw(), 'id="' + id + '"') === 1), ids.map(id => id + ':' + count("getElementById('" + id + "')") + '/' + times(draw(), 'id="' + id + '"')).join(' '));
@@ -173,7 +186,39 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('the grid is the real states: the first answered and current, the second not', html.includes('<button class="mock-cell done cur" type="button"') && html.includes('aria-label="Question 1, answered, current" aria-current="true">1</button>') && html.includes('aria-label="Question 2, not answered">2</button>'));
   ask('S.mockView = "end"');
   const end = String(ask('buildMock()'));
-  ok('the summary over the real states: one of two answered, the second not, as a way back to it', end.includes('1 of 2 answered') && end.includes('<b>1 not answered</b>') && end.includes('onclick="mockGo(1)" aria-label="Go to question 2">2</button>'));
+  ok('the summary over the real states: one of two answered, the second not, as a way back to it', end.includes('1 of 2 answered') && end.includes('<b>1 not answered</b>') && end.includes('data-action="mockGo" data-q="1" aria-label="Go to question 2">2</button>'));
+
+  /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document over the page's own
+     tables, with a recording stand-in for each function they call, and as the element each button the page's own line
+     drew over the real MockExam, in the order drawn. A disabled button is not tapped: a browser fires no click on one.
+     The block in the stand-in context is on question 8 (index 7), which the summary drawn does not show, so Back to the
+     block must read where the block is when tapped, not what was drawn. */
+  ask('S.mockView = "q"');
+  const onQ = String(ask('buildMock()'));
+  ask('S.mock.paused = true');
+  const paused = String(ask('buildMock()'));
+  ask('S.mock.paused = false; S.mockView = "end"');
+  const summary = String(ask('buildMock()'));
+  ask('S.mock = null');
+  const gone = String(ask('buildMock()'));
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const tables = TABLES.map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
+  const called = [...new Set([...tables.matchAll(/([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].filter(n => n !== 'Number');
+  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null, mock:{i:7}}, offlineJob={busy:false};\n'
+    + called.map(n => `function ${n}(){ tcalls.push(${J(n)} + (arguments.length ? " " + JSON.stringify([].slice.call(arguments)) : "")); }`).join('\n') + '\n' + tables
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
+  const tapAll = h => { tcalls.length = 0; [...h.matchAll(/<button\b([^>]*)>/g)].forEach(m => {
+    if (/\sdisabled(\s|$|>)/.test(m[1] + ' ')) return;
+    const at = Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], x[2]]));
+    const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
+    const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ type: 'click', target: el })); }); return tcalls.slice(); };
+  const tq = tapAll(onQ), tp = tapAll(paused), ts = tapAll(summary), tg = tapAll(gone);
+  ok('tapped through the real Actions and the page\'s tables, on the first question: Pause, each option by its index as a number, Flag, Next, End block, and each cell to its question (Back is disabled there)',
+     J(tq) === J(['mockPause', 'mockPick [0]', 'mockPick [1]', 'mockFlag', 'mockNext', 'mockEnd', 'mockGo [0]', 'mockGo [1]']), J(tq));
+  ok('paused: Resume; the summary: the question not answered, Back to the block at the question it is on when tapped, and Hand in; with no block: back to Sessions',
+     J(tp) === J(['mockUnpause']) && J(ts) === J(['mockGo [1]', 'mockGo [7]', 'mockSubmit']) && J(tg) === J(['goSessions']), J([tp, ts, tg]));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

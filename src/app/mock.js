@@ -34,8 +34,12 @@
      4. The summary: how many answered, the time, the questions not answered and those flagged as ways
         back to each, the way back to the block, and "Hand in".
 
-   The buttons name mockPick, mockGo, mockPrev, mockNext, mockFlag, mockPause, mockUnpause, mockEnd,
-   mockSubmit and goSessions: an inline handler is read where it is tapped, so those stay the page's.
+   The buttons name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's ACTIONS table calls
+   (src/core/actions.js): mockPrev, mockNext, mockFlag, mockPause, mockUnpause, mockEnd, mockSubmit and
+   goSessions with nothing; mockPick with the option's index (data-mi) and mockGo with the question's
+   (data-q, on a summary chip and on a cell), each read as a number, as the handlers were given; and mockBack,
+   which goes back to the question the block is on, read when tapped, as mockGo(S.mock.i) read it. The
+   functions stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -43,7 +47,7 @@
 function endHtml(S, kit){
   const {MockExam,mockClockText,icon}=kit;
   const r=S.mock, st=MockExam.states(r), n=st.n;
-  const chip=(c,cls)=>`<button class="mock-chip ${cls}" type="button" onclick="mockGo(${c.n-1})" aria-label="Go to question ${c.n}">${c.n}</button>`;
+  const chip=(c,cls)=>`<button class="mock-chip ${cls}" type="button" data-action="mockGo" data-q="${c.n-1}" aria-label="Go to question ${c.n}">${c.n}</button>`;
   const blank=st.cells.filter(c=>!c.answered), flagged=st.cells.filter(c=>c.flagged);
   const left=r.secPerQ?`<span class="mock-clock sm" id="mockClock" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span> left`
     :`<span class="mock-clock sm" id="mockClock" data-urgency="none">${mockClockText(r)}</span> so far`;
@@ -55,8 +59,8 @@ function endHtml(S, kit){
     ${flagged.length?`<div class="mock-end-sec"><b>${flagged.length} flagged</b> — to look at again
       <div class="mock-chips">${flagged.map(c=>chip(c,'flag')).join('')}</div></div>`:''}
     <div class="actions mock-end-actions">
-      <button class="btn btn-prev wide" type="button" onclick="mockGo(S.mock.i)">${icon('arrow-left','icon-sm')} Back to the block</button>
-      <button class="btn btn-next" type="button" onclick="mockSubmit()">Hand in ${icon('check','icon-sm')}</button>
+      <button class="btn btn-prev wide" type="button" data-action="mockBack">${icon('arrow-left','icon-sm')} Back to the block</button>
+      <button class="btn btn-next" type="button" data-action="mockSubmit">Hand in ${icon('check','icon-sm')}</button>
     </div></div></div>`;
 }
 
@@ -66,20 +70,20 @@ function screenHtml(S, kit){
   const buildMockEnd=()=>endHtml(S,kit);
   const r=S.mock, q=mockQ();
   if(!r||!q) return `<div class="mock-wrap"><div class="mock-gone"><p>No block is open.</p>
-    <button class="btn btn-next" type="button" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
+    <button class="btn btn-next" type="button" data-action="goSessions">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
   if(S.mockView==='end') return buildMockEnd();
   const n=r.ids.length, st=MockExam.states(r), chosen=r.sel[r.i], lab=r.secPerQ?'left':'elapsed';
   if(r.paused) return `<div class="quiz-wrap mock-wrap"><div class="mock-paused" role="status">
       <span class="mock-pause-ic">${icon('pause')}</span><h2>Paused</h2>
       <p>The clock is stopped and the question is hidden. Nothing is scored until you hand the block in.</p>
       <div class="mock-clockbox big"><span class="mock-clock" id="mockClock" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span><span class="mock-clock-lab">${lab}</span></div>
-      <button class="btn btn-next" type="button" onclick="mockUnpause()">${icon('play','icon-sm')} Resume</button></div></div>`;
+      <button class="btn btn-next" type="button" data-action="mockUnpause">${icon('play','icon-sm')} Resume</button></div></div>`;
   const pace=MockExam.pace(r);
   const opts=q.o.map((o,i)=>`<button class="opt mock-opt${q.imgopt?' img-opt':''}${chosen===i?' picked':''}" type="button" data-mi="${i}"
-      onclick="mockPick(${i})" aria-pressed="${chosen===i}" style="--acc:var(--teal)">
+      data-action="mockPick" aria-pressed="${chosen===i}" style="--acc:var(--teal)">
       <span class="opt-letter">${e(o.l)}</span><span class="opt-text">${e(o.t)}</span></button>`).join('');
   const cells=st.cells.map(c=>`<button class="mock-cell${c.answered?' done':''}${c.flagged?' flag':''}${c.current?' cur':''}" type="button"
-      data-mc="${c.n-1}" onclick="mockGo(${c.n-1})" aria-label="${mockCellLabel(c)}"${c.current?' aria-current="true"':''}>${c.n}</button>`).join('');
+      data-mc="${c.n-1}" data-action="mockGo" data-q="${c.n-1}" aria-label="${mockCellLabel(c)}"${c.current?' aria-current="true"':''}>${c.n}</button>`).join('');
   const flagged=!!r.flag[r.i], lastQ=r.i>=n-1;
   const isMobile=window.innerWidth<768;
   return `<div class="quiz-wrap mock-wrap">
@@ -87,7 +91,7 @@ function screenHtml(S, kit){
       <div class="mock-top">
         <div class="mock-clockbox"><span class="mock-clock" id="mockClock" role="timer" aria-live="off" data-urgency="${MockExam.urgency(r)}">${mockClockText(r)}</span><span class="mock-clock-lab">${lab}</span></div>
         <span class="q-counter">Question ${r.i+1} of ${n}</span>
-        <button class="mock-mini" type="button" onclick="mockPause()" aria-label="Pause the block">${icon('pause','icon-sm')}<span>Pause</span></button>
+        <button class="mock-mini" type="button" data-action="mockPause" aria-label="Pause the block">${icon('pause','icon-sm')}<span>Pause</span></button>
       </div>
       <div class="prog-track"><div class="prog-fill" id="mockProg" style="transform:scaleX(${(st.answered/n).toFixed(4)})"></div></div>
       <div class="mock-subrow"><span id="mockSub">${st.answered} answered · ${st.flagged} flagged</span><span class="mock-pace" id="mockPace" data-status="${pace?pace.status:''}">${e(mockPaceText(r))}</span></div>
@@ -103,12 +107,12 @@ function screenHtml(S, kit){
     ${isMobile?'':'<div class="kb-hint kbd-row">Press <kbd>A</kbd>–<kbd>E</kbd> to answer · <kbd>F</kbd> to flag · <kbd>←</kbd> <kbd>→</kbd> to move</div>'}
     </div></div>
     <div class="actions mock-actions">
-      <button class="btn btn-prev" type="button" onclick="mockPrev()" aria-label="Previous question"${r.i===0?' disabled':''}>${icon('arrow-left','icon-sm')}</button>
-      <button class="btn mock-flag${flagged?' on':''}" id="mockFlagBtn" type="button" onclick="mockFlag()" aria-pressed="${flagged}">${icon('flag','icon-sm')} <span class="mock-flag-l">Flag</span></button>
-      <button class="btn btn-next" type="button" onclick="mockNext()">${lastQ?'Review and hand in':'Next'} ${icon('arrow-right','icon-sm')}</button>
+      <button class="btn btn-prev" type="button" data-action="mockPrev" aria-label="Previous question"${r.i===0?' disabled':''}>${icon('arrow-left','icon-sm')}</button>
+      <button class="btn mock-flag${flagged?' on':''}" id="mockFlagBtn" type="button" data-action="mockFlag" aria-pressed="${flagged}">${icon('flag','icon-sm')} <span class="mock-flag-l">Flag</span></button>
+      <button class="btn btn-next" type="button" data-action="mockNext">${lastQ?'Review and hand in':'Next'} ${icon('arrow-right','icon-sm')}</button>
     </div>
     <div class="mock-navcard">
-      <div class="mock-navh"><span>Questions</span><button class="mock-mini" type="button" onclick="mockEnd()">${icon('check','icon-sm')}<span>End block</span></button></div>
+      <div class="mock-navh"><span>Questions</span><button class="mock-mini" type="button" data-action="mockEnd">${icon('check','icon-sm')}<span>End block</span></button></div>
       <div class="mock-nav" role="group" aria-label="Questions in this block">${cells}</div>
       <div class="mock-key"><span><i class="k done"></i>answered</span><span><i class="k flag"></i>flagged</span><span><i class="k"></i>not answered</span></div>
     </div>

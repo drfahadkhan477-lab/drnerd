@@ -357,7 +357,7 @@ jobs:
         run: node tests/verify-refs-pure.js
       - name: the question screen shows the question before and after answering, the reveal, how sure and why missed, the review ratings with when each card comes back over the real FSRS, and its buttons name actions where they had inline handlers (67 checks)
         run: node tests/verify-quiz-pure.js
-      - name: a mock block shows the question, clock, pace, flag and grid, paused or not, and the summary before handing in, and the page's line draws a block over the real MockExam (48 checks)
+      - name: a mock block shows the question, clock, pace, flag and grid, paused or not, and the summary before handing in, the page's line draws a block over the real MockExam, and its buttons name actions where they had inline handlers (51 checks)
         run: node tests/verify-mock-pure.js
       - name: the Sessions screen shows the mock exam's card, a block in progress or one to set up, and the voice card, the page's lines draw it over its own setMockCfg() and the real MockExam, and its controls name actions where they had inline handlers (64 checks)
         run: node tests/verify-sessions-pure.js

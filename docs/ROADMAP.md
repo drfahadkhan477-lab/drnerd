@@ -296,6 +296,7 @@ notes library (`verify-refs-pure`; `verify-reflist` taps each of its buttons), a
 the Sessions screen (`verify-sessions-pure`; `verify-mockscreen` and
 `verify-voicescreen` tap its controls), and the quiz (`verify-quiz-pure`;
 `verify-quiznav`, `verify-flags`, `verify-apexask` and `verify-mockscreen` tap
+its buttons) and the mock block (`verify-mock-pure`; `verify-mockscreen` taps
 its buttons). An action that needs state reads it when
 tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
