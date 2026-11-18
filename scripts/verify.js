@@ -98,7 +98,7 @@ const SUITES = [
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
   ['voicescreen', 'the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave'],
-  ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
+  ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn, and the Study screen\'s rings, tiles, review, missed, every-question and back buttons start what they say when tapped'],
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
   ['content',      'a question broken in a way the fellow cannot see is never shipped silently'],
   ['backup',       'a restored backup appears now, not only after the next launch, and the Progress screen\'s buttons reach their functions when tapped'],

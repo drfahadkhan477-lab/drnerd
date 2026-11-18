@@ -5398,6 +5398,16 @@ const ACTIONS={
   mockUnpause:()=>mockUnpause(),
   mockEnd:()=>mockEnd(),
   mockSubmit:()=>mockSubmit(),
+  /* the Study screen (src/app/study.js): a chapter's story and tile are startChapter above, the missed card retryMissed;
+     a plan chip and a topic run carry their number, read back as the number the handlers were given */
+  startDue:()=>startQuiz(null,'due'),
+  startFlagged:()=>startQuiz(null,'flagged'),
+  startAll:()=>startQuiz(null),
+  startPlan:el=>startPlan(Number(el.dataset.plan)),
+  startRun:el=>startRun(Number(el.dataset.run)),
+  clearExamDate:()=>setExamDate(''),
+  clearFlags:()=>clearFlags(),
+  goAnnotations:()=>goAnnotations(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5416,6 +5426,8 @@ const CHANGE_ACTIONS={
   searchChapter:el=>searchChapter(el.value),
   /* the mock block's chapter, on the Sessions screen */
   mockChapter:el=>setMockCfg('ch',el.value),
+  /* the Study screen's exam date */
+  setExamDate:el=>setExamDate(el.value),
 };
 Actions.install(document,CHANGE_ACTIONS,'change');
 /* In a stacked split the document does not scroll — #app does. Every "go to
