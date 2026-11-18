@@ -12,6 +12,7 @@
  *   · opening the search screen builds it with no query asked, and in many slices, not in one;
  *   · a query typed before it is done gets the answers a fresh whole build gives;
  *   · a note written while it is being built is not lost to it;
+ *   · its chips, Clear, box, chapter, rows, Quiz these and Home do what they say when tapped, typed in and chosen from;
  *   · nothing throws, and nothing is left running.
  */
 'use strict';
@@ -105,6 +106,49 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('the note is written with the build part done and not finished, or this section measures nothing', r.mid.done > 0 && r.mid.done < r.mid.of && r.mid.built === false, `${r.mid.done} of ${r.mid.of} documents were in`);
     ok('adding a note mid-build drops the job, and the slice that was waiting builds nothing from it', r.dead.built === false && r.dead.job === false && r.after.built === false && r.after.job === false, JSON.stringify([r.dead, r.after]));
     ok('and the next search builds from the library as it is, so the note is found', r.top === 'A note written mid-build', String(r.top));
+  }
+
+  /* docs/ROADMAP.md, E2. The screen carries no inline handler: each control names an action that the page's tables
+     call through one listener on the document (src/core/actions.js). This is the screen used as a reader uses it, by
+     real taps, keys and a choice, so a control whose action is missing from its table, or a table not listened to for
+     its event, fails here. tests/verify-search-pure.js holds what each control names and what each action calls. A
+     wait below that times out is a FAIL line, never a pass: until() says whether it came true. */
+  head('the screen, tapped, typed in and chosen from');
+  {
+    const until = (fn, arg, ms = 8000) => page.waitForFunction(fn, arg === undefined ? null : arg, { timeout: ms, polling: 40 }).then(() => true, () => false);
+    const where = () => page.evaluate(() => JSON.stringify({ screen: S.screen, q: SQ.q, ch: SQ.ch, hits: SQ.hits.length, qs: S.questions ? S.questions.length : 0 }));
+    await page.evaluate(() => { SQ.ch = ''; runSearch(''); openSearch(); });
+    await onScreen(page, 'search', { marker: '.chips.sug .chip' });
+    await quiet(page);
+    const topic = await page.evaluate(() => document.querySelector('.chips.sug .chip').textContent);
+    await page.click('.chips.sug .chip');
+    ok('a topic tapped searches for itself', await until(t => SQ.q === t && S.screen === 'search' && !!document.querySelector('.sb-x'), topic), await where());
+    await page.click('.sb-x');
+    ok('Clear searches for nothing, and the topics are offered again', await until(() => SQ.q === '' && !!document.querySelector('.chips.sug .chip')), await where());
+
+    /* A word of a question's own stem, from the synthetic bank, so it is found; and that question's chapter. */
+    const pick = await page.evaluate(() => { const q = ALL_Q.find(x => !x.bad && (x.s.match(/[A-Za-z]{6,}/) || [])[0]); return { word: q.s.match(/[A-Za-z]{6,}/)[0].toLowerCase(), ch: q.ch }; });
+    await page.fill('#sQ', pick.word);
+    ok('typing in the box searches for what it holds, and lists what it finds', await until(w => SQ.q === w && SQ.hits.length > 0 && !!document.querySelector('.hits .hit'), pick.word), await where());
+    await quiet(page);
+    await page.selectOption('#sCh', pick.ch);
+    ok('choosing a chapter searches it alone', await until(c => SQ.ch === c && SQ.hits.length > 0 && SQ.hits.every(h => h.q.ch === c) && document.getElementById('sCh').value === c, pick.ch), await where());
+    await quiet(page);
+    const qid = await page.evaluate(() => document.querySelector('.hits .hit').dataset.qid);
+    await page.click('.hits .hit');
+    ok('a row tapped opens its own question', await until(id => S.screen === 'quiz' && S.questions.length === 1 && S.questions[0].id === id, qid), await where());
+
+    await page.evaluate(() => openSearch());
+    await onScreen(page, 'search', { marker: '.sb-quiz' });
+    await quiet(page);
+    const n = await page.evaluate(() => SQ.hits.length);
+    await page.click('.sb-quiz');
+    ok('"Quiz these N" deals the N found', await until(k => S.screen === 'quiz' && S.questions.length === k, n), await where());
+    await page.evaluate(() => openSearch());
+    await onScreen(page, 'search', { marker: '.sb-back' });
+    await quiet(page);
+    await page.click('.sb-back');
+    ok('Home goes home', await until(() => S.screen === 'home'), await where());
   }
 
   head('nothing throws');

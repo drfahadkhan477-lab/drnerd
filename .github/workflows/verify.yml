@@ -349,7 +349,7 @@ jobs:
         run: node tests/verify-annotations-pure.js
       - name: the mock report says the score, the time, the flags as the Flagged list is now, the slowest and each chapter weakest first, the page's line grades a block through the real MockExam, and its buttons name actions where they had inline handlers (52 checks)
         run: node tests/verify-mockreport-pure.js
-      - name: the topic search marks the words typed in escaped text, lists each match with its chapter, flags, stem and answer, and the page's line draws a search over its own helpers (54 checks)
+      - name: the topic search marks the words typed in escaped text, lists each match with its chapter, flags, stem and answer, the page's line draws a search over its own helpers, and its controls name actions where they had inline handlers (59 checks)
         run: node tests/verify-search-pure.js
       - name: the Study screen draws the chapters, the review queue, the study plan and the exam date, and its cards only when there is something, and the page works out the topic runs first (65 checks)
         run: node tests/verify-study-pure.js
