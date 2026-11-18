@@ -31,14 +31,16 @@
      3. "Save changes" and Cancel while a note is edited; "Add note" otherwise.
      4. With no notes, a line that says how to add one.
 
-   The buttons name refSave, refCancel, refImportText, refExport, refMore, goHome and goRefs, and the cards
-   refEdit and refRemove: an inline handler is read where it is tapped, so those stay the page's.
+   The buttons name actions, not inline handlers (docs/ROADMAP.md, E2): refSave, refCancel, refImportText,
+   refExport, refMore, goHome and goRefs, which the page's ACTIONS table calls (src/core/actions.js), each by the
+   page's function of that name, with no argument, as the handler called it. The functions stay the page's. The
+   cards are the page's refCard(), and still carry its inline handlers for refEdit and refRemove.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
 function pagerHtml(REF_PAGE,left){
-  return left>0?`<div class="ref-pager" id="refPager"><button class="chip" type="button" onclick="refMore()">Show ${Math.min(REF_PAGE,left)} more</button><span>${left} more in your library</span></div>`:'';
+  return left>0?`<div class="ref-pager" id="refPager"><button class="chip" type="button" data-action="refMore">Show ${Math.min(REF_PAGE,left)} more</button><span>${left} more in your library</span></div>`:'';
 }
 
 function screenHtml(REF, kit){
@@ -60,16 +62,16 @@ function screenHtml(REF, kit){
       <input id="refG" placeholder="Tags, comma separated — amyloid, restrictive, ATTR">
       <textarea id="refB" rows="6" placeholder="Write the concept in your own words. Summarising what you read is where the learning happens — and it gives the tutor your framing to build on."></textarea>
       <div class="ref-btns">
-        <button class="btn btn-next" onclick="refSave()">${refEditing?'Save changes':'Add note'}</button>
-        ${refEditing?`<button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="refCancel()">Cancel</button>`:''}
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="refImportText()">⤒ Import .md / .txt / .json</button>
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="refExport()">⤓ Export notes</button>
-        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goHome()">${icon('arrow-left','icon-sm')} Back</button>
+        <button class="btn btn-next" data-action="refSave">${refEditing?'Save changes':'Add note'}</button>
+        ${refEditing?`<button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" data-action="refCancel">Cancel</button>`:''}
+        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" data-action="refImportText">⤒ Import .md / .txt / .json</button>
+        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" data-action="refExport">⤓ Export notes</button>
+        <button class="btn" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" data-action="goHome">${icon('arrow-left','icon-sm')} Back</button>
       </div>
       <div class="ref-hint">Markdown files split on <code>#</code> headings — one note per section. Nothing you write leaves this device except as context on your own API calls.</div>
     </div>
     <div class="section-label">${viewed?'Source note':`${REF.length} note${REF.length===1?'':'s'} indexed`}</div>
-    ${viewed?`<div class="ref-btns"><button class="chip" onclick="goHome()">Back to study</button><button class="chip" onclick="goRefs()">Show all notes</button></div>`:''}
+    ${viewed?`<div class="ref-btns"><button class="chip" data-action="goHome">Back to study</button><button class="chip" data-action="goRefs">Show all notes</button></div>`:''}
     ${rows||'<div style="text-align:center;color:var(--muted);font-size:13px;padding:18px">No notes yet. Add one above, or import a markdown file.</div>'}
   </div>`;
 }
