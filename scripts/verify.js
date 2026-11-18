@@ -313,7 +313,10 @@ const SUITES = [
   ['results-pure', 'the results screen gives the quiz\'s score or the session\'s, changes colour at 80 and 60, draws a row for every chapter answered in the bank\'s order, offers the missed only when something is, restarts what was being done, reads eight names of the state and changes nothing, and the page hands it its own state and helpers'],
   /* The second screen out of the shell: what Apex has kept about the reader. Its builder is src/app/memory.js;
      the two handlers that delete stay in the page, where verify-ui-pure reads their confirm(). */
-  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data and never in a handler, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data, no inline handler but an action for each button that the page\'s ACTIONS table calls, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  /* Roadmap E2: one delegated listener in place of inline handlers, in src/core/actions.js. The Memory screen is the
+     first to name actions instead; verify-memory and verify-backup-ids tap it through the real page. */
+  ['actions-pure', 'a tap on an element with data-action, or inside one, calls the action of that name from the page\'s table once, with the element and the event, the nearest such element winning; nothing is called outside every data-action or the root, or for a name the table does not have as its own function, and what install() returns removes its listener'],
   /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
      chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
   ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, and every element the page\'s mounts look up is in the markup under that name'],
@@ -346,9 +349,13 @@ const SUITES = [
      keeps the line that starts its survey of the figures on this device, the handlers, and the functions it hands
      over, which read its state, storage and browser. Named for the screen: verify-stats holds the record's numbers. */
   ['statsscreen-pure', 'the Progress screen shows whether progress is saved, the streak, answers, accuracy and cards due, the card for figures kept on this device, predicted retention and the week ahead, calibration by band with the pace and where the misses come from, the mock blocks handed in, the last thirty days as a line and a heat map, a ring for each chapter\'s mastery, and the reader\'s data with the pending backup\'s confirmation and the Safari tab\'s warning, reads four names of the state and changes nothing, and the page\'s line draws it over the real Calib, FSRS, ReviewQueue and MockExam and starts the survey after the paint'],
-  /* The thirteenth, in parts: the home screen's three pages leave one at a time into src/app/home.js. The Labs page and
-     the Brain page have; the Home page, with the hero and the pearl, is still the page's own function. */
+  /* The thirteenth, in parts: the home screen's three pages left one at a time into src/app/home.js, the Labs page, the
+     Brain page and the Home page with the hero and the pearl. */
   ['homescreen-pure', 'the home screen\'s Home page shows the daily pearl or what it is for, the heart in 3D or as an illustration with its menu, the session strip and its one button, and the greeting for someone new; its Labs page shows the four labs and the six study tools with what they say of the app; its Brain page shows the brain, a neuron for each part lit by how well it is remembered, the chosen one\'s info, the gauge and figures, and a row for each chapter; each reads only what it should and changes nothing, and the page\'s lines draw them, the Home page over its own pearl and greeting with the reading flag set as it draws, the Brain page over the real FSRS and BrainMap with the info read after the art lays the brain out'],
+  /* Last of the screens table: the Apex panel's markup, in src/app/apexpanel.js. buildAI() stays the page's, because
+     it reads what was being typed and where the panel was scrolled, puts the markup in, wires the chat and the avatar,
+     and keeps the figures' memo; the module is handed that memo's answer and the head already drawn. */
+  ['apexpanel-pure', 'the Apex panel shows its head with what Apex answers from or about and its four buttons, the setup where there is no key to call with, the thread with each reply as it went or what Apex can do, the dots while a reply is written, what the reply drew on for this thread only, the figures from those notes open or shut, the prompts that apply, the box, Send or Stop and what it is powered by; each part reads only what it draws with and changes nothing, and the page\'s lines draw it over its own helpers, prompts, providers and markdown, finding the figures once per reply'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -552,8 +559,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure, homescreen-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'contrast'];
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

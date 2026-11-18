@@ -29,10 +29,10 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 
 | Layer | Holds | Rule |
 |---|---|---|
-| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn) | Must run under Node for the pure suites |
+| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn, and actions, the one delegated listener E2 puts in place of inline handlers) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
-| `src/app/` | Screens that have left the shell, one file each: results, memory, rhythmlab, annotations, mockreport, search, study, refs, quiz, mock, sessions, stats, and home | A function of what the page hands it; changes nothing it is given; must run under Node |
+| `src/app/` | Screens that have left the shell, one file each: results, memory, rhythmlab, annotations, mockreport, search, study, refs, quiz, mock, sessions, stats, home, and apexpanel, the Apex panel's markup | A function of what the page hands it; changes nothing it is given; must run under Node |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
 
 ## The shell's script
