@@ -4,7 +4,7 @@
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-home.js <patched.html|url>
  *
- * Four claims:
+ * Five claims:
  *   · the welcome bar (the hero ECG strip) is genuinely larger than it was;
  *   · the Brain page's gauge reports the REAL state of the bank — its mastery
  *     ring is FSRS's own recall estimate and is drawn to the number it shows,
@@ -14,6 +14,8 @@
  *   · home says ONE thing: the trace and the pearl — the study material it
  *     used to carry is behind a door on the Labs page rather than below the
  *     fold;
+ *   · the home screen's buttons, tapped through the page, reach what they say
+ *     (docs/ROADMAP.md, E2: they name actions, not inline handlers);
  *   · S.homeLayout still persists and still reaches the home screen's own
  *     hero sizing on a cold load. It used to also drive a visible three-way
  *     switch — Signal/Focus/Grid — but studyflow removed that control: it
@@ -718,6 +720,139 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     for (const r of rows) {
       ok(`${r.theme}: every word in the hint clears AA`, !r.error && r.worst >= 4.5, r.error || `${r.worst}:1`);
     }
+  }
+
+  head('the home screen\'s buttons reach what they say when tapped');
+  /* docs/ROADMAP.md, E2: the three pages' buttons name actions, and only a tap through the page shows that one reaches
+     its function. A tab to Labs, a neuron, a chapter's row, the heart's button and its credit, the pearl's Recall,
+     another pearl, Show all and Read note, the Chapters door, and the Sessions and Practice Lab cards are tapped in
+     their own suites (homepager, pwa, pearl, home above, mockscreen, lab); the rest are tapped here. Each tap starts
+     from its page drawn and quiet, and is held to what it changes, read from the page after the tap. Chambers and flow
+     does nothing without the 3D heart, which a headless engine may not draw, so that one is held to reaching
+     toggleHeroMechanics(), recorded where the page looks it up. A tap that cannot be made, or that changes nothing, is a FAIL. */
+  {
+    const { onScreen, quiet, transitionDone } = require('./_render.js');
+    /* After two minutes with no input the app raises its ambient screen over the page (src/ui/livingDiagram.js, IDLE_MS),
+       and a suite's page.evaluate() is no input; a slow machine passes two minutes here. So each step begins with a key
+       pressed, as a person's touch would begin it: input, which keeps the screen from rising, and a key, which puts it
+       away if it has (the page's own rule). */
+    const toPage = async n => {
+      await page.keyboard.press('Shift');
+      await page.waitForFunction(() => typeof AMBIENT === 'undefined' || !AMBIENT.active(), null, { timeout: 5000, polling: 40 }).catch(() => {});
+      await page.evaluate(() => goHome());
+      await onScreen(page, 'home', { marker: '#homePage2' });
+      await page.evaluate(n => homeGo(n), n);
+      await page.waitForFunction(n => homePage === n, n, { timeout: 8000, polling: 40 }).catch(() => {});
+      await quiet(page);
+    };
+    /* A button low on a page is scrolled to first, as a reader scrolls to it, and the page let settle: the pages sit in a
+       pager that snaps sideways, and a scroll left to the click itself can still be moving when the click gives up. */
+    const tap = async (n, sel, until, arg) => {
+      await toPage(n);
+      await page.evaluate(sel => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ block: 'center', inline: 'nearest' }); }, sel);
+      await quiet(page);
+      await transitionDone(page);
+      /* What is under the button's middle when a tap cannot be made, so a failure says what was in the way. */
+      let blocked = '';
+      const tapped = await page.locator(sel).first().click({ timeout: 5000 }).then(() => true, async () => {
+        blocked = await page.evaluate(sel => { const el = document.querySelector(sel); if (!el) return 'no such button';
+          const r = el.getBoundingClientRect(), at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+          return JSON.stringify({ box: [r.x, r.y, r.width, r.height].map(Math.round), view: [innerWidth, innerHeight], under: at ? at.tagName.toLowerCase() + (at.id ? '#' + at.id : '') + (typeof at.className === 'string' && at.className ? '.' + at.className.split(' ')[0] : '') : null, itself: !!at && (at === el || el.contains(at)) }); }, sel).catch(() => 'unreadable');
+        return false; });
+      const went = tapped && await page.waitForFunction(until, arg, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+      const said = tapped ? await page.evaluate(() => JSON.stringify({ screen: S.screen, mode: S.mode, chapter: S.chapter, homePage })) : 'the button could not be tapped: ' + blocked;
+      if (went) await quiet(page);
+      return { went, said };
+    };
+    const was = await page.evaluate(() => ({ atlas3D, atlasPaused, pearlAsWritten, heroCutaway }));
+    /* A headless engine draws the 3D heart in software: measured here, a frame every 200 ms with it live and every 300 ms
+       cut away, against 33 ms with the illustration, and a click waits on frames. So every tap here is made with the
+       illustration up, which draws the same buttons; the explore button's is the one that turns the 3D heart on. The
+       heart is put back as it was at the end. */
+    await page.evaluate(() => { if (atlas3D) toggleAtlas3D(); });
+
+    let t = await tap(0, '#atlasExplore', () => atlas3D === true);
+    ok('the explore button turns the illustration over to the 3D heart', t.went, t.said);
+    await page.evaluate(() => { if (atlas3D) toggleAtlas3D(); });
+    t = await tap(0, '#atlasLandingPause', w => atlasPaused === !w, was.atlasPaused);
+    ok('the heart\'s pause on the landing pauses it, or plays it', t.went, t.said);
+    /* The menu is the live heart's, so the heart is shown for it, and paused first: paused, it draws a frame every 17 ms
+       (measured), so the taps on its menu are not waiting on it. Chambers and flow while it is paused, then the menu's
+       motion button, which plays it. */
+    await page.evaluate(() => { if (atlasPaused) toggleAtlasMotion(); if (!atlas3D) toggleAtlas3D(); });
+    await toPage(0);
+    await page.evaluate(() => { if (!atlasPaused) toggleAtlasMotion(); });
+    await quiet(page);
+    await page.locator('#heroHeartBtn').click({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => !document.getElementById('heroMenu').hidden, null, { timeout: 5000, polling: 40 }).catch(() => {});
+    await page.evaluate(() => { window.__mech = 0; const real = toggleHeroMechanics; toggleHeroMechanics = function () { window.__mech++; return real.apply(this, arguments); }; window.__realMech = real; });
+    const mechTapped = await page.locator('#heroMechanics').click({ timeout: 5000 }).then(() => true, () => false);
+    const mech = await page.evaluate(() => { const n = window.__mech; toggleHeroMechanics = window.__realMech; return n; });
+    ok('the menu\'s chambers and flow reaches toggleHeroMechanics(), once', mechTapped && mech === 1, mechTapped ? mech + ' call(s)' : 'the button could not be tapped');
+    await page.evaluate(w => { if (heroCutaway !== w) toggleHeroMechanics(); }, was.heroCutaway);
+    const menuTapped = await page.locator('#atlasPause').click({ timeout: 5000 }).then(() => true, () => false);
+    const menuPlayed = menuTapped && await page.waitForFunction(() => atlasPaused === false, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    ok('the menu\'s motion button plays the paused heart', menuPlayed, menuTapped ? String(await page.evaluate(() => atlasPaused)) : 'the button could not be tapped');
+    await page.evaluate(() => { if (atlasPaused) toggleAtlasMotion(); toggleHeroMenu(false); if (atlas3D) toggleAtlas3D(); });
+
+    const pearl = await page.evaluate(() => !!pearlNow());
+    t = pearl ? await tap(0, '#pearlReading', w => pearlAsWritten === !w, was.pearlAsWritten) : { went: false, said: 'no pearl to read' };
+    ok('the pearl\'s Paragraph reads the statement as written, or as steps', t.went, t.said);
+    t = pearl ? await tap(0, '#pearlSourceToggle', () => document.getElementById('pearlSource') && !document.getElementById('pearlSource').hidden) : { went: false, said: 'no pearl to read' };
+    ok('and its Source shows where the pearl is from', t.went, t.said);
+    await page.evaluate(() => { const s = document.getElementById('pearlSource'); if (s && !s.hidden) pearlSourceToggle(); if (pearlAsWritten) pearlReading(); });
+
+    /* The strip under the hero: Review with cards due, Continue with a history and none due, Start with nothing. */
+    const kept = await page.evaluate(() => JSON.stringify({ srs: S.srs, practice: S.practice }));
+    await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); const due = FSRS.localDateToISO(d);
+      S.srs = {}; POOL.slice(0, 4).forEach(q => { S.srs[q.id] = { difficulty: 5, stability: 3, ivl: 3, reps: 1, lapses: 0, last: due, due, sv: 1 }; }); clearResume(null, 'due'); });
+    const dueIds = await page.evaluate(() => dueQuestions().map(q => q.id).sort().join(' '));
+    t = await tap(0, '.atlas-session button', () => S.screen === 'quiz' && S.mode === 'due');
+    const dealt = await page.evaluate(() => (S.questions || []).map(q => q.id).sort().join(' '));
+    ok('with cards due, the strip\'s Review deals every card due, and only those', t.went && dueIds.split(' ').length === 4 && dealt === dueIds, t.said + ' · ' + dealt);
+    await page.evaluate(() => { Object.keys(S.srs).forEach(id => { S.srs[id].due = '2099-01-01'; }); });
+    t = await tap(0, '.atlas-session button', () => S.screen === 'study');
+    ok('with a history and none due, its Continue opens Chapters', t.went, t.said);
+    await page.evaluate(() => { S.srs = {}; S.practice = {}; });
+    t = await tap(0, '.atlas-session button', () => S.screen === 'quiz' && S.mode === 'due');
+    ok('with nothing yet, its Start begins the twenty-minute plan', t.went, t.said);
+
+    /* Someone new: no cards and not welcomed, so the greeting is drawn, and Got it puts it away for good. */
+    await page.evaluate(() => { try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {} LOG.length = 0; });
+    t = await tap(0, '#homeHello .hello-x', () => { try { return localStorage.getItem('accsap12.welcomed') === '1'; } catch (_) { return false; } });
+    ok('Got it puts the greeting away, and keeps it away', t.went, t.said);
+    await page.evaluate(k => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); }, kept);
+
+    t = await tap(2, '#homeTab1', () => homePage === 1);
+    ok('the Brain tab goes to the Brain page', t.went, t.said);
+    t = await tap(1, '#homeTab0', () => homePage === 0);
+    ok('and the Home tab back to Home', t.went, t.said);
+
+    /* With no notes to draw a pearl from, the intro is shown, and its button opens the notes. */
+    const pearls = await page.evaluate(() => { const was = pearlCache; pearlCache = []; pearlCurrent = null; window.__pearls = was; return Array.isArray(was) ? was.length : 0; });
+    t = await tap(0, '#atlasIntro .atlas-primary', () => S.screen === 'refs');
+    ok('with no pearl, the intro\'s Open notes opens the notes', t.went, t.said);
+    await page.evaluate(() => { pearlCache = window.__pearls; });
+
+    for (const [sel, screen, says] of [['.lab-card.lab-rhythm', 'lab', 'the Rhythm Lab card opens the Rhythm Lab'], ['.lab-card.lab-echo', 'echo', 'the Echo Studio card opens Echo Studio'],
+      ['.door[data-action="openSearch"]', 'search', 'the Search door opens the search'], ['.door[data-action="goStats"]', 'stats', 'the Progress door opens Progress'],
+      ['.door[data-action="goRefs"]', 'refs', 'the Notes door opens the notes'], ['.door[data-action="goMemory"]', 'memory', 'the Memory door opens what Apex knows'],
+      ['.door[data-action="goAnnotations"]', 'annotations', 'the Annotations door opens the annotations']]) {
+      t = await tap(2, '#homePage2 ' + sel, s => S.screen === s, screen);
+      ok(says, t.went, t.said);
+    }
+
+    /* The Brain page: Review with cards due, and a chosen neuron's Practise, which starts that neuron's chapter. */
+    await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); const due = FSRS.localDateToISO(d); const q = POOL[0]; S.srs[q.id] = Object.assign({}, S.srs[q.id] || {}, { difficulty: 5, stability: 3, ivl: 3, reps: 1, lapses: 0, last: due, due, sv: 1 }); });
+    t = await tap(1, '#homePage1 .brain-actions .brain-go', () => S.screen === 'quiz' && S.mode === 'due');
+    ok('the Brain page\'s Review starts the review queue', t.went, t.said);
+    await toPage(1);
+    const chosen = await page.evaluate(() => { brainPick(0, false); const x = brainArtL && brainArtL.L.nodes[0]; return x ? x.docId : null; });
+    const practise = chosen !== null && await page.locator('#brainInfo .brain-go').click({ timeout: 5000 }).then(() => true, () => false);
+    const started = practise && await page.waitForFunction(ch => S.screen === 'quiz' && S.chapter === ch && S.mode === 'all', chosen, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    ok('and a chosen neuron\'s Practise starts its chapter', started, practise ? await page.evaluate(() => JSON.stringify({ screen: S.screen, chapter: S.chapter })) + ' · wanted ' + chosen : 'the button could not be tapped');
+    await page.evaluate(([k, w]) => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); if (atlas3D !== w) toggleAtlas3D(); goHome(); }, [kept, was.atlas3D]);
+    await onScreen(page, 'home', { marker: '#homePage0' });
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

@@ -87,7 +87,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         doors: p(0).querySelectorAll('.door').length },
       brain: { gauge: !!p(1).querySelector('.brain-gauge'), rows: p(1).querySelectorAll('.brain-ch').length, chapters: CHAPTERS.length,
         doors: p(1).querySelectorAll('.door').length },
-      labs: [...p(2).querySelectorAll('.lab-card')].map(c => c.getAttribute('onclick')),
+      labs: [...p(2).querySelectorAll('.lab-card')].map(c => c.getAttribute('data-action')),
       labDoors: [...p(2).querySelectorAll('.door b')].map(b => b.textContent),
       after: (() => { const c = p(2).querySelectorAll('.lab-card'), d = p(2).querySelector('.door'); return !!(c.length && d && (c[c.length - 1].compareDocumentPosition(d) & 4)); })(),
     };
@@ -96,7 +96,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('Home holds the hero and the pearl, no progress bar and no doors', parts.home.hero && parts.home.pearl && !parts.home.prog && parts.home.doors === 0, JSON.stringify(parts.home));
   ok('Brain holds the gauge and a row for every chapter, and no doors', parts.brain.gauge && parts.brain.rows === parts.brain.chapters && parts.brain.rows > 0 && parts.brain.doors === 0,
      `${parts.brain.rows} rows for ${parts.brain.chapters} chapters, ${parts.brain.doors} doors`);
-  ok('Labs holds the Rhythm Lab, Echo, the Practice Lab and Sessions', parts.labs.join('|') === 'goLab()|goEcho()|goPractice()|goSessions()', parts.labs.join(' · '));
+  ok('Labs holds the Rhythm Lab, Echo, the Practice Lab and Sessions', parts.labs.join('|') === 'goLab|goEcho|goPractice|goSessions', parts.labs.join(' · '));
   /* Every card's white type sits on its own gradient: a card with none is white on the page (Sessions shipped so). */
   const bare = await page.evaluate(() => [...document.querySelectorAll('.lab-card')].filter(c => getComputedStyle(c).backgroundImage === 'none').map(c => c.className));
   ok('every Labs card is painted with its own gradient', bare.length === 0 && parts.labs.length === 4, bare.join(' · '));

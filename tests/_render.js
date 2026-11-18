@@ -244,16 +244,24 @@ async function watchTransitions(page) {
   });
 }
 
+/* The view transition render() started, if one is live, finished. With watchTransitions() installed it resolves when
+   the transition does (true), or at once when none is live; without it, it says so (false) and waits for nothing. A
+   live transition takes the page's hit-testing: a point on a button is the transition's, not the button's, until it
+   ends, so a tap waits for this first. A precondition, never the proposition. */
+async function transitionDone(page) {
+  return page.evaluate(() => {
+    if (typeof window.__vtLive === 'undefined') return false;
+    return window.__vtLive && window.__vtLive.finished ? window.__vtLive.finished.then(() => true, () => true) : true;
+  });
+}
+
 /* Resize, but never into a live transition. Falls back to a bounded settle
    when the watch is not installed, so a suite that forgets watchTransitions()
    is slower rather than broken — and says so, rather than crashing on WebKit
    with nothing in the log. */
 async function resized(page, width, height, opts = {}) {
-  const watched = await page.evaluate(() => typeof window.__vtLive !== 'undefined');
-  if (watched) {
-    await page.evaluate(() => (window.__vtLive && window.__vtLive.finished
-      ? window.__vtLive.finished.catch(() => {}) : null));
-  } else if (!opts.quiet) {
+  const watched = await transitionDone(page);
+  if (!watched && !opts.quiet) {
     await page.waitForTimeout(2000);   /* measured above: 300ms is not enough */
   }
   await page.setViewportSize({ width, height });
@@ -294,5 +302,5 @@ async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {})
 }
 
 module.exports = { booted, settled, onScreen, quiet, afterRender, resolved,
-                   watchTransitions, resized, framesSteady,
+                   watchTransitions, transitionDone, resized, framesSteady,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };

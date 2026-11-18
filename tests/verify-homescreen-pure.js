@@ -21,9 +21,11 @@
  *   - the brain: nothing without BrainMap or neurons; a neuron for each part, chosen or not; lobes, axons,
  *     signals, glow, flashes, sparks and branches as the layout says; and what the chosen neuron holds;
  *   - that each reads the names it should of the state and the kit, and changes nothing;
- *   - the page's lines, the handlers the markup names, and those lines over the page's own helpers: the Labs
+ *   - the page's lines, the actions the markup names (each in the page's table as written; no inline handler
+ *     but the scroll and key ones left), and those lines over the page's own helpers: the Labs
  *     page with and without notes and Apex's memory, the Brain page over the real FSRS and BrainMap, the Home
- *     page over the page's own pearl and greeting, and the two heart images where the split build finds them.
+ *     page over the page's own pearl and greeting, and the two heart images where the split build finds them;
+ *     and every control those lines drew tapped through the real src/core/actions.js.
  */
 'use strict';
 const fs = require('fs');
@@ -43,16 +45,19 @@ const run = f => { try { return String(f()); } catch (err) { return 'THREW ' + e
 const g1 = (s, re) => (s.match(re) || [])[1];
 const times = (html, text) => html.split(text).length - 1;
 const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
 
 const CH = ['One', 'Two', 'Three'];
 const kitOf = over => Object.assign({ REF: [{}, {}, {}, {}], Memory: { count: () => 6 }, TOTAL_Q: 50, icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']' }, over);
 const labs = (sOver, dueN, kOver, chapters) => run(() => M.labsHtml(Object.assign({ mock: null }, sOver), chapters || CH, dueN === undefined ? 7 : dueN, kitOf(kOver)));
-/* A card of the Labs grid: its class, its handler, its id if it has one, the icon beside its name, its name and what it says. */
-const cards = html => [...html.matchAll(/<button class="lab-card ([a-z-]+)"(?: id="([^"]*)")? onclick="([^"]*)">([\s\S]*?)<\/button>/g)].map(m => {
+/* A card of the Labs grid: its class, its action, its id if it has one, the icon beside its name, its name and what it says. */
+const cards = html => [...html.matchAll(/<button class="lab-card ([a-z-]+)"(?: id="([^"]*)")? data-action="([^"]*)">([\s\S]*?)<\/button>/g)].map(m => {
   const inner = m[4]; return { cls: m[1], id: m[2], go: m[3], icon: g1(inner, /<span class="lab-ic" aria-hidden="true">([^<]*)<\/span>/), name: g1(inner, /<span class="lab-txt"><b>([^<]*)<\/b>/), says: g1(inner, /<span class="lab-txt"><b>[^<]*<\/b><i>([^<]*)<\/i>/), open: /<span class="lab-go" aria-hidden="true">Open \[icon arrow-right icon-sm\]<\/span>/.test(inner) };
 });
-/* A door of the study tools: whether it is the wide one, its handler, its icon, its name and what it says. */
-const doors = html => [...html.matchAll(/<button class="(door(?: door-wide)?)" onclick="([^"]*)">\s*<span class="door-ic">([^<]*)<\/span>\s*<span class="door-txt"><b>([^<]*)<\/b><i>([^<]*)<\/i><\/span>/g)].map(m => m.slice(1));
+/* A door of the study tools: whether it is the wide one, its action, its icon, its name and what it says. */
+const doors = html => [...html.matchAll(/<button class="(door(?: door-wide)?)" data-action="([^"]*)">\s*<span class="door-ic">([^<]*)<\/span>\s*<span class="door-txt"><b>([^<]*)<\/b><i>([^<]*)<\/i><\/span>/g)].map(m => m.slice(1));
 
 head('the Labs page');
 {
@@ -60,7 +65,7 @@ head('the Labs page');
   ok('what Labs is', html.startsWith('<header class="page-head"><span class="page-eyebrow">[icon activity icon-sm] Labs</span>') && html.includes('<h1 class="page-title">Hear it, see it, read it</h1>') && html.includes('<p class="page-sub">Traces drawn live, echo views to explore, and sounds and strips to practise on.</p></header>'));
   const c = cards(html);
   ok('a card for each lab, in order: the Rhythm Lab, Echo Studio, the Practice Lab, Sessions', J(c.map(x => [x.cls, x.name])) === J([['lab-rhythm', 'Rhythm Lab'], ['lab-echo', 'Echo Studio'], ['lab-practice', 'Practice Lab'], ['lab-sessions', 'Sessions']]), J(c.map(x => [x.cls, x.name])));
-  ok('each a way in to its own lab, and no other', J(c.map(x => x.go)) === J(['goLab()', 'goEcho()', 'goPractice()', 'goSessions()']), J(c.map(x => x.go)));
+  ok('each a way in to its own lab, and no other, by its action', J(c.map(x => x.go)) === J(['goLab', 'goEcho', 'goPractice', 'goSessions']), J(c.map(x => x.go)));
   ok('each with its own icon, and "Open"', J(c.map(x => x.icon)) === J(['[icon activity]', '[icon waveform]', '[icon heart-pulse]', '[icon alarm]']) && c.every(x => x.open), J(c.map(x => x.icon)));
   ok('what the first three are for', J(c.slice(0, 3).map(x => x.says)) === J(['Every trace, drawn live', 'Views, findings and the arithmetic', 'Sounds, tracings, strips']), J(c.slice(0, 3).map(x => x.says)));
   /* From where the grid opens to the tools' heading: one div opened and closed, so the cards are inside it. */
@@ -78,7 +83,7 @@ head('the study tools');
   const row = html.slice(html.indexOf('<div class="door-row lab-doors">'));
   ok('under their heading, after the labs, and all in their row, which ends the page', html.indexOf('<h3 class="page-h3">Study tools</h3>') > html.indexOf('lab-sessions') && html.indexOf('<div class="door-row lab-doors">') > html.indexOf('Study tools') && html.endsWith('</button>\n    </div>') && doors(row).length === 6 && times(row, '<div') === 1 && times(row, '</div>') === 1, doors(row).length + ' doors in a row of ' + times(row, '<div') + ' div');
   ok('six doors and no seventh button, in order: Chapters, the wide one, then Search, Progress, Notes, Memory, Annotations', times(html, '<button class="door') === 6 && J(d.map(x => [x[0], x[3]])) === J([['door door-wide', 'Chapters'], ['door', 'Search'], ['door', 'Progress'], ['door', 'Notes'], ['door', 'Memory'], ['door', 'Annotations']]), J(d.map(x => [x[0], x[3]])));
-  ok('each opens its own tool, and no other', J(d.map(x => x[1])) === J(['goStudy()', 'openSearch()', 'goStats()', 'goRefs()', 'goMemory()', 'goAnnotations()']), J(d.map(x => x[1])));
+  ok('each opens its own tool, and no other, by its action', J(d.map(x => x[1])) === J(['goStudy', 'openSearch', 'goStats', 'goRefs', 'goMemory', 'goAnnotations']), J(d.map(x => x[1])));
   ok('each with its own icon', J(d.map(x => x[2])) === J(['[icon book]', '[icon search]', '[icon trending-up]', '[icon folder]', '[icon pin]', '[icon highlighter]']), J(d.map(x => x[2])));
   ok('Chapters says how many chapters and how many cards are due', d.length === 6 && d[0][4] === '3 chapters · 7 due for review', (d[0] || [])[4]);
   ok('or, with none due, how many questions the bank has', (doors(labs({}, 0))[0] || [])[4] === '3 chapters · 50 questions' && (doors(labs({}, 0, { TOTAL_Q: 9 }, ['Only']))[0] || [])[4] === '1 chapters · 9 questions', (doors(labs({}, 0))[0] || [])[4]);
@@ -114,11 +119,11 @@ head('the Brain page');
   const stats = h => [...h.matchAll(/<span class="brain-stat (bs-[a-z]+)"><b>([^<]*)<\/b><i>([^<]*)<\/i><\/span>/g)].map(m => m.slice(1));
   ok('seen of the bank, due, answered today with how many right, and the recall of the cards scheduled', J(stats(html)) === J([['bs-seen', '80%', 'seen · 4 of 5'], ['bs-due', '2', 'due for review'], ['bs-today', '5', 'answered today · 3 right'], ['bs-ret', '81%', 'recall, cards scheduled']]), J(stats(html)));
   ok('nothing answered today says no number right; with nothing scheduled, recall is a dash', J(stats(brainPage({}, [2, 4, 80, 30, { a: 0, c: 0 }], { avgRetention: () => null })).slice(2).map(x => x[1] + ' ' + x[2])) === J(['0 answered today', '— recall, cards scheduled']));
-  ok('with cards due, the way to review them all', html.includes('<div class="brain-actions"><button class="brain-go primary" onclick="startQuiz(null,\'due\')">[icon repeat icon-sm] Review 2 due</button></div>') && !brainPage({}, [0, 4, 80, 30, { a: 5, c: 3 }]).includes('brain-actions'));
-  const rows = h => [...h.matchAll(/<button class="brain-ch" style="--c:([^;]*);--ci:([^"]*)" onclick="startQuiz\(([^)]*)\)"\s*aria-label="([^"]*)">\s*<span class="brain-ch-ic" aria-hidden="true">([^<]*)<\/span>\s*<span class="brain-ch-main"><b>([^<]*)<\/b>\s*<span class="brain-bar" aria-hidden="true"><i data-w="(\d+)"><\/i><\/span>\s*<span class="brain-ch-meta">(.*?)<\/span><\/span>\s*<span class="brain-ch-pct" aria-hidden="true">([^<]*)<\/span>\s*<\/button>/g)].map(m => m.slice(1));
+  ok('with cards due, the way to review them all, by startDue', html.includes('<div class="brain-actions"><button class="brain-go primary" data-action="startDue">[icon repeat icon-sm] Review 2 due</button></div>') && !brainPage({}, [0, 4, 80, 30, { a: 5, c: 3 }]).includes('brain-actions'));
+  const rows = h => [...h.matchAll(/<button class="brain-ch" style="--c:([^;]*);--ci:([^"]*)" data-action="startChapter" data-ch="([^"]*)"\s*aria-label="([^"]*)">\s*<span class="brain-ch-ic" aria-hidden="true">([^<]*)<\/span>\s*<span class="brain-ch-main"><b>([^<]*)<\/b>\s*<span class="brain-bar" aria-hidden="true"><i data-w="(\d+)"><\/i><\/span>\s*<span class="brain-ch-meta">(.*?)<\/span><\/span>\s*<span class="brain-ch-pct" aria-hidden="true">([^<]*)<\/span>\s*<\/button>/g)].map(m => m.slice(1));
   const r = rows(html);
   ok('under "Chapters", a row for each chapter, in the bank\'s order, in its accent or the teal, with its ink', html.indexOf('<h3 class="page-h3">Chapters</h3>') > html.indexOf('brain-hero') && J(r.map(x => [x[0], x[1]])) === J([['#112233', 'INK(#112233)'], ['var(--teal)', 'INK(var(--teal))'], ['var(--teal)', 'INK(var(--teal))']]), J(r.map(x => [x[0], x[1]])));
-  ok('each a way to practise its chapter, the name\'s quotes written as entities', J(r.map(x => x[2])) === J(['&quot;Valves & \\&quot;more\\&quot;&quot;', '&quot;Rhythm&quot;', '&quot;Quiet&quot;']), J(r.map(x => x[2])));
+  ok('each a way to practise its chapter, by startChapter, its name in data-ch through e()', J(r.map(x => x[2])) === J(['E(Valves & &quot;more&quot;)', 'E(Rhythm)', 'E(Quiet)']), J(r.map(x => x[2])));
   ok('its mastery, rounded: as the bar, the figure, and to a screen reader', J(r.map(x => [x[6], x[8]])) === J([['67', '67%'], ['25', '25%'], ['0', '0%']]), J(r.map(x => [x[6], x[8]])));
   ok('seen counts a card scheduled or practised; due, a scheduled card due today or before', J(r.map(x => x[7])) === J(['3 of 3 seen · <em>1 due</em>', '1 of 2 seen · <em>1 due</em>', '0 of 0 seen']), J(r.map(x => x[7])));
   ok('the same said to a screen reader, the name through e(), "due" only where some are', J(r.map(x => x[3])) === J(['E(Valves & &quot;more&quot;): 67 percent mastered, 3 of 3 seen, 1 due', 'E(Rhythm): 25 percent mastered, 1 of 2 seen, 1 due', 'E(Quiet): 0 percent mastered, 0 of 0 seen']), J(r.map(x => x[3])));
@@ -141,7 +146,7 @@ head('the brain');
 {
   const html = art();
   ok('nothing where BrainMap is not loaded, or where there are no neurons', art({ BrainMap: undefined }) === '' && art({ brainLayoutNow: () => ({ nodes: [], edges: [], units: [], gap: 0 }) }) === '');
-  ok('an svg found by its id, in BrainMap\'s view, tapped and keyed by the page\'s handlers', html.startsWith('<svg class="brain-svg" id="brainArt" viewBox="' + BrainMap.BRAIN.VIEW + '" role="group"') && J(handlersOf(html)) === J(['brainTap(event)', 'brainKey(event)']) && html.endsWith('</g></svg>'));
+  ok('an svg found by its id, in BrainMap\'s view, tapped by the brainTap action and keyed by the page\'s handler', html.startsWith('<svg class="brain-svg" id="brainArt" viewBox="' + BrainMap.BRAIN.VIEW + '" role="group"') && J(actionsOf(html)) === J(['brainTap']) && J(handlersOf(html)) === J(['brainKey(event)']) && J(inlineOf(html)) === J(['onkeydown']) && html.endsWith('</g></svg>'));
   ok('said to a screen reader: how many of the neurons are lit, and how to move and practise', html.includes('aria-label="Your brain: 2 of 3 parts of the bank lit. Arrow keys move between them; Enter practises that chapter."'));
   const neurons = h => [...h.matchAll(/<g class="neuron( sel)?" data-i="(\d+)" data-state="([a-z]+)" role="button" tabindex="(-?\d+)" aria-label="([^"]*)" aria-pressed="(true|false)">/g)].map(m => m.slice(1));
   ok('a neuron for each part, in order, with its state, its title, the state\'s word and its recall, through e()', J(neurons(html).map(n => [n[1], n[2], n[4]])) === J([['0', 'solid', 'E(Valves & <b> · questions 1–3, solid, recall 91% today)'], ['1', 'new', 'E(Valves & <b> · questions 4–6, not seen yet)'], ['2', 'weak', 'E(Rhythm · questions 1–2, weak, recall 40% today)']]), J(neurons(html).map(n => n[4])));
@@ -175,7 +180,7 @@ head('what the chosen neuron holds');
   ok('with none chosen, before the brain is laid out, or with a choice the layout does not have: how to choose one', I() === HINT && I({ brainArtL: null, brainSel: 0 }) === HINT && I({ brainSel: 7 }) === HINT);
   const html = I({ brainSel: 0 });
   ok('the chosen neuron\'s chapter, its questions, its state and its recall, through e()', html.startsWith('<span class="brain-info-k">This neuron</span> <b>E(Valves & <b>)</b>') && html.includes('<span class="brain-info-m">E(questions 1–3) · solid · recall 91% today</span>'), html.slice(0, 160));
-  ok('and the way to practise its chapter, the name\'s quotes written as entities', html.endsWith('<button class="brain-go primary" onclick="startQuiz(&quot;Valves & <b>&quot;)">[icon play icon-sm] Practise this chapter</button>') && J(handlersOf(html)) === J(['startQuiz(&quot;Valves & <b>&quot;)']));
+  ok('and the way to practise its chapter, by startChapter, its name in data-ch through e(), and no inline handler', html.endsWith('<button class="brain-go primary" data-action="startChapter" data-ch="E(Valves & <b>)">[icon play icon-sm] Practise this chapter</button>') && J(actionsOf(html)) === J(['startChapter']) && inlineOf(html).length === 0);
   ok('a neuron not seen yet says so, and no recall', I({ brainSel: 1 }).includes('<span class="brain-info-m">E(questions 4–6) · not seen yet</span>'), g1(I({ brainSel: 1 }), /<span class="brain-info-m">([^<]*)</));
 }
 
@@ -195,12 +200,12 @@ head('the Home page');
   hcalls.length = 0;
   const html = homePage();
   ok('three pages side by side in a pager, each a tab panel, and the tabs to them', /^<div class="home-pages" id="homePages">\s*<div class="home-pager" id="homePager" onscroll="homePagerScroll\(\)">/.test(html) && [0, 1, 2].every(i => html.includes('id="homePage' + i + '" role="tabpanel" aria-labelledby="homeTab' + i + '"')) && html.endsWith('</div>\n  </div>'));
-  const tabs = [...html.matchAll(/<button class="home-tab" role="tab" id="homeTab(\d)" aria-controls="homePage(\d)" onclick="homeGo\((\d)\)">([^<]*)<span>([^<]*)<\/span><\/button>/g)].map(m => m.slice(1));
-  ok('three tabs, Home, Brain and Labs, each to its own page, keyed by homeTabKey()', J(tabs) === J([['0', '0', '0', '[icon home icon-sm]', 'Home'], ['1', '1', '1', '[icon brain icon-sm]', 'Brain'], ['2', '2', '2', '[icon activity icon-sm]', 'Labs']]) && html.includes('<div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">'), J(tabs));
+  const tabs = [...html.matchAll(/<button class="home-tab" role="tab" id="homeTab(\d)" aria-controls="homePage(\d)" data-action="homeGo" data-page="(\d)">([^<]*)<span>([^<]*)<\/span><\/button>/g)].map(m => m.slice(1));
+  ok('three tabs, Home, Brain and Labs, each to its own page by homeGo with the page in data-page, keyed by homeTabKey()', J(tabs) === J([['0', '0', '0', '[icon home icon-sm]', 'Home'], ['1', '1', '1', '[icon brain icon-sm]', 'Brain'], ['2', '2', '2', '[icon activity icon-sm]', 'Labs']]) && html.includes('<div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">'), J(tabs));
   ok('the Brain and Labs pages are the page\'s, handed what was counted here: due, started, the share explored, the share mastered, and today', html.includes('<section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">[BRAIN]</div></section>') && html.includes('<div class="home-page-in">[LABS]</div></section>')
      && J(hcalls.filter(c => !c.startsWith('pearl'))) === J(['brain [2,4,80,50,{"a":6,"c":4}]', 'labs [2]']), J(hcalls));
   ok('in the layout chosen, reading when there is a pearl, and paused when the heart is', html.includes('<div class="home-wrap anim-fade atlas-reading" data-home="focus">') && homePage({}, { atlasReading: false }).includes('<div class="home-wrap anim-fade" data-home="focus">') && homePage({}, { atlasPaused: true }).startsWith('<div class="home-pages atlas-paused" id="homePages">'));
-  ok('with no pearl being read, what the daily pearl is for, the three steps, and the way to the notes', homePage({}, { atlasReading: false, pearlNow: () => null }).includes('<section class="atlas-intro" id="atlasIntro" aria-labelledby="atlasTitle">') && html.includes('<section class="atlas-intro" id="atlasIntro" hidden aria-labelledby="atlasTitle">') && html.includes('<h1 id="atlasTitle">Make one <br>idea stick.</h1>') && html.includes('<button class="atlas-primary" onclick="goRefs()">Open notes[icon arrow-right]</button>') && (html.match(/<strong>(Observe|Explain|Recall)<\/strong>/g) || []).length === 3);
+  ok('with no pearl being read, what the daily pearl is for, the three steps, and the way to the notes', homePage({}, { atlasReading: false, pearlNow: () => null }).includes('<section class="atlas-intro" id="atlasIntro" aria-labelledby="atlasTitle">') && html.includes('<section class="atlas-intro" id="atlasIntro" hidden aria-labelledby="atlasTitle">') && html.includes('<h1 id="atlasTitle">Make one <br>idea stick.</h1>') && html.includes('<button class="atlas-primary" data-action="goRefs">Open notes[icon arrow-right]</button>') && (html.match(/<strong>(Observe|Explain|Recall)<\/strong>/g) || []).length === 3);
 }
 
 head('the pearl');
@@ -209,13 +214,13 @@ head('the pearl');
   ok('the card, shown when there is a pearl to read, hidden when not, and none without a pearl', html.includes('<div class="pearl-card" id="pearlCard">') && homePage({}, { atlasReading: false }).includes('<div class="pearl-card" id="pearlCard" hidden>') && !homePage({}, { pearlNow: () => null }).includes('pearl-card'));
   ok('marked as having a figure when the page draws one for it', homePage({}, { pearlFigure: () => '<figure>F</figure>' }).includes('<div class="pearl-card has-fig" id="pearlCard">'));
   ok('its chapter, for a screen reader, through e(), or "From your notes"', html.includes('<span class="pearl-cap sr-only" id="pearlCap">E(Valves & &quot;more&quot;)</span>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('id="pearlCap">E(From your notes)</span>'));
-  ok('another pearl, by pearlNext(), only where there are two or more', /<button class="pearl-next" onclick="pearlNext\(\)"\s*title="Another pearl" aria-label="Another pearl">\[icon rotate-ccw icon-sm\]<\/button>/.test(html) && /aria-label="Another pearl" disabled>/.test(homePage({}, { pearlAll: () => [1] })));
+  ok('another pearl, by pearlNext, only where there are two or more', /<button class="pearl-next" data-action="pearlNext"\s*title="Another pearl" aria-label="Another pearl">\[icon rotate-ccw icon-sm\]<\/button>/.test(html) && /aria-label="Another pearl" disabled>/.test(homePage({}, { pearlAll: () => [1] })));
   ok('what it is about, through e(), or its title where it has no concept', html.includes('<h1 class="pearl-concept" id="pearlConcept" tabindex="-1">E(A <b>rule</b>)</h1>') && homePage({}, { pearlNow: () => ({ title: 'T<x>' }) }).includes('tabindex="-1">E(T<x>)</h1>'));
   ok('the statement as the page\'s ladder lays it out, scrolled by pearlScroll()', html.includes('<div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlScroll()">[LADDER Title]</div>'));
-  ok('Show all, by pearlToggleAll(), drawn hidden and collapsed: the page shows it once it has measured the statement past its box', html.includes('<button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>[icon chevron-down icon-sm]<span>Show all</span></button>'));
-  const acts = h => [...g1(h, /<div class="pearl-actions">([\s\S]*?)<\/div>/).matchAll(/onclick="([^"]*)"/g)].map(m => m[1]);
-  ok('the ways to recall, read it as a paragraph, see the source and open the note, in that order', J(acts(html)) === J(['pearlRecall()', 'pearlReading()', 'pearlSourceToggle()', 'pearlOpen()']), J(acts(html)));
-  ok('the paragraph button pressed only when the statement is read as written', html.includes('id="pearlReading" onclick="pearlReading()" aria-controls="pearlBody" aria-pressed="false"') && homePage({}, { pearlAsWritten: true }).includes('aria-pressed="true" title="Read the complete statement as a paragraph"'));
+  ok('Show all, by pearlToggleAll, drawn hidden and collapsed: the page shows it once it has measured the statement past its box', html.includes('<button class="pearl-morecue" id="pearlMore" data-action="pearlToggleAll" aria-controls="pearlBody" aria-expanded="false" hidden>[icon chevron-down icon-sm]<span>Show all</span></button>'));
+  const acts = h => [...g1(h, /<div class="pearl-actions">([\s\S]*?)<\/div>/).matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
+  ok('the ways to recall, read it as a paragraph, see the source and open the note, in that order, each its own action', J(acts(html)) === J(['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen']), J(acts(html)));
+  ok('the paragraph button pressed only when the statement is read as written', html.includes('id="pearlReading" data-action="pearlReading" aria-controls="pearlBody" aria-pressed="false"') && homePage({}, { pearlAsWritten: true }).includes('aria-pressed="true" title="Read the complete statement as a paragraph"'));
   ok('the note it is from, through e(), as the open button\'s title and as the source; or "Your reference notes"', html.includes('title="E(Note <i>7</i>)">Read note [icon arrow-right icon-sm]</button>') && html.includes('aria-label="Pearl source" hidden>E(Note <i>7</i>)</div>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('hidden>E(Your reference notes)</div>'));
   ok('the prompt to explain it, hidden until asked for', html.includes('<div class="pearl-prompt" id="pearlPrompt" hidden>') && html.includes('<strong>Explain it in your own words.</strong>'));
   ok('and last, its figure, then its chapter\'s emblem', /\[EMBLEM\]\n      <\/div>/.test(homePage({}, { pearlEmblem: () => '[EMBLEM]', pearlFigure: () => '' })) && homePage({}, { pearlFigure: () => '[FIG]' }).includes('[FIG][EMBLEM]\n      </div>'));
@@ -225,13 +230,13 @@ head('the hero');
 {
   const html = homePage();
   ok('the anatomy and the beating heart are the page\'s two images, each in its place', html.includes('<div class="hero-live atlas-3d">\n      [ATLAS-IMG]\n') && html.includes('<div class="h-beat">[HERO-IMG]</div>'));
-  ok('live in 3D: the cardiac cycle, and the way back to the illustration', html.includes('<span class="hero-live-status"><i aria-hidden="true"></i> Live cardiac cycle</span>') && /id="atlasExplore" onclick="toggleAtlas3D\(\)"\s*aria-label="Show heart illustration" aria-pressed="true" title="Show heart illustration">\[icon layers icon-sm\] Illustration<\/button>/.test(html));
+  ok('live in 3D: the cardiac cycle, and the way back to the illustration', html.includes('<span class="hero-live-status"><i aria-hidden="true"></i> Live cardiac cycle</span>') && /id="atlasExplore" data-action="toggleAtlas3D"\s*aria-label="Show heart illustration" aria-pressed="true" title="Show heart illustration">\[icon layers icon-sm\] Illustration<\/button>/.test(html));
   const flat = homePage({}, { atlas3D: false });
   ok('as an illustration: says so, and offers 3D', flat.includes('<div class="hero-live">') && flat.includes('Illustrative anatomy</span>') && /aria-label="Explore heart in 3D" aria-pressed="false" title="Explore heart in 3D">\[icon layers icon-sm\] Explore in 3D<\/button>/.test(flat));
-  ok('pause or play, by toggleAtlasMotion(), as the heart is', html.includes('id="atlasLandingPause" onclick="toggleAtlasMotion()" aria-label="Pause animation">[icon pause icon-sm]</button>') && homePage({}, { atlasPaused: true }).includes('aria-label="Play animation">[icon play icon-sm]</button>')
-     && homePage({}, { atlasPaused: true }).includes('id="atlasPause" onclick="toggleAtlasMotion()" aria-pressed="true">[icon play icon-sm]<span>Play motion</span>'));
-  ok('the heart\'s menu, hidden, opened by toggleHeroMenu(): chambers and flow, motion, and the model\'s credit', html.includes('<div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>') && /id="heroHeartBtn" onclick="toggleHeroMenu\(undefined,event\)"/.test(html) && J([...String(g1(html, /(<div class="hero-menu"[\s\S]*?<\/div>)/)).matchAll(/onclick="([^"(]*)/g)].map(m => m[1])) === J(['toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit']));
-  ok('chambers and flow pressed, and the explore button marked, only with the cutaway on', homePage({}, { heroCutaway: true }).includes('id="heroMechanics" onclick="toggleHeroMechanics()"\n          aria-pressed="true"') && homePage({}, { heroCutaway: true }).includes('<button class="hero-mechanics is-active" id="atlasExplore"') && html.includes('aria-pressed="false">[icon layers icon-sm]<span>Chambers and flow</span>'));
+  ok('pause or play, by toggleAtlasMotion, as the heart is', html.includes('id="atlasLandingPause" data-action="toggleAtlasMotion" aria-label="Pause animation">[icon pause icon-sm]</button>') && homePage({}, { atlasPaused: true }).includes('aria-label="Play animation">[icon play icon-sm]</button>')
+     && homePage({}, { atlasPaused: true }).includes('id="atlasPause" data-action="toggleAtlasMotion" aria-pressed="true">[icon play icon-sm]<span>Play motion</span>'));
+  ok('the heart\'s menu, hidden, opened by toggleHeroMenu: chambers and flow, motion, and the model\'s credit', html.includes('<div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>') && /id="heroHeartBtn" data-action="toggleHeroMenu"/.test(html) && J(actionsOf(String(g1(html, /(<div class="hero-menu"[\s\S]*?<\/div>)/)))) === J(['toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit']));
+  ok('chambers and flow pressed, and the explore button marked, only with the cutaway on', homePage({}, { heroCutaway: true }).includes('id="heroMechanics" data-action="toggleHeroMechanics"\n          aria-pressed="true"') && homePage({}, { heroCutaway: true }).includes('<button class="hero-mechanics is-active" id="atlasExplore"') && html.includes('aria-pressed="false">[icon layers icon-sm]<span>Chambers and flow</span>'));
 }
 
 head('the session strip and the greeting');
@@ -241,11 +246,11 @@ head('the session strip and the greeting');
   ok('explored, answered today and due', /<strong>80<small>%<\/small><\/strong><span>Explored<\/span><\/div><div><strong>6<\/strong><span>Answers today<\/span><\/div><div><strong>2<\/strong><span>Due<\/span>/.test(strip), strip.slice(0, 200));
   ok('a meter of the bank explored, said to a screen reader', strip.includes('aria-valuemax="5" aria-valuenow="4" aria-valuetext="4 of 5 questions explored"><span style="width:80%"></span>'));
   ok('explored is capped at all of it, and nothing with no bank', /<strong>100<small>/.test(homePage({}, { startedCount: () => 9 })) && /<strong>0<small>/.test(homePage({}, { TOTAL_Q: 0 })) && homePage({}, { TOTAL_Q: 0 }).includes('aria-valuemax="1" aria-valuenow="1"'));
-  ok('with cards due, Review them; with history, Continue; with nothing, Start the 20-minute plan', strip.includes('<button onclick="startQuiz(null,\'due\',dueQuestions())">Review [icon arrow-right icon-sm]</button>') && homePage({}, { dueQuestions: () => [] }).includes('<button onclick="goStudy()">Continue')
-     && homePage({}, { dueQuestions: () => [], startedCount: () => 0 }).includes('<button onclick="startPlan(20)" aria-label="Start a 20-minute study session">Start'));
+  ok('with cards due, Review them (reviewAllDue); with history, Continue (goStudy); with nothing, Start the 20-minute plan (startPlan, 20 in data-plan)', strip.includes('<button data-action="reviewAllDue">Review [icon arrow-right icon-sm]</button>') && homePage({}, { dueQuestions: () => [] }).includes('<button data-action="goStudy">Continue')
+     && homePage({}, { dueQuestions: () => [], startedCount: () => 0 }).includes('<button data-action="startPlan" data-plan="20" aria-label="Start a 20-minute study session">Start'));
   ok('today\'s answers are today\'s, not another day\'s, and none with none', /<strong>0<\/strong><span>Answers today/.test(homePage({ daily: { '2026-11-16': { a: 9, c: 9 } } })));
   ok('mastery is the chapters\' weighed by their size: (0.666×3 + 0.25×2 + 0×0) of 5 is 50%, handed to the Brain page', (hcalls.length = 0, homePage(), hcalls.some(c => c.startsWith('brain [2,4,80,50,'))), J(hcalls));
-  ok('for someone new, what Chapters and Apex are, with the bank\'s size, and Got it by dismissHello(); for others, nothing', homePage({}, { showHello: () => true }).includes('<i><b>Chapters</b> holds all 5 questions, grouped by topic.') && homePage({}, { showHello: () => true }).includes('<button class="hello-x" onclick="dismissHello()">Got it</button>') && !html.includes('homeHello'));
+  ok('for someone new, what Chapters and Apex are, with the bank\'s size, and Got it by dismissHello; for others, nothing', homePage({}, { showHello: () => true }).includes('<i><b>Chapters</b> holds all 5 questions, grouped by topic.') && homePage({}, { showHello: () => true }).includes('<button class="hello-x" data-action="dismissHello">Got it</button>') && !html.includes('homeHello'));
 }
 
 head('it reads what it is given and changes nothing');
@@ -331,9 +336,8 @@ head('the page hands the module what it has, and keeps what the markup names');
   const WORDS = ['Hear it, see it, read it', 'Study tools', 'Views, findings and the arithmetic', 'Every trace, drawn live', 'Sounds, tracings, strips', 'things Apex knows', 'A mock block is open · resume it'];
   ok('and the Labs page\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = labs() + labs({ mock: { ids: ['a'] } }, 0);
-  const handlers = [...new Set(handlersOf(all).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names ten handlers', J(handlers) === J(['goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'openSearch']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const la = [...new Set(actionsOf(all))].sort();
+  ok('its markup names ten actions and carries no inline handler', J(la) === J(['goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'openSearch']) && inlineOf(all).length === 0, la.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
 
   const BRAIN = "function buildBrain(dueN,seenN,covered,masteryPct,today){ return HomeScreen.brainHtml(S,CHAPTERS,CH_COLORS,dueN,seenN,covered,masteryPct,today,\n  {POOL,TOTAL_Q,avgRetention,masteryFor,todayISO,chInk,chIcon,buildBrainArt,brainInfoHtml,e,icon}); }";
   const ART = "function buildBrainArt(){ return HomeScreen.brainArtHtml(CH_COLORS,{BrainMap:typeof BrainMap!=='undefined'?BrainMap:undefined,brainLayoutNow,brainSel,BRAIN_TUNE,BRAIN_STATE_LABEL,e}); }";
@@ -355,9 +359,13 @@ head('the page hands the module what it has, and keeps what the markup names');
   const HWORDS = ['Make one <br>idea stick.', 'The living heart', 'Explain it in your own words.', 'Answers today', 'New here?', 'Chambers and flow'];
   ok('and the Home page\'s own words are no longer in the page', HWORDS.every(t => count(t) === 0), HWORDS.map(t => count(t)).join(' '));
   const hall = homePage({}, { showHello: () => true }) + homePage({}, { dueQuestions: () => [], startedCount: () => 0 }) + homePage({}, { dueQuestions: () => [] });
-  const hh = [...new Set(handlersOf(hall).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('the Home page names twenty-one handlers, each a function the page declares once', J(hh) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'homePagerScroll', 'homeTabKey', 'pearlNext', 'pearlOpen', 'pearlReading', 'pearlRecall', 'pearlScroll', 'pearlSourceToggle', 'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']) && hh.every(n => count('function ' + n + '(') === 1),
-     hh.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const ha = [...new Set(actionsOf(hall))].sort();
+  ok('the Home page names seventeen actions', J(ha) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'pearlNext', 'pearlOpen', 'pearlReading', 'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'reviewAllDue', 'startPlan', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
+  /* A scroll does not bubble to the document, and a key on a tab is the tab list's: those three stay inline for now. */
+  const hh = [...new Set(handlersOf(hall))].sort();
+  ok('and its only inline handlers are the pager\'s and the pearl\'s scroll and the tabs\' keys, each a function the page declares once',
+     J(inlineOf(hall)) === J([0, 1, 2].flatMap(() => ['onscroll', 'onscroll', 'onkeydown'])) && J(hh) === J(['homePagerScroll()', 'homeTabKey(event)', 'pearlScroll()']) && ['homePagerScroll', 'homeTabKey', 'pearlScroll'].every(n => count('function ' + n + '(') === 1),
+     inlineOf(hall).join(' ') + ' · ' + hh.join(' '));
   const kitNames = re => String(g1(page, re)).replace(/\s+/g, '').split(',').map(x => x.split(':')[0]).sort().join(' ');
   ok('each hands the names its member was seen to ask for', kitNames(/HomeScreen\.brainHtml\([^{]*\{([^}]*)\}\); \}/) === [...BK_READS].sort().join(' ') && kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/) === [...ART_READS].sort().join(' ') && kitNames(/HomeScreen\.brainInfoHtml\(\{([^}]*)\}\); \}/) === [...INFO_READS].sort().join(' '),
      kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/));
@@ -367,8 +375,28 @@ head('the page hands the module what it has, and keeps what the markup names');
   const BWORDS = ['What you remember', 'recall, cards scheduled', 'Practise this chapter', 'Tap a neuron', 'parts of the bank lit', 'percent mastered'];
   ok('and the Brain page\'s own words are no longer in the page', BWORDS.every(t => count(t) === 0), BWORDS.map(t => count(t)).join(' '));
   const ballx = brainPage() + art() + run(() => M.brainInfoHtml({ brainArtL: { L: LAY }, brainSel: 0, BRAIN_STATE_LABEL: LABEL, e: String, icon: () => '' }));
-  const bh = [...new Set(handlersOf(ballx).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('the Brain page names three handlers, each a function the page declares once', J(bh) === J(['brainKey', 'brainTap', 'startQuiz']) && bh.every(n => count('function ' + n + '(') === 1), bh.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const ba = [...new Set(actionsOf(ballx))].sort();
+  ok('the Brain page names three actions, and its only inline handler is the brain\'s keys, a function the page declares once', J(ba) === J(['brainTap', 'startChapter', 'startDue']) && J(inlineOf(ballx)) === J(['onkeydown']) && J(handlersOf(ballx)) === J(['brainKey(event)']) && count('function brainKey(') === 1,
+     ba.join(' ') + ' · ' + inlineOf(ballx).join(' '));
+  /* A tap is looked up in ACTIONS: each action the three pages name is held to that table, as written, and to no other. */
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
+  const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
+  const ENTRY = { goAnnotations: 'goAnnotations:()=>goAnnotations(),', goEcho: 'goEcho:()=>goEcho(),', goLab: 'goLab:()=>goLab(),', goMemory: 'goMemory:()=>goMemory(),', goPractice: 'goPractice:()=>goPractice(),',
+    goRefs: 'goRefs:()=>goRefs(),', goSessions: 'goSessions:()=>goSessions(),', goStats: 'goStats:()=>goStats(),', goStudy: 'goStudy:()=>goStudy(),', openSearch: 'openSearch:()=>openSearch(),',
+    dismissHello: 'dismissHello:()=>dismissHello(),', homeGo: 'homeGo:el=>homeGo(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),', pearlReading: 'pearlReading:()=>pearlReading(),',
+    pearlRecall: 'pearlRecall:()=>pearlRecall(),', pearlSourceToggle: 'pearlSourceToggle:()=>pearlSourceToggle(),', pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', reviewAllDue: "reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),",
+    startPlan: 'startPlan:el=>startPlan(Number(el.dataset.plan)),', toggleAtlas3D: 'toggleAtlas3D:()=>toggleAtlas3D(),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
+    toggleHeroMechanics: 'toggleHeroMechanics:()=>toggleHeroMechanics(),', toggleHeroMenu: 'toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),', brainTap: 'brainTap:(el,ev)=>brainTap(ev),',
+    startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', startDue: "startDue:()=>startQuiz(null,'due'),"};
+  const named = [...new Set(la.concat(ha, ba))].sort();
+  ok('the twenty-eight actions of the three pages are each in ACTIONS once, as written, and in no other table',
+     named.length === 28 && named.every(n => ENTRY[n] && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0 && tableOf('ACTIONS').split(ENTRY[n]).length === 2),
+     named.length + ' · ' + named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 ? '' : ' (not as written)')).join(' '));
+  const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen', 'pearlReading',
+    'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu'];
+  ok('they call twenty-seven functions the page declares, once each, and the page listens for taps on the document',
+     CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and the ids the page looks for are drawn: the brain, its tilt, its net and the info', ['brain3d', 'brainTilt', 'brainInfo'].every(id => times(brainPage(), 'id="' + id + '"') === 1) && ['brainArt', 'brainNet'].every(id => times(art(), 'id="' + id + '"') === 1)
      && ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')"].every(t => count(t) >= 1) && count("'#brainArt") >= 1, ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')", "'#brainArt"].map(t => count(t)).join(' '));
 
@@ -440,6 +468,43 @@ head('the page hands the module what it has, and keeps what the markup names');
   hask('pearlCache=[]; pearlCurrent=null;');
   const noPearl = String(hask('buildHome()'));
   ok('with no notes, no card: the reading flag cleared and the intro shown', !noPearl.includes('pearl-card') && hask('atlasReading') === false && noPearl.includes('<section class="atlas-intro" id="atlasIntro" aria-labelledby="atlasTitle">'), String(hask('atlasReading')));
+
+  /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document over the page's three
+     tables, with a recording stand-in for each function they call, and as the element each control the page's own lines
+     drew, its attributes read back as a browser reads them (so a chapter's name is the name, not its escaped text). A
+     disabled button is not tapped, as a browser fires no click on one. Every other control is tapped, in the order drawn:
+     the Labs page as drawn above with notes, a memory and a block open; the Brain page as drawn above, the first neuron
+     chosen and a card due; and the Home page with two pearls, a card due, and someone new to greet. An action handed the
+     event is recorded as "the click", so it is seen to be handed the click it was tapped with. */
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const tables = TABLES.map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
+  const called = [...new Set([...tables.matchAll(/([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].filter(n => n !== 'Number');
+  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null,mock:{i:0}}, offlineJob={busy:false};\n'
+    + called.map(n => `function ${n}(){ var a=[].slice.call(arguments).map(function(x){ return x===window.__ev ? 'the click' : x===undefined ? 'undefined' : x; }); tcalls.push(${J(n)} + (a.length ? " " + JSON.stringify(a) : "")); return n==='dueQuestions' ? 'DUE' : undefined; }`.replace(/\bn===/, J(n) + '===')).join('\n') + '\n' + tables
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
+  const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const controls = h => [...h.matchAll(/<(button|select|input|svg)\b([^>]*)>/g)].map(m => {
+    const at = Object.fromEntries([...m[2].matchAll(/([a-z-]+)(?:="([^"]*)")?/g)].map(x => [x[1], unescape(x[2] || '')]));
+    const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
+    const el = { nodeType: 1, value: '', dataset, disabled: 'disabled' in at, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    return el; }).filter(el => !el.disabled);
+  const fire = (type, h) => { tcalls.length = 0; controls(h).forEach(el => { const ev = { type, target: el }; tctx.__ev = ev; tctx.listeners.filter(l => l[0] === type).forEach(l => l[1](ev)); }); return tcalls.slice(); };
+  const labTaps = fire('click', full);
+  ok('tapped, the Labs page: each lab, then each tool, each its own function',
+     J(labTaps) === J(['goLab', 'goEcho', 'goPractice', 'goSessions', 'goStudy', 'openSearch', 'goStats', 'goRefs', 'goMemory', 'goAnnotations']), J(labTaps));
+  const brainTaps = fire('click', bpage);
+  ok('tapped, the Brain page: the brain handed the click, the chosen neuron\'s chapter, the review, and each chapter\'s row, each by its own name',
+     J(brainTaps) === J(['brainTap ["the click"]', 'startQuiz ["Valves & more"]', 'startQuiz [null,"due"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz ["Empty"]']), J(brainTaps));
+  delete store['accsap12.welcomed'];
+  hask('pearlCache=[{concept:"One",title:"A",text:"First.",chapter:"Rhythm notes",source:"N1"},{concept:"Two",title:"B",text:"Second.",chapter:"Rhythm notes",source:"N2"}]; pearlCurrent=null; dueQuestions=()=>[1];');
+  const greeted = String(hask('buildHome()'));
+  const homeTaps = fire('click', greeted);
+  ok('tapped, the Home page: the notes, the heart\'s explore, pause and menu (handed the click), its chambers, motion and credit, the pearl\'s six, the review of every card due, Got it, and each tab with its page',
+     greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroMenu ["undefined","the click"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
+       'pearlNext', 'pearlToggleAll', 'pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen', 'dueQuestions', 'startQuiz [null,"due","DUE"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
+  ok('and a key or a choice on any of the three pages calls nothing here', J(fire('input', full + bpage + greeted).concat(fire('change', full + bpage + greeted))) === J([]));
+
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

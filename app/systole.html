@@ -5408,6 +5408,31 @@ const ACTIONS={
   clearExamDate:()=>setExamDate(''),
   clearFlags:()=>clearFlags(),
   goAnnotations:()=>goAnnotations(),
+  /* the home screen (src/app/home.js). Its Labs card and doors reuse goSessions, goStudy, goRefs and goAnnotations
+     above, its strip startPlan with data-plan, and the Brain page's chapters and Review startChapter and startDue.
+     The heart's button hands toggleHeroMenu() the click, which reads whether a pointer made it; the brain hands
+     brainTap() the click, which finds the neuron under it. A tab carries its page in data-page. */
+  toggleAtlas3D:()=>toggleAtlas3D(),
+  toggleAtlasMotion:()=>toggleAtlasMotion(),
+  toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),
+  toggleHeroMechanics:()=>toggleHeroMechanics(),
+  toggleHeroCredit:()=>toggleHeroCredit(),
+  pearlNext:()=>pearlNext(),
+  pearlToggleAll:()=>pearlToggleAll(),
+  pearlRecall:()=>pearlRecall(),
+  pearlReading:()=>pearlReading(),
+  pearlSourceToggle:()=>pearlSourceToggle(),
+  pearlOpen:()=>pearlOpen(),
+  reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),
+  dismissHello:()=>dismissHello(),
+  homeGo:el=>homeGo(Number(el.dataset.page)),
+  goLab:()=>goLab(),
+  goEcho:()=>goEcho(),
+  goPractice:()=>goPractice(),
+  openSearch:()=>openSearch(),
+  goStats:()=>goStats(),
+  goMemory:()=>goMemory(),
+  brainTap:(el,ev)=>brainTap(ev),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
