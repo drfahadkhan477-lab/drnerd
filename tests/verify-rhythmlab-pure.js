@@ -59,7 +59,12 @@ const draw = (p, part) => { try { return String(L[part || 'screenHtml'](p)); } c
 
 const g = (s, re) => (s.match(re) || [])[1];
 const chipsOf = (html, attr) => [...html.matchAll(new RegExp('<button class="chip( mini)?( hot)?" ' + attr + '="([^"]*)"[^>]*>([^<]*)</button>', 'g'))].map(m => ({ key: m[3], says: m[4], hot: !!m[2] }));
-const rhythmChips = html => [...html.matchAll(/<button class="chip( hot)?" onclick="([^"]*)">([^<]*)<\/button>/g)].map(m => ({ does: m[2], says: m[3], hot: !!m[1] }));
+const rhythmChips = html => [...html.matchAll(/<button class="chip( hot)?" data-action="([^"]*)" data-kind="([^"]*)">([^<]*)<\/button>/g)].map(m => ({ does: m[2] + ' ' + m[3], says: m[4], hot: !!m[1] }));
+/* docs/ROADMAP.md, E2. Attribute names, read tag by tag with each value consumed whole, so text inside a value is never
+   taken for a name; and the actions the markup names. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
 const playOf = html => { const m = html.match(/<button class="chip mini" data-physio-play\s+title="([^"]*)">([^<]*)<\/button>/); return m ? [m[1], m[2]] : ['NO BUTTON']; };
 const times = (s, t) => s.split(t).length - 1;
 
@@ -74,8 +79,8 @@ head('the monitor, and a chip for every rhythm');
   ok('there is a chip for every rhythm, in the order the page gives, named through e()',
      J(chips.map(c => c.says)) === J(['E(Ventricular tachycardia)', 'E(Sinus rhythm)', 'E(Asystole)', 'E(Atrial fibrillation)']), chips.map(c => c.says).join(' | '));
   ok('only the chosen rhythm\'s chip is marked', J(chips.map(c => c.hot)) === J([true, false, false, false]) && J(rhythmChips(draw(page({ labKind: 'afib' }))).map(c => c.hot)) === J([false, false, false, true]), J(chips.map(c => c.hot)));
-  ok('each chip calls setLab() with its own key', J(chips.map(c => c.does)) === J(KEYS.map(k => 'setLab(\'' + k + '\')')), chips.map(c => c.does).join(' | '));
-  ok('the Home button goes home', vt.includes('<button class="btn sb-back" onclick="goHome()">[icon arrow-left icon-sm] Home</button>'));
+  ok('each chip names the setLab action, with its own key as data', J(chips.map(c => c.does)) === J(KEYS.map(k => 'setLab ' + k)), chips.map(c => c.does).join(' | '));
+  ok('the Home button names the goHome action', vt.includes('<button class="btn sb-back" data-action="goHome">[icon arrow-left icon-sm] Home</button>'));
   ok('the monitor has one canvas for the page to draw into, and says the traces are models, not recordings',
      times(vt, '<canvas id="labCanvas" aria-label="Live electrocardiogram trace"></canvas>') === 1 && vt.includes('Traces are generated from waveform models, not recordings'));
   ok('the cycle panel and the 12-lead panel follow, once each, in that order',
@@ -163,8 +168,13 @@ head('the page hands over what it has, and keeps what is chosen');
      [count('function buildPhysio('), count('function buildTwelveLead('), count('tap a rhythm to morph the trace'), count('A teaching model: every curve'), count('teaches the wrong pattern')].join(' '));
 
   const all = draw(page({ labKind: 'sinus', physioView: 'pv', twelveLead: 'V1' }));
-  const handlers = [...new Set([...all.matchAll(/onclick="([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].sort();
-  ok('its markup names two handlers, and each is a function the page declares, once', J(handlers) === J(['goHome', 'setLab']) && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const handlers = [...new Set(actionsOf(all))].sort();
+  ok('its markup names two actions, and carries no inline handler, in any panel', J(handlers) === J(['goHome', 'setLab']) && inlineOf(all).length === 0 && inlineOf(draw(page({ labKind: 'vt', physioView: 'wiggers' }))).length === 0, handlers.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  const TABLE = { goHome: 'goHome:()=>goHome(),', setLab: 'setLab:el=>setLab(el.dataset.kind),' };
+  const table = (shell.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
+  ok('each is in the page\'s ACTIONS table once, calling the page\'s function of that name, which the page declares once; setLab passes the key from the chip\'s data',
+     handlers.length === 2 && handlers.every(n => table.split(TABLE[n]).length === 2 && count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1,
+     handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1) + '/' + count('function ' + n + '(')).join(' '));
 
   /* The markup is the module's and the mounts are the page's. They meet at six ids and four data attributes:
      a name changed on one side leaves a canvas the page cannot find, and nothing says so. */
@@ -209,6 +219,20 @@ head('the page hands over what it has, and keeps what is chosen');
   const still = world('var labKind="vt", physioView="wiggers", physioSlow=2, physioIv="base", twelveLead=null;', { reduce: true });
   ok('with Reduce Motion on, the first drawing finds the cycle paused, because the page was asked and decided',
      J(playOf(still.shown)) === J(['Play the cycle', 'Play']) && still.ask('physioPlaying') === false, J(playOf(still.shown)) + ' · physioPlaying ' + still.ask('physioPlaying'));
+  /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document, the page's own ACTIONS
+     table over stand-ins for setLab() and goHome() that record their calls, and each button the page's own line drew,
+     with the attributes it drew, as the element tapped. */
+  const calls = [];
+  const tctx = { calls }; tctx.window = tctx; vm.createContext(tctx);
+  vm.runInContext(file('src/core/actions.js') + '\nfunction goHome(){ calls.push("goHome"); }\nfunction setLab(k){ calls.push("setLab " + k); }\nfunction memForget(){ calls.push("memForget"); }\nfunction memForgetAll(){ calls.push("memForgetAll"); }\n'
+    + (shell.match(/const ACTIONS=\{[\s\S]*?\n\};/) || ['const ACTIONS={};'])[0].replace(/^const /, 'var ') + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);', tctx);
+  const tapped = [...w.shown.matchAll(/<button\b([^>]*)>/g)].map(m => Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], x[2]]))).filter(at => 'data-action' in at);
+  for (const at of tapped) {
+    const el = { nodeType: 1, getAttribute: k => (k in at ? at[k] : null), dataset: { kind: at['data-kind'] }, closest: sel => (sel === '[data-action]' ? el : null) };
+    tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ target: el }));
+  }
+  ok('tapped through the real Actions and the page\'s table, the buttons the page\'s own line drew go home and set each rhythm by its own key',
+     J(calls) === J(['goHome', 'setLab sinus', 'setLab vt']), J(calls));
   const bare = world('var labKind="sinus", physioView="flow", physioSlow=1, physioIv="base", twelveLead=null;', { noPhysio: true, reduce: false });
   ok('on a page with no Physio the screen is still drawn outside the PV loop', !bare.shown.startsWith('THREW') && bare.shown.includes('<span>Cardiac cycle · Flow</span>'), bare.shown.slice(0, 90));
 }

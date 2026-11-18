@@ -437,14 +437,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      rhythm's rate to physio.setRate, but the diagram has no getter for it, and
      reading it back off the live clock is a race against real frames. With
      setRate taken out of setLab this section stays green, so it claims only what
-     it reads: that the lab moved to the rhythm asked for. (The rhythm chips
-     carry no data attribute, so the click that used to precede the call found
-     nothing; setLab is what a chip's onclick calls.) */
-  head('setLab moves the lab to the rhythm it is asked for');
-  await page.evaluate(() => { setLab('tachy'); });
-  await page.waitForTimeout(300);
-  const afterTachy = await page.evaluate(() => ({ kind: labKind }));
-  ok('setLab reaches the rhythm the test asked for', afterTachy.kind === 'tachy');
+     it reads: that the lab moved to the rhythm asked for. The chip is tapped as
+     a reader taps it: a rhythm chip names the setLab action and carries its key
+     (data-kind), and the page's one delegated listener calls setLab() with it
+     (docs/ROADMAP.md, E2). Before E2 the chips carried no data attribute, so
+     this called setLab() directly and left the tap unmeasured. */
+  head('a tap on a rhythm chip moves the lab to that rhythm');
+  const tapped = await page.evaluate(() => {
+    const chip = document.querySelector('[data-action="setLab"][data-kind="tachy"]');
+    if (!chip) return { found: false };
+    const before = labKind;
+    chip.click();
+    return { found: true, before, kind: labKind };
+  });
+  ok('the Sinus tachycardia chip is there, and a tap on it moves the lab from another rhythm to that one', tapped.found && tapped.before !== 'tachy' && tapped.kind === 'tachy', JSON.stringify(tapped));
 
   head('every view mounts, sizes its canvas and says what it is');
   const viewSweep = await page.evaluate(async () => {
