@@ -32,8 +32,11 @@
         the count. The last button restarts what was being done: due cards again, the flagged again, the
         chapter again, or the whole quiz.
 
-   The buttons name goHome(), startQuiz() and askApexMisses(), and the restart button says S.chapter: an
-   inline handler is read where it is tapped, in the page, so those four names stay the page's.
+   The buttons carry no inline handler (docs/ROADMAP.md, E2): each names an action, goHome, retryMissed,
+   askApexMisses or restartQuiz, which the page's one delegated listener (src/core/actions.js) finds in its
+   ACTIONS table and calls. Restart says only whether to use the chapter (data-scope: none for a review of
+   what is due) and the mode (data-mode); the page's action reads S.chapter when it is tapped, as the handler
+   it replaces did. goHome(), startQuiz() and askApexMisses() stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -77,11 +80,11 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
     </div>
     ${rows?`<div class="section-label">Cumulative Chapter Performance</div><div class="ch-perf">${rows}</div>`:''}
     <div class="results-btns">
-      <button class="btn btn-next" onclick="goHome()" type="button">${icon('arrow-left','icon-sm')} Back to Chapters</button>
-      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red-ink);border:1.5px solid var(--red-b)" onclick="startQuiz(null,'missed')">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
-      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--teal-ink)" onclick="askApexMisses()">${icon('zap','icon-sm')} Explain my misses</button>`:''}
+      <button class="btn btn-next" data-action="goHome" type="button">${icon('arrow-left','icon-sm')} Back to Chapters</button>
+      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--red-bg);color:var(--red-ink);border:1.5px solid var(--red-b)" data-action="retryMissed">${icon('repeat','icon-sm')} Retry Missed (${S.missed.size})</button>`:''}
+      ${S.missed.size>0?`<button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--accent);color:var(--teal-ink)" data-action="askApexMisses">${icon('zap','icon-sm')} Explain my misses</button>`:''}
       <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)"
-        onclick="startQuiz(${S.mode==='due'?'null':'S.chapter'},'${restartMode}')">${restartLabel}</button>
+        data-action="restartQuiz" data-scope="${S.mode==='due'?'none':'chapter'}" data-mode="${restartMode}">${restartLabel}</button>
     </div>
   </div>`;
 }

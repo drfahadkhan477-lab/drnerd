@@ -18,10 +18,12 @@
  *   - a row for every chapter answered at all, in the bank's order, changing colour at 70 and 50, with
  *     the chapter's accent, its name escaped and its percent in ink;
  *   - "Retry Missed" and "Explain my misses" only when something is missed; what the last button says and
- *     restarts, by mode; and that the chapter's name is never written into a handler;
+ *     restarts, by mode; and that the chapter's name is never written into a button, which names actions and carries
+ *     no inline handler (docs/ROADMAP.md, E2);
  *   - the eight names of the state it reads, and that it changes nothing it is given;
- *   - the page's one line hands over the page's own state and helpers, the three handlers the buttons
- *     name are the page's, and the page's own helpers, cut from it, draw what the page shows.
+ *   - the page's one line hands over the page's own state and helpers, the four actions the buttons name are in the
+ *     page's table over the page's own functions, a tap through the real Actions reaches them (Restart reading the
+ *     chapter when tapped), and the page's own helpers, cut from it, draw what the page shows.
  *
  * Nothing here reads the clock or the time zone.
  */
@@ -68,7 +70,13 @@ const rowsOf = html => html.split('<div class="chp-row"').slice(1).map(r => ({
   pct: g(r, /class="chp-pct" style="color:([^"]*)">([^<]*)%</)[1],
   count: g(r, /class="chp-count">([^<]*)</)[0],
 }));
-const buttonsOf = html => [...html.matchAll(/<button\b[^>]*\bonclick="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].map(m => [m[1], m[2].trim()]);
+/* docs/ROADMAP.md, E2: a button names an action, and Restart also says whether to use the chapter and in which mode. */
+const attrOf = (tag, name) => (tag.match(new RegExp('\\s' + name + '="([^"]*)"')) || [])[1];
+const buttonsOf = html => [...html.matchAll(/<button\b([^>]*\bdata-action="[^"]*"[^>]*)>([\s\S]*?)<\/button>/g)]
+  .map(m => [[attrOf(m[1], 'data-action'), attrOf(m[1], 'data-scope'), attrOf(m[1], 'data-mode')].filter(Boolean).join(' '), m[2].trim()]);
+/* Attribute names, read tag by tag with each value consumed whole, so text inside a value is never taken for a name. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
 
 head('the score is the quiz\'s when a quiz was answered, and the session\'s when none was');
 {
@@ -146,30 +154,32 @@ head('a row for every chapter answered, in the bank\'s order');
 head('what the buttons offer');
 {
   const clean = buttonsOf(draw(state({ quizTotal: 4, quizCorrect: 4 })));
-  ok('"Back to Chapters" is first, and goes home', J(clean[0]) === J(['goHome()', '[icon arrow-left icon-sm] Back to Chapters']), J(clean[0]));
+  ok('"Back to Chapters" is first, and goes home', J(clean[0]) === J(['goHome', '[icon arrow-left icon-sm] Back to Chapters']), J(clean[0]));
   ok('with nothing missed there is that and the restart, and no more', clean.length === 2 && !clean.some(b => /Missed|misses/.test(b[1])), clean.map(b => b[1]).join(' | '));
   const three = buttonsOf(draw(state({ quizTotal: 4, quizCorrect: 1, missed: new Set(['a', 'b', 'c']) })));
-  ok('with three missed, "Retry Missed (3)" starts a quiz of the missed', J(three[1]) === J(['startQuiz(null,\'missed\')', '[icon repeat icon-sm] Retry Missed (3)']), J(three[1]));
-  ok('and "Explain my misses" asks Apex', J(three[2]) === J(['askApexMisses()', '[icon zap icon-sm] Explain my misses']), J(three[2]));
-  ok('four buttons then, the restart last', three.length === 4 && /^startQuiz\(/.test((three[3] || [''])[0]) && three[0][0] === 'goHome()', three.map(b => b[0]).join(' | '));
+  ok('with three missed, "Retry Missed (3)" names the retryMissed action', J(three[1]) === J(['retryMissed', '[icon repeat icon-sm] Retry Missed (3)']), J(three[1]));
+  ok('and "Explain my misses" names askApexMisses', J(three[2]) === J(['askApexMisses', '[icon zap icon-sm] Explain my misses']), J(three[2]));
+  ok('four buttons then, the restart last', three.length === 4 && /^restartQuiz /.test((three[3] || [''])[0]) && three[0][0] === 'goHome', three.map(b => b[0]).join(' | '));
 
-  /* [mode, chapter, what the button says, what it does] */
+  /* [mode, chapter, what the button says, the action, whether it uses the chapter, and its mode] */
   const RESTART = [
-    ['due', 'Alpha', 'Continue Reviewing', 'startQuiz(null,\'due\')'],
-    ['flagged', 'Alpha', 'Flagged Again', 'startQuiz(S.chapter,\'flagged\')'],
-    ['missed', 'Alpha', 'Restart Chapter', 'startQuiz(S.chapter,\'missed\')'],
-    ['missed', null, 'Restart Quiz', 'startQuiz(S.chapter,\'missed\')'],
-    ['all', 'Alpha', 'Restart Chapter', 'startQuiz(S.chapter,\'all\')'],
-    [undefined, null, 'Restart Quiz', 'startQuiz(S.chapter,\'all\')'],
-    ['chapter', '', 'Restart Quiz', 'startQuiz(S.chapter,\'all\')'],
+    ['due', 'Alpha', 'Continue Reviewing', 'restartQuiz none due'],
+    ['flagged', 'Alpha', 'Flagged Again', 'restartQuiz chapter flagged'],
+    ['missed', 'Alpha', 'Restart Chapter', 'restartQuiz chapter missed'],
+    ['missed', null, 'Restart Quiz', 'restartQuiz chapter missed'],
+    ['all', 'Alpha', 'Restart Chapter', 'restartQuiz chapter all'],
+    [undefined, null, 'Restart Quiz', 'restartQuiz chapter all'],
+    ['chapter', '', 'Restart Quiz', 'restartQuiz chapter all'],
   ];
   for (const [mode, chapter, says, does] of RESTART) {
     const last = buttonsOf(draw(state({ quizTotal: 4, quizCorrect: 4, mode, chapter }))).pop() || [];
-    ok(`mode ${J(mode)}, chapter ${J(chapter)}: "${says}", which runs ${does}`, J(last) === J([does, says]), J(last));
+    ok(`mode ${J(mode)}, chapter ${J(chapter)}: "${says}", which names ${does}`, J(last) === J([does, says]), J(last));
   }
   const hostile = draw(state({ quizTotal: 4, quizCorrect: 4, mode: 'all', chapter: 'x\'),alert(1),(\'' }));
-  ok('the chapter\'s name is never written into a handler: the button says S.chapter, the page\'s own name for it',
-     !hostile.startsWith('THREW') && !hostile.includes('alert(1)') && (buttonsOf(hostile).pop() || [])[0] === 'startQuiz(S.chapter,\'all\')', (buttonsOf(hostile).pop() || [])[0]);
+  ok('the chapter\'s name is never written into a button: Restart says only "chapter"',
+     !hostile.startsWith('THREW') && (buttonsOf(hostile).pop() || [])[0] === 'restartQuiz chapter all' && ![...hostile.matchAll(/<button\b[^>]*>/g)].some(m => m[0].includes('alert(1)')), (buttonsOf(hostile).pop() || [])[0]);
+  const every = ['due', 'flagged', 'missed', 'all'].map(mode => draw(state({ quizTotal: 4, quizCorrect: 1, missed: new Set(['a']), mode, chapter: 'Alpha' }))).join('');
+  ok('and the screen carries no inline handler, with every button it can show', every.length > 400 && inlineOf(every).length === 0, inlineOf(every).join(' ') || 'none');
 }
 
 head('it reads the state it is given, and changes nothing');
@@ -217,13 +227,38 @@ head('the page hands over its own state and helpers');
   ok('and the screen\'s own words are no longer in the page', count('Cumulative Chapter Performance') === 0 && count('Back to Chapters') === 0 && count('Retry Missed') === 0,
      ['Cumulative Chapter Performance', 'Back to Chapters', 'Retry Missed'].map(t => count(t)).join(' '));
 
-  /* Every handler the markup can name, over every button it can show. */
+  /* Every action the markup can name, over every button it can show. */
   const named = new Set();
   for (const mode of ['due', 'flagged', 'missed', 'all'])
-    for (const b of buttonsOf(draw(state({ quizTotal: 4, quizCorrect: 1, missed: new Set(['a']), mode, chapter: 'Alpha' })))) named.add((b[0].match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]);
+    for (const b of buttonsOf(draw(state({ quizTotal: 4, quizCorrect: 1, missed: new Set(['a']), mode, chapter: 'Alpha' })))) named.add(b[0].split(' ')[0]);
   const handlers = [...named].sort();
-  ok('its buttons name three handlers', J(handlers) === J(['askApexMisses', 'goHome', 'startQuiz']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  ok('its buttons name four actions', J(handlers) === J(['askApexMisses', 'goHome', 'restartQuiz', 'retryMissed']), handlers.join(' '));
+  const TABLE = { goHome: 'goHome:()=>goHome(),', retryMissed: 'retryMissed:()=>startQuiz(null,\'missed\'),', askApexMisses: 'askApexMisses:()=>askApexMisses(),',
+    restartQuiz: 'restartQuiz:el=>startQuiz(el.dataset.scope===\'chapter\'?S.chapter:null,el.dataset.mode),' };
+  const table = (page.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
+  ok('each is in the page\'s ACTIONS table once, over the page\'s goHome(), startQuiz() and askApexMisses(), each declared once, and the listener is installed',
+     handlers.length === 4 && handlers.every(n => table.split(TABLE[n]).length === 2) && ['goHome', 'startQuiz', 'askApexMisses'].every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1,
+     handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1)).join(' ') + ' · ' + ['goHome', 'startQuiz', 'askApexMisses'].map(n => n + ':' + count('function ' + n + '(')).join(' '));
+
+  /* A tap, as the page takes it: the real src/core/actions.js on a stand-in document, the page's own ACTIONS table over
+     stand-ins for the three functions that record their calls, and each button the module drew as the element tapped.
+     The chapter is changed after the screen is drawn and before the tap: Restart's handler read S.chapter when tapped,
+     and the action must too. */
+  const calls = [];
+  const tctx = { calls, S: { chapter: 'Beta' } }; tctx.window = tctx; vm.createContext(tctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'actions.js'), 'utf8')
+    + '\nfunction goHome(){ calls.push("goHome"); }\nfunction startQuiz(ch, mode){ calls.push("startQuiz " + JSON.stringify(ch) + " " + mode); }\nfunction askApexMisses(){ calls.push("askApexMisses"); }\n'
+    + 'function setLab(){} function memForget(){} function memForgetAll(){}\n'
+    + (page.match(/const ACTIONS=\{[\s\S]*?\n\};/) || ['const ACTIONS={};'])[0].replace(/^const /, 'var ') + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);', tctx);
+  const tap = html => { calls.length = 0; for (const m of html.matchAll(/<button\b([^>]*)>/g)) {
+    const at = Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], x[2]])); if (!('data-action' in at)) continue;
+    const el = { nodeType: 1, getAttribute: k => (k in at ? at[k] : null), dataset: { scope: at['data-scope'], mode: at['data-mode'] }, closest: sel => (sel === '[data-action]' ? el : null) };
+    tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ target: el })); } return calls.slice(); };
+  const missedTaps = tap(draw(state({ quizTotal: 4, quizCorrect: 1, missed: new Set(['a']), mode: 'all', chapter: 'Alpha' })));
+  ok('tapped through the real Actions and the page\'s table: Back goes home, Retry Missed starts the missed, Explain asks Apex, and Restart starts the chapter as it stands when tapped',
+     J(missedTaps) === J(['goHome', 'startQuiz null missed', 'askApexMisses', 'startQuiz "Beta" all']), J(missedTaps));
+  const dueTaps = tap(draw(state({ quizTotal: 4, quizCorrect: 4, mode: 'due', chapter: 'Alpha' })));
+  ok('and a review of what is due starts again with no chapter', J(dueTaps) === J(['goHome', 'startQuiz null due']), J(dueTaps));
 
   /* The page's own helpers and its own line, with the module where the slot stands, in a context that has
      nothing else: what the reader is shown, less the page. */
