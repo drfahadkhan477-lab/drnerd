@@ -36,9 +36,12 @@
      5. In a review session, before rating: the four ratings, each with when the card would come back.
         Otherwise: home, back, flag, and next (or skip).
 
-   The buttons name toggleFlag, rateReview, prevQ, nextQ, goHome, restartQuiz, setConfidence,
-   setMissReason and askApexWhy, and an option is answered by the page's listener on [data-idx]: an inline
-   handler is read where it is tapped, so those stay the page's.
+   The buttons name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's ACTIONS table calls
+   (src/core/actions.js): toggleFlag, prevQ, nextQ (Next and Skip), goHome and askApexWhy with nothing;
+   setConfidence with the chip's band (data-cf) and rateReview with the button's grade (data-grade), each read
+   as a number, as the handlers were given; setMissReason with the chip's reason (data-why); and
+   quizStartOver, which is the page's restartQuiz(). The functions stay the page's. An option is answered by
+   the page's listener on [data-idx].
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -50,7 +53,7 @@ function cfRow(S,kit){
   const chips=Calib.BANDS.map(function(b){
     const on = a && a.cf===b.id;
     return '<button class="cf-chip'+(on?" on":"")+'" type="button" data-cf="'+b.id+'"'
-      + ' aria-pressed="'+(on?"true":"false")+'" onclick="setConfidence('+b.id+')">'
+      + ' aria-pressed="'+(on?"true":"false")+'" data-action="setConfidence">'
       + e(b.label) + '</button>';
   }).join("");
   return '<div class="cf-row" role="group" aria-label="How sure are you, before answering?">'
@@ -66,12 +69,12 @@ function missRow(S,LOG,kit,wasCorrect){
   const chips=Calib.REASONS.map(function(r){
     const on = why===r.id;
     return '<button class="miss-chip'+(on?" on":"")+'" type="button" data-why="'+r.id+'"'
-      + ' aria-pressed="'+(on?"true":"false")+'" onclick="setMissReason(\''+r.id+'\')">'
+      + ' aria-pressed="'+(on?"true":"false")+'" data-action="setMissReason">'
       + e(r.label) + '</button>';
   }).join("");
   return '<div class="miss-row" role="group" aria-label="Why did you miss it?">'
     + '<span class="miss-lab">Why did you miss it?</span>' + chips
-    + '<button class="miss-ask" type="button" onclick="askApexWhy()">' + icon('zap','icon-sm') + ' Ask Apex why</button></div>';
+    + '<button class="miss-ask" type="button" data-action="askApexWhy">' + icon('zap','icon-sm') + ' Ask Apex why</button></div>';
 }
 
 function screenHtml(S, LOG, CH_COLORS, kit){
@@ -139,7 +142,7 @@ function screenHtml(S, LOG, CH_COLORS, kit){
 
   /* The flag is a toggle: its name stays "Flag" and aria-pressed says whether it is on, as the mock block's does. */
   const flagOn=S.flagged.has(q.id);
-  const flagBtn=`<button class="btn btn-flag${flagOn?' on':''}" id="qFlag" type="button" onclick="toggleFlag()" aria-pressed="${flagOn}"
+  const flagBtn=`<button class="btn btn-flag${flagOn?' on':''}" id="qFlag" type="button" data-action="toggleFlag" aria-pressed="${flagOn}"
     title="Flag this question to come back to it (F)">${icon('flag','icon-sm')}<span class="btn-flag-l">Flag</span></button>`;
   const reviewing = answered && S.mode==='due' && !alreadyRated;
   /* A review session's action row is empty until the card is rated, and rating moves on: the Flag button is in the prompt,
@@ -147,25 +150,25 @@ function screenHtml(S, LOG, CH_COLORS, kit){
   const rateRow = reviewing ? `<div class="rate-prompt anim-pop">
       <div class="rate-q">How well did you know this — before you saw the options?</div>
       <div class="rate-row">${RATINGS.map(([key,label,grade,col])=>
-        `<button class="rate-btn" style="--rc:${col}" onclick="rateReview(${grade})">
+        `<button class="rate-btn" style="--rc:${col}" data-action="rateReview" data-grade="${grade}">
            <span class="rate-label">${label}</span>
            <span class="rate-sched">${fmtInterval(fsrsPreview(S.srs[q.id],grade,q.id).ivl)}</span>
          </button>`).join('')}</div>
       <div class="rate-flag">${flagBtn}</div>
     </div>` : '';
-  const prevBtn=canGoBack?`<button class="btn btn-prev" onclick="prevQ()" type="button" aria-label="Previous question">${icon('arrow-left','icon-sm')}</button>`:'';
+  const prevBtn=canGoBack?`<button class="btn btn-prev" data-action="prevQ" type="button" aria-label="Previous question">${icon('arrow-left','icon-sm')}</button>`:'';
   const actions = reviewing ? '' : answered
-    ?`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
-      <button class="btn btn-next anim-pop" onclick="nextQ()" type="button">${qIdx<questions.length-1?'Next Question':'View Results'} ${icon('arrow-right','icon-sm')}</button>`
-    :`<button class="btn btn-home" onclick="goHome()" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
-      <button class="btn btn-skip" onclick="nextQ()" type="button">Skip ${icon('arrow-right','icon-sm')}</button>`;
+    ?`<button class="btn btn-home" data-action="goHome" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
+      <button class="btn btn-next anim-pop" data-action="nextQ" type="button">${qIdx<questions.length-1?'Next Question':'View Results'} ${icon('arrow-right','icon-sm')}</button>`
+    :`<button class="btn btn-home" data-action="goHome" type="button" aria-label="Home">${icon('home')}</button>${prevBtn}${flagBtn}
+      <button class="btn btn-skip" data-action="nextQ" type="button">Skip ${icon('arrow-right','icon-sm')}</button>`;
 
   return `<div class="quiz-wrap">
     <div class="qbar anim-slide">
       <div class="qbar-top">
         <span class="ch-badge" style="background:${chColor}22;color:${chInk(chColor)}">${e(q.ch)}</span>
         <span class="q-counter">${qIdx+1} of ${questions.length}<span class="sr-only"> in this session</span></span>
-        ${S.resumed?`<button class="q-restart" type="button" onclick="restartQuiz()"
+        ${S.resumed?`<button class="q-restart" type="button" data-action="quizStartOver"
           title="Deal this chapter again from the beginning">Resumed · start over</button>`:''}
       </div>
       <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>

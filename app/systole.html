@@ -5375,6 +5375,17 @@ const ACTIONS={
   discardMock:()=>discardMock(),
   openMockReport:()=>openMockReport(),
   startVoice:()=>startVoice(),
+  /* the quiz (src/app/quiz.js): a confidence chip carries its band's number and a rating button its grade, read back as
+     the numbers the handlers were given; a miss chip carries its reason. Start over is quizStartOver, because
+     restartQuiz above is the results screen's, which starts a quiz anew; this one forgets the resumed deck first. */
+  setConfidence:el=>setConfidence(Number(el.dataset.cf)),
+  setMissReason:el=>setMissReason(el.dataset.why),
+  askApexWhy:()=>askApexWhy(),
+  toggleFlag:()=>toggleFlag(),
+  rateReview:el=>rateReview(Number(el.dataset.grade)),
+  prevQ:()=>prevQ(),
+  nextQ:()=>nextQ(),
+  quizStartOver:()=>restartQuiz(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into

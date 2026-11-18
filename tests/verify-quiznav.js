@@ -12,7 +12,7 @@
  * date drifting further out every time its question is revisited.
  *
  * And the header those moves redraw: the counter says the place in the session ("4 of 20"), and only the question's
- * tag says "Question" with the bank's own number.
+ * tag says "Question" with the bank's own number. And Skip, Home and Resumed · start over, clicked.
  */
 'use strict';
 const path = require('path');
@@ -212,6 +212,34 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('and does not call it "Q" or "Question", the word the tag uses for the bank\'s own number',
       !/\bQ(uestion)?\b/.test(r.seen) && r.tag.indexOf('Question ' + r.n) === 0, JSON.stringify({ counter: r.seen, tag: r.tag.slice(0, 40) }));
     ok('a screen reader is told what the place counts', r.all === `${r.place} of ${r.of} in this session`, JSON.stringify(r.all));
+  }
+
+  /* docs/ROADMAP.md, E2. The quiz's buttons name actions, not inline handlers, which the page's ACTIONS table calls
+     through one listener on the document (src/core/actions.js). Next and Previous are clicked above; the flag, the
+     ratings, the chips and Ask Apex why in their own suites (verify-flags, verify-apexask, verify-mockscreen). Skip, Home
+     and Resumed · start over are clicked here, each from a quiz drawn for it, through the real functions. A wait is a
+     precondition (the screen drawn, by afterRender); a click that cannot be made, or a state that never comes, is FAIL. */
+  head('Skip, Home and start over, clicked');
+  {
+    const act = f => f().then(() => true, () => false);
+    const until = (fn, arg) => page.waitForFunction(fn, arg === undefined ? null : arg, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    const fresh = async extra => {
+      await page.evaluate(x => { (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'); if (x) { S.resumed = true; render(); } }, !!extra);
+      await afterRender(page, sel => S.screen === 'quiz' && S.qIdx === 0 && !!document.querySelector(sel), { arg: extra || '.btn-skip', label: 'a fresh quiz with ' + (extra || '.btn-skip') });
+    };
+    await fresh();
+    const skipped = await act(() => page.locator('.btn-skip').click({ timeout: 5000 })) && await until(() => S.screen === 'quiz' && S.qIdx === 1 && !S.answered);
+    ok('Skip moves on to the next question, unanswered', skipped, await page.evaluate(() => JSON.stringify({ screen: S.screen, qIdx: S.qIdx, answered: S.answered })));
+    await fresh();
+    const home = await act(() => page.locator('.btn-home').click({ timeout: 5000 })) && await until(() => S.screen === 'home');
+    ok('Home leaves the quiz for the home screen', home, await page.evaluate(() => S.screen));
+    await fresh('.q-restart');
+    await page.evaluate(() => { S.qIdx = 1; S.resumed = true; render(); });
+    await afterRender(page, () => S.qIdx === 1 && !!document.querySelector('.q-restart'), { label: 'the second question, resumed' });
+    /* The same chapter and mode: the results screen's Restart is an action named restartQuiz too, and it would start a
+       quiz from its first question with neither. */
+    const over = await act(() => page.locator('.q-restart').click({ timeout: 5000 })) && await until(ch => S.screen === 'quiz' && S.qIdx === 0 && S.resumed === false && S.chapter === ch && S.mode === 'all', await page.evaluate(() => CHAPTERS[0]));
+    ok('Resumed · start over deals the same chapter again, in the same mode, from its first question, no longer resumed', over, await page.evaluate(() => JSON.stringify({ qIdx: S.qIdx, resumed: S.resumed, chapter: S.chapter === CHAPTERS[0] ? 'the same' : S.chapter, mode: S.mode })));
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));
