@@ -602,13 +602,25 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     const SCREENS = [['Chapters', () => goStudy()], ['a question', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); }],
       ['a question answered', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); selectOpt((q.ci + 1) % q.o.length); }],
       ['a figure question', () => { const q = POOL.find(x => !x.bad && x.img); startAdhocQuiz([q], q.ch); }],
-      ['Progress', () => goStats()], ['the notes', () => goRefs()], ['the Rhythm Lab', () => goLab()], ['Sessions', () => goSessions()]];
+      ['Progress', () => goStats()], ['the notes', () => goRefs()],
+      ['the notes (paged fixture)', () => { REF = Array.from({length:1152}, (_, i) => ({id:'fixture-'+i, title:'Invented note '+i, tags:[], body:'An invented note for the scrolling check.', ts:i})); goRefs(); }],
+      ['the Rhythm Lab', () => goLab()], ['Sessions', () => goSessions()]];
     for (const [w, h, what] of [[390, 844, 'a phone'], [820, 1180, 'an iPad Air upright'], [1180, 820, 'an iPad Air on its side']]) {
       /* Motion reduced, so what scrolls into view is drawn where it rests, not part-way through its entrance. */
       const page = await open({ width: w, height: h }, { hasTouch: true, isMobile: w < 600, reducedMotion: 'reduce' });
       const under = [], seen = [];
       for (const [name, go] of SCREENS) {
         await page.evaluate(`(${go})()`);
+        /* Reach the library's actual end before testing clearance. The pager is
+           asynchronous and can add more than forty pages, so a stable height
+           after a few frames is not evidence that the library has ended. Use
+           the same action as its Show more button, and refuse a stuck pager. */
+        if (name.startsWith('the notes')) await page.evaluate(() => {
+          while (document.getElementById('refPager')) {
+            const before = refShown; refMore();
+            if (refShown <= before) throw Error('Reference pager made no progress');
+          }
+        });
         await quiet(page);
         const r = await page.evaluate(async () => {
           /* The end of the screen: the document's and #app's own (on an iPad upright #app is the scroller), again until the
