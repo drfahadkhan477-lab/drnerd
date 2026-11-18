@@ -16,9 +16,10 @@
  *   - the counts, and the three ways the time is said;
  *   - the flags, counted against the Flagged list as it is now; and the slowest questions;
  *   - a row for each chapter, the weakest first, with its own thresholds at 70 and 50;
- *   - the buttons, and that every handler on the screen is one of three fixed calls;
+ *   - the buttons, and that every action on the screen is one of three fixed ones, with no inline handler (E2);
  *   - that it reads two names of the state and six of the kit, and changes nothing it is given;
- *   - the page's one line: what it hands over is what the module asks for, the two handlers are the
+ *   - the page's one line: what it hands over is what the module asks for, the two actions are in the page's
+ *     table, a tap through the real Actions reaches them, the functions are the
  *     page's, and that line over the real MockExam and the page's own helpers and mockLookup() grades a
  *     block made here and says what the arithmetic done here says.
  */
@@ -69,8 +70,13 @@ function draw(result, opts) {
 /* The parts of the markup a reader sees. */
 const g1 = (s, re) => (s.match(re) || [])[1];
 const times = (html, text) => html.split(text).length - 1;
-const handlersOf = html => [...html.matchAll(/onclick="([^"]*)"/g)].map(m => m[1]);
-const buttonsOf = html => [...html.matchAll(/<button\b[^>]*\bonclick="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].map(m => [m[1], m[2].trim()]);
+/* docs/ROADMAP.md, E2: a button names an action, and a review button also the set to review. */
+const attrOf = (tag, name) => (tag.match(new RegExp('\\s' + name + '="([^"]*)"')) || [])[1];
+const handlersOf = html => [...html.matchAll(/<button\b([^>]*\bdata-action="[^"]*"[^>]*)>/g)].map(m => [attrOf(m[1], 'data-action'), attrOf(m[1], 'data-mode')].filter(Boolean).join(' '));
+const buttonsOf = html => [...html.matchAll(/<button\b([^>]*\bdata-action="[^"]*"[^>]*)>([\s\S]*?)<\/button>/g)].map(m => [[attrOf(m[1], 'data-action'), attrOf(m[1], 'data-mode')].filter(Boolean).join(' '), m[2].trim()]);
+/* Attribute names, read tag by tag with each value consumed whole, so text inside a value is never taken for a name. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
 const scoreOf = html => ({
   pct: g1(html, /class="score-pct" style="color:[^"]*">([^<]*)</), ink: g1(html, /class="score-pct" style="color:([^"]*)"/), label: g1(html, /class="score-label">([^<]*)</),
   said: g1(html, /role="img" aria-label="([^"]*)"/), msg: (g1(html, /class="score-msg">([^<]*)</) || '').trim(),
@@ -90,7 +96,7 @@ const QUIET = 'background:var(--card);border:1.5px solid var(--border);color:var
 head('with no block handed in');
 {
   const asked = [], html = draw(null, { asked }), gone = draw(null, { S: { flagged: new Set() } });
-  ok('it says so, and offers the way back to Sessions and nothing else', html.includes('<p>' + NONE + '</p>') && J(buttonsOf(html)) === J([['goSessions()', '[icon arrow-left icon-sm] Back to Sessions']]) && scoreOf(html).pct === undefined, J(buttonsOf(html)));
+  ok('it says so, and offers the way back to Sessions and nothing else', html.includes('<p>' + NONE + '</p>') && J(buttonsOf(html)) === J([['goSessions', '[icon arrow-left icon-sm] Back to Sessions']]) && scoreOf(html).pct === undefined, J(buttonsOf(html)));
   ok('the same with no word of a block in the state at all', gone.includes(NONE) && buttonsOf(gone).length === 1, gone.slice(0, 80));
   ok('and nothing is graded', !html.startsWith('THREW') && asked.length === 0, asked.map(a => a[0]).join(' ') || 'nothing asked');
 }
@@ -162,13 +168,13 @@ head('the buttons');
 {
   const some = draw(graded({ n: 10, review: { missed: ['a', 'b', 'c'] } })), none = draw(graded({ n: 10, review: { missed: [] } }));
   ok('with something to learn from: review those, by how many; review all, by how many; back to Sessions',
-     J(buttonsOf(some)) === J([['mockReview(\'missed\')', '[icon repeat icon-sm] Review the 3 to learn from'], ['mockReview(\'all\')', 'Review all 10'], ['goSessions()', '[icon arrow-left icon-sm] Back to Sessions']]), J(buttonsOf(some)));
-  ok('with every answer right and nothing flagged, the first is not offered', J(buttonsOf(none).map(b => b[0])) === J(['mockReview(\'all\')', 'goSessions()']), J(buttonsOf(none).map(b => b[0])));
-  ok('the two that are always there are the quiet ones', times(some, 'style="' + QUIET + '" onclick="mockReview(\'all\')"') === 1 && times(some, 'style="' + QUIET + '" onclick="goSessions()"') === 1);
+     J(buttonsOf(some)) === J([['mockReview missed', '[icon repeat icon-sm] Review the 3 to learn from'], ['mockReview all', 'Review all 10'], ['goSessions', '[icon arrow-left icon-sm] Back to Sessions']]), J(buttonsOf(some)));
+  ok('with every answer right and nothing flagged, the first is not offered', J(buttonsOf(none).map(b => b[0])) === J(['mockReview all', 'goSessions']), J(buttonsOf(none).map(b => b[0])));
+  ok('the two that are always there are the quiet ones', times(some, 'style="' + QUIET + '" data-action="mockReview" data-mode="all"') === 1 && times(some, 'style="' + QUIET + '" data-action="goSessions"') === 1);
   const hostile = draw(graded({ byCh: [{ ch: 'x\');alert(1);(\'', n: 2, correct: 1 }], slowest: [{ i: 0, ch: 'y");alert(2);("', ms: 5 }], review: { missed: ['z\');alert(3);(\''] } }));
-  const allowed = ['mockReview(\'missed\')', 'mockReview(\'all\')', 'goSessions()'];
-  ok('nothing of a block is written into a handler: every handler on the screen is one of three fixed calls',
-     !hostile.startsWith('THREW') && handlersOf(hostile).length === 3 && handlersOf(hostile).every(h => allowed.includes(h)), handlersOf(hostile).join(' | '));
+  const allowed = ['mockReview missed', 'mockReview all', 'goSessions'];
+  ok('nothing of a block is written into a button: every action on the screen is one of three fixed ones, and it carries no inline handler',
+     !hostile.startsWith('THREW') && handlersOf(hostile).length === 3 && handlersOf(hostile).every(h => allowed.includes(h)) && inlineOf(some).length === 0 && inlineOf(none).length === 0, handlersOf(hostile).join(' | ') + ' · ' + (inlineOf(some).join(' ') || 'no on* attribute'));
 }
 
 head('it reads what it is given, and changes nothing');
@@ -220,8 +226,25 @@ head('the page hands the module what it has, and keeps what the buttons name');
   const WORDS = [NONE, 'This block, by chapter', 'to learn from', 'In your Flagged list', 'Time ran out at', ', no time limit', 'Mock block', 'id="mockSummary"', 'id="mockTime"'];
   ok('and the report\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const some = draw(graded({ review: { missed: ['a'] } }));
-  const handlers = [...new Set(handlersOf(some).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its buttons name two handlers', J(handlers) === J(['goSessions', 'mockReview']), handlers.join(' '));
+  const handlers = [...new Set(handlersOf(some).map(h => h.split(' ')[0]))].sort();
+  ok('its buttons name two actions', J(handlers) === J(['goSessions', 'mockReview']), handlers.join(' '));
+  const TABLE = { goSessions: 'goSessions:()=>goSessions(),', mockReview: 'mockReview:el=>mockReview(el.dataset.mode),' };
+  const table = (page.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
+  ok('each is in the page\'s ACTIONS table once, calling the page\'s function of that name, and the listener is installed; mockReview passes the set from the button\'s data',
+     handlers.length === 2 && handlers.every(n => table.split(TABLE[n]).length === 2) && count('Actions.install(document,ACTIONS);') === 1, handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1)).join(' '));
+  /* A tap, as the page takes it: the real src/core/actions.js on a stand-in document, the page's own ACTIONS table over
+     stand-ins that record their calls, and each button the module drew, with the attributes it drew, as the element. */
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const stubs = ['goHome', 'memForget', 'memForgetAll', 'setLab', 'startQuiz', 'askApexMisses', 'practiceAnnotated', 'goStudy', 'mockReview', 'goSessions'].map(n => `function ${n}(){ tcalls.push(${JSON.stringify(n)} + (arguments.length ? " " + [].slice.call(arguments).join(" ") : "")); }`).join('\n');
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'actions.js'), 'utf8') + '\nvar S={chapter:null};\n' + stubs + '\n'
+    + (page.match(/const ACTIONS=\{[\s\S]*?\n\};/) || ['const ACTIONS={};'])[0].replace(/^const /, 'var ') + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);', tctx);
+  for (const m of some.matchAll(/<button\b([^>]*)>/g)) {
+    const at = Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], x[2]])); if (!('data-action' in at)) continue;
+    const el = { nodeType: 1, getAttribute: k => (k in at ? at[k] : null), dataset: { mode: at['data-mode'] }, closest: sel => (sel === '[data-action]' ? el : null) };
+    tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ target: el }));
+  }
+  ok('tapped through the real Actions and the page\'s table: review the missed, review all, and back to Sessions', J(tcalls) === J(['mockReview missed', 'mockReview all', 'goSessions']), J(tcalls));
   ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
 
   /* The page's own line, helpers and mockLookup(), with the real MockExam and this module where their slots
