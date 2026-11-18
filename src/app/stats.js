@@ -54,8 +54,11 @@
      9. The reader's data: export, the confirmation a pending backup asks for, import, reset, the Safari
         tab's warning, how many reviews are logged and the state of the storage.
 
-   The buttons name goHome, startQuiz, offlineDownload, exportMarkup, confirmBackupSaved, importMarkup and
-   resetProgress: an inline handler is read where it is tapped, so those stay the page's. The page also
+   The buttons name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's ACTIONS table calls
+   (src/core/actions.js): goHome, exportMarkup, confirmBackupSaved, importMarkup and resetProgress, each by
+   the page's function of that name; startChapter, which starts a quiz in the chapter a ring carries in
+   data-ch, through e(); and offlineButton, the figures card's button, which stops a download while one runs
+   and starts one otherwise. The functions stay the page's. The page also
    starts its survey of the figures on this device as it draws this screen; that is the page's doing, and
    stays in its line.
    ═════════════════════════════════════════════ */
@@ -173,7 +176,7 @@ function screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit){
     const m=masteryFor(ch), pct=Math.round(m*100);
     const col=CH_COLORS[ch]||'var(--teal)';
     const R=26, C=2*Math.PI*R;
-    return `<button class="mast" style="--accent:${col}" onclick="startQuiz(${JSON.stringify(ch).replace(/"/g,'&quot;')})">
+    return `<button class="mast" style="--accent:${col}" data-action="startChapter" data-ch="${e(ch)}">
       <svg viewBox="0 0 64 64" class="mast-ring">
         <circle cx="32" cy="32" r="${R}" fill="none" stroke="var(--border)" stroke-width="5"/>
         <circle cx="32" cy="32" r="${R}" fill="none" stroke="${col}" stroke-width="5"
@@ -192,7 +195,7 @@ function screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit){
         <div class="stats-title">Your Progress</div>
         <div class="stats-sub">${ok?icon('check','icon-sm')+' Saved locally on this device':icon('alert','icon-sm')+' Local storage unavailable — use Export'}</div>
       </div>
-      <button class="btn sb-back" onclick="goHome()">${icon('arrow-left','icon-sm')} Home</button>
+      <button class="btn sb-back" data-action="goHome">${icon('arrow-left','icon-sm')} Home</button>
     </div>
 
     <div class="stat-grid">
@@ -209,7 +212,7 @@ function screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit){
       <div class="off-track"><span class="off-fill" style="width:0%"></span></div>
       <div class="off-foot">
         <span class="off-note">Pull every figure down once and the bank works with no network at all.</span>
-        <button class="off-btn" onclick="offlineDownload()">Download the rest</button>
+        <button class="off-btn" data-action="offlineButton">Download the rest</button>
       </div>
     </div>`:''}
     ${retentionTile()}
@@ -233,10 +236,10 @@ function screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit){
     <div class="panel">
       <div class="panel-h">Your data</div>
       <div class="data-row">
-        <button class="btn sb-back" onclick="exportMarkup()">⤓ Export everything</button>
-        ${pendingBackupSave?'<button class="btn sb-back" onclick="confirmBackupSaved()">I saved the backup file</button>':''}
-        <button class="btn sb-back" onclick="importMarkup()">⤒ Import backup</button>
-        <button class="btn sb-back" onclick="resetProgress()">Reset progress</button>
+        <button class="btn sb-back" data-action="exportMarkup">⤓ Export everything</button>
+        ${pendingBackupSave?'<button class="btn sb-back" data-action="confirmBackupSaved">I saved the backup file</button>':''}
+        <button class="btn sb-back" data-action="importMarkup">⤒ Import backup</button>
+        <button class="btn sb-back" data-action="resetProgress">Reset progress</button>
       </div>
       ${safariTabStorage()?`<div class="notice" id="safariTabNote"><span>${icon('alert')}</span><span><b>Add Systole to your Home Screen to keep this.</b>
         In a Safari tab, Safari deletes a site's saved data (progress, schedule, notes, ink and the downloaded bank) after
