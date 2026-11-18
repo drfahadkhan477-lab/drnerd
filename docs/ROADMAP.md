@@ -294,7 +294,9 @@ taps, types into and chooses from it) and the Progress screen
 (`verify-statsscreen-pure`; `verify-backup` taps each of its buttons), and the
 notes library (`verify-refs-pure`; `verify-reflist` taps each of its buttons), and
 the Sessions screen (`verify-sessions-pure`; `verify-mockscreen` and
-`verify-voicescreen` tap its controls). An action that needs state reads it when
+`verify-voicescreen` tap its controls), and the quiz (`verify-quiz-pure`;
+`verify-quiznav`, `verify-flags`, `verify-apexask` and `verify-mockscreen` tap
+its buttons). An action that needs state reads it when
 tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
 input only, so a tap on a field calls nothing and a key in a button calls

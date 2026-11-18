@@ -51,8 +51,12 @@ const question = (id, over) => Object.assign({ id, ch: 'Rhythm', n: 7, s: 'the s
 const state = over => Object.assign({ questions: [question('q1'), question('q2')], qIdx: 0, selected: null, answered: false, answers: {}, mode: 'all', flagged: new Set(), srs: {}, resumed: false, quizCorrect: 0, quizTotal: 0 }, over);
 const draw = (sOver, kOver, LOG, colors) => run(() => M.screenHtml(state(sOver), LOG || [], colors || { Rhythm: '#112233' }, kitOf(kOver)));
 const optsOf = html => html.split('<button class="opt').slice(1).map(s => ({ cls: 'opt' + s.slice(0, s.indexOf('"')), dis: / disabled /.test(s.slice(0, 40)), idx: g1(s, /data-idx="(\d+)"/), pressed: g1(s, /aria-pressed="([^"]*)"/), text: g1(s, /class="opt-text">([^<]*)</), pct: g1(s, /class="opt-pct" style="color:([^"]*)">([^<]*)</) }));
-const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
-const actions = html => handlersOf(g1(html, /<div class="actions">([\s\S]*)<\/div>\s*<\/div>\s*$/) || '');
+/* docs/ROADMAP.md, E2. Attribute names, read tag by tag with each value consumed whole, so text inside a value is never
+   taken for a name; and the actions the markup names, in the order drawn. */
+const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
+const actions = html => actionsOf(g1(html, /<div class="actions">([\s\S]*)<\/div>\s*<\/div>\s*$/) || '');
 
 head('the bar');
 {
@@ -60,7 +64,7 @@ head('the bar');
   ok('the chapter, in chInk()\'s ink on its colour, through e()', html.includes('<span class="ch-badge" style="background:#11223322;color:INK(#112233)">E(Rhythm)</span>'));
   ok('the place in the session, said to a screen reader as in this session', html.includes('<span class="q-counter">2 of 2<span class="sr-only"> in this session</span></span>'));
   ok('the bar is as far along as the place', g1(html, /transform:scaleX\(([^)]*)\)/) === '1.0000' && g1(draw(), /transform:scaleX\(([^)]*)\)/) === '0.5000');
-  ok('"start over" only when the session was resumed', draw({ resumed: true }).includes('onclick="restartQuiz()"') && !html.includes('restartQuiz'));
+  ok('"start over" only when the session was resumed, by the quizStartOver action', draw({ resumed: true }).includes('<button class="q-restart" type="button" data-action="quizStartOver"') && !html.includes('quizStartOver'));
   ok('the score so far, and nothing before the first answer', g1(draw({ quizCorrect: 2, quizTotal: 3 }), /<div class="qstats">([^<]*)</) === 'This quiz: 2/3 (67%)' && g1(html, /<div class="qstats">([^<]*)</) === '');
   ok('a chapter with no colour takes the teal', draw({}, {}, [], {}).includes('style="background:var(--teal)22;color:INK(var(--teal))"'));
 }
@@ -123,21 +127,21 @@ head('the reveal');
 head('how sure, and why missed');
 {
   const cf = draw({ answers: { 0: { cf: 2 } } });
-  ok('before answering: a chip for each band, the chosen one marked', cf.includes('data-cf="0" aria-pressed="false" onclick="setConfidence(0)">E(Guess)</button>') && cf.includes('class="cf-chip on" type="button" data-cf="2" aria-pressed="true" onclick="setConfidence(2)">E(Sure)'));
+  ok('before answering: a chip for each band, the chosen one marked', cf.includes('data-cf="0" aria-pressed="false" data-action="setConfidence">E(Guess)</button>') && cf.includes('class="cf-chip on" type="button" data-cf="2" aria-pressed="true" data-action="setConfidence">E(Sure)'));
   ok('none once answered', !draw({ answered: true }).includes('cf-row') && run(() => M.cfRowHtml(state({ answered: true }), kitOf())) === '');
   const LOG = [{ q: 'q1', why: 'gap' }, { q: 'q2', why: 'slip' }, { q: 'q1', why: 'slip' }];
   const miss = draw({ answered: true, selected: 0 }, {}, LOG);
-  ok('after a miss: a chip for each reason, the one last given for this question marked', miss.includes('class="miss-chip on" type="button" data-why="slip" aria-pressed="true"') && miss.includes('data-why="gap" aria-pressed="false"'));
+  ok('after a miss: a chip for each reason, the one last given for this question marked', miss.includes('class="miss-chip on" type="button" data-why="slip" aria-pressed="true" data-action="setMissReason">') && miss.includes('data-why="gap" aria-pressed="false" data-action="setMissReason">'));
   const other = draw({ answered: true, selected: 0 }, {}, [{ q: 'q1', why: 'gap' }, { q: 'q2', why: 'slip' }]);
   ok('a reason given for another question since is not this one\'s', other.includes('class="miss-chip on" type="button" data-why="gap"') && !other.includes('class="miss-chip on" type="button" data-why="slip"'));
-  ok('and a way to ask Apex why', miss.includes('<button class="miss-ask" type="button" onclick="askApexWhy()">[icon zap icon-sm] Ask Apex why</button>'));
+  ok('and a way to ask Apex why, by the askApexWhy action', miss.includes('<button class="miss-ask" type="button" data-action="askApexWhy">[icon zap icon-sm] Ask Apex why</button>'));
   ok('none after a right answer', !draw({ answered: true, selected: 1 }, {}, LOG).includes('miss-row') && run(() => M.missRowHtml(state(), LOG, kitOf(), true)) === '');
 }
 
 head('the review ratings');
 {
   const html = draw({ mode: 'due', answered: true, selected: 1, srs: { q1: { tag: 'card' } } });
-  const rates = [...html.matchAll(/<button class="rate-btn" style="--rc:([^"]*)" onclick="rateReview\((\d+)\)">\s*<span class="rate-label">([^<]*)<\/span>\s*<span class="rate-sched">([^<]*)<\/span>/g)].map(m => m.slice(1));
+  const rates = [...html.matchAll(/<button class="rate-btn" style="--rc:([^"]*)" data-action="rateReview" data-grade="(\d+)">\s*<span class="rate-label">([^<]*)<\/span>\s*<span class="rate-sched">([^<]*)<\/span>/g)].map(m => m.slice(1));
   ok('in a review, answered and not yet rated: a button for each rating, with when the card would come back', J(rates) === J([['#E00', '1', 'Again', 'IVL(card/1)'], ['#0A0', '3', 'Good', 'IVL(card/3)']]), J(rates));
   ok('and the flag in the prompt, with no other action', html.includes('<div class="rate-flag"><button class="btn btn-flag" id="qFlag"') && actions(html).length === 0, J(actions(html)));
   ok('once rated, no ratings', !draw({ mode: 'due', answered: true, answers: { 0: { rated: true } } }).includes('rate-prompt'));
@@ -146,9 +150,9 @@ head('the review ratings');
 
 head('the actions and the keys');
 {
-  ok('before answering: home, flag and skip; back from the second on', J(actions(draw())) === J(['goHome()', 'toggleFlag()', 'nextQ()']) && J(actions(draw({ qIdx: 1 }))) === J(['goHome()', 'prevQ()', 'toggleFlag()', 'nextQ()']));
+  ok('before answering: home, flag and skip; back from the second on', J(actions(draw())) === J(['goHome', 'toggleFlag', 'nextQ']) && J(actions(draw({ qIdx: 1 }))) === J(['goHome', 'prevQ', 'toggleFlag', 'nextQ']) && J(actions(draw({ answered: true }))) === J(['goHome', 'toggleFlag', 'nextQ']), J(actions(draw({ qIdx: 1 }))));
   ok('"Skip" before answering, "Next Question" after, "View Results" at the end', draw().includes('Skip [icon arrow-right icon-sm]') && draw({ answered: true }).includes('Next Question [icon arrow-right icon-sm]') && draw({ answered: true, qIdx: 1 }).includes('View Results [icon arrow-right icon-sm]'));
-  ok('the flag is a toggle: named Flag, pressed when on', draw().includes('aria-pressed="false"\n    title="Flag this question') && draw({ flagged: new Set(['q1']) }).includes('class="btn btn-flag on" id="qFlag" type="button" onclick="toggleFlag()" aria-pressed="true"'));
+  ok('the flag is a toggle: named Flag, pressed when on', draw().includes('aria-pressed="false"\n    title="Flag this question') && draw({ flagged: new Set(['q1']) }).includes('class="btn btn-flag on" id="qFlag" type="button" data-action="toggleFlag" aria-pressed="true"'));
   ok('a wide screen is told the keys, the letters of this question\'s options', draw().includes('Press <kbd>A</kbd><kbd>B</kbd> to answer') && draw({ answered: true }).includes('Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next'));
   const three = draw({ qIdx: 1, questions: [question('q1'), question('q2', { o: [{ l: 'A', t: 'x' }, { l: 'B', t: 'y' }, { l: 'C', t: 'z' }] })] });
   ok('the letters are those of the question on screen', three.includes('Press <kbd>A</kbd><kbd>B</kbd><kbd>C</kbd> to answer'));
@@ -192,9 +196,18 @@ head('the page hands the module what it has, and keeps what the markup names');
   const WORDS = ['How sure?', 'Why did you miss it?', 'Answer Distribution', 'Resumed · start over', 'How well did you know this'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw({ resumed: true, qIdx: 1 }) + draw({ answered: true, selected: 0 }, {}, [{ q: 'q1', why: null }]) + draw({ mode: 'due', answered: true, selected: 1 });
-  const handlers = [...new Set(handlersOf(all).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names nine handlers', J(handlers) === J(['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'restartQuiz', 'setConfidence', 'setMissReason', 'toggleFlag']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const named = [...new Set(actionsOf(all))].sort();
+  ok('its markup names nine actions and carries no inline handler', J(named) === J(['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'quizStartOver', 'rateReview', 'setConfidence', 'setMissReason', 'toggleFlag']) && inlineOf(all).length === 0, named.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
+  const ENTRY = { setConfidence: 'setConfidence:el=>setConfidence(Number(el.dataset.cf)),', setMissReason: 'setMissReason:el=>setMissReason(el.dataset.why),', askApexWhy: 'askApexWhy:()=>askApexWhy(),',
+    toggleFlag: 'toggleFlag:()=>toggleFlag(),', rateReview: 'rateReview:el=>rateReview(Number(el.dataset.grade)),', prevQ: 'prevQ:()=>prevQ(),', nextQ: 'nextQ:()=>nextQ(),', quizStartOver: 'quizStartOver:()=>restartQuiz(),', goHome: 'goHome:()=>goHome(),' };
+  ok('each is in the page\'s ACTIONS table once, as written, and in neither of the others: the numbers read back as numbers, and start over the page\'s restartQuiz()',
+     named.length === 9 && named.every(n => ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0),
+     named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 ? '' : ' (not as written)')).join(' '));
+  const CALLS = ['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'restartQuiz', 'setConfidence', 'setMissReason', 'toggleFlag'];
+  ok('they call nine functions the page declares, once each, and the page listens for taps on the document', CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('the chips setConfidence() and setMissReason() repaint are found by the classes the module draws', count('document.querySelectorAll(".cf-chip")') === 1 && count('document.querySelectorAll(".miss-chip")') === 1 && all.includes('class="cf-chip') && all.includes('class="miss-chip'));
   const ids = ['qFlag', 'qFlagBadge'];
   ok('the ids the page looks up are drawn', ids.every(id => count("getElementById('" + id + "')") + count("'#" + id) > 0 && draw().includes('id="' + id + '"')), ids.map(id => id + ':' + (count("getElementById('" + id + "')") + count("'#" + id))).join(' '));
@@ -222,6 +235,36 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('for this question, naming the card changes at least one rating\'s day, so the next check can tell (precondition)', want !== unnamed, want + ' vs ' + unnamed);
   ok('a new card\'s four ratings, each with when the real FSRS would bring this card back, as the real ReviewQueue says it', scheds.length === 4 && J(scheds) === want, J(scheds));
   ok('the bar and the score are the page\'s', html.includes('<span class="q-counter">1 of 1') && html.includes('This quiz: 1/1 (100%)'));
+  /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document over the page's own
+     tables, with a recording stand-in for each function they call, and as the element each button the page's own line
+     drew over the real Calib and RATINGS, its attributes read back as a browser reads them, in the order drawn. Three
+     drawings: a review waiting for its rating; a resumed session's second question, not yet answered; and a miss. */
+  const rating = html;
+  ask(`S.questions.push({ id: 'a2', ch: 'Valves & more', n: 4, s: 'S', ex: 'E', o: [{ l: 'A', t: 'x' }, { l: 'B', t: 'y' }], ci: 0 }); S.qIdx = 1; S.answered = false; S.selected = null; S.mode = 'all'; S.resumed = true; S.answers = {};`);
+  const asking = String(ask('buildQuiz()'));
+  ask(`S.answered = true; S.selected = 1; S.resumed = false; LOG.push({ q: 'a2', why: null });`);
+  const missed = String(ask('buildQuiz()'));
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const tables = TABLES.map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
+  const called = [...new Set([...tables.matchAll(/([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].filter(n => n !== 'Number');
+  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null}, offlineJob={busy:false};\n'
+    + called.map(n => `function ${n}(){ tcalls.push(${J(n)} + (arguments.length ? " " + JSON.stringify([].slice.call(arguments)) : "")); }`).join('\n') + '\n' + tables
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
+  const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const tapAll = h => { tcalls.length = 0; [...h.matchAll(/<button\b([^>]*)>/g)].forEach(m => {
+    const at = Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], unescape(x[2])]));
+    const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
+    const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ type: 'click', target: el })); }); return tcalls.slice(); };
+  const tr = tapAll(rating), ta = tapAll(asking), tm = tapAll(missed);
+  ok('tapped through the real Actions and the page\'s tables, waiting for a rating: each rating with its grade as a number (Again 1 to Easy 4), then the flag',
+     J(tr) === J(['rateReview [1]', 'rateReview [2]', 'rateReview [3]', 'rateReview [4]', 'toggleFlag']), J(tr));
+  ok('a resumed session\'s second question: start over (the page\'s restartQuiz(), not the results screen\'s), each band as a number, home, back, flag and skip',
+     J(ta) === J(['restartQuiz', 'setConfidence [0]', 'setConfidence [1]', 'setConfidence [2]', 'setConfidence [3]', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(ta));
+  ok('a miss: each of the real reasons, Ask Apex why, home, back, flag and next',
+     J(tm) === J(['setMissReason ["gap"]', 'setMissReason ["misread"]', 'setMissReason ["mixed"]', 'setMissReason ["slip"]', 'setMissReason ["guess"]', 'askApexWhy', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(tm));
+
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
