@@ -480,8 +480,14 @@ head('the page hands the module what it has, and keeps what the markup names');
   const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
   const tables = TABLES.map(t => (page.match(new RegExp('const ' + t + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + t + '={};'])[0].replace(/^const /, 'var ')).join('\n');
   const called = [...new Set([...tables.matchAll(/([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].filter(n => n !== 'Number');
-  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null,mock:{i:0}}, offlineJob={busy:false};\n'
-    + called.map(n => `function ${n}(){ var a=[].slice.call(arguments).map(function(x){ return x===window.__ev ? 'the click' : x===undefined ? 'undefined' : x; }); tcalls.push(${J(n)} + (a.length ? " " + JSON.stringify(a) : "")); return n==='dueQuestions' ? 'DUE' : undefined; }`.replace(/\bn===/, J(n) + '===')).join('\n') + '\n' + tables
+  /* Each stand-in is a function put on the context under the name the tables call, so no name read from the page is
+     written into code. */
+  called.forEach(n => { tctx[n] = (...args) => {
+    const a = args.map(x => (x === tctx.__ev ? 'the click' : x === undefined ? 'undefined' : x));
+    tcalls.push(n + (a.length ? ' ' + JSON.stringify(a) : ''));
+    return n === 'dueQuestions' ? 'DUE' : undefined;
+  }; });
+  vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null,mock:{i:0}}, offlineJob={busy:false};\n' + tables
     + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
   const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   const controls = h => [...h.matchAll(/<(button|select|input|svg)\b([^>]*)>/g)].map(m => {
