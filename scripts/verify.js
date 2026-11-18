@@ -70,7 +70,7 @@ const SUITES = [
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['loops',        'no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere'],
   ['theme',        'nine palettes, two axes, unthemed semantics'],
-  ['home',         'the welcome bar, the progress bar, three layouts, and the home screen\'s buttons reach what they say when tapped'],
+  ['home',         'the welcome bar, the progress bar, three layouts, and the home screen\'s buttons, the brain\'s keys, and the pager\'s and the pearl\'s scrolls reach what they say'],
   ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
@@ -316,7 +316,7 @@ const SUITES = [
   ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data, no inline handler but an action for each button that the page\'s ACTIONS table calls, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
   /* Roadmap E2: one delegated listener in place of inline handlers, in src/core/actions.js. The Memory screen is the
      first to name actions instead; verify-memory and verify-backup-ids tap it through the real page. */
-  ['actions-pure', 'a tap on an element with data-action, or inside one, calls the action of that name from the page\'s table once, with the element and the event, the nearest such element winning; nothing is called outside every data-action or the root, or for a name the table does not have as its own function, and what install() returns removes its listener'],
+  ['actions-pure', 'a tap on an element with data-action, or inside one, calls the action of that name from the page\'s table once, with the element and the event, the nearest such element winning; nothing is called outside every data-action or the root, or for a name the table does not have as its own function, and what install() returns removes its listener; asked, it listens as an event goes down, and acts only for the element the event is on'],
   /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
      chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
   ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, every element the page\'s mounts look up is in the markup under that name, and its chips and Home button name actions the page\'s ACTIONS table calls, with no inline handler'],

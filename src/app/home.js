@@ -91,10 +91,10 @@
    pearlOpen and dismissHello; its strip reviewAllDue, goStudy, or startPlan with 20 in data-plan; and each tab
    homeGo, with its page in data-page. The Labs page's: goLab, goEcho, goPractice, goSessions, goStudy, openSearch,
    goStats, goRefs, goMemory and goAnnotations. The Brain page's: brainTap on the brain, startDue, and startChapter
-   with the chapter in data-ch through e(). Three inline handlers are left, the pager's and the pearl's scroll
-   (homePagerScroll, pearlScroll) and the tabs' and the brain's keys (homeTabKey, brainKey): a scroll does not
-   bubble to the listener on the document, and a key on a tab is answered by the tab list's handler. The functions
-   stay the page's.
+   with the chapter in data-ch through e(). A key on a tab or in the brain is the page's KEY_ACTIONS under the
+   same names, homeGo and brainTap, which call homeTabKey() and brainKey(); the pager and the pearl's statement name
+   homePagerScroll and pearlScroll, which SCROLL_ACTIONS calls for a scroll of that element itself. No inline handler
+   is left. The functions stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -117,7 +117,7 @@ function homeHtml(S, CHAPTERS, kit){
   const masteryPct=Math.round(masteryFrac*100);
 
   return `<div class="home-pages${atlasPaused?' atlas-paused':''}" id="homePages">
-    <div class="home-pager" id="homePager" onscroll="homePagerScroll()">
+    <div class="home-pager" id="homePager" data-action="homePagerScroll">
     <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
     <div class="home-wrap anim-fade${atlasReading?' atlas-reading':''}" data-home="${S.homeLayout}">
     <section class="atlas-intro" id="atlasIntro"${atlasReading?' hidden':''} aria-labelledby="atlasTitle">
@@ -177,7 +177,7 @@ function homeHtml(S, CHAPTERS, kit){
           </div>
           <h1 class="pearl-concept" id="pearlConcept" tabindex="-1">${e(p.concept||p.title)}</h1>
 
-          <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlScroll()">${pearlLadder(p)}</div>
+          <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" data-action="pearlScroll">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" data-action="pearlToggleAll" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
           <div class="pearl-prompt" id="pearlPrompt" hidden>
@@ -212,7 +212,7 @@ function homeHtml(S, CHAPTERS, kit){
     <section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>
     <section class="home-page home-labs" id="homePage2" role="tabpanel" aria-labelledby="homeTab2"><div class="home-page-in">${buildLabs(dueN)}</div></section>
     </div>
-    <div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">
+    <div class="home-tabs" role="tablist" aria-label="Home pages">
       <span class="home-tab-pill" aria-hidden="true"></span>
       <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" data-action="homeGo" data-page="0">${icon('home','icon-sm')}<span>Home</span></button>
       <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" data-action="homeGo" data-page="1">${icon('brain','icon-sm')}<span>Brain</span></button>
@@ -370,7 +370,7 @@ function brainArtHtml(CH_COLORS, kit){
       <circle class="soma" cx="${x.x}" cy="${x.y}" r="${x.r}"/><circle class="soma-shine" cx="${x.x}" cy="${x.y}" r="${x.r}" fill="url(#sbSoma)"/>
       <circle class="nucleus" cx="${(x.x-x.r*0.25).toFixed(1)}" cy="${(x.y-x.r*0.25).toFixed(1)}" r="${(x.r*0.34).toFixed(1)}"/></g>`; }).join('')}</g>`;
   return `<svg class="brain-svg" id="brainArt" viewBox="${B.VIEW}" role="group" aria-label="Your brain: ${lit} of ${nodes.length} parts of the bank lit. Arrow keys move between them; Enter practises that chapter."
-      data-action="brainTap" onkeydown="brainKey(event)">${defs}${body}<g class="brain-net" id="brainNet">${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</g></svg>`;
+      data-action="brainTap">${defs}${body}<g class="brain-net" id="brainNet">${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</g></svg>`;
 }
 
 function brainInfoHtml(kit){

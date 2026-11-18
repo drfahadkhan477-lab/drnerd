@@ -5455,6 +5455,23 @@ const CHANGE_ACTIONS={
   setExamDate:el=>setExamDate(el.value),
 };
 Actions.install(document,CHANGE_ACTIONS,'change');
+/* What a key does, by the name of the element it is pressed on or in: a home tab, which moves along the tabs, and the
+   brain, whose neurons the arrows walk and Enter practises. A key reached the tab list's and the svg's own handler
+   first when it was written on them; here it reaches the document first only past the listeners for Escape, the echo
+   tabs and the peek, none of which a key on a tab or a neuron answers, and before the one that clicks a focused
+   role="button" on Enter, which brainKey() keeps from clicking a neuron by taking the key first, as it did. */
+const KEY_ACTIONS={
+  homeGo:(el,ev)=>homeTabKey(ev),
+  brainTap:(el,ev)=>brainKey(ev),
+};
+Actions.install(document,KEY_ACTIONS,'keydown');
+/* What a scroll does. A scroll does not bubble, so this listens as it goes down to the element that scrolled, and acts
+   only for that element: the home pager, and the pearl's statement inside it, each for its own scroll alone. */
+const SCROLL_ACTIONS={
+  homePagerScroll:()=>homePagerScroll(),
+  pearlScroll:()=>pearlScroll(),
+};
+Actions.install(document,SCROLL_ACTIONS,'scroll',{capture:true,own:true});
 /* In a stacked split the document does not scroll — #app does. Every "go to
    the top of this screen" has to ask the right one, or it quietly does nothing
    and you arrive halfway down. Both are scrolled because only one of them is

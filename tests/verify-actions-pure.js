@@ -16,7 +16,9 @@
  *     event, once; the nearest such element wins; a text node's element is its parent;
  *   - nothing is called for a tap outside every data-action, for one outside the root, for a name the table does not
  *     have as its own function (a name every object inherits included), or for an empty name;
- *   - find() says which element a tap would act for, and nothing changes the table or the element.
+ *   - find() says which element a tap would act for, and nothing changes the table or the element;
+ *   - asked to capture, it listens as the event goes down, and what it returns removes that listener; asked to act only
+ *     for the element the event is on, an event on something inside an element with data-action calls nothing.
  */
 'use strict';
 const { Actions } = require('../src/core/actions.js');
@@ -41,8 +43,9 @@ function node(name, attrs, parent) {
 function rootNode(parent) {
   const r = node('root', {}, parent);
   r.listeners = [];
-  r.addEventListener = (type, fn) => r.listeners.push([type, fn]);
-  r.removeEventListener = (type, fn) => { r.listeners = r.listeners.filter(l => !(l[0] === type && l[1] === fn)); };
+  /* As the DOM keeps them: a listener is its type, its function and whether it captures, and removing one names all three. */
+  r.addEventListener = (type, fn, capture) => r.listeners.push([type, fn, !!capture]);
+  r.removeEventListener = (type, fn, capture) => { r.listeners = r.listeners.filter(l => !(l[0] === type && l[1] === fn && l[2] === !!capture)); };
   /* As the DOM dispatches: an error in a listener is reported, and the dispatch, and the caller, carry on. */
   r.errors = [];
   r.tap = (target, type = 'click') => { const ev = { type, target }; r.listeners.filter(l => l[0] === type).forEach(l => { try { l[1](ev); } catch (err) { r.errors.push(err.message); } }); return ev; };
@@ -113,6 +116,31 @@ head('what it will not call');
   Actions.install(r2, ownTable);
   calls.length = 0; r2.tap(node('button', { 'data-action': 'inherited' }, r2));
   ok('nor for a function the table only inherits: the table\'s own names are the allowlist', calls.length === 0, J(calls));
+}
+
+head('capture, and only the element itself');
+{
+  const r = rootNode();
+  Actions.install(r, table);
+  ok('without options, the listener does not capture', r.listeners.length === 1 && r.listeners[0][2] === false, J(r.listeners.map(l => l.slice(0, 1).concat(l[2]))));
+  const r2 = rootNode();
+  const off = Actions.install(r2, table, 'scroll', { capture: true, own: true });
+  ok('asked to capture, one listener of that type, capturing', r2.listeners.length === 1 && r2.listeners[0][0] === 'scroll' && r2.listeners[0][2] === true, J(r2.listeners.map(l => [l[0], l[2]])));
+  const pane = node('div', { 'data-action': 'go' }, r2), inner = node('div', {}, pane), deeper = node('p', {}, inner);
+  calls.length = 0;
+  r2.tap(pane, 'scroll');
+  ok('a scroll on the element with data-action calls its action, with the element and the event', J(calls) === J([['go', 'div', 'scroll']]), J(calls));
+  calls.length = 0;
+  r2.tap(inner, 'scroll'); r2.tap(deeper, 'scroll');
+  ok('a scroll on something inside it calls nothing: it is not the element that scrolled', J(calls) === J([]) && r2.errors.length === 0, J(calls));
+  const r3 = rootNode();
+  Actions.install(r3, table, 'scroll', { capture: true });
+  const pane3 = node('div', { 'data-action': 'go' }, r3), inner3 = node('div', {}, pane3);
+  calls.length = 0;
+  r3.tap(inner3, 'scroll');
+  ok('without own, an event inside it still reaches the nearest one, as a tap does', J(calls) === J([['go', 'div', 'scroll']]), J(calls));
+  off();
+  ok('and what it returns removes the capturing listener', r2.listeners.length === 0, r2.listeners.length + ' left');
 }
 
 head('find');

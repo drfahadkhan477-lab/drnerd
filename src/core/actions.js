@@ -6,7 +6,14 @@
    calls the function of that name from a table the page hands it. When no inline handler is left, the split build
    can ship a script-src that refuses them (scripts/csp.js, scriptPolicy; tests/verify-csp.js shows what it refuses).
 
-     install(root, table, type = 'click')   listen on root; returns the function that stops listening
+     install(root, table, type = 'click', options)
+                                            listen on root; returns the function that stops listening. options:
+                                              capture  listen as the event goes down, not as it comes back up: an
+                                                       event that does not bubble, as a scroll does not, reaches a
+                                                       listener on the document only so
+                                              own      act only for the element the event is on, never for one it is
+                                                       inside: a scroll belongs to what scrolled, not to the scroller
+                                                       around it
      find(target, root)                     the element a listener on root would act for, or null
 
    The table is the allowlist. Only a name that is the table's own property and a function is called, so markup that
@@ -32,17 +39,18 @@ function find(target, rootEl) {
   return rootEl && rootEl !== el && typeof rootEl.contains === 'function' && !rootEl.contains(el) ? null : el;
 }
 
-function install(rootEl, table, type) {
+function install(rootEl, table, type, options) {
   const kind = type || 'click';
+  const capture = !!(options && options.capture), onlyItself = !!(options && options.own);
   const listener = ev => {
     const el = find(ev.target, rootEl);
-    if (!el) return;
+    if (!el || (onlyItself && el !== ev.target)) return;
     const name = el.getAttribute('data-action');
     if (!own.call(table, name) || typeof table[name] !== 'function') return;
     table[name](el, ev);
   };
-  rootEl.addEventListener(kind, listener);
-  return () => rootEl.removeEventListener(kind, listener);
+  rootEl.addEventListener(kind, listener, capture);
+  return () => rootEl.removeEventListener(kind, listener, capture);
 }
 
 root.Actions = { install, find };
