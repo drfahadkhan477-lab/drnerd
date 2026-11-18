@@ -21,8 +21,8 @@
 # commit and the one to use. Keep the human-readable version in the trailing
 # comment — it is the only thing that makes the pin auditable at a glance.
 #
-# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 7282 checks in
-# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7199.
+# READ THIS BEFORE TRUSTING A GREEN CHECKMARK. Of the 8513 checks in
+# `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 8430.
 # The other 238 all drive something this workflow does not have: the real
 # bank, or the split build made from it. The app is built here, but
 # around an invented bank (the synthetic-browser job), because the real one is
@@ -93,7 +93,7 @@
 #                the clocks change. verify-plan-pure was, in New York, London
 #                and Berlin; it was found by running the suites there, not by
 #                this file.
-#                Across every job but split-build, 7199 real checks, up
+#                Across every job but split-build, 8430 real checks, up
 #                from 89: the physiology and the 12-lead geometry were pure
 #                arithmetic behind a Playwright harness they never needed,
 #                which meant the most mathematically load-bearing code in the
@@ -233,7 +233,7 @@ jobs:
           esac
       - name: cancelled Apex responses cannot execute tools (2 checks)
         run: node tests/verify-apex-cancel.js
-      - name: FSRS-5–derived scheduling (110 checks)
+      - name: FSRS-5–derived scheduling (123 checks)
         run: node tests/verify-fsrs.js
       - name: the scheduler against ts-fsrs, on our own weights (15 checks)
         run: node tests/verify-oracle.js
@@ -325,7 +325,7 @@ jobs:
         run: node tests/verify-figaudit.js
       - name: a dead suite is diagnosed by what killed it, not by what it last printed (32 checks)
         run: node tests/verify-cause-pure.js
-      - name: nothing a model says can become something the page runs (64 checks)
+      - name: nothing a model says can become something the page runs (71 checks)
         run: node tests/verify-md-pure.js
       - name: a refused request is told as what it is, the provider's words escaped, and the response read no more than it was (67 checks)
         run: node tests/verify-providererror-pure.js
@@ -345,7 +345,7 @@ jobs:
         run: node tests/verify-actions-pure.js
       - name: the Rhythm Lab's markup says what is chosen, offers what the view allows, draws a 12-lead only where one is modelled, and names every element the page's mounts look up (43 checks)
         run: node tests/verify-rhythmlab-pure.js
-      - name: the annotations screen draws a row for each annotated question, says which of two things no rows means, and the page repaints on typing what the screen itself draws (54 checks)
+      - name: the annotations screen draws a row for each annotated question, says which of two things no rows means, and the page repaints on typing what the screen itself draws (55 checks)
         run: node tests/verify-annotations-pure.js
       - name: the mock report says the score, the time, the flags as the Flagged list is now, the slowest and each chapter weakest first, and the page's line grades a block through the real MockExam (50 checks)
         run: node tests/verify-mockreport-pure.js
@@ -634,7 +634,7 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
-        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
+        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (83 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-contrast,') }}
         name: every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast (29 checks)
@@ -709,7 +709,7 @@ jobs:
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
-        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (100 checks)
+        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (119 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
         name: unified Settings preserves reading preferences, credentials and drafts (26 checks)
@@ -787,7 +787,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-csp,') }}
-        name: the policy contains an injection without breaking anything the app does (27 checks)
+        name: the policy contains an injection without breaking anything the app does (35 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-echo,') }}
         name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
@@ -975,7 +975,7 @@ jobs:
         name: nine palettes, two axes, unthemed semantics (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
-        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
+        name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (83 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-contrast,') }}
         name: every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast (29 checks)
@@ -1050,7 +1050,7 @@ jobs:
         name: every answer keeps the option chosen, Apex is told what the fellow chose and how they miss through the real panel, the miss row, chips and results button ask it, its tools answer from the page, and a mock block puts it away (60 checks)
         run: node tests/verify-apexask.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-readsize,') }}
-        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (100 checks)
+        name: a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil's rail clear of Apex in each way it opens (119 checks)
         run: node tests/verify-readsize.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-settings,') }}
         name: unified Settings preserves reading preferences, credentials and drafts (26 checks)
@@ -1125,7 +1125,7 @@ jobs:
         name: a suite that reads after a screen change reads the new screen, not the old one (21 checks)
         run: node tests/verify-render.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-csp,') }}
-        name: the policy contains an injection without breaking anything the app does (27 checks)
+        name: the policy contains an injection without breaking anything the app does (35 checks)
         run: node tests/verify-csp.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-echo,') }}
         name: Echo Studio routes, delegates and keeps the caret where it was (35 checks)
