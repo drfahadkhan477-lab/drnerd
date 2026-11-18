@@ -45,8 +45,11 @@
         score, as the way to its report when the report kept is that block's.
      4. The voice card, where the browser can speak and listen, and nothing where it cannot.
 
-   The buttons name goLabs, resumeMock, discardMock, setMockCfg, startMock, openMockReport and
-   startVoice: an inline handler is read where it is tapped, so those stay the page's.
+   The controls name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's tables call
+   (src/core/actions.js): goLabs, resumeMock, discardMock, startMock, openMockReport and startVoice, each by the
+   page's function of that name with nothing; setMockCfg, by which a chip sets the setting it carries in data-cfg
+   to its value under that setting's own name (data-n, data-sec), where setMockCfg() looks for it again to put the
+   keyboard back on it; and mockChapter, the chapter menu, when another is chosen. The functions stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -57,27 +60,27 @@ function mockInnerHtml(S, CHAPTERS, kit){
   /* The report kept is the last block's only if it was handed in at the moment the history says: an import replaces the
      history and leaves the report, and a report that could not be written leaves the one before it. */
   const hasReport=!!(lastH&&S.mockLast&&S.mockLast.submittedAt===lastH.ts);
-  const lastLine=lastH?`<button class="mock-quiet" type="button" onclick="openMockReport()"${hasReport?'':' disabled'}>Last block: ${Math.round(100*lastH.correct/lastH.n)}%${hasReport?' · see the report':''}</button>`:'';
+  const lastLine=lastH?`<button class="mock-quiet" type="button" data-action="openMockReport"${hasReport?'':' disabled'}>Last block: ${Math.round(100*lastH.correct/lastH.n)}%${hasReport?' · see the report':''}</button>`:'';
   if(r){
     const st=MockExam.states(r), left=r.secPerQ?MockExam.fmtClock(MockExam.remainingMs(r),'down')+' left':MockExam.fmtClock(r.elapsedMs)+' so far';
     return `<div class="fc-glow" aria-hidden="true"></div>
       <div class="fc-top"><span class="fc-badge">${icon('alarm')} MOCK EXAM</span><span class="pace-pill ok">In progress</span></div>
       <div class="fc-title">A block is open</div>
       <div class="fc-sub" id="mockLive">${st.answered} of ${st.n} answered · ${left} · ${st.flagged} flagged</div>
-      <button class="mock-go" id="mockResume" type="button" onclick="resumeMock()">${icon('play')}<span>Resume the block</span></button>
-      <button class="mock-quiet${_mockArm?' arm':''}" id="mockDiscard" type="button" onclick="discardMock()">${_mockArm?'Tap again to discard it':'Discard this block'}</button>`;
+      <button class="mock-go" id="mockResume" type="button" data-action="resumeMock">${icon('play')}<span>Resume the block</span></button>
+      <button class="mock-quiet${_mockArm?' arm':''}" id="mockDiscard" type="button" data-action="discardMock">${_mockArm?'Tap again to discard it':'Discard this block'}</button>`;
   }
   const sizes=mockSizes();
-  const chip=(k,v,on,label)=>`<button class="mock-pick${on?' on':''}" type="button" data-${k}="${v}" aria-pressed="${on}" onclick="setMockCfg('${k}','${v}')">${label}</button>`;
+  const chip=(k,v,on,label)=>`<button class="mock-pick${on?' on':''}" type="button" data-action="setMockCfg" data-cfg="${k}" data-${k}="${v}" aria-pressed="${on}">${label}</button>`;
   return `<div class="fc-glow" aria-hidden="true"></div>
     <div class="fc-top"><span class="fc-badge">${icon('alarm')} MOCK EXAM</span></div>
     <div class="fc-title">A timed block, no feedback until you hand it in</div>
     <div class="fc-sub">Like the real thing: choose, move on, come back, find out at the end. Questions you have not met come first.</div>
     <div class="mock-row" role="group" aria-label="Questions in the block">${sizes.map(n=>chip('n',n,mockSize()===n,'<b>'+n+'</b><span>questions</span>')).join('')}</div>
     <div class="mock-row" role="group" aria-label="Time for each question">${[...MockExam.PACES,0].map(s=>chip('sec',s,_mockCfg.sec===s,s?'<b>'+s+'</b><span>sec each</span>':'<b>No</b><span>limit</span>')).join('')}</div>
-    <label class="mock-chsel"><span>Chapter</span><select id="mockCh" onchange="setMockCfg('ch',this.value)">
+    <label class="mock-chsel"><span>Chapter</span><select id="mockCh" data-action="mockChapter">
       <option value="">All chapters</option>${CHAPTERS.map(c=>`<option value="${e(c)}"${_mockCfg.ch===c?' selected':''}>${e(c)}</option>`).join('')}</select></label>
-    <button class="mock-go" id="mockStart" type="button" onclick="startMock()">${icon('alarm')}<span>${e(mockStartText())}</span></button>
+    <button class="mock-go" id="mockStart" type="button" data-action="startMock">${icon('alarm')}<span>${e(mockStartText())}</span></button>
     <div class="mock-note">The clock runs only while Systole is on screen. Search, Echo and Apex are off while you are in the block.</div>
     ${_mockLost?'<div class="mock-note lost">The block that was open could not be carried on, so it was set aside.</div>':''}
     ${lastLine}`;
@@ -99,7 +102,7 @@ function voiceHtml(kit){
     </div>
     <div class="voice-wave" aria-hidden="true">${Array.from({length:28},(_,k)=>`<i style="--k:${k}"></i>`).join('')}</div>
     <div class="voice-say">Say <kbd>A</kbd>–<kbd>E</kbd> <kbd>repeat</kbd> <kbd>skip</kbd> <kbd>explain</kbd> <kbd>stop</kbd></div>
-    <button class="voice-go" id="voiceStart" onclick="startVoice()">${icon('mic')}<span>Start a voice session</span></button>
+    <button class="voice-go" id="voiceStart" data-action="startVoice">${icon('mic')}<span>Start a voice session</span></button>
   </div>`:'';
 }
 
@@ -107,7 +110,7 @@ function screenHtml(S, CHAPTERS, kit){
   const {icon}=kit;
   const mockCard=()=>mockCardHtml(S,CHAPTERS,kit), voiceCardHtml=()=>voiceHtml(kit);
   return `<div class="sessions-page" id="sessionsPage">
-    <button class="btn sb-back" type="button" onclick="goLabs()">${icon('arrow-left','icon-sm')} Labs</button>
+    <button class="btn sb-back" type="button" data-action="goLabs">${icon('arrow-left','icon-sm')} Labs</button>
     <header class="page-head"><span class="page-eyebrow">${icon('alarm','icon-sm')} Sessions</span>
       <h1 class="page-title">Practise under pressure</h1>
       <p class="page-sub">A timed block like the real exam, or ten questions answered out loud.</p></header>

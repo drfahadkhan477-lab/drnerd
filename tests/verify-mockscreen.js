@@ -146,6 +146,18 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('nothing spills out of the card', r.spill === false);
     ok('the glow behind the card is out of the flow, as on the other cards, so it can be seen at all', r.glow === 'absolute', r.glow);
   }
+  /* docs/ROADMAP.md, E2: the way back names an action, which only a tap through the page shows reaches goLabs(). The
+     other controls on the screen are tapped below, where what they do is held. A tap that cannot be made is a FAIL. */
+  {
+    /* The home screen remembers its page, and the way here came through Labs: the pager is set to its first page first,
+       so only goLabs() lands on the Labs page, and a tap that went home anyhow does not. */
+    await page.evaluate(() => { homePage = 0; });
+    const tapped = await page.click('#sessionsPage .sb-back', { timeout: 5000 }).then(() => true, () => false);
+    const back = tapped && await page.waitForFunction(() => S.screen === 'home' && homePage === 2, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    ok('the way back from Sessions goes to the Labs page of the home screen', back, tapped ? await page.evaluate(() => JSON.stringify({ screen: S.screen, homePage })) : 'the button could not be tapped');
+    await page.evaluate(() => goSessions());
+    await onScreen(page, 'sessions', { marker: '#mockCard' });
+  }
   {
     await page.evaluate(() => { window.__card = document.getElementById('mockCard'); });
     await page.click('#mockCard [data-n="20"]');
