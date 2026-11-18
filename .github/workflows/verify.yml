@@ -347,7 +347,7 @@ jobs:
         run: node tests/verify-rhythmlab-pure.js
       - name: the annotations screen draws a row for each annotated question, says which of two things no rows means, the page repaints on typing what the screen itself draws, and its box and buttons name actions where they had inline handlers (57 checks)
         run: node tests/verify-annotations-pure.js
-      - name: the mock report says the score, the time, the flags as the Flagged list is now, the slowest and each chapter weakest first, and the page's line grades a block through the real MockExam (50 checks)
+      - name: the mock report says the score, the time, the flags as the Flagged list is now, the slowest and each chapter weakest first, the page's line grades a block through the real MockExam, and its buttons name actions where they had inline handlers (52 checks)
         run: node tests/verify-mockreport-pure.js
       - name: the topic search marks the words typed in escaped text, lists each match with its chapter, flags, stem and answer, and the page's line draws a search over its own helpers (54 checks)
         run: node tests/verify-search-pure.js

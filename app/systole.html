@@ -5343,6 +5343,9 @@ const ACTIONS={
   /* the annotations screen (src/app/annotations.js) */
   practiceAnnotated:()=>practiceAnnotated(),
   goStudy:()=>goStudy(),
+  /* the mock exam's report (src/app/mockreport.js): a review button carries the set to review */
+  mockReview:el=>mockReview(el.dataset.mode),
+  goSessions:()=>goSessions(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into

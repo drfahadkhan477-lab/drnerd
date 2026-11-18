@@ -36,8 +36,9 @@
      7. "Review the N to learn from" is offered only when something was wrong, blank or flagged, with
         the count; "Review all N" and "Back to Sessions" always.
 
-   The buttons name mockReview() and goSessions(): an inline handler is read where it is tapped, in the
-   page, so those two names stay the page's.
+   The buttons carry no inline handler (docs/ROADMAP.md, E2): each names an action, mockReview with the set
+   to review in data-mode (missed or all), or goSessions, which the page's one delegated listener
+   (src/core/actions.js) finds in its ACTIONS table and calls. mockReview() and goSessions() stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -46,7 +47,7 @@ function screenHtml(S, CH_COLORS, CH_SHORT, kit){
   const {MockExam,mockLookup,chIcon,e,icon,semText}=kit;
   const r=S.mockLast;
   if(!r) return `<div class="mock-wrap"><div class="mock-gone"><p>No block has been handed in yet.</p>
-    <button class="btn btn-next" type="button" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
+    <button class="btn btn-next" type="button" data-action="goSessions">${icon('arrow-left','icon-sm')} Back to Sessions</button></div></div>`;
   const g=MockExam.grade(r,mockLookup), p=g.pct;
   const col=p>=80?'var(--green)':p>=60?'var(--amber)':'var(--red)';
   const msg=p>=80?'Outstanding!':p>=60?'Good Progress!':'Keep Studying!', msgIcon=p>=80?'trophy':p>=60?'target':'book';
@@ -80,9 +81,9 @@ function screenHtml(S, CH_COLORS, CH_SHORT, kit){
     ${flagLine}${slow}
     ${rows?`<div class="section-label">This block, by chapter</div><div class="ch-perf">${rows}</div>`:''}
     <div class="results-btns">
-      ${missed?`<button class="btn btn-next" type="button" onclick="mockReview('missed')">${icon('repeat','icon-sm')} Review the ${missed} to learn from</button>`:''}
-      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="mockReview('all')">Review all ${g.n}</button>
-      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" onclick="goSessions()">${icon('arrow-left','icon-sm')} Back to Sessions</button>
+      ${missed?`<button class="btn btn-next" type="button" data-action="mockReview" data-mode="missed">${icon('repeat','icon-sm')} Review the ${missed} to learn from</button>`:''}
+      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" data-action="mockReview" data-mode="all">Review all ${g.n}</button>
+      <button class="btn" type="button" style="background:var(--card);border:1.5px solid var(--border);color:var(--muted)" data-action="goSessions">${icon('arrow-left','icon-sm')} Back to Sessions</button>
     </div>
   </div>`;
 }
