@@ -85,11 +85,16 @@
      4. A row for each chapter: its mastery, how many of its questions are seen and due, each a way to
         practise it.
 
-   The Home page's buttons name goRefs, toggleAtlas3D, toggleAtlasMotion, toggleHeroMenu, toggleHeroMechanics,
-   toggleHeroCredit, pearlNext, pearlScroll, pearlToggleAll, pearlRecall, pearlReading, pearlSourceToggle,
-   pearlOpen, dismissHello, homePagerScroll, homeTabKey and homeGo; the Labs page's name goLab, goEcho, goPractice, goSessions, goStudy, openSearch, goStats, goRefs,
-   goMemory and goAnnotations; the Brain page's name startQuiz, brainTap and brainKey. An inline handler is
-   read where it is tapped, so those stay the page's.
+   The buttons name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's ACTIONS table calls
+   (src/core/actions.js). The Home page's: goRefs, toggleAtlas3D, toggleAtlasMotion, toggleHeroMenu,
+   toggleHeroMechanics, toggleHeroCredit, pearlNext, pearlToggleAll, pearlRecall, pearlReading, pearlSourceToggle,
+   pearlOpen and dismissHello; its strip reviewAllDue, goStudy, or startPlan with 20 in data-plan; and each tab
+   homeGo, with its page in data-page. The Labs page's: goLab, goEcho, goPractice, goSessions, goStudy, openSearch,
+   goStats, goRefs, goMemory and goAnnotations. The Brain page's: brainTap on the brain, startDue, and startChapter
+   with the chapter in data-ch through e(). Three inline handlers are left, the pager's and the pearl's scroll
+   (homePagerScroll, pearlScroll) and the tabs' and the brain's keys (homeTabKey, brainKey): a scroll does not
+   bubble to the listener on the document, and a key on a tab is answered by the tab list's handler. The functions
+   stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -124,7 +129,7 @@ function homeHtml(S, CHAPTERS, kit){
         <li><span class="atlas-step-icon">${icon('message-circle')}</span><span class="atlas-step-arrow">${icon('arrow-right')}</span><strong>Explain</strong><span>Put it in your<br>own words.</span></li>
         <li><span class="atlas-step-icon">${icon('clipboard')}</span><strong>Recall</strong><span>Reveal the note<br>and compare.</span></li>
       </ol>
-      <div class="atlas-intro-actions"><button class="atlas-primary" onclick="goRefs()">Open notes${icon('arrow-right')}</button></div>
+      <div class="atlas-intro-actions"><button class="atlas-primary" data-action="goRefs">Open notes${icon('arrow-right')}</button></div>
     </section>
     <div class="hero-live${atlas3D?' atlas-3d':''}">
       ${ATLAS_IMG}
@@ -142,16 +147,16 @@ function homeHtml(S, CHAPTERS, kit){
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
       <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
-      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" onclick="toggleAtlas3D()"
+      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" data-action="toggleAtlas3D"
         aria-label="${atlas3D?'Show heart illustration':'Explore heart in 3D'}" aria-pressed="${atlas3D}" title="${atlas3D?'Show heart illustration':'Explore heart in 3D'}">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
-      <button class="atlas-pause" id="atlasLandingPause" onclick="toggleAtlasMotion()" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
-      <button class="hero-heart-hit" id="heroHeartBtn" onclick="toggleHeroMenu(undefined,event)" aria-label="Heart model: motion, chambers and credit"
+      <button class="atlas-pause" id="atlasLandingPause" data-action="toggleAtlasMotion" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
+      <button class="hero-heart-hit" id="heroHeartBtn" data-action="toggleHeroMenu" aria-label="Heart model: motion, chambers and credit"
         aria-expanded="false" aria-controls="heroMenu" title="Heart model"></button>
       <div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>
-        <button class="hero-tool hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" onclick="toggleHeroMechanics()"
+        <button class="hero-tool hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" data-action="toggleHeroMechanics"
           aria-pressed="${heroCutaway}">${icon('layers','icon-sm')}<span>Chambers and flow</span></button>
-        <button class="hero-tool atlas-pause" id="atlasPause" onclick="toggleAtlasMotion()" aria-pressed="${atlasPaused}">${icon(atlasPaused?'play':'pause','icon-sm')}<span>${atlasPaused?'Play motion':'Pause motion'}</span></button>
-        <button class="hero-tool hero-credit-btn" id="heroCreditBtn" onclick="toggleHeroCredit()" hidden
+        <button class="hero-tool atlas-pause" id="atlasPause" data-action="toggleAtlasMotion" aria-pressed="${atlasPaused}">${icon(atlasPaused?'play':'pause','icon-sm')}<span>${atlasPaused?'Play motion':'Pause motion'}</span></button>
+        <button class="hero-tool hero-credit-btn" id="heroCreditBtn" data-action="toggleHeroCredit" hidden
           aria-expanded="false" aria-controls="heroScanCredit">${icon('info','icon-sm')}<span>Model credit</span></button>
         <p class="hero-scan-credit" id="heroScanCredit" hidden></p>
       </div>
@@ -167,13 +172,13 @@ function homeHtml(S, CHAPTERS, kit){
 
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
             <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
-            <button class="pearl-next" onclick="pearlNext()"
+            <button class="pearl-next" data-action="pearlNext"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
           <h1 class="pearl-concept" id="pearlConcept" tabindex="-1">${e(p.concept||p.title)}</h1>
 
           <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlScroll()">${pearlLadder(p)}</div>
-          <button class="pearl-morecue" id="pearlMore" onclick="pearlToggleAll()" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
+          <button class="pearl-morecue" id="pearlMore" data-action="pearlToggleAll" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
           <div class="pearl-prompt" id="pearlPrompt" hidden>
             <span class="pearl-prompt-icon" aria-hidden="true">${icon('brain')}</span>
@@ -181,10 +186,10 @@ function homeHtml(S, CHAPTERS, kit){
             <span>State the key rule, then any condition or exception. Reveal it when you're ready to compare.</span>
           </div>
           <div class="pearl-actions">
-            <button class="pearl-recall" id="pearlRecall" onclick="pearlRecall()" aria-controls="pearlBody" aria-expanded="true">Recall</button>
-            <button class="pearl-reading" id="pearlReading" onclick="pearlReading()" aria-controls="pearlBody" aria-pressed="${pearlAsWritten}" title="Read the complete statement as a paragraph">${icon('book','icon-sm')} Paragraph</button>
-            <button class="pearl-reading" id="pearlSourceToggle" onclick="pearlSourceToggle()" aria-controls="pearlSource" aria-expanded="false">Source</button>
-            <button class="pearl-open" onclick="pearlOpen()" title="${e(p.source||'Your reference notes')}">Read note ${icon('arrow-right','icon-sm')}</button>
+            <button class="pearl-recall" id="pearlRecall" data-action="pearlRecall" aria-controls="pearlBody" aria-expanded="true">Recall</button>
+            <button class="pearl-reading" id="pearlReading" data-action="pearlReading" aria-controls="pearlBody" aria-pressed="${pearlAsWritten}" title="Read the complete statement as a paragraph">${icon('book','icon-sm')} Paragraph</button>
+            <button class="pearl-reading" id="pearlSourceToggle" data-action="pearlSourceToggle" aria-controls="pearlSource" aria-expanded="false">Source</button>
+            <button class="pearl-open" data-action="pearlOpen" title="${e(p.source||'Your reference notes')}">Read note ${icon('arrow-right','icon-sm')}</button>
           </div>
           <div class="pearl-source" id="pearlSource" role="region" aria-label="Pearl source" hidden>${e(p.source||'Your reference notes')}</div>
 
@@ -192,7 +197,7 @@ function homeHtml(S, CHAPTERS, kit){
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
-    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Answers today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button onclick="${dueN?"startQuiz(null,'due',dueQuestions())":seenN?"goStudy()":"startPlan(20)"}"${dueN||seenN?'':' aria-label="Start a 20-minute study session"'}>${dueN?'Review':seenN?'Continue':'Start'} ${icon('arrow-right','icon-sm')}</button></div>
+    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Answers today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button ${dueN?'data-action="reviewAllDue"':seenN?'data-action="goStudy"':'data-action="startPlan" data-plan="20"'}${dueN||seenN?'':' aria-label="Start a 20-minute study session"'}>${dueN?'Review':seenN?'Continue':'Start'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">
@@ -200,7 +205,7 @@ function homeHtml(S, CHAPTERS, kit){
         <i><b>Chapters</b> holds all ${TOTAL_Q} questions, grouped by topic.
            <b>Apex</b> — your study companion — explains any answer,
            and can read the figures with you.</i>
-        <button class="hello-x" onclick="dismissHello()">Got it</button>
+        <button class="hello-x" data-action="dismissHello">Got it</button>
       </div>
     </div>`:''}
     </div></div></section>
@@ -209,9 +214,9 @@ function homeHtml(S, CHAPTERS, kit){
     </div>
     <div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">
       <span class="home-tab-pill" aria-hidden="true"></span>
-      <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" onclick="homeGo(0)">${icon('home','icon-sm')}<span>Home</span></button>
-      <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" onclick="homeGo(1)">${icon('brain','icon-sm')}<span>Brain</span></button>
-      <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" onclick="homeGo(2)">${icon('activity','icon-sm')}<span>Labs</span></button>
+      <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" data-action="homeGo" data-page="0">${icon('home','icon-sm')}<span>Home</span></button>
+      <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" data-action="homeGo" data-page="1">${icon('brain','icon-sm')}<span>Brain</span></button>
+      <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" data-action="homeGo" data-page="2">${icon('activity','icon-sm')}<span>Labs</span></button>
     </div>
   </div>`;
 }
@@ -222,25 +227,25 @@ function labsHtml(S, CHAPTERS, dueN, kit){
       <h1 class="page-title">Hear it, see it, read it</h1>
       <p class="page-sub">Traces drawn live, echo views to explore, and sounds and strips to practise on.</p></header>
     <div class="labs-grid">
-      <button class="lab-card lab-rhythm" onclick="goLab()">
+      <button class="lab-card lab-rhythm" data-action="goLab">
         <svg class="lab-art" viewBox="0 0 240 60" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M0 34h46l6-3 6 3h14l5 6 6-36 6 44 5-14h16l8-6 9 6h40l6-3 6 3h14l5 6 6-36 6 44 5-14h14"/></svg>
         <span class="lab-ic" aria-hidden="true">${icon('activity')}</span>
         <span class="lab-txt"><b>Rhythm Lab</b><i>Every trace, drawn live</i></span>
         <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
       </button>
-      <button class="lab-card lab-echo" onclick="goEcho()">
+      <button class="lab-card lab-echo" data-action="goEcho">
         <svg class="lab-art lab-art-echo" viewBox="0 0 240 120" aria-hidden="true"><path d="M120 6 30 114M120 6l90 108"/><path class="la-w1" d="M66 70a70 70 0 0 1 108 0"/><path class="la-w2" d="M48 92a96 96 0 0 1 144 0"/><path class="la-w3" d="M84 48a44 44 0 0 1 72 0"/></svg>
         <span class="lab-ic" aria-hidden="true">${icon('waveform')}</span>
         <span class="lab-txt"><b>Echo Studio</b><i>Views, findings and the arithmetic</i></span>
         <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
       </button>
-      <button class="lab-card lab-practice" onclick="goPractice()">
+      <button class="lab-card lab-practice" data-action="goPractice">
         <span class="lab-art lab-art-beat" aria-hidden="true">${icon('heart-solid')}</span>
         <span class="lab-ic" aria-hidden="true">${icon('heart-pulse')}</span>
         <span class="lab-txt"><b>Practice Lab</b><i>Sounds, tracings, strips</i></span>
         <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
       </button>
-      <button class="lab-card lab-sessions" id="labSessions" onclick="goSessions()">
+      <button class="lab-card lab-sessions" id="labSessions" data-action="goSessions">
         <span class="lab-art lab-art-beat" aria-hidden="true">${icon('alarm')}</span>
         <span class="lab-ic" aria-hidden="true">${icon('alarm')}</span>
         <span class="lab-txt"><b>Sessions</b><i>${S.mock?'A mock block is open · resume it':'Timed mock exam · voice drill'}</i></span>
@@ -249,16 +254,16 @@ function labsHtml(S, CHAPTERS, dueN, kit){
     </div>
     <h3 class="page-h3">Study tools</h3>
     <div class="door-row lab-doors">
-      <button class="door door-wide" onclick="goStudy()">
+      <button class="door door-wide" data-action="goStudy">
         <span class="door-ic">${icon("book")}</span>
         <span class="door-txt"><b>Chapters</b><i>${`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
         <span class="door-go">${icon('arrow-right','icon-sm')}</span>
       </button>
-      <button class="door" onclick="openSearch()"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
-      <button class="door" onclick="goStats()"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
-      <button class="door" onclick="goRefs()"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
-      <button class="door" onclick="goMemory()"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
-      <button class="door" onclick="goAnnotations()"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
+      <button class="door" data-action="openSearch"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
+      <button class="door" data-action="goStats"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
+      <button class="door" data-action="goRefs"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
+      <button class="door" data-action="goMemory"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
+      <button class="door" data-action="goAnnotations"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
     </div>`;
 }
 
@@ -282,7 +287,7 @@ function brainHtml(S, CHAPTERS, CH_COLORS, dueN, seenN, covered, masteryPct, tod
   const rows=CHAPTERS.map(ch=>{
     const qs=POOL.filter(q=>q.ch===ch), m=Math.round(masteryFor(ch)*100), col=CH_COLORS[ch]||'var(--teal)';
     const seen=qs.filter(q=>S.srs[q.id]||S.practice[q.id]).length, due=qs.filter(q=>{ const c=S.srs[q.id]; return c&&c.due<=todayISO(); }).length;
-    return `<button class="brain-ch" style="--c:${col};--ci:${chInk(col)}" onclick="startQuiz(${JSON.stringify(ch).replace(/"/g,'&quot;')})"
+    return `<button class="brain-ch" style="--c:${col};--ci:${chInk(col)}" data-action="startChapter" data-ch="${e(ch)}"
         aria-label="${e(ch)}: ${m} percent mastered, ${seen} of ${qs.length} seen${due?`, ${due} due`:''}">
       <span class="brain-ch-ic" aria-hidden="true">${chIcon(ch)}</span>
       <span class="brain-ch-main"><b>${e(ch)}</b>
@@ -315,7 +320,7 @@ function brainHtml(S, CHAPTERS, CH_COLORS, dueN, seenN, covered, masteryPct, tod
           <span class="brain-stat bs-today"><b>${today.a}</b><i>answered today${today.a?` · ${today.c} right`:''}</i></span>
           <span class="brain-stat bs-ret"><b>${ret==null?'—':ret+'%'}</b><i>recall, cards scheduled</i></span>
         </div>
-        ${dueN?`<div class="brain-actions"><button class="brain-go primary" onclick="startQuiz(null,'due')">${icon('repeat','icon-sm')} Review ${dueN} due</button></div>`:''}
+        ${dueN?`<div class="brain-actions"><button class="brain-go primary" data-action="startDue">${icon('repeat','icon-sm')} Review ${dueN} due</button></div>`:''}
       </div>
     </div>
     <h3 class="page-h3">Chapters</h3>
@@ -365,7 +370,7 @@ function brainArtHtml(CH_COLORS, kit){
       <circle class="soma" cx="${x.x}" cy="${x.y}" r="${x.r}"/><circle class="soma-shine" cx="${x.x}" cy="${x.y}" r="${x.r}" fill="url(#sbSoma)"/>
       <circle class="nucleus" cx="${(x.x-x.r*0.25).toFixed(1)}" cy="${(x.y-x.r*0.25).toFixed(1)}" r="${(x.r*0.34).toFixed(1)}"/></g>`; }).join('')}</g>`;
   return `<svg class="brain-svg" id="brainArt" viewBox="${B.VIEW}" role="group" aria-label="Your brain: ${lit} of ${nodes.length} parts of the bank lit. Arrow keys move between them; Enter practises that chapter."
-      onclick="brainTap(event)" onkeydown="brainKey(event)">${defs}${body}<g class="brain-net" id="brainNet">${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</g></svg>`;
+      data-action="brainTap" onkeydown="brainKey(event)">${defs}${body}<g class="brain-net" id="brainNet">${lobes}${axons}${signals}${glow}${flashes}${sparks}${cells}</g></svg>`;
 }
 
 function brainInfoHtml(kit){
@@ -374,7 +379,7 @@ function brainInfoHtml(kit){
   if(!x) return `<span class="brain-info-hint">${icon('zap','icon-sm')} Tap a neuron: it fires, and says what it holds.</span>`;
   return `<span class="brain-info-k">This neuron</span> <b>${e(x.docId)}</b>
     <span class="brain-info-m">${e(x.title.split(' · ')[1]||'')} · ${BRAIN_STATE_LABEL[x.state]}${x.recall!=null?` · recall ${x.recall}% today`:''}</span>
-    <button class="brain-go primary" onclick="startQuiz(${JSON.stringify(x.docId).replace(/"/g,'&quot;')})">${icon('play','icon-sm')} Practise this chapter</button>`;
+    <button class="brain-go primary" data-action="startChapter" data-ch="${e(x.docId)}">${icon('play','icon-sm')} Practise this chapter</button>`;
 }
 
 root.HomeScreen = { homeHtml, labsHtml, brainHtml, brainArtHtml, brainInfoHtml };

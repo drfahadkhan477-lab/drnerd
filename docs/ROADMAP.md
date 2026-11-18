@@ -300,7 +300,12 @@ its buttons) and the mock block (`verify-mock-pure`; `verify-mockscreen` taps
 its buttons) and the Study screen (`verify-study-pure`; `verify-chapters`
 taps its rings, tiles, review, missed, every-question and back buttons,
 `verify-planscreen` a plan, `verify-topicrunscreen` a run, `verify-examdate`
-the date and its clear, and `verify-flags` the flagged and annotated cards). An action that needs state reads it when
+the date and its clear, and `verify-flags` the flagged and annotated cards), and the
+home screen's three pages (`verify-homescreen-pure`; `verify-home` taps the buttons
+no other suite taps, and `verify-homepager`, `verify-pearl`, `verify-pwa`,
+`verify-mockscreen`, `verify-lab` and `verify-echo` the rest). Four inline
+handlers are left there: the pager's and the pearl's scroll, which does not
+bubble to a listener on the document, and the tabs' and the brain's keys. An action that needs state reads it when
 tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
 input only, so a tap on a field calls nothing and a key in a button calls
