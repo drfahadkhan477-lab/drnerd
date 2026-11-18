@@ -194,7 +194,7 @@ const TOOLS = () => {
   const res = await page.waitForFunction(() => S.screen === 'results' && !!document.querySelector('.score-pct'), null, { timeout: 8000 }).then(() => true, () => false);
   await quiet(page);
   ok('the results are up (precondition)', res);
-  await sweep([['the score', '.score-pct', 'red'], ['a chapter\'s figure', '.chp-pct', 'red'], ['Retry Missed', 'button[onclick*="\'missed\'"]', 'red']], 'results');
+  await sweep([['the score', '.score-pct', 'red'], ['a chapter\'s figure', '.chp-pct', 'red'], ['Retry Missed', 'button[data-action="retryMissed"]', 'red']], 'results');
 
   head('real accent and chapter text');
   {

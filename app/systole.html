@@ -5335,6 +5335,11 @@ const ACTIONS={
   memForgetAll:()=>memForgetAll(),
   /* the Rhythm Lab (src/app/rhythmlab.js): a chip carries its rhythm's key */
   setLab:el=>setLab(el.dataset.kind),
+  /* the results screen (src/app/results.js). Restart reads the chapter when it is tapped, as its handler did, and is
+     told only whether to use it (a review of what is due has none) and the mode to start again in. */
+  retryMissed:()=>startQuiz(null,'missed'),
+  askApexMisses:()=>askApexMisses(),
+  restartQuiz:el=>startQuiz(el.dataset.scope==='chapter'?S.chapter:null,el.dataset.mode),
 };
 Actions.install(document,ACTIONS);
 /* In a stacked split the document does not scroll — #app does. Every "go to
