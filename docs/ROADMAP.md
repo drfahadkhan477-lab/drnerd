@@ -286,8 +286,12 @@ scans what it draws for any `on*` attribute; `verify-memory` and
 `verify-backup-ids` tap it through the real page), then the Rhythm Lab
 (`verify-rhythmlab-pure`; `verify-physio` taps a rhythm chip) and the
 results screen (`verify-results-pure`; `verify-flags` taps Flagged Again and
-`verify-apexask` Explain my misses). An action that needs state reads it when
-tapped, as its handler did: Restart reads the chapter then. Next: the other
+`verify-apexask` Explain my misses), and the annotations screen
+(`verify-annotations-pure`; `verify-flags` types into its box and taps
+Practise). An action that needs state reads it when tapped, as its handler
+did: Restart reads the chapter then. What a field does as it is typed in is in
+a table of its own, `INPUT_ACTIONS`, listened to for input only, so a tap on a
+field calls nothing and a key in a button calls nothing. Next: the other
 screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in

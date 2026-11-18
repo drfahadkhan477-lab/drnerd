@@ -39,8 +39,10 @@
         written anywhere yet.
      5. The Practise button says how many, and is disabled with none.
 
-   The box names annoInput(), the buttons practiceAnnotated() and goStudy(), and a tap on a row is caught
-   by the page's one listener on [data-anno]. Those stay the page's.
+   The box and the buttons carry no inline handler (docs/ROADMAP.md, E2): the box names the annoInput action,
+   which the page's input listener (src/core/actions.js, over INPUT_ACTIONS) calls with what is in the box as
+   a key goes down, and the buttons practiceAnnotated and goStudy, from the page's ACTIONS table. A tap on a
+   row is caught by the page's listener on [data-anno]. The functions stay the page's.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -88,11 +90,11 @@ function screenHtml(p,rows){
       <div class="sb-row">
         <span class="sb-icon">${icon('pencil')}</span>
         <input id="annoQ" type="search" placeholder="Find a note by what it says…" aria-label="Search your annotations"
-          value="${e(ANNO.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="annoInput(this.value)">
+          value="${e(ANNO.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" data-action="annoInput">
       </div>
       <div class="sb-row2">
-        <button class="btn btn-next sb-quiz" id="annoPractise" type="button" onclick="practiceAnnotated()"${rows.length?'':' disabled'}>${annoPractiseHtml(rows.length)}</button>
-        <button class="btn sb-back" type="button" onclick="goStudy()">${icon('arrow-left','icon-sm')} Chapters</button>
+        <button class="btn btn-next sb-quiz" id="annoPractise" type="button" data-action="practiceAnnotated"${rows.length?'':' disabled'}>${annoPractiseHtml(rows.length)}</button>
+        <button class="btn sb-back" type="button" data-action="goStudy">${icon('arrow-left','icon-sm')} Chapters</button>
       </div>
     </div>
     <div class="section-label" id="annoCount" role="status">${e(annoCountText(ANNO.rows.length,rows.length))}</div>

@@ -20,8 +20,7 @@
  *     the three pieces the page asks for again as a key goes down;
  *   - that it reads eight names of the page and changes nothing it is given;
  *   - the page's lines: what they hand over is what the module asks for and no more of the page's state
- *     than it reads, the handlers and ids the markup
- *     names are the page's, and the page's own code over the real FlagSet and the page's own helpers
+ *     than it reads, the actions and ids the markup names are the page's, with no inline handler (E2), and the page's own code over the real FlagSet and the page's own helpers
  *     draws, repaints on typing, starts a quiz and follows a tap as the markup has it.
  *
  * Not asserted: the chip's tint for a chapter with no colour of its own. The page writes the teal's name
@@ -152,14 +151,14 @@ head('the screen');
   const box = tagOf(scr, 'annoQ');
   ok('the box is a search field with a name for a screen reader, and holds what is typed, through e()',
      box.startsWith('<input ') && box.includes(' type="search"') && box.includes(' aria-label="Search your annotations"') && box.includes(' placeholder="Find a note by what it says…"') && box.includes(' value="E(w:sign)"'), box);
-  ok('it tells the page as a key goes down, and offers no correction of what is typed',
-     box.includes(' oninput="annoInput(this.value)"') && box.includes(' autocomplete="off"') && box.includes(' autocapitalize="off"') && box.includes(' spellcheck="false"'), box);
+  ok('it names the annoInput action, which the page calls as a key goes down, and offers no correction of what is typed',
+     box.includes(' data-action="annoInput"') && box.includes(' autocomplete="off"') && box.includes(' autocapitalize="off"') && box.includes(' spellcheck="false"'), box);
   ok('the bar carries the pencil', times(scr, '<span class="sb-icon">[icon pencil]</span>') === 1);
   const btn = tagOf(scr, 'annoPractise');
-  ok('the Practise button names practiceAnnotated() and says how many rows are shown', btn.includes(' onclick="practiceAnnotated()"') && btn.includes(' type="button"') && buttonIn(scr) === A.practiseHtml(p, 2) && buttonIn(none) === A.practiseHtml(p, 0),
+  ok('the Practise button names practiceAnnotated and says how many rows are shown', btn.includes(' data-action="practiceAnnotated"') && btn.includes(' type="button"') && buttonIn(scr) === A.practiseHtml(p, 2) && buttonIn(none) === A.practiseHtml(p, 0),
      btn + ' ' + buttonIn(scr));
   ok('it is disabled with no row to show, and not with some', / disabled>$/.test(tagOf(none, 'annoPractise')) && !/disabled/.test(btn), tagOf(none, 'annoPractise') + ' | ' + btn);
-  ok('"Chapters" goes back, by goStudy()', times(scr, '<button class="btn sb-back" type="button" onclick="goStudy()">[icon arrow-left icon-sm] Chapters</button>') === 1);
+  ok('"Chapters" goes back, by the goStudy action', times(scr, '<button class="btn sb-back" type="button" data-action="goStudy">[icon arrow-left icon-sm] Chapters</button>') === 1);
   ok('the line above the list is a status, and holds the count of every annotated question and of those shown, through e()',
      tagOf(scr, 'annoCount').includes(' role="status"') && countIn(scr) === 'E(' + A.countText(p, 3, 2) + ')' && countIn(scr) === 'E(2 of 3 match)', countIn(scr));
   ok('the list holds the rows shown, as listHtml() draws them', listIn(scr) === A.listHtml(p, shown) && rowsOf(scr).length === 2 && listIn(none) === A.listHtml(p, []), String(listIn(scr)).slice(0, 80));
@@ -229,9 +228,38 @@ head('the page hands the module what it has, and keeps what the markup names');
 
   const p = pageOf('', [row('q1')]);
   const scr = run(() => A.screenHtml(p, p.ANNO.rows));
-  const handlers = [...new Set([...scr.matchAll(/\son[a-z]+="([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]))].sort();
-  ok('its markup names three handlers', J(handlers) === J(['annoInput', 'goStudy', 'practiceAnnotated']), handlers.join(' '));
-  ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  /* docs/ROADMAP.md, E2. Attribute names, read tag by tag with each value consumed whole, so text inside a value is never
+     taken for a name. */
+  const attrsOf = tag => [...tag.replace(/^<[a-z0-9-]+/i, '').matchAll(/([^\s=>"'\/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g)].map(m => m[1].toLowerCase());
+  const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>"']*)*>/gi)].flatMap(m => attrsOf(m[0])).filter(n => /^on/.test(n));
+  const handlers = [...new Set([...scr.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]))].sort();
+  ok('its markup names three actions and carries no inline handler', J(handlers) === J(['annoInput', 'goStudy', 'practiceAnnotated']) && inlineOf(scr).length === 0 && inlineOf(run(() => A.screenHtml(pageOf('', []), []))).length === 0, handlers.join(' ') + ' · ' + (inlineOf(scr).join(' ') || 'no on* attribute'));
+  const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
+  const clicks = tableOf('ACTIONS'), inputs = tableOf('INPUT_ACTIONS');
+  ok('the two buttons are in the page\'s ACTIONS table and the box in its INPUT_ACTIONS, each once and in no other, over the page\'s function of that name, declared once',
+     clicks.split('practiceAnnotated:()=>practiceAnnotated(),').length === 2 && clicks.split('goStudy:()=>goStudy(),').length === 2 && !/annoInput/.test(clicks)
+     && inputs.split('annoInput:el=>annoInput(el.value),').length === 2 && !/practiceAnnotated|goStudy/.test(inputs) && handlers.every(n => count('function ' + n + '(') === 1),
+     handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  ok('and the page listens for taps over the one and for typing over the other, on the document', count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,INPUT_ACTIONS,'input');") === 1);
+
+  /* A tap and a key, as the page takes them: the real src/core/actions.js listening on a stand-in document for clicks
+     over the page's ACTIONS and for input over its INPUT_ACTIONS, over stand-ins for the three functions, and each
+     control the module drew, with the attributes it drew, as the element. The box holds what was typed. */
+  const tcalls = [];
+  const tctx = { tcalls }; tctx.window = tctx; vm.createContext(tctx);
+  const stubs = ['goHome', 'memForget', 'memForgetAll', 'setLab', 'startQuiz', 'askApexMisses', 'practiceAnnotated', 'goStudy', 'annoInput'].map(n => `function ${n}(){ tcalls.push(${JSON.stringify(n)} + (arguments.length ? " " + JSON.stringify([].slice.call(arguments)) : "")); }`).join('\n');
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'actions.js'), 'utf8') + '\nvar S={chapter:null};\n' + stubs + '\n'
+    + ['ACTIONS', 'INPUT_ACTIONS'].map(n => (page.match(new RegExp('const ' + n + '=\\{[\\s\\S]*?\\n\\};')) || ['const ' + n + '={};'])[0].replace(/^const /, 'var ')).join('\n')
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");', tctx);
+  const controls = [...scr.matchAll(/<(button|input)\b([^>]*)>/g)].map(m => Object.fromEntries([...m[2].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], x[2]]))).filter(at => 'data-action' in at);
+  const fire = (type, at) => { const el = { nodeType: 1, value: 'sotalol', getAttribute: k => (k in at ? at[k] : null), dataset: {}, closest: sel => (sel === '[data-action]' ? el : null) };
+    tctx.listeners.filter(l => l[0] === type).forEach(l => l[1]({ type, target: el })); };
+  tcalls.length = 0; controls.forEach(at => fire('click', at));
+  const tappedNow = tcalls.slice();
+  tcalls.length = 0; controls.forEach(at => fire('input', at));
+  const typedNow = tcalls.slice();
+  ok('through the real Actions and the page\'s tables: a tap on each button calls its function and a tap on the box nothing; typing in the box calls annoInput() with what it holds, and in a button nothing',
+     controls.length === 3 && J(tappedNow) === J(['practiceAnnotated', 'goStudy']) && J(typedNow) === J(['annoInput ["sotalol"]']), J(tappedNow) + ' · ' + J(typedNow));
 
   /* The page's own stretch, from the screen's state to the listener that follows a tap, taken whole, with
      this module where its slot stands, the real FlagSet, and the page's own helpers. What is not the

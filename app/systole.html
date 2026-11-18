@@ -5340,8 +5340,18 @@ const ACTIONS={
   retryMissed:()=>startQuiz(null,'missed'),
   askApexMisses:()=>askApexMisses(),
   restartQuiz:el=>startQuiz(el.dataset.scope==='chapter'?S.chapter:null,el.dataset.mode),
+  /* the annotations screen (src/app/annotations.js) */
+  practiceAnnotated:()=>practiceAnnotated(),
+  goStudy:()=>goStudy(),
 };
 Actions.install(document,ACTIONS);
+/* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
+   a button calls nothing above. */
+const INPUT_ACTIONS={
+  /* the annotations screen's search: what is in the box as it stands */
+  annoInput:el=>annoInput(el.value),
+};
+Actions.install(document,INPUT_ACTIONS,'input');
 /* In a stacked split the document does not scroll — #app does. Every "go to
    the top of this screen" has to ask the right one, or it quietly does nothing
    and you arrive halfway down. Both are scrolled because only one of them is
