@@ -14,7 +14,7 @@
  *   · home says ONE thing: the trace and the pearl — the study material it
  *     used to carry is behind a door on the Labs page rather than below the
  *     fold;
- *   · the home screen's buttons, tapped through the page, reach what they say
+ *   · the home screen's buttons, tapped through the page, and the brain's keys reach what they say
  *     (docs/ROADMAP.md, E2: they name actions, not inline handlers);
  *   · S.homeLayout still persists and still reaches the home screen's own
  *     hero sizing on a cold load. It used to also drive a visible three-way
@@ -851,6 +851,18 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const practise = chosen !== null && await page.locator('#brainInfo .brain-go').click({ timeout: 5000 }).then(() => true, () => false);
     const started = practise && await page.waitForFunction(ch => S.screen === 'quiz' && S.chapter === ch && S.mode === 'all', chosen, { timeout: 8000, polling: 40 }).then(() => true, () => false);
     ok('and a chosen neuron\'s Practise starts its chapter', started, practise ? await page.evaluate(() => JSON.stringify({ screen: S.screen, chapter: S.chapter })) + ' · wanted ' + chosen : 'the button could not be tapped');
+    /* The brain's keys are its KEY_ACTIONS entry: an arrow moves the keyboard to the next neuron, Enter practises the one
+       the keyboard is on, once, and the click the page makes for a focused role="button" on Enter is not made as well. */
+    await toPage(1);
+    const first = await page.evaluate(() => { const g = document.querySelector('#brainArt .neuron'); if (!g) return null; g.setAttribute('tabindex', '0'); g.focus(); return { i: +g.dataset.i, n: document.querySelectorAll('#brainArt .neuron').length }; });
+    if (first) await page.keyboard.press('ArrowRight');
+    const moved = first && await page.waitForFunction(w => document.activeElement && document.activeElement.matches && document.activeElement.matches('#brainArt .neuron') && +document.activeElement.dataset.i === (w.i + 1) % w.n, first, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    ok('in the brain, an arrow moves the keyboard to the next neuron', moved, first ? await page.evaluate(() => document.activeElement && document.activeElement.dataset ? 'on ' + document.activeElement.dataset.i : 'nowhere') + ' of ' + first.n : 'no neuron drawn');
+    const want = moved && await page.evaluate(() => { const i = +document.activeElement.dataset.i; window.__starts = 0; const real = startQuiz; window.__realStart = real; startQuiz = function () { window.__starts++; return real.apply(this, arguments); }; return brainArtL.L.nodes[i].docId; });
+    if (want) await page.keyboard.press('Enter');
+    const entered = want && await page.waitForFunction(ch => S.screen === 'quiz' && S.chapter === ch, want, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    const starts = want ? await page.evaluate(() => { const n = window.__starts; startQuiz = window.__realStart; return n; }) : 0;
+    ok('and Enter practises that neuron\'s chapter, once', entered && starts === 1, want ? JSON.stringify({ screen: await page.evaluate(() => S.screen), starts, wanted: want }) : 'no neuron moved to');
     await page.evaluate(([k, w]) => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); if (atlas3D !== w) toggleAtlas3D(); goHome(); }, [kept, was.atlas3D]);
     await onScreen(page, 'home', { marker: '#homePage0' });
   }

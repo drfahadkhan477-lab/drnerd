@@ -146,7 +146,7 @@ head('the brain');
 {
   const html = art();
   ok('nothing where BrainMap is not loaded, or where there are no neurons', art({ BrainMap: undefined }) === '' && art({ brainLayoutNow: () => ({ nodes: [], edges: [], units: [], gap: 0 }) }) === '');
-  ok('an svg found by its id, in BrainMap\'s view, tapped by the brainTap action and keyed by the page\'s handler', html.startsWith('<svg class="brain-svg" id="brainArt" viewBox="' + BrainMap.BRAIN.VIEW + '" role="group"') && J(actionsOf(html)) === J(['brainTap']) && J(handlersOf(html)) === J(['brainKey(event)']) && J(inlineOf(html)) === J(['onkeydown']) && html.endsWith('</g></svg>'));
+  ok('an svg found by its id, in BrainMap\'s view, tapped and keyed by its brainTap action, with no inline handler', html.startsWith('<svg class="brain-svg" id="brainArt" viewBox="' + BrainMap.BRAIN.VIEW + '" role="group"') && J(actionsOf(html)) === J(['brainTap']) && inlineOf(html).length === 0 && html.endsWith('</g></svg>'));
   ok('said to a screen reader: how many of the neurons are lit, and how to move and practise', html.includes('aria-label="Your brain: 2 of 3 parts of the bank lit. Arrow keys move between them; Enter practises that chapter."'));
   const neurons = h => [...h.matchAll(/<g class="neuron( sel)?" data-i="(\d+)" data-state="([a-z]+)" role="button" tabindex="(-?\d+)" aria-label="([^"]*)" aria-pressed="(true|false)">/g)].map(m => m.slice(1));
   ok('a neuron for each part, in order, with its state, its title, the state\'s word and its recall, through e()', J(neurons(html).map(n => [n[1], n[2], n[4]])) === J([['0', 'solid', 'E(Valves & <b> · questions 1–3, solid, recall 91% today)'], ['1', 'new', 'E(Valves & <b> · questions 4–6, not seen yet)'], ['2', 'weak', 'E(Rhythm · questions 1–2, weak, recall 40% today)']]), J(neurons(html).map(n => n[4])));
@@ -199,9 +199,9 @@ head('the Home page');
 {
   hcalls.length = 0;
   const html = homePage();
-  ok('three pages side by side in a pager, each a tab panel, and the tabs to them', /^<div class="home-pages" id="homePages">\s*<div class="home-pager" id="homePager" onscroll="homePagerScroll\(\)">/.test(html) && [0, 1, 2].every(i => html.includes('id="homePage' + i + '" role="tabpanel" aria-labelledby="homeTab' + i + '"')) && html.endsWith('</div>\n  </div>'));
+  ok('three pages side by side in a pager, scrolled by its homePagerScroll action, each a tab panel, and the tabs to them', /^<div class="home-pages" id="homePages">\s*<div class="home-pager" id="homePager" data-action="homePagerScroll">/.test(html) && [0, 1, 2].every(i => html.includes('id="homePage' + i + '" role="tabpanel" aria-labelledby="homeTab' + i + '"')) && html.endsWith('</div>\n  </div>'));
   const tabs = [...html.matchAll(/<button class="home-tab" role="tab" id="homeTab(\d)" aria-controls="homePage(\d)" data-action="homeGo" data-page="(\d)">([^<]*)<span>([^<]*)<\/span><\/button>/g)].map(m => m.slice(1));
-  ok('three tabs, Home, Brain and Labs, each to its own page by homeGo with the page in data-page, keyed by homeTabKey()', J(tabs) === J([['0', '0', '0', '[icon home icon-sm]', 'Home'], ['1', '1', '1', '[icon brain icon-sm]', 'Brain'], ['2', '2', '2', '[icon activity icon-sm]', 'Labs']]) && html.includes('<div class="home-tabs" role="tablist" aria-label="Home pages" onkeydown="homeTabKey(event)">'), J(tabs));
+  ok('three tabs, Home, Brain and Labs, each to its own page by homeGo with the page in data-page, which also names what a key on it does', J(tabs) === J([['0', '0', '0', '[icon home icon-sm]', 'Home'], ['1', '1', '1', '[icon brain icon-sm]', 'Brain'], ['2', '2', '2', '[icon activity icon-sm]', 'Labs']]) && html.includes('<div class="home-tabs" role="tablist" aria-label="Home pages">'), J(tabs));
   ok('the Brain and Labs pages are the page\'s, handed what was counted here: due, started, the share explored, the share mastered, and today', html.includes('<section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">[BRAIN]</div></section>') && html.includes('<div class="home-page-in">[LABS]</div></section>')
      && J(hcalls.filter(c => !c.startsWith('pearl'))) === J(['brain [2,4,80,50,{"a":6,"c":4}]', 'labs [2]']), J(hcalls));
   ok('in the layout chosen, reading when there is a pearl, and paused when the heart is', html.includes('<div class="home-wrap anim-fade atlas-reading" data-home="focus">') && homePage({}, { atlasReading: false }).includes('<div class="home-wrap anim-fade" data-home="focus">') && homePage({}, { atlasPaused: true }).startsWith('<div class="home-pages atlas-paused" id="homePages">'));
@@ -216,7 +216,7 @@ head('the pearl');
   ok('its chapter, for a screen reader, through e(), or "From your notes"', html.includes('<span class="pearl-cap sr-only" id="pearlCap">E(Valves & &quot;more&quot;)</span>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('id="pearlCap">E(From your notes)</span>'));
   ok('another pearl, by pearlNext, only where there are two or more', /<button class="pearl-next" data-action="pearlNext"\s*title="Another pearl" aria-label="Another pearl">\[icon rotate-ccw icon-sm\]<\/button>/.test(html) && /aria-label="Another pearl" disabled>/.test(homePage({}, { pearlAll: () => [1] })));
   ok('what it is about, through e(), or its title where it has no concept', html.includes('<h1 class="pearl-concept" id="pearlConcept" tabindex="-1">E(A <b>rule</b>)</h1>') && homePage({}, { pearlNow: () => ({ title: 'T<x>' }) }).includes('tabindex="-1">E(T<x>)</h1>'));
-  ok('the statement as the page\'s ladder lays it out, scrolled by pearlScroll()', html.includes('<div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" onscroll="pearlScroll()">[LADDER Title]</div>'));
+  ok('the statement as the page\'s ladder lays it out, scrolled by its pearlScroll action', html.includes('<div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" data-action="pearlScroll">[LADDER Title]</div>'));
   ok('Show all, by pearlToggleAll, drawn hidden and collapsed: the page shows it once it has measured the statement past its box', html.includes('<button class="pearl-morecue" id="pearlMore" data-action="pearlToggleAll" aria-controls="pearlBody" aria-expanded="false" hidden>[icon chevron-down icon-sm]<span>Show all</span></button>'));
   const acts = h => [...g1(h, /<div class="pearl-actions">([\s\S]*?)<\/div>/).matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
   ok('the ways to recall, read it as a paragraph, see the source and open the note, in that order, each its own action', J(acts(html)) === J(['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen']), J(acts(html)));
@@ -360,12 +360,8 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('and the Home page\'s own words are no longer in the page', HWORDS.every(t => count(t) === 0), HWORDS.map(t => count(t)).join(' '));
   const hall = homePage({}, { showHello: () => true }) + homePage({}, { dueQuestions: () => [], startedCount: () => 0 }) + homePage({}, { dueQuestions: () => [] });
   const ha = [...new Set(actionsOf(hall))].sort();
-  ok('the Home page names seventeen actions', J(ha) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'pearlNext', 'pearlOpen', 'pearlReading', 'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'reviewAllDue', 'startPlan', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
-  /* A scroll does not bubble to the document, and a key on a tab is the tab list's: those three stay inline for now. */
-  const hh = [...new Set(handlersOf(hall))].sort();
-  ok('and its only inline handlers are the pager\'s and the pearl\'s scroll and the tabs\' keys, each a function the page declares once',
-     J(inlineOf(hall)) === J([0, 1, 2].flatMap(() => ['onscroll', 'onscroll', 'onkeydown'])) && J(hh) === J(['homePagerScroll()', 'homeTabKey(event)', 'pearlScroll()']) && ['homePagerScroll', 'homeTabKey', 'pearlScroll'].every(n => count('function ' + n + '(') === 1),
-     inlineOf(hall).join(' ') + ' · ' + hh.join(' '));
+  ok('the Home page names nineteen actions', J(ha) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'homePagerScroll', 'pearlNext', 'pearlOpen', 'pearlReading', 'pearlRecall', 'pearlScroll', 'pearlSourceToggle', 'pearlToggleAll', 'reviewAllDue', 'startPlan', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
+  ok('and carries no inline handler', inlineOf(hall).length === 0, inlineOf(hall).join(' ') || 'no on* attribute');
   const kitNames = re => String(g1(page, re)).replace(/\s+/g, '').split(',').map(x => x.split(':')[0]).sort().join(' ');
   ok('each hands the names its member was seen to ask for', kitNames(/HomeScreen\.brainHtml\([^{]*\{([^}]*)\}\); \}/) === [...BK_READS].sort().join(' ') && kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/) === [...ART_READS].sort().join(' ') && kitNames(/HomeScreen\.brainInfoHtml\(\{([^}]*)\}\); \}/) === [...INFO_READS].sort().join(' '),
      kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/));
@@ -376,12 +372,13 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('and the Brain page\'s own words are no longer in the page', BWORDS.every(t => count(t) === 0), BWORDS.map(t => count(t)).join(' '));
   const ballx = brainPage() + art() + run(() => M.brainInfoHtml({ brainArtL: { L: LAY }, brainSel: 0, BRAIN_STATE_LABEL: LABEL, e: String, icon: () => '' }));
   const ba = [...new Set(actionsOf(ballx))].sort();
-  ok('the Brain page names three actions, and its only inline handler is the brain\'s keys, a function the page declares once', J(ba) === J(['brainTap', 'startChapter', 'startDue']) && J(inlineOf(ballx)) === J(['onkeydown']) && J(handlersOf(ballx)) === J(['brainKey(event)']) && count('function brainKey(') === 1,
+  ok('the Brain page names three actions and carries no inline handler', J(ba) === J(['brainTap', 'startChapter', 'startDue']) && inlineOf(ballx).length === 0,
      ba.join(' ') + ' · ' + inlineOf(ballx).join(' '));
-  /* A tap is looked up in ACTIONS: each action the three pages name is held to that table, as written, and to no other. */
+  /* A tap is looked up in ACTIONS, a key in KEY_ACTIONS and a scroll in SCROLL_ACTIONS: each action the three pages name
+     is held to the tables it is in, each entry as written, and to no other table. A tab and the brain are in two. */
   const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
   const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
-  const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
+  const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS', 'KEY_ACTIONS', 'SCROLL_ACTIONS'];
   const ENTRY = { goAnnotations: 'goAnnotations:()=>goAnnotations(),', goEcho: 'goEcho:()=>goEcho(),', goLab: 'goLab:()=>goLab(),', goMemory: 'goMemory:()=>goMemory(),', goPractice: 'goPractice:()=>goPractice(),',
     goRefs: 'goRefs:()=>goRefs(),', goSessions: 'goSessions:()=>goSessions(),', goStats: 'goStats:()=>goStats(),', goStudy: 'goStudy:()=>goStudy(),', openSearch: 'openSearch:()=>openSearch(),',
     dismissHello: 'dismissHello:()=>dismissHello(),', homeGo: 'homeGo:el=>homeGo(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),', pearlReading: 'pearlReading:()=>pearlReading(),',
@@ -389,14 +386,20 @@ head('the page hands the module what it has, and keeps what the markup names');
     startPlan: 'startPlan:el=>startPlan(Number(el.dataset.plan)),', toggleAtlas3D: 'toggleAtlas3D:()=>toggleAtlas3D(),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
     toggleHeroMechanics: 'toggleHeroMechanics:()=>toggleHeroMechanics(),', toggleHeroMenu: 'toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),', brainTap: 'brainTap:(el,ev)=>brainTap(ev),',
     startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', startDue: "startDue:()=>startQuiz(null,'due'),"};
+  /* Where an action is in a table besides ACTIONS, or only there: the table and the entry. */
+  const ELSEWHERE = { homeGo: [['KEY_ACTIONS', 'homeGo:(el,ev)=>homeTabKey(ev),']], brainTap: [['KEY_ACTIONS', 'brainTap:(el,ev)=>brainKey(ev),']],
+    homePagerScroll: [['SCROLL_ACTIONS', 'homePagerScroll:()=>homePagerScroll(),']], pearlScroll: [['SCROLL_ACTIONS', 'pearlScroll:()=>pearlScroll(),']] };
+  const SCROLL_ONLY = new Set(['homePagerScroll', 'pearlScroll']);
+  const entries = n => (SCROLL_ONLY.has(n) ? [] : [['ACTIONS', ENTRY[n]]]).concat(ELSEWHERE[n] || []);
+  const held = n => (SCROLL_ONLY.has(n) || ENTRY[n]) && TABLES.every(t => keyed(t, n) === (entries(n).some(e => e[0] === t) ? 1 : 0)) && entries(n).every(([t, e]) => tableOf(t).split(e).length === 2);
   const named = [...new Set(la.concat(ha, ba))].sort();
-  ok('the twenty-eight actions of the three pages are each in ACTIONS once, as written, and in no other table',
-     named.length === 28 && named.every(n => ENTRY[n] && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0 && tableOf('ACTIONS').split(ENTRY[n]).length === 2),
-     named.length + ' · ' + named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 ? '' : ' (not as written)')).join(' '));
+  ok('the thirty actions of the three pages: each in the tables for what it answers once, as written, and in no other; a tab and the brain in ACTIONS and KEY_ACTIONS, the two scrolls in SCROLL_ACTIONS alone',
+     named.length === 30 && named.every(held),
+     named.length + ' · ' + named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (held(n) ? '' : ' (not as held)')).join(' '));
   const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen', 'pearlReading',
-    'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu'];
-  ok('they call twenty-seven functions the page declares, once each, and the page listens for taps on the document',
-     CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+    'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu', 'homeTabKey', 'brainKey', 'homePagerScroll', 'pearlScroll'];
+  ok('they call thirty-one functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
+     CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,KEY_ACTIONS,'keydown');") === 1 && count("Actions.install(document,SCROLL_ACTIONS,'scroll',{capture:true,own:true});") === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and the ids the page looks for are drawn: the brain, its tilt, its net and the info', ['brain3d', 'brainTilt', 'brainInfo'].every(id => times(brainPage(), 'id="' + id + '"') === 1) && ['brainArt', 'brainNet'].every(id => times(art(), 'id="' + id + '"') === 1)
      && ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')"].every(t => count(t) >= 1) && count("'#brainArt") >= 1, ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')", "'#brainArt"].map(t => count(t)).join(' '));
 
@@ -483,14 +486,14 @@ head('the page hands the module what it has, and keeps what the markup names');
   /* Each stand-in is a function put on the context under the name the tables call, so no name read from the page is
      written into code. */
   called.forEach(n => { tctx[n] = (...args) => {
-    const a = args.map(x => (x === tctx.__ev ? 'the click' : x === undefined ? 'undefined' : x));
+    const a = args.map(x => (x === tctx.__ev ? 'the event' : x === undefined ? 'undefined' : x));
     tcalls.push(n + (a.length ? ' ' + JSON.stringify(a) : ''));
     return n === 'dueQuestions' ? 'DUE' : undefined;
   }; });
   vm.runInContext(read('src/core/actions.js') + '\nvar S={chapter:null,mock:{i:0}}, offlineJob={busy:false};\n' + tables
-    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
+    + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");\nActions.install(doc,KEY_ACTIONS,"keydown");\nActions.install(doc,SCROLL_ACTIONS,"scroll",{capture:true,own:true});', tctx);
   const unescape = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-  const controls = h => [...h.matchAll(/<(button|select|input|svg)\b([^>]*)>/g)].map(m => {
+  const controls = h => [...h.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>/g)].map(m => {
     const at = Object.fromEntries([...m[2].matchAll(/([a-z-]+)(?:="([^"]*)")?/g)].map(x => [x[1], unescape(x[2] || '')]));
     const dataset = Object.fromEntries(Object.keys(at).filter(k => k.startsWith('data-')).map(k => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), at[k]]));
     const el = { nodeType: 1, value: '', dataset, disabled: 'disabled' in at, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
@@ -501,15 +504,19 @@ head('the page hands the module what it has, and keeps what the markup names');
      J(labTaps) === J(['goLab', 'goEcho', 'goPractice', 'goSessions', 'goStudy', 'openSearch', 'goStats', 'goRefs', 'goMemory', 'goAnnotations']), J(labTaps));
   const brainTaps = fire('click', bpage);
   ok('tapped, the Brain page: the brain handed the click, the chosen neuron\'s chapter, the review, and each chapter\'s row, each by its own name',
-     J(brainTaps) === J(['brainTap ["the click"]', 'startQuiz ["Valves & more"]', 'startQuiz [null,"due"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz ["Empty"]']), J(brainTaps));
+     J(brainTaps) === J(['brainTap ["the event"]', 'startQuiz ["Valves & more"]', 'startQuiz [null,"due"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz ["Empty"]']), J(brainTaps));
   delete store['accsap12.welcomed'];
   hask('pearlCache=[{concept:"One",title:"A",text:"First.",chapter:"Rhythm notes",source:"N1"},{concept:"Two",title:"B",text:"Second.",chapter:"Rhythm notes",source:"N2"}]; pearlCurrent=null; dueQuestions=()=>[1];');
   const greeted = String(hask('buildHome()'));
   const homeTaps = fire('click', greeted);
   ok('tapped, the Home page: the notes, the heart\'s explore, pause and menu (handed the click), its chambers, motion and credit, the pearl\'s six, the review of every card due, Got it, and each tab with its page',
-     greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroMenu ["undefined","the click"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
+     greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroMenu ["undefined","the event"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
        'pearlNext', 'pearlToggleAll', 'pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen', 'dueQuestions', 'startQuiz [null,"due","DUE"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
-  ok('and a key or a choice on any of the three pages calls nothing here', J(fire('input', full + bpage + greeted).concat(fire('change', full + bpage + greeted))) === J([]));
+  const keys = fire('keydown', full + bpage + greeted), scrolls = fire('scroll', full + bpage + greeted);
+  ok('a key: on the brain, brainKey() handed the key; on each tab, homeTabKey() handed it; on anything else, nothing',
+     J(keys) === J(['brainKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]']), J(keys));
+  ok('a scroll: of the pager, homePagerScroll(); of the pearl\'s statement, pearlScroll(); of anything else, nothing', J(scrolls) === J(['homePagerScroll', 'pearlScroll']), J(scrolls));
+  ok('and something typed or chosen on any of the three pages calls nothing here', J(fire('input', full + bpage + greeted).concat(fire('change', full + bpage + greeted))) === J([]));
 
 }
 
