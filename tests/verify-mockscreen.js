@@ -155,8 +155,13 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const tapped = await page.click('#sessionsPage .sb-back', { timeout: 5000 }).then(() => true, () => false);
     const back = tapped && await page.waitForFunction(() => S.screen === 'home' && homePage === 2, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
     ok('the way back from Sessions goes to the Labs page of the home screen', back, tapped ? await page.evaluate(() => JSON.stringify({ screen: S.screen, homePage })) : 'the button could not be tapped');
+    /* S.screen is set when the tap lands, and render() swaps the screen in later, inside a view transition. Going on
+       before the home screen is drawn left that swap to land after Sessions was drawn again, and the card the next check
+       holds was drawn a second time under it (CI, Chromium shard 2). So each screen is waited for drawn and quiet. */
+    if (back) { await onScreen(page, 'home', { marker: '#homePage2' }); await quiet(page); }
     await page.evaluate(() => goSessions());
     await onScreen(page, 'sessions', { marker: '#mockCard' });
+    await quiet(page);
   }
   {
     await page.evaluate(() => { window.__card = document.getElementById('mockCard'); });
