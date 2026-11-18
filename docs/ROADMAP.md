@@ -283,8 +283,9 @@ delegated listener that calls a `data-action` by name from the page's
 `ACTIONS` table, which is the allowlist (`verify-actions-pure`). The Memory
 screen is the first to carry no inline handler (`verify-memoryscreen-pure`
 scans what it draws for any `on*` attribute; `verify-memory` and
-`verify-backup-ids` tap it through the real page). Next: the other screens,
-one at a time.
+`verify-backup-ids` tap it through the real page), and the Rhythm Lab the
+second (`verify-rhythmlab-pure`; `verify-physio` taps a rhythm chip). Next:
+the other screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express

@@ -35,8 +35,10 @@
         a note that says why: a normal trace under an abnormal name teaches the wrong pattern.
      4. Every panel says it is a model and not a recording.
 
-   The chips name setLab() and the Home button goHome(); those stay the page's, as do the handlers
-   mountPhysio() gives the cycle's chips. An inline handler is read where it is tapped.
+   The rhythm chips and the Home button carry no inline handler (docs/ROADMAP.md, E2): each names an
+   action, setLab with the rhythm's key in data-kind, or goHome, which the page's one delegated listener
+   (src/core/actions.js) finds in its ACTIONS table and calls. setLab() and goHome() stay the page's, as
+   do the listeners mountPhysio() gives the cycle's chips by their data-physio-* attributes.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -91,7 +93,7 @@ function screenHtml(p){
         <div class="stats-title">Rhythm Lab</div>
         <div class="stats-sub">Live waveforms — tap a rhythm to morph the trace</div>
       </div>
-      <button class="btn sb-back" onclick="goHome()">${icon('arrow-left','icon-sm')} Home</button>
+      <button class="btn sb-back" data-action="goHome">${icon('arrow-left','icon-sm')} Home</button>
     </div>
     <div class="lab-monitor">
       <canvas id="labCanvas" aria-label="Live electrocardiogram trace"></canvas>
@@ -102,7 +104,7 @@ function screenHtml(p){
     </div>
     <div class="lab-desc">${e(r.desc)}</div>
     <div class="chips lab-chips">${RHYTHM_KEYS.map(k=>
-      `<button class="chip${k===labKind?' hot':''}" onclick="setLab('${k}')">${e(RHYTHMS[k].name)}</button>`).join('')}</div>
+      `<button class="chip${k===labKind?' hot':''}" data-action="setLab" data-kind="${k}">${e(RHYTHMS[k].name)}</button>`).join('')}</div>
     <div class="ref-hint" style="margin-top:12px">Traces are generated from waveform models, not recordings —
       shapes are schematic and meant for pattern recognition, not measurement.</div>
     ${buildPhysio()}

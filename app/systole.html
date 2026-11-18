@@ -5328,10 +5328,13 @@ document.addEventListener('click',ev=>{
    an inline handler left, the split build can ship scripts/csp.js's scriptPolicy. */
 @@SLOT[src:src/core/actions.js]@@
 const ACTIONS={
-  /* the Memory screen (src/app/memory.js) */
+  /* more than one screen */
   goHome:()=>goHome(),
+  /* the Memory screen (src/app/memory.js) */
   memForget:el=>memForget(el.dataset.memoryId),
   memForgetAll:()=>memForgetAll(),
+  /* the Rhythm Lab (src/app/rhythmlab.js): a chip carries its rhythm's key */
+  setLab:el=>setLab(el.dataset.kind),
 };
 Actions.install(document,ACTIONS);
 /* In a stacked split the document does not scroll — #app does. Every "go to
