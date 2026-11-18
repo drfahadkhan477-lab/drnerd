@@ -70,7 +70,7 @@ const SUITES = [
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['loops',        'no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere'],
   ['theme',        'nine palettes, two axes, unthemed semantics'],
-  ['home',         'the welcome bar, the progress bar, three layouts, and the home screen\'s buttons, and the brain\'s keys, reach what they say'],
+  ['home',         'the welcome bar, the progress bar, three layouts, and the home screen\'s buttons, the brain\'s keys, and the pager\'s and the pearl\'s scrolls reach what they say'],
   ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],

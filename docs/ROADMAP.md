@@ -309,7 +309,8 @@ calls `homeTabKey()`, the brain's `brainTap` calls `brainKey()`
 (`verify-homepager` presses a tab's arrow, `verify-home` the brain's). Its
 scrolls are in `SCROLL_ACTIONS`, which listens as a scroll goes down, since
 one does not bubble, and acts only for the element scrolled
-(`verify-homepager` swipes the pager, `verify-pearl` scrolls the statement). An action that needs state reads it when
+(`verify-home` scrolls each, and holds the statement's scroll, inside the pager,
+to the statement alone; `verify-homepager` swipes the pager). An action that needs state reads it when
 tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
 input only, so a tap on a field calls nothing and a key in a button calls

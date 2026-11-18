@@ -14,7 +14,8 @@
  *   · home says ONE thing: the trace and the pearl — the study material it
  *     used to carry is behind a door on the Labs page rather than below the
  *     fold;
- *   · the home screen's buttons, tapped through the page, and the brain's keys reach what they say
+ *   · the home screen's buttons, tapped through the page, the brain's keys, and the pager's and the pearl's
+ *     scrolls, each its own, reach what they say
  *     (docs/ROADMAP.md, E2: they name actions, not inline handlers);
  *   · S.homeLayout still persists and still reaches the home screen's own
  *     hero sizing on a cold load. It used to also drive a visible three-way
@@ -801,6 +802,30 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     t = pearl ? await tap(0, '#pearlSourceToggle', () => document.getElementById('pearlSource') && !document.getElementById('pearlSource').hidden) : { went: false, said: 'no pearl to read' };
     ok('and its Source shows where the pearl is from', t.went, t.said);
     await page.evaluate(() => { const s = document.getElementById('pearlSource'); if (s && !s.hidden) pearlSourceToggle(); if (pearlAsWritten) pearlReading(); });
+
+    /* The scrolls are SCROLL_ACTIONS', which listens as a scroll goes down and acts only for the element that scrolled. The
+       page's own pearlScroll() and homePagerScroll() are counted where the table looks them up: a scroll of the pearl's
+       statement, which sits inside the pager, is the statement's alone, and a scroll of the pager is the pager's. The
+       statement is held short for this if it is not already taller than its box, so there is something to scroll. */
+    await toPage(0);
+    const spied = await page.evaluate(() => {
+      window.__scrolls = { pearl: 0, pager: 0 }; window.__realScrolls = { pearlScroll, homePagerScroll };
+      pearlScroll = function () { window.__scrolls.pearl++; return window.__realScrolls.pearlScroll.apply(this, arguments); };
+      homePagerScroll = function () { window.__scrolls.pager++; return window.__realScrolls.homePagerScroll.apply(this, arguments); };
+      const w = document.getElementById('pearlBody'); if (!w) return 'no statement';
+      if (w.scrollHeight - w.clientHeight < 40) w.style.maxHeight = '40px';
+      return w.scrollHeight - w.clientHeight;
+    });
+    await page.evaluate(() => { const w = document.getElementById('pearlBody'); if (w) w.scrollTop = 30; });
+    const pearlScrolled = typeof spied === 'number' && spied > 0 && await page.waitForFunction(() => window.__scrolls.pearl > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    await quiet(page);
+    const afterPearl = await page.evaluate(() => Object.assign({}, window.__scrolls));
+    ok('a scroll of the pearl\'s statement reaches pearlScroll(), and not the pager\'s homePagerScroll() around it', pearlScrolled && afterPearl.pager === 0, JSON.stringify({ over: spied, calls: afterPearl }));
+    await page.evaluate(() => { const p = document.getElementById('homePager'); p.scrollLeft = p.clientWidth; });
+    const pagerScrolled = await page.waitForFunction(() => window.__scrolls.pager > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    ok('and a scroll of the pager reaches homePagerScroll()', pagerScrolled, JSON.stringify(await page.evaluate(() => window.__scrolls)));
+    await page.evaluate(() => { pearlScroll = window.__realScrolls.pearlScroll; homePagerScroll = window.__realScrolls.homePagerScroll; const w = document.getElementById('pearlBody'); if (w) w.style.maxHeight = ''; homeGo(0); });
+    await quiet(page);
 
     /* The strip under the hero: Review with cards due, Continue with a history and none due, Start with nothing. */
     const kept = await page.evaluate(() => JSON.stringify({ srs: S.srs, practice: S.practice }));
