@@ -617,8 +617,12 @@ says. *The right heart, wired:* a lesion's RA, RV and PA on axes that fit, the
 JVP's waves found on its own trace, and S2's split off the crossings: reversed
 in severe AS, wide in MR. S1's split is left unsaid for a lesion: with no
 inertia the mitral valve shuts at the end of the atrial kick in a stiff
-ventricle. Next: the constriction gap, then sounds and the 3D heart, one view
-per change, and Normal from the engine once every view reads it.
+ventricle. *Heart sounds, wired:* the Practice Lab places AS, AR, MS and MR's
+sounds and murmurs on the engine's valve events (`HeartSounds.eventsFor`), so
+AS is heard with P2 before A2 and its murmur running to its own late A2; the
+other lesions keep physio.js's events, and the heart map still draws physio's
+spans. Next: the constriction gap, then the 3D heart, and Normal from the engine
+once every view reads it.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them

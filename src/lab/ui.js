@@ -291,7 +291,7 @@ function paint() {
     else drawStrip(c, L.stim.t);
   } else if (L.screen === 'explore') {
     const it = LI.byId(L.ex);
-    if (it.kind === 'sounds') { L.stim = { r: HS.render(it.key, { beats: 3, bpm: 72, seed: 7, rate: 8000 }) }; drawSound(c, L.stim.r, true); }
+    if (it.kind === 'sounds') { L.stim = { r: HS.render(it.key, { beats: 3, bpm: 72, seed: 7, rate: 8000, events: HS.eventsFor(it.key) }) }; drawSound(c, L.stim.r, true); }
     else drawTracing(c, TR.byId(it.key), true);
   }
 }
@@ -316,7 +316,7 @@ function nextQuestion() {
   L.reason = pick.reason === 'due' ? 'Due for review.' : pick.reason === 'new' ? 'New to you.' : 'Nothing due: reviewing what you are closest to forgetting.';
   L.options = Drill.options({ item: L.item, items, n: 4, seed: seed + 1 });
   L.picked = null;
-  if (L.kind === 'sounds') L.stim = { r: HS.render(L.item.key, { beats: 4, bpm: [64, 72, 80][seed % 3], seed, rate: 8000 }) };
+  if (L.kind === 'sounds') L.stim = { r: HS.render(L.item.key, { beats: 4, bpm: [64, 72, 80][seed % 3], seed, rate: 8000, events: HS.eventsFor(L.item.key) }) };
   else if (L.kind === 'tracings') L.stim = { t: TR.byId(L.item.key) };
   else L.stim = { t: ST.trace(L.item.key, 6) };
   show('drill');

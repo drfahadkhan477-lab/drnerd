@@ -192,9 +192,11 @@ function bandNoise(n, rate, lo, hi, rand) {
 
 /* position → fraction of the cycle. Events come from Physio, so a change to
    the physiology moves the sound with it. */
+/* The events a render places its sounds on: physio.js's, unless the render was handed a lesion's own. */
+let EVENTS_NOW = null;
 function frac(pos) {
   if (pos.abs !== undefined) return pos.abs;
-  const ev = Physio.EVENTS.find(e => e.id === pos.ev);
+  const ev = (EVENTS_NOW || Physio.EVENTS).find(e => e.id === pos.ev);
   if (!ev) throw new Error('heartsounds: unknown valve event "' + pos.ev + '"');
   return ev.at + (pos.add || 0);
 }
@@ -240,13 +242,20 @@ function lesionById(id) {
   return l;
 }
 
-/* render(id, { beats, bpm, seed, rate }) → samples in [-0.9, 0.9]. The cycle
+/* render(id, { beats, bpm, seed, rate, events }) → samples in [-0.9, 0.9]. The cycle
    is bpm-scaled in seconds but fractions of the cycle stay where physio puts
    them, which is how a faster rate shortens diastole in the audio as it does
-   in the heart. */
+   in the heart. events, where given, are the lesion's own valve events
+   ([{ id, at }], as eventsFor() gives them), and every sound and murmur is placed
+   on those instead: the same spec, on the beat that lesion makes. */
 function render(id, o) {
   o = o || {};
   const lesion = lesionById(id);
+  const given = Array.isArray(o.events) && o.events.length ? o.events : null;
+  EVENTS_NOW = given;
+  try { return renderOn(lesion, o, given); } finally { EVENTS_NOW = null; }
+}
+function renderOn(lesion, o, given) {
   const rate = o.rate || RATE, beats = o.beats || 3, bpm = o.bpm || 72;
   const cycleSec = 60 / bpm, perCycle = Math.round(cycleSec * rate);
   const rand = rng32(o.seed === undefined ? 1 : o.seed);
@@ -275,9 +284,19 @@ function render(id, o) {
   let peak = 1e-9;
   for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
   for (let i = 0; i < buf.length; i++) buf[i] = buf[i] / peak * 0.9;
-  return { samples: buf, rate, cycleSec, beats, events: Physio.EVENTS.map(e => ({ id: e.id, at: e.at })) };
+  return { samples: buf, rate, cycleSec, beats, source: given ? 'lesion' : 'physio', events: (given || Physio.EVENTS).map(e => ({ id: e.id, at: e.at })) };
 }
 
-root.HeartSounds = { LESIONS, SOUND, RATE, render, frac, lesionById };
+/* A lesion's own valve events, from the circulation engine (src/core/circulation.js, docs/ROADMAP.md S8), for the
+   lesions it makes: aortic stenosis sounds with P2 before A2 because its LV empties late, mitral regurgitation
+   with A2 early. null for every other id, and where the engine is not loaded: physio.js's events then. */
+const ENGINE = ['as', 'ar', 'ms', 'mr'];
+function eventsFor(id, C) {
+  const Circ = C || root.Circulation;
+  if (ENGINE.indexOf(id) < 0 || !Circ || typeof Circ.cycle !== 'function') return null;
+  try { return Circ.cycle(id).EVENTS.map(e => ({ id: e.id, at: e.at })); } catch (_) { return null; }
+}
+
+root.HeartSounds = { LESIONS, SOUND, RATE, render, frac, lesionById, eventsFor, ENGINE };
 
 })(typeof window !== 'undefined' ? window : this);

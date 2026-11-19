@@ -2332,12 +2332,20 @@ function goLab(){ S.screen='lab'; render(); toTop(); }
 function buildPractice(){ return `<div class="home-wrap anim-fade"><div class="plab" id="plabRoot"></div></div>`; }
 /* The split build lifts the Lab's modules into vendor/ and leaves LAB_SRC naming the file (scripts/build-pwa.js);
    the first draw of this screen loads it and draws again when it is there. A failed load is not remembered. */
-let labLibP=null;
+let labLibP=null, labNoCirc=false;
 function mountPractice(){
-  if(typeof LabUI==='undefined'){
-    if(S.screen==='practice'&&window.LAB_SRC&&!labLibP){
+  /* The Lab's heart sounds for AS, AR, MS and MR are placed on the circulation engine's valve events
+     (HeartSounds.eventsFor), so the Lab waits for the engine too, which the split build also lifts (CIRC_SRC). If the
+     engine will not load, the Lab draws all the same, on physio.js's events, which is what eventsFor gives without it. */
+  if(typeof LabUI==='undefined'||(window.CIRC_SRC&&typeof Circulation==='undefined'&&!labNoCirc)){
+    if(S.screen==='practice'&&window.LAB_SRC&&!labLibP&&typeof LabUI==='undefined'){
       const s=document.createElement('script'); s.src=window.LAB_SRC;
       labLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); labLibP=null; res(); }; });
+      document.head.appendChild(s);
+    }
+    if(S.screen==='practice'&&window.CIRC_SRC&&!circLibP&&typeof Circulation==='undefined'){
+      const s=document.createElement('script'); s.src=window.CIRC_SRC;
+      circLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); circLibP=null; labNoCirc=true; res(); mountPractice(); }; });
       document.head.appendChild(s);
     }
     return;

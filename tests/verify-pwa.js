@@ -679,6 +679,9 @@ async function heapAfterBoot(page, url) {
       const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
       return images.length === 2 && images.every(i => i.naturalWidth > 100 && /\/echo\/echo-/.test(i.src));
     }));
+    /* The circulation engine leaves app.js too (build-pwa, 3.747): nothing has loaded it yet. */
+    ok('the circulation engine is not in app.js, and nothing has loaded it before it is needed', await page.evaluate(() =>
+      typeof Circulation === 'undefined' && typeof window.CIRC_SRC === 'string' && !document.querySelector('script[src="' + window.CIRC_SRC + '"]')));
     /* The Lab's modules leave app.js for vendor/ (build-pwa, 3.746) and load when the Lab is first drawn. First drawn
        here, after the outage: the file must come from the precache, and the Lab must draw from it. */
     await page.evaluate(() => goPractice());
@@ -686,17 +689,17 @@ async function heapAfterBoot(page, url) {
       { timeout: 30000 }).then(() => true, () => false);
     ok('the Lab, out of app.js, draws on its first visit offline', labDrawn === true && await page.evaluate(() =>
       typeof window.LAB_SRC === 'string' && !!document.querySelector('script[src="' + window.LAB_SRC + '"]')));
-    /* The circulation engine leaves app.js too (build-pwa, 3.747), and loads when a lesion is first drawn in the
-       Rhythm Lab's cycle panel: first drawn here, offline, so it must come from the precache. */
+    /* Its heart sounds for AS, AR, MS and MR are placed on the engine's valve events (HeartSounds.eventsFor), so the
+       Lab loads the engine too before it draws, here from the precache, offline. */
+    ok('and the Lab loads the engine with it, so its heart sounds for aortic stenosis are placed on the engine\'s own beat', await page.evaluate(() => {
+      const e = typeof HeartSounds !== 'undefined' && typeof Circulation !== 'undefined' && HeartSounds.eventsFor('as');
+      return !!e && e.find(x => x.id === 'ac').at === Circulation.cycle('as').T.ac && !!document.querySelector('script[src="' + window.CIRC_SRC + '"]'); }));
+    /* Then a lesion in the Rhythm Lab's cycle panel draws from the engine the Lab loaded. */
     await page.evaluate(() => { goLab(); });
     await settled(page, () => !!document.querySelector('[data-physio-lesion="as"]') && typeof physio !== 'undefined' && !!physio, { timeout: 30000 });
-    const circBefore = await page.evaluate(() => typeof Circulation === 'undefined');
     await page.evaluate(() => document.querySelector('[data-physio-lesion="as"]').click());
-    const circDrawn = await settled(page, () => typeof Circulation !== 'undefined' && !!physio.cycle() && physio.cycle().preset === 'as',
-      { timeout: 30000 }).then(() => true, () => false);
-    ok('the circulation engine, out of app.js, is not loaded until a lesion is drawn, then draws it on its first visit offline',
-       circBefore === true && circDrawn === true && await page.evaluate(() => typeof window.CIRC_SRC === 'string' && !!document.querySelector('script[src="' + window.CIRC_SRC + '"]')),
-       JSON.stringify({ circBefore, circDrawn }));
+    const circDrawn = await settled(page, () => !!physio.cycle() && physio.cycle().preset === 'as', { timeout: 30000 }).then(() => true, () => false);
+    ok('and a lesion tapped in the cycle panel then draws its beat, offline', circDrawn === true, JSON.stringify({ circDrawn }));
     transport.resume();
     await ctx.close();
     transport.close();
