@@ -509,7 +509,7 @@ async function heapAfterBoot(page, url) {
     const idx = await (await fetch(ORIGIN + '/index.html')).text();
     const meta = (idx.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)">/) || [])[1] || '';
     const listed = [...(meta.match(/script-src ([^;]*)/) || ['', ''])[1].matchAll(/'sha256-([^']+)'/g)].map(m => m[1]).sort();
-    const inline = [...idx.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => require('crypto').createHash('sha256').update(m[1], 'utf8').digest('base64')).sort();
+    const inline = [...idx.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map(m => require('crypto').createHash('sha256').update(m[1], 'utf8').digest('base64')).sort();
     ok('index.html\'s policy has a script-src of \'self\' and the hash of each of its inline scripts, and of nothing else',
        /script-src 'self' 'sha256-/.test(meta) && inline.length > 0 && JSON.stringify(listed) === JSON.stringify(inline) && idx.indexOf('Content-Security-Policy') < idx.search(/<script\b/i),
        `${listed.length} listed, ${inline.length} inline`);

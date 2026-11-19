@@ -1095,12 +1095,17 @@ html = html.replace('__APP_INTEGRITY__', APP_INTEGRITY);
    <script>, not an onclick, not a javascript: URL, not eval. So this is the last thing done to the shell, and it
    refuses to build anything it cannot account for. */
 step('ship a script-src that admits only the shell\'s own scripts', () => {
+  /* An end tag as a browser reads one: </script, then anything up to the > (</script > and </script x> close it too). */
   const opens = (html.match(/<script\b/gi) || []).length;
-  const inline = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  const inline = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)];
   if (inline.length !== opens) throw new Error(`the shell has ${opens} <script> tags but ${inline.length} whole ones were found`);
   if (inline.some(m => /\bsrc\s*=/i.test(m[1]))) throw new Error('the shell loads a script by src in its markup; the loader is meant to add them');
-  if (/\son[a-z]{3,}\s*=\s*["']/i.test(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) throw new Error('the shell\'s markup carries an inline handler, which this policy refuses');
-  if (/javascript:/i.test(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) throw new Error('the shell\'s markup carries a javascript: URL, which this policy refuses');
+  /* The markup between the scripts, read by position, not by taking the scripts out of the text. */
+  let markup = '', at = 0;
+  for (const m of inline) { markup += html.slice(at, m.index); at = m.index + m[0].length; }
+  markup += html.slice(at);
+  if (/\son[a-z]{3,}\s*=\s*["']/i.test(markup)) throw new Error('the shell\'s markup carries an inline handler, which this policy refuses');
+  if (/javascript:/i.test(markup)) throw new Error('the shell\'s markup carries a javascript: URL, which this policy refuses');
   const hashes = inline.map(m => crypto.createHash('sha256').update(m[2], 'utf8').digest('base64'));
   if (html.split(CSP.META).length !== 2) throw new Error('the base <meta> policy is not in the shell exactly once');
   html = html.replace(CSP.META, CSP.scriptMeta(hashes));
