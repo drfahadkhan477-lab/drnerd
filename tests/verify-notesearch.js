@@ -114,22 +114,27 @@ try {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
       '/* ══════════════ Glass ══════════════'),
     route: cut('app/systole.html', "    :S.screen==='notesearch'?buildNoteSearch()", "    :S.screen==='echo'?buildEchoScreen()"),
-    doors: cut('app/systole.html', '      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"',
+    doors: cut('app/systole.html', '      <button class="icon-btn" data-action="goNoteSearch" title="Search your notes"',
       '      <!-- Study shortcuts end -->'),
+    /* The button names an action (docs/ROADMAP.md, E2), so the page's listener and its table come with it, as
+       verify-echo brings them: the real src/core/actions.js, filled into its slot, and ACTIONS as the page writes it,
+       installed on the document. */
+    actions: cut('app/systole.html', '@@SLOT[src:src/core/actions.js]@@', 'Actions.install(document,ACTIONS);', { inclusive: true }),
     css: cutStylesheet('.echo-studio{', '/* ── glass — why, in app/systole.html "Glass" ── */'),
   };
 } catch (e) { cutError = e.message; }
 
 head('search-your-notes is read from the app that ships');
-ok('its glue, its route, its way in and its css were each found once', !!pieces, cutError || 'four pieces');
+ok('its glue, its route, its way in, the page\'s listener and its css were each found once', !!pieces, cutError || 'five pieces');
 /* Non-vacuity: everything below drives what was cut. */
 ok('and each is whole: the module filled in, the screen routed, the button, the list',
    !!pieces && /function buildNoteSearch\(\)/.test(pieces.glue) && /NoteSearch\b/.test(pieces.glue) &&
-   /buildNoteSearch\(\)/.test(pieces.route) && /goNoteSearch\(\)/.test(pieces.doors) && /\.ns-list\{/.test(pieces.css),
+   /buildNoteSearch\(\)/.test(pieces.route) && /data-action="goNoteSearch"/.test(pieces.doors) &&
+   /goNoteSearch:\(\)=>goNoteSearch\(\),/.test(pieces.actions) && /\.ns-list\{/.test(pieces.css),
    pieces ? `glue ${pieces.glue.length}, doors ${pieces.doors.length}, css ${pieces.css.length}` : 'nothing cut');
 if (!pieces) { console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
 fs.writeFileSync(OUT, SCAFFOLD
-  .replace('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */', m => pieces.glue + '\n' + m)
+  .replace('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */', m => pieces.glue + '\n' + pieces.actions + '\n' + m)
   .replace("    S.screen==='echo'?buildEchoScreen()\n", m => m + pieces.route)
   .replace('      <div class="theme-wrap">', m => pieces.doors + m)
   .replace('.nav{color:#fff;height:var(--navh);display:flex;align-items:center;', m => pieces.css + m), 'utf8');
@@ -149,15 +154,15 @@ fs.writeFileSync(OUT, SCAFFOLD
      navbar carries it on every other screen. */
   await page.evaluate(() => { S.screen = 'echo'; render(); });
   const btn = await page.evaluate(() => {
-    const b = document.querySelector('.nav [onclick="goNoteSearch()"]');
+    const b = document.querySelector('.nav [data-action="goNoteSearch"]');
     return b ? { label: b.getAttribute('aria-label'), icon: (b.querySelector('[data-icon]') || {}).getAttribute
       ? b.querySelector('[data-icon]').getAttribute('data-icon') : null,
-      noEcho: !!document.querySelector('.nav') && !document.querySelector('.nav [onclick="goEcho()"]') } : null;
+      noEcho: !!document.querySelector('.nav') && !document.querySelector('.nav [onclick="goEcho()"], .nav [data-action="goEcho"]') } : null;
   });
   ok('the nav has a Search-your-notes button', !!btn && btn.label === 'Search your notes', btn ? btn.label : 'missing');
   ok('with the book glyph, evaluated rather than left as text', !!btn && btn.icon === 'book', btn ? String(btn.icon) : '');
   ok('and Echo is not in the bar beside it: Labs has it', !!btn && btn.noEcho);
-  await page.click('.nav [onclick="goNoteSearch()"]');
+  await page.click('.nav [data-action="goNoteSearch"]');
   const screen = await page.evaluate(() => ({ s: S.screen, field: !!document.querySelector('[data-ns-q]'),
     hint: (document.querySelector('.ns-hint') || {}).textContent || '' }));
   ok('it opens the notes search screen', screen.s === 'notesearch' && screen.field, screen.s);

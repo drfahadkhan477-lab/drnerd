@@ -490,7 +490,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     for (const [go, screen] of [['goStudy', 'study'], ['goNoteSearch', 'notesearch'], ['goEcho', 'echo']]) {
       await page.evaluate(g => window[g](), go);
       await onScreen(page, screen, { marker: '#navbar .nav' });
-      seen.push(await page.evaluate(() => S.screen + ':' + document.querySelectorAll('#navbar [onclick="goEcho()"]').length));
+      seen.push(await page.evaluate(() => S.screen + ':' + document.querySelectorAll('#navbar [onclick="goEcho()"], #navbar [data-action="goEcho"]').length));
     }
     ok('on Study, note search and Echo itself, the bar offers no Echo button', seen.every(x => /:0$/.test(x)) && seen.length === 3, seen.join());
     await page.context().close();

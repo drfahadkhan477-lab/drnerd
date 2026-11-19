@@ -196,7 +196,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
     /* The focus mode is the window's own, like whether it resumed a deck: another window turning it on does not hide the bar here, and the button
        here still says what this window is doing, so a press of it does what it says and not the opposite. */
-    const focusNow = () => B.evaluate(() => { const b = document.querySelector('[onclick="toggleFocusMode()"]'); return { mode: S.focusMode, bar: document.documentElement.hasAttribute('data-focus'), pressed: b ? b.getAttribute('aria-pressed') : 'no button' }; });
+    const focusNow = () => B.evaluate(() => { const b = document.querySelector('#navbar [data-action="toggleFocusMode"]'); return { mode: S.focusMode, bar: document.documentElement.hasAttribute('data-focus'), pressed: b ? b.getAttribute('aria-pressed') : 'no button' }; });
     const focusBefore = await focusNow();
     const heardBefore = await B.evaluate(() => window.__taken);
     await A.evaluate(() => { S.focusMode = true; save(); });

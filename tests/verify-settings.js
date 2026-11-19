@@ -47,7 +47,7 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await page.goto(URL);await booted(page);await quiet(page);
  await page.evaluate(()=>{startAdhocQuiz([POOL.find(q=>!q.bad)],null);});await quiet(page);
  await page.click('#settingsBtn');
- await check('Settings opens with reading, appearance and Apex sections',async()=>await page.evaluate(()=>{const d=document.querySelector('#generalSettings');return d.open&&d.querySelectorAll('section').length===3;}),async()=>{await page.evaluate(()=>{document.querySelector('#generalSettings section').remove()});},1);
+ await check('Settings opens with reading, appearance and Apex sections',async()=>await page.evaluate(()=>{const d=document.querySelector('#generalSettings');return !!d&&d.open&&d.querySelectorAll('section').length===3;}),async()=>{await page.evaluate(()=>{document.querySelector('#generalSettings section').remove()});},1);
  await page.selectOption('[name="layout"]','split');
  await check('layout preference does not reveal an unanswered explanation',async()=>await page.evaluate(()=>!S.answered&&!document.querySelector('.reveal-card')&&!document.querySelector('.reading-split')),async()=>{await page.evaluate(()=>{document.querySelector('.reading-question').insertAdjacentHTML('beforeend','<div class="reveal-card">Premature answer</div>')});},2);
  await page.evaluate(()=>closeSettings());await page.evaluate(()=>selectOpt(S.questions[S.qIdx].ci));await quiet(page);

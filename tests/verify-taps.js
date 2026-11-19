@@ -104,7 +104,7 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     ok('on Home, Apex is in the rail under the three tabs, and takes a press anywhere within 21 px of its centre',
        rail.length === 1 && rail[0].w >= 44 && rail[0].h >= 44 && rail[0].wrong === 0 &&
        Math.abs(place.fabLeft - place.tabLeft) < 40 && place.fabTop > place.tabBottom && place.fabTop < place.tabBottom + 60, JSON.stringify({ rail, place }));
-    const home = await page.evaluate(() => ({ bar: [...document.querySelectorAll('.nav .icon-btn')].map(b => b.getAttribute('onclick') || b.id),
+    const home = await page.evaluate(() => ({ bar: [...document.querySelectorAll('.nav .icon-btn')].map(b => b.getAttribute('data-action') || b.getAttribute('onclick') || b.id),
       rail: !!document.getElementById('homeEchoLink'), labs: !!document.querySelector('#homePage2 [data-action="goEcho"]') }));
     ok('and Echo is neither in the rail nor in the bar there, only on the Labs page', !home.rail && !home.bar.some(c => /goEcho/.test(c)) && home.labs, JSON.stringify(home));
   }
