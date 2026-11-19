@@ -161,7 +161,7 @@ head('the page: a review keeps every due card, and the mock block is arranged');
   ok('the review the page starts by itself is reviewDeck() over the queue, and Home\'s review of every card due is reviewDeck() over them',
      count("else if(mode==='due') qs=deck||reviewDeck(reviewQueue(20));") === 1 && count("reviewAllDue:()=>startQuiz(null,'due',reviewDeck(dueQuestions())),") === 1);
   ok('and startQuiz() does not shuffle a review afterwards, which would part each pair', count("if(!deck&&mode!=='due') qs=shuf(qs);") === 1 && count('if(!deck) qs=shuf(qs);') === 0);
-  ok('the mock block is the block MockExam dealt, arranged', count('const ids=Confusable.arrange(MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen}).map(id=>QBYID[id]).filter(Boolean)).map(q=>q.id);') === 1);
+  ok('the mock block is dealt by MockExam with Confusable.arrange as its order', count('const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen,arrange:qs=>Confusable.arrange(qs)});') === 1);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

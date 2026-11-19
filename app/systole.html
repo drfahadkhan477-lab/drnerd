@@ -5601,8 +5601,8 @@ function startMock(){
   if(S.mock){ resumeMock(); return; }
   try{ stopVoice(); }catch(_){}
   const ch=_mockCfg.ch&&CHAPTERS.includes(_mockCfg.ch)?_mockCfg.ch:null;
-  /* docs/ROADMAP.md, S6: the block MockExam dealt, its chapters taken in turn where it has more than one. */
-  const ids=Confusable.arrange(MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen}).map(id=>QBYID[id]).filter(Boolean)).map(q=>q.id);
+  /* docs/ROADMAP.md, S6: the block's chapters taken in turn where it has more than one. */
+  const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen,arrange:qs=>Confusable.arrange(qs)});
   if(!ids.length){ toast('There are no questions to build a block from.'); return; }
   S.mock=MockExam.start({ids,secPerQ:_mockCfg.sec,chapter:ch,now:Date.now()});
   S.mockView='q'; _mockSaid=mockSaidNow(); _mockArm=false; _mockLost=false; mockFresh();
