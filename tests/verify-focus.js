@@ -44,7 +44,7 @@ const ok = (label, cond, detail = '') => {
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
-const FOCUS_BTN = '#navbar [onclick="toggleFocusMode()"]';
+const FOCUS_BTN = '#navbar [data-action="toggleFocusMode"]';
 
 (async () => {
   const browser = await launch();
@@ -96,7 +96,10 @@ const FOCUS_BTN = '#navbar [onclick="toggleFocusMode()"]';
     ok('and --navh is reserving real space', /^[1-9]/.test(before.navh), before.navh);
     ok('with no focus attribute set', before.attr === null, String(before.attr));
 
-    await page.evaluate(() => toggleFocusMode());
+    /* Turned on by a tap on the bar's own button, which names an action (docs/ROADMAP.md, E2) heard by the page's one
+       listener on the document; so the checks below measure the button. Turned off further down by the function,
+       because the bar is gone while it is on. */
+    await page.click(FOCUS_BTN);
     await quiet(page);
 
     const after = await page.evaluate(() => ({

@@ -320,7 +320,13 @@ carries none either: its text sizes, widths, themes, reset, close and Apex
 memory are in `ACTIONS`, its two sliders in `INPUT_ACTIONS` and its layout in
 `CHANGE_ACTIONS` (`verify-settings` scans the open dialog for any `on*`
 attribute and taps, types into or chooses from each control; `verify-theme`
-taps a theme). Next: the other screens, one at a time.
+taps a theme). The bar along the top (`buildNav()`) carries none: its brand is
+`goHome` and its search `openSearch`, and focus mode, the notes search, Home's
+light and dark button (which asks which the theme is when tapped) and Settings
+are in `ACTIONS` (`verify-theme` scans the bar on Home and on a question and taps
+its brand, search and light and dark button; `verify-focus` taps focus mode,
+`verify-notesearch` the notes search and `verify-settings` Settings). Next: the
+other screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express

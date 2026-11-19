@@ -5442,6 +5442,12 @@ const ACTIONS={
   resetDisplaySettings:()=>resetDisplaySettings(),
   closeSettings:()=>closeSettings(),
   settingsMemory:()=>{closeSettings();goMemory();},
+  /* the bar along the top (buildNav()): its brand is goHome above and its search openSearch. Home's light and dark
+     button asks which the theme is when it is tapped, as its handler did. */
+  toggleFocusMode:()=>toggleFocusMode(),
+  goNoteSearch:()=>goNoteSearch(),
+  toggleLightDark:()=>setTheme(themeIsDark()?'daylight':'midnight'),
+  openSettings:()=>openSettings(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5643,7 +5649,7 @@ function mockMount(){
     /* The bar was just drawn, with its three ways to the answers. They are taken out of it rather than drawn conditionally in
        buildNav, whose markup suites cut out of this file by its text (verify-notesearch, verify-echo). */
     const bar=document.getElementById('navbar');
-    if(bar) bar.querySelectorAll('[onclick="openSearch()"],[onclick="goNoteSearch()"],[onclick="goEcho()"]').forEach(b=>b.remove());
+    if(bar) bar.querySelectorAll('[data-action="openSearch"],[data-action="goNoteSearch"],[data-action="goEcho"],[onclick="openSearch()"],[onclick="goNoteSearch()"],[onclick="goEcho()"]').forEach(b=>b.remove());
     mockStartTicker();
   } else {
     if(h.hasAttribute('data-mock')){
@@ -6038,7 +6044,7 @@ function buildNav(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):null;
   const col=S.screen==='home'?(p===null?'var(--teal-ink)':p>=70?'var(--green-ink)':p>=50?'var(--amber-ink)':'var(--red-ink)'):(p===null?'#5EEAD4':p>=70?'#34D399':p>=50?'#FBBF24':'#F87171');
   return `<nav class="nav">
-    <div class="nav-brand" onclick="goHome()" role="button" tabindex="0" aria-label="Home">
+    <div class="nav-brand" data-action="goHome" role="button" tabindex="0" aria-label="Home">
       <div class="nav-logo">${icon("heart-pulse")}</div>
       <div>
         <div class="nav-title">Systole</div>
@@ -6053,17 +6059,17 @@ function buildNav(){
         <span style="opacity:.6">·</span>
         <span style="color:${col}">${p}%</span>
       </div>`:''}
-      <button class="icon-btn${S.screen==='home'?' atlas-search':''}" onclick="openSearch()" title="Search questions by topic" aria-label="Search by topic">${icon("search")}${S.screen==='home'?'<span>Search questions, topics, or figures…</span>':''}</button>
-      ${S.screen==='quiz'?`<button class="icon-btn" onclick="toggleFocusMode()" title="Focus mode"
+      <button class="icon-btn${S.screen==='home'?' atlas-search':''}" data-action="openSearch" title="Search questions by topic" aria-label="Search by topic">${icon("search")}${S.screen==='home'?'<span>Search questions, topics, or figures…</span>':''}</button>
+      ${S.screen==='quiz'?`<button class="icon-btn" data-action="toggleFocusMode" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
         aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
       ${S.screen!=='home'?`
-      <button class="icon-btn" onclick="goNoteSearch()" title="Search your notes"
+      <button class="icon-btn" data-action="goNoteSearch" title="Search your notes"
         aria-label="Search your notes">${icon('book')}</button>
       <!-- Study shortcuts end -->
       `:''}
-      ${S.screen==='home'?`<button class="icon-btn" onclick="setTheme(themeIsDark()?'daylight':'midnight')" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
-      <button class="icon-btn" onclick="openSettings()" title="Settings" aria-label="Settings"
+      ${S.screen==='home'?`<button class="icon-btn" data-action="toggleLightDark" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
+      <button class="icon-btn" data-action="openSettings" title="Settings" aria-label="Settings"
         aria-haspopup="dialog" id="settingsBtn">${icon('settings')}</button>
     </div>
   </nav>`;
