@@ -631,8 +631,17 @@ and a venous compliance of 40 to 60 mL/mmHg (with the stressed volume they hold
 added back). That resistance drops 11 mmHg between the veins and the LA at a
 normal output, where the real gradient is one or two, and the normal LA mean
 falls to about zero and tamponade loses its pulsus. Within this structure the
-gap cannot be closed by its numbers; it needs a mechanism (pulmonary venous
-inertance, or septal mechanics) and is the *Fable* modelling still open here.
+gap cannot be closed by its numbers. Two mechanisms were then tried on every
+preset and VALIDATION row. Inspiratory pooling in the lungs (their vessels'
+compliance rising with inspiration) raises constriction's E-wave fall to 20%,
+but the normal heart's to 12%, past its textbook ceiling of about 10%, so it
+does not tell the two apart. A slower pulmonary venous refill (compliance 40 to
+80 mL/mmHg, normal resistance, the volume added back) separates them cleanly
+(constriction 11 to 15%, normal under 1%), but falls short of a quarter and
+moves MS, HFpEF and tamponade out of their rows. An abdominal push on venous
+return raised the normal RA on inspiration, which is wrong. One mechanism not
+yet tried is a septum with its own mechanics, so that a filling RV pushes into
+the LV; that is the modelling still open here.
 Next, each the owner's to choose: that model; Normal from the engine (the PV
 loop's interventions act on physio.js's loop, so Normal and they would part);
 the 3D heart (driven by rhythm activation, not physio, on Home, and edited by
