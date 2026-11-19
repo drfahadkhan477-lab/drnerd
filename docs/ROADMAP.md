@@ -570,9 +570,14 @@ only through a pericardium that passes it on. Each lesion is a change from
 normal, run to a steady state and held by `Circulation.VALIDATION` to its
 textbook ranges (verify-circulation-pure). Not yet reproduced: constriction's
 breathing signs (the mitral E wave falls a few percent where the textbook has a
-quarter or more), so constriction is held to its catheter signs alone. Next:
-that gap, then the Wiggers diagram, PV loop, sounds, Doppler and 3D heart
-driven from it, one view per change.
+quarter or more), so constriction is held to its catheter signs alone.
+*The Wiggers view, wired:* `Circulation.cycle(preset)` gives one steady beat
+with the chest held still, its valve events measured where the pressures cross
+and its phases between them. The Wiggers view offers each lesion as a chip and
+draws its beat, with axes sized to it; Normal stays physio.js's drawn cycle
+(verify-physio, verify-rhythmlab-pure). Next: the constriction gap, then the PV
+loop, sounds, Doppler and the 3D heart, one view per change, and Normal from
+the engine once every view reads it.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them

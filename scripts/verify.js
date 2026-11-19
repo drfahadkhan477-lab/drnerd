@@ -233,7 +233,7 @@ const SUITES = [
   ['topicrun-pure', 'questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair'],
   /* Look-alikes side by side (docs/ROADMAP.md, S6): the two things an Apex gap memory names, paired in review. */
   /* One physiology engine (docs/ROADMAP.md, S8): the lesions made in one circulation, held to textbook ranges. */
-  ['circulation-pure', 'one circulation of elastance chambers, Bernoulli valves and Windkessel beds makes each lesion fall in its textbook ranges, keeps its blood, settles, and moves a valve only where two pressures cross'],
+  ['circulation-pure', 'one circulation of elastance chambers, Bernoulli valves and Windkessel beds makes each lesion fall in its textbook ranges, keeps its blood, settles, and moves a valve only where two pressures cross, and hands the views one beat whose events are those crossings'],
   ['confusable-pure', 'a gap Apex noted is read as the two things it names; a review deals a question on the other side straight after one on a side, keeps every due card, and takes chapters in turn, as the mock block does'],
   /* Voice mode's logic: what is read, what is heard, what happens next. */
   ['voice-pure', 'a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary'],

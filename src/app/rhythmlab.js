@@ -14,6 +14,8 @@
        labKind                 the rhythm that is chosen
        PHYSIO_VIEWS, PHYSIO_SPEEDS, physioView, physioSlow, physioIv
                                the cycle's views and speeds, and which view, speed and intervention are chosen
+       PHYSIO_LESIONS, physioLesion
+                               the lesions the Wiggers view can draw (docs/ROADMAP.md, S8), and the one chosen
        physioIsPlaying         the page's function that says whether the cycle is playing. It is called, not
                                read: on its first call the page decides from the device's Reduce Motion setting
        Physio                  src/core/physio.js, for the interventions of the PV loop; used in that view only
@@ -30,7 +32,8 @@
         describes it. A chip for every rhythm, in RHYTHM_KEYS' order, the chosen one marked.
      2. The cycle panel is headed with the chosen view's name, and falls back to the first view when what
         is stored names none. Play or Pause says what a tap would do. One speed and one view are marked.
-        The interventions are offered in the PV loop and nowhere else.
+        The interventions are offered in the PV loop and nowhere else; the lesions in the Wiggers view and
+        nowhere else, the chosen one marked.
      3. The 12-lead panel has a canvas only for a rhythm that has a modelled 12-lead. Any other rhythm gets
         a note that says why: a normal trace under an abnormal name teaches the wrong pattern.
      4. Every panel says it is a model and not a recording.
@@ -44,7 +47,7 @@
 'use strict';
 
 function physioHtml(p){
-  const {PHYSIO_VIEWS,PHYSIO_SPEEDS,physioView,physioSlow,physioIv,physioIsPlaying,Physio,e}=p;
+  const {PHYSIO_VIEWS,PHYSIO_SPEEDS,PHYSIO_LESIONS,physioView,physioSlow,physioIv,physioLesion,physioIsPlaying,Physio,e}=p;
   const v=PHYSIO_VIEWS.find(x=>x[0]===physioView)||PHYSIO_VIEWS[0];
   return `<div class="panel physio-panel">
     <div class="panel-h"><span>Cardiac cycle · ${e(v[1])}</span>
@@ -56,6 +59,8 @@ function physioHtml(p){
            title="${n===1?'Real time':'\u0024{label} of real time'}">${e(label)}</button>`).join('')}</div>
     <div class="physio-chips">${PHYSIO_VIEWS.map(([k,label])=>
       `<button class="chip${physioView===k?' hot':''}" data-physio-view="${k}">${e(label)}</button>`).join('')}</div>
+    ${v[0]==='wiggers'&&PHYSIO_LESIONS?`<div class="physio-chips lesion-chips">${PHYSIO_LESIONS.map(([k,label])=>
+      `<button class="chip mini${physioLesion===k?' hot':''}" data-physio-lesion="${k}">${e(label)}</button>`).join('')}</div>`:''}
     <div class="physio-stage"><canvas id="physioCanvas" aria-label="Cardiac cycle diagram"></canvas></div>
     ${physioView==='pv'?`<div class="physio-chips iv-chips">${Physio.INTERVENTIONS.map(iv=>
       `<button class="chip${physioIv===iv.id?' hot':''}" data-physio-iv="${iv.id}">${e(iv.label)}</button>`).join('')}</div>`:''}

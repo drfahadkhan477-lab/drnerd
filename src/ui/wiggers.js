@@ -75,6 +75,10 @@ function mount(canvas, opts) {
        the diagram; now that the diagram is the only thing on the panel, it has
        to announce its own time. */
     onFrame: typeof opts.onFrame === 'function' ? opts.onFrame : null,
+    /* The beat the Wiggers view draws: null for physio.js's drawn cycle, or a Circulation.cycle() (a lesion
+       made in src/core/circulation.js, docs/ROADMAP.md S8). The other views draw physio.js until each is
+       wired to it in turn. */
+    cycle: opts.cycle || null,
     zones: [],            // hit regions, in CSS px
     hoverT: null,
   };
@@ -198,9 +202,12 @@ function mount(canvas, opts) {
     if (unit) text(unit, B.x - 6, B.y + 4, p.dim, 9, 600, 'right', true);
     ctx.restore();
   }
+  /* What the Wiggers view reads: the lesion's beat when one is set, else physio.js. */
+  const D = () => (S.view === 'wiggers' && S.cycle) ? S.cycle : Ph;
   function phaseBands(B, p) {
-    for (const ph of Ph.PHASES) {
-      const i = Ph.PHASES.indexOf(ph);
+    const PH = D().PHASES;
+    for (const ph of PH) {
+      const i = PH.indexOf(ph);
       if (i % 2) continue;
       ctx.fillStyle = p.band;
       ctx.fillRect(xAt(B, ph.from), B.y, (ph.to - ph.from) * B.w, B.h);
@@ -208,7 +215,7 @@ function mount(canvas, opts) {
   }
   function eventLines(B, p, side) {
     ctx.save(); ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
-    for (const ev of Ph.EVENTS) {
+    for (const ev of D().EVENTS) {
       if (side && ev.side !== side) continue;
       ctx.strokeStyle = p.gridB;
       const x = Math.round(xAt(B, ev.at)) + .5;
@@ -263,12 +270,19 @@ function mount(canvas, opts) {
     }
     /* R belongs just after atrial systole begins — the QRS starts the moment
        the ventricle does, which is what puts it at the foot of IVC. */
-    const ms = (Ph.wrap(t - 0.075) * rr) + rOffset + rr * 8;
+    /* A lesion's beat carries its own excitation time; its R peak is 40 ms after. */
+    const rPeak = (S.view === 'wiggers' && S.cycle) ? S.cycle.rAt + 0.04 / secs() : 0.075;
+    const ms = (Ph.wrap(t - rPeak) * rr) + rOffset + rr * 8;
     return L.sample('II', ms, 'sinus', S.hr);
   }
 
   /* ════════════════════ view: the Wiggers diagram ════════════════════════ */
   function drawWiggers(p) {
+    const Q = D();
+    /* Axes that hold the beat: physio.js's fixed 0-130 mmHg and 40-130 mL, or as far as a lesion reaches. */
+    const pHi = Q === Ph ? 130 : Math.max(130, Math.ceil(Q.max.p / 20) * 20), pStep = pHi > 160 ? 40 : 20;
+    const vLo = Q === Ph ? 40 : Math.max(0, Math.floor((Q.min.v - 10) / 10) * 10);
+    const vHi = Q === Ph ? 130 : Math.ceil((Q.max.v + 10) / 10) * 10, vStep = Math.max(10, Math.round((vHi - vLo) / 3 / 10) * 10);
     const { L, R } = MARGINS.wiggers, TOP = 18, BOT = 64;
     const w = W - L - R;
     const gap = 10;
@@ -285,43 +299,43 @@ function mount(canvas, opts) {
     for (const B of [Becg, Bp, Bv]) { phaseBands(B, p); eventLines(B, p); }
 
     /* pressures */
-    vaxis(Bp, 0, 130, 20, p, 'mmHg');
-    trace(Bp, Ph.laPressure, 0, 130, p.la, 1.9);
-    trace(Bp, Ph.aoPressure, 0, 130, p.ao, 2.4);
-    trace(Bp, Ph.lvPressure, 0, 130, p.lv, 2.4);
+    vaxis(Bp, 0, pHi, pStep, p, 'mmHg');
+    trace(Bp, Q.laPressure, 0, pHi, p.la, 1.9);
+    trace(Bp, Q.aoPressure, 0, pHi, p.ao, 2.4);
+    trace(Bp, Q.lvPressure, 0, pHi, p.lv, 2.4);
     /* Shade the gradient that drives ejection: the only interval in the cycle
        when the ventricle is pushing blood into the aorta rather than at it. */
     ctx.save();
     ctx.beginPath();
     const n = 90;
-    for (let i = 0; i <= n; i++) { const t = Ph.T.ao + (Ph.T.ac - Ph.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Ph.lvPressure(t), 0, 130)); }
-    for (let i = n; i >= 0; i--) { const t = Ph.T.ao + (Ph.T.ac - Ph.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Ph.aoPressure(t), 0, 130)); }
+    for (let i = 0; i <= n; i++) { const t = Q.T.ao + (Q.T.ac - Q.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Q.lvPressure(t), 0, pHi)); }
+    for (let i = n; i >= 0; i--) { const t = Q.T.ao + (Q.T.ac - Q.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Q.aoPressure(t), 0, pHi)); }
     ctx.closePath(); ctx.fillStyle = p.lv; ctx.globalAlpha = .10; ctx.fill();
     ctx.restore();
 
-    text('Aorta', xAt(Bp, .60), yAt(Bp, Ph.aoPressure(.60), 0, 130) - 11, p.ao, 10.5, 700);
-    text('LV', xAt(Bp, .22), yAt(Bp, Ph.lvPressure(.22), 0, 130) - 11, p.lv, 10.5, 700);
-    text('LA', xAt(Bp, .47), yAt(Bp, Ph.laPressure(.47), 0, 130) - 10, p.la, 10.5, 700);
+    text('Aorta', xAt(Bp, .60), yAt(Bp, Q.aoPressure(.60), 0, pHi) - 11, p.ao, 10.5, 700);
+    text('LV', xAt(Bp, .22), yAt(Bp, Q.lvPressure(.22), 0, pHi) - 11, p.lv, 10.5, 700);
+    text('LA', xAt(Bp, .47), yAt(Bp, Q.laPressure(.47), 0, pHi) - 10, p.la, 10.5, 700);
 
     /* volume */
-    vaxis(Bv, 40, 130, 30, p, 'mL');
-    trace(Bv, Ph.lvVolume, 40, 130, p.vol, 2.4, { fill: .10 });
-    text('LV volume', xAt(Bv, .70), yAt(Bv, Ph.lvVolume(.70), 40, 130) - 11, p.vol, 10.5, 700);
+    vaxis(Bv, vLo, vHi, vStep, p, 'mL');
+    trace(Bv, Q.lvVolume, vLo, vHi, p.vol, 2.4, { fill: .10 });
+    text('LV volume', xAt(Bv, .70), yAt(Bv, Q.lvVolume(.70), vLo, vHi) - 11, p.vol, 10.5, 700);
     /* Stroke volume, named on the axis it is measured from. */
     ctx.save();
     ctx.strokeStyle = p.vol; ctx.globalAlpha = .55; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
-    for (const v of [Ph.EDV, Ph.ESV]) {
-      const yy = Math.round(yAt(Bv, v, 40, 130)) + .5;
+    for (const v of [Q.EDV, Q.ESV]) {
+      const yy = Math.round(yAt(Bv, v, vLo, vHi)) + .5;
       ctx.beginPath(); ctx.moveTo(Bv.x, yy); ctx.lineTo(Bv.r, yy); ctx.stroke();
     }
     ctx.restore();
-    const yEdv = yAt(Bv, Ph.EDV, 40, 130), yEsv = yAt(Bv, Ph.ESV, 40, 130);
+    const yEdv = yAt(Bv, Q.EDV, vLo, vHi), yEsv = yAt(Bv, Q.ESV, vLo, vHi);
     ctx.save();
     ctx.strokeStyle = p.vol; ctx.lineWidth = 1.2;
     const ax = Bv.r - 26;
     ctx.beginPath(); ctx.moveTo(ax, yEdv); ctx.lineTo(ax, yEsv); ctx.stroke();
     ctx.restore();
-    text('SV 70', Bv.r - 22, (yEdv + yEsv) / 2, p.vol, 9.5, 700, 'left', true);
+    text('SV ' + Math.round(Q.EDV - Q.ESV), Bv.r - 22, (yEdv + yEsv) / 2, p.vol, 9.5, 700, 'left', true);
 
     /* ECG */
     vaxis(Becg, -0.6, 1.6, 100, p, '');
@@ -330,7 +344,7 @@ function mount(canvas, opts) {
 
     /* heart sounds, on the events that make them */
     let lastSx = -99;
-    for (const ev of Ph.EVENTS) {
+    for (const ev of Q.EVENTS) {
       if (!ev.sound) continue;
       const x = xAt(Becg, ev.at);
       const stack = x - lastSx < 16;
@@ -344,8 +358,8 @@ function mount(canvas, opts) {
 
     /* phases */
     S.zones = [];
-    const cur = Ph.phaseAt(S.t);
-    for (const ph of Ph.PHASES) {
+    const cur = Q.phaseAt(S.t);
+    for (const ph of Q.PHASES) {
       const x = xAt(Bph, ph.from), pw = (ph.to - ph.from) * Bph.w;
       const on = ph.id === cur.id;
       ctx.save();
@@ -364,7 +378,7 @@ function mount(canvas, opts) {
       }
     }
     /* valve events along the bottom */
-    for (const ev of Ph.EVENTS) {
+    for (const ev of Q.EVENTS) {
       if (ev.side !== 'L') continue;
       const x = xAt(Bph, ev.at);
       text(ev.id.toUpperCase(), x, Bph.b + 11, p.dim, 8.5, 700, 'center', true);
@@ -378,7 +392,7 @@ function mount(canvas, opts) {
     for (const B of [Becg, Bp, Bv]) cursor(B, p);
 
     /* the live readout — the reason this is a model and not a picture */
-    const s = Ph.sample(S.t);
+    const s = Q.sample(S.t);
     const cw = (W - L - R) / 4;
     const ry = Bph.b + 36;
     const rd = [
@@ -939,6 +953,11 @@ function mount(canvas, opts) {
     setTime(t) { S.t = Ph.wrap(t); draw(); return api; },
     time: () => S.t,
     setIntervention(id) { S.iv = id; draw(); return api; },
+    /* The beat the Wiggers view draws (a Circulation.cycle(), or null for physio.js), and the phase that view
+       is in now, from whichever it draws. */
+    setCycle(c) { S.cycle = c || null; rOffset = null; draw(); return api; },
+    cycle: () => S.cycle,
+    phaseNow: () => D().phaseAt(S.t),
     intervention: () => S.iv,
     play() { S.playing = true; S.last = 0; return api; },
     pause() { S.playing = false; return api; },

@@ -83,6 +83,30 @@ head('valves move where pressures cross, and only then');
   ok('a regurgitant valve runs backward, through its own orifice, while the gradient is reversed', ar.qav.some(q => q < -1) && ar.qav.every((q, i) => !(q < 0) || ar.plv[i] < ar.pao[i]), 'least ' + Math.min.apply(null, ar.qav).toFixed(0) + ' mL/s');
 }
 
+head('one beat for the views: its events are crossings, its phases tile the beat');
+{
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
+  for (const name of Object.keys(C.PRESETS)) {
+    const y = C.cycle(name), T = y.T;
+    /* Each event, read where it was measured: the two pressures are equal there, to half a mmHg. */
+    const pairs = [['mc', y.lvPressure, y.laPressure], ['mo', y.lvPressure, y.laPressure], ['ao', y.lvPressure, y.aoPressure], ['ac', y.lvPressure, y.aoPressure]];
+    const off = pairs.map(([k, a, b]) => [k, Math.abs(a(T[k]) - b(T[k]))]);
+    const tiles = y.PHASES.every((ph, i) => ph.from <= ph.to && (i === 0 ? ph.from === 0 : ph.from === y.PHASES[i - 1].to)) && y.PHASES[y.PHASES.length - 1].to === 1;
+    ok(`${name}: the left heart's four events are where its pressures cross, in the order mitral shuts, aortic opens, aortic shuts, mitral opens, and the seven phases tile the beat`,
+       y.ok && off.every(([, d]) => d < 0.5) && T.mc < T.ao && T.ao < T.ac && T.ac < T.mo && tiles, off.map(([k, d]) => k + ' ' + d.toFixed(2)).join(' ') + (tiles ? '' : ' · phases do not tile'));
+  }
+  const n = C.cycle('normal');
+  const flat = (a, b) => { let most = 0; for (let i = 1; i <= 40; i++) { const t0 = a + (b - a) * (i - 1) / 40, t1 = a + (b - a) * i / 40; most = Math.max(most, Math.abs(n.lvVolume(t1) - n.lvVolume(t0))); } return most; };
+  ok('between the valves, the LV\'s volume holds: isovolumetric contraction and relaxation are flat', flat(n.T.mc + 0.002, n.T.ao - 0.002) < 0.05 && flat(n.T.ac + 0.002, n.T.mo - 0.002) < 0.05,
+     flat(n.T.mc + 0.002, n.T.ao - 0.002).toFixed(3) + ' and ' + flat(n.T.ac + 0.002, n.T.mo - 0.002).toFixed(3) + ' mL a step');
+  const ms = C.cycle('ms');
+  ok('in mitral stenosis the mitral valve stays open to the end of the beat: there is no diastasis', ms.T.dias === 1 && ms.phaseAt(0.99).id === 'rapid_fil', ms.T.dias + ' · ' + ms.phaseAt(0.99).id);
+  ok('in aortic stenosis the LV peaks far above the aorta', C.cycle('as').max.p > 180 && C.cycle('as').lvPressure(C.cycle('as').T.peak) - C.cycle('as').aoPressure(C.cycle('as').T.peak) > 40);
+  ok('a beat\'s stroke volume and ejection fraction are its run\'s', near(n.SV, n.EDV - n.ESV, 1e-9) && near(n.EF, n.SV / n.EDV, 1e-9) && n.SV > 60);
+  ok('sample() gives the four readouts at a moment', (() => { const x = n.sample(0.5); return ['lvP', 'aoP', 'laP', 'lvV'].every(k => Number.isFinite(x[k])) && x.lvV === n.lvVolume(0.5); })());
+  ok('the same lesion asked again is the same beat, not a second run', C.cycle('ar') === C.cycle('ar'));
+}
+
 head('the presets are changes from normal, and nothing else');
 {
   const before = JSON.stringify(C.NORMAL);

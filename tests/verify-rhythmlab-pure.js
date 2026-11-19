@@ -47,10 +47,12 @@ const RHYTHMS = () => ({ sinus: { name: 'Sinus rhythm', hr: 68, desc: 'Normal.' 
 const KEYS = ['vt', 'sinus', 'asys', 'afib'];
 const VIEWS = [['wiggers', 'Wiggers'], ['pv', 'PV loop'], ['flow', 'Flow']];
 const SPEEDS = [[1, '1×'], [2, '½×'], [4, '¼×']];
+const LESIONS = [['normal', 'Normal'], ['as', 'AS<b>'], ['tamponade', 'Tamponade']];
 const PHYSIO = { INTERVENTIONS: [{ id: 'base', label: 'Baseline' }, { id: 'pre', label: 'More preload' }, { id: 'ino', label: 'Inotrope' }] };
 const page = o => Object.assign({
   RHYTHMS: RHYTHMS(), RHYTHM_KEYS: KEYS.slice(), labKind: 'sinus',
   PHYSIO_VIEWS: VIEWS.map(v => v.slice()), PHYSIO_SPEEDS: SPEEDS.map(v => v.slice()), physioView: 'wiggers', physioSlow: 2, physioIv: 'base',
+  PHYSIO_LESIONS: LESIONS.map(v => v.slice()), physioLesion: 'normal',
   physioIsPlaying: () => true, Physio: PHYSIO, LEAD12_MAP: { sinus: 'sinus', afib: 'afib' }, twelveLead: null,
   leadCardHtml: id => '[card ' + id + ']', e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']',
 }, o);
@@ -138,8 +140,8 @@ head('it reads what it is given, and changes nothing');
     defineProperty(t, k) { wrote.push('define ' + String(k)); return true; },
   });
   const drawn = [page({ labKind: 'sinus', physioView: 'pv', twelveLead: 'V1' }), page({ labKind: 'vt', physioView: 'flow' })].map(p => draw(watched(p)));
-  const WANT = ['LEAD12_MAP', 'PHYSIO_SPEEDS', 'PHYSIO_VIEWS', 'Physio', 'RHYTHMS', 'RHYTHM_KEYS', 'e', 'icon', 'labKind', 'leadCardHtml', 'physioIsPlaying', 'physioIv', 'physioSlow', 'physioView', 'twelveLead'];
-  ok('of what the page has, it asks for fifteen names and no other', drawn.every(h => !h.startsWith('THREW')) && J([...read].sort()) === J(WANT), [...read].sort().join(' '));
+  const WANT = ['LEAD12_MAP', 'PHYSIO_LESIONS', 'PHYSIO_SPEEDS', 'PHYSIO_VIEWS', 'Physio', 'RHYTHMS', 'RHYTHM_KEYS', 'e', 'icon', 'labKind', 'leadCardHtml', 'physioIsPlaying', 'physioIv', 'physioLesion', 'physioSlow', 'physioView', 'twelveLead'];
+  ok('of what the page has, it asks for seventeen names and no other', drawn.every(h => !h.startsWith('THREW')) && J([...read].sort()) === J(WANT), [...read].sort().join(' '));
   ok('and sets, deletes and defines nothing on it', drawn.every(h => !h.startsWith('THREW')) && wrote.length === 0, wrote.join(', ') || 'nothing');
   /* Frozen all the way down: in a strict module a write throws, and draw() then says THREW. */
   const deep = o => { Object.values(o).forEach(v => { if (v && typeof v === 'object') deep(v); }); return Object.freeze(o); };
@@ -150,6 +152,17 @@ head('it reads what it is given, and changes nothing');
   ok('and the rhythms and the lists are as they were, in the same order', J([given.RHYTHMS, given.RHYTHM_KEYS, given.PHYSIO_VIEWS, given.PHYSIO_SPEEDS, given.LEAD12_MAP]) === J([before.RHYTHMS, before.RHYTHM_KEYS, before.PHYSIO_VIEWS, before.PHYSIO_SPEEDS, before.LEAD12_MAP]));
 }
 
+head('the lesions: offered in the Wiggers view alone (docs/ROADMAP.md, S8)');
+{
+  const lesions = h => [...h.matchAll(/<button class="chip mini( hot)?" data-physio-lesion="([^"]*)">([^<]*(?:<b>)?[^<]*)<\/button>/g)].map(m => [m[2], m[3], !!m[1]]);
+  const w = draw(page({ physioLesion: 'as' }), 'physioHtml');
+  ok('in the Wiggers view, a chip for each lesion in order, its name through e(), the chosen one alone marked',
+     J(lesions(w)) === J([['normal', 'E(Normal)', false], ['as', 'E(AS<b>)', true], ['tamponade', 'E(Tamponade)', false]]), J(lesions(w)));
+  ok('above the canvas, in a row of their own', w.indexOf('lesion-chips') > 0 && w.indexOf('lesion-chips') < w.indexOf('id="physioCanvas"'));
+  ok('and in no other view', ['pv', 'flow'].every(v => !draw(page({ physioView: v }), 'physioHtml').includes('data-physio-lesion')));
+  ok('a page with no lesions to offer draws none, and does not throw', (() => { const h = draw(page({ PHYSIO_LESIONS: undefined }), 'physioHtml'); return !h.startsWith('THREW') && !h.includes('lesion-chips'); })());
+}
+
 head('the page hands over what it has, and keeps what is chosen');
 {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
@@ -157,7 +170,7 @@ head('the page hands over what it has, and keeps what is chosen');
   const raw = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
   const shell = blankComments(raw);
   const count = text => shell.split(text).length - 1;
-  const LINE = 'function buildLab(){ return RhythmLabScreen.screenHtml({RHYTHMS,RHYTHM_KEYS,labKind,PHYSIO_VIEWS,PHYSIO_SPEEDS,physioView,physioSlow,physioIv,physioIsPlaying,\n'
+  const LINE = 'function buildLab(){ return RhythmLabScreen.screenHtml({RHYTHMS,RHYTHM_KEYS,labKind,PHYSIO_VIEWS,PHYSIO_SPEEDS,PHYSIO_LESIONS,physioView,physioSlow,physioIv,physioLesion,physioIsPlaying,\n'
              + '  Physio:typeof Physio!==\'undefined\'?Physio:undefined,LEAD12_MAP,twelveLead,leadCardHtml,e,icon}); }';
   ok('buildLab() is one call: the rhythms and which is chosen, the cycle\'s choices and the function that says whether it plays, Physio if the page has it, the leads, and the helpers',
      count(LINE) === 1 && count('function buildLab(') === 1, `${count(LINE)} such call(s), ${count('function buildLab(')} declaration(s)`);
@@ -186,8 +199,9 @@ head('the page hands over what it has, and keeps what is chosen');
   ok('the six elements the page\'s mounts look up by id are in the markup under those names, and it names no other but physioModel',
      J(ids) === J(MOUNTED.concat('physioModel').sort()) && MOUNTED.every(lookedUp) && !lookedUp('physioModel'),
      ids.map(i => i + (lookedUp(i) ? '' : ' (not looked up)')).join(' '));
-  const datas = [...new Set([...all.matchAll(/\b(data-physio-[a-z]+)\b/g)].map(m => m[1]))].sort();
-  ok('and every data attribute on a cycle chip is one the page binds a tap to', J(datas) === J(['data-physio-iv', 'data-physio-play', 'data-physio-slow', 'data-physio-view']) && datas.every(d => count('querySelectorAll(\'[' + d + ']\')') > 0),
+  const wig = draw(page({ physioView: 'wiggers' }));
+  const datas = [...new Set([...(all + wig).matchAll(/\b(data-physio-[a-z]+)\b/g)].map(m => m[1]))].sort();
+  ok('and every data attribute on a cycle chip, in the PV loop and the Wiggers view, is one the page binds a tap to', J(datas) === J(['data-physio-iv', 'data-physio-lesion', 'data-physio-play', 'data-physio-slow', 'data-physio-view']) && datas.every(d => count('querySelectorAll(\'[' + d + ']\')') > 0),
      datas.map(d => d + ':' + count('querySelectorAll(\'[' + d + ']\')')).join(' '));
 
   ok('which rhythm is chosen is still the page\'s to keep', count('let labMon=null, labKind=\'sinus\';') === 1);
@@ -199,7 +213,7 @@ head('the page hands over what it has, and keeps what is chosen');
   const whole = (from, to) => { const a = shell.indexOf(from); if (a < 0 || shell.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = shell.indexOf(to, a); return raw.slice(a, b + to.length); };
   const file = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
-    whole('const LEAD12_MAP={', '};'), whole('let physioPlaying=null;', '\n'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n}')].join('\n');
+    whole('const PHYSIO_LESIONS=[', '];'), whole('let physioLesion=', '})();'), whole('const LEAD12_MAP={', '};'), whole('let physioPlaying=null;', '\n'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n}')].join('\n');
   const world = (state, opts) => {
     const ctx = { RHYTHMS: { sinus: { name: 'Sinus <rhythm>', hr: 68, desc: 'Normal & regular' }, vt: { name: 'VT', hr: 180, desc: 'Fast' } }, RHYTHM_KEYS: ['sinus', 'vt'] };
     ctx.window = ctx; if (opts && opts.reduce !== undefined) ctx.matchMedia = () => ({ matches: opts.reduce });

@@ -53,8 +53,8 @@ const NORMAL = {
      rise to its peak and to fall back. */
   lv: { ees: 2.8, vd: 5, p0: 0.6, lam: 0.033, v0: 35, tr: 0.30, td: 0.15 },
   rv: { ees: 0.60, vd: 20, p0: 0.5, lam: 0.030, v0: 40, tr: 0.30, td: 0.15 },
-  la: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.040, v0: 15, tr: 0.09, td: 0.09 },
-  ra: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.035, v0: 15, tr: 0.09, td: 0.09 },
+  la: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.040, v0: 15, tr: 0.15, td: 0.12 },
+  ra: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.035, v0: 15, tr: 0.15, td: 0.12 },
   septum: 0.05,           // share of each ventricle's passive pressure felt by the other
   /* zc: the root's characteristic impedance; ca, r: the arterial compliance and resistance; cv, rv: the
      venous compliance and the resistance to return. */
@@ -357,6 +357,99 @@ const VALIDATION = [
   ['constriction', 'earlyFill', 0.75, I, 'dip and plateau: nearly all filling in early diastole'],
 ];
 
-root.Circulation = { simulate, measure, params, PRESETS, NORMAL, VALIDATION };
+/* ── one beat, for the views ──────────────────────────────────────────────────────────────────────────
+   cycle(preset) runs the preset with the chest held still, to a steady state, and hands back one beat in the
+   shape the views read physio.js in: each trace as a function of the cycle fraction t (0 is atrial
+   excitation), the eight valve events, the seven left-heart phases between them, and a sample at any t.
+
+   EVERY EVENT IS A CROSSING, measured on the run: the mitral valve closes where the LV's pressure rises
+   through the LA's, the aortic opens where it rises through the aortic root's, and so on. A valve that
+   leaks still "closes" there, at the crossing: from then the gradient runs the other way, and so does the
+   leak. Rapid filling gives way to diastasis where the mitral flow has fallen to a quarter of its peak; where
+   it never does before the beat ends (mitral stenosis: the gradient runs all through diastole), diastasis
+   has no width.
+   The same preset asked again is the same object: a run is worth keeping. */
+const PHASE_TEXT = {
+  atrial:    ['Atrial systole', 'The atrial kick: the last of ventricular filling.'],
+  ivc:       ['Isovolumetric contraction', 'Mitral shut, aortic not yet open: pressure climbs at constant volume.'],
+  rapid_ej:  ['Rapid ejection', 'The aortic valve opens and most of the stroke leaves.'],
+  red_ej:    ['Reduced ejection', 'Ejection continues while the ventricle’s pressure is already falling.'],
+  ivr:       ['Isovolumetric relaxation', 'Aortic shut, mitral not yet open: pressure falls at constant volume.'],
+  rapid_fil: ['Rapid filling', 'The mitral valve opens and the ventricle fills fast: the E wave.'],
+  diastasis: ['Reduced filling (diastasis)', 'Filling slows as the pressures come together.'],
+};
+const cycles = new Map();
+function cycle(preset) {
+  const key = typeof preset === 'string' ? preset : JSON.stringify(preset);
+  if (cycles.has(key)) return cycles.get(key);
+  const p = merge(params(preset), { resp: { depth: 0 } });
+  const beat = 60 / p.hr;
+  const run = simulate(p, { seconds: 24 * beat, keep: beat, every: 1 });
+  const n = run.t.length;
+  const at = a => t => { const x = ((t % 1) + 1) % 1 * n, i = Math.floor(x) % n, f = x - Math.floor(x); return a[i] * (1 - f) + a[(i + 1) % n] * f; };
+  const frac = i => i / n;
+  /* A crossing of up − down from below to above (dir 1) or above to below (dir −1), searched from i in
+     step direction s, at the sample where the sign turns, interpolated between the two. */
+  const cross = (up, down, dir, i, s) => {
+    for (let k = 0; k < n; k++) {
+      const j = (i + s * k + n) % n, j2 = (j + 1) % n;
+      const d0 = (up[j] - down[j]) * dir, d1 = (up[j2] - down[j2]) * dir;
+      if (d0 <= 0 && d1 > 0) return (j + d0 / (d0 - d1)) / n % 1;
+    }
+    return null;
+  };
+  const argmax = a => a.reduce((b, x, i) => x > a[b] ? i : b, 0);
+  const iA = argmax(run.qav), iP = argmax(run.qpv);
+  const idx = t => Math.round(t * n) % n;
+  const T = {};
+  T.ao = cross(run.plv, run.pao, 1, iA, -1);
+  T.ac = cross(run.plv, run.pao, -1, iA, 1);
+  T.mc = cross(run.plv, run.pla, 1, idx(T.ao), -1);
+  T.mo = cross(run.plv, run.pla, -1, idx(T.ac), 1);
+  T.po = cross(run.prv, run.ppa, 1, iP, -1);
+  T.pc = cross(run.prv, run.ppa, -1, iP, 1);
+  T.tc = cross(run.prv, run.pra, 1, idx(T.po), -1);
+  T.to = cross(run.prv, run.pra, -1, idx(T.pc), 1);
+  T.peak = frac(argmax(run.plv));
+  /* Diastasis: from the E wave's peak on, the first sample where the mitral flow is a quarter of it. */
+  let iE = idx(T.mo); for (let k = 0, j = iE; k < n / 2; k++, j = (j + 1) % n) if (run.qmv[j] > run.qmv[iE]) iE = j;
+  let iD = iE; while (iD < n && run.qmv[iD] > run.qmv[iE] / 4) iD++;
+  /* Through to the end of the beat without slowing (mitral stenosis): no diastasis, a phase of no width. */
+  T.dias = iD < n ? frac(iD) : 1;
+  const order = ['mc', 'ao', 'peak', 'ac', 'mo', 'dias'];
+  const ok = order.every(k => T[k] !== null) && order.every((k, i) => i === 0 || T[k] > T[order[i - 1]]);
+  const bounds = [['atrial', 0, T.mc], ['ivc', T.mc, T.ao], ['rapid_ej', T.ao, T.peak], ['red_ej', T.peak, T.ac],
+    ['ivr', T.ac, T.mo], ['rapid_fil', T.mo, T.dias], ['diastasis', T.dias, 1]];
+  const PH = bounds.map(([id, from, to]) => ({ id, from, to, name: PHASE_TEXT[id][0], blurb: PHASE_TEXT[id][1] }));
+  const EVENTS = [
+    { at: T.mc, id: 'mc', label: 'Mitral closes', side: 'L', sound: 'S1', note: 'M1' },
+    { at: T.tc, id: 'tc', label: 'Tricuspid closes', side: 'R', sound: 'S1', note: 'T1' },
+    { at: T.po, id: 'po', label: 'Pulmonic opens', side: 'R', sound: null },
+    { at: T.ao, id: 'ao', label: 'Aortic opens', side: 'L', sound: null },
+    { at: T.ac, id: 'ac', label: 'Aortic closes', side: 'L', sound: 'S2', note: 'A2' },
+    { at: T.pc, id: 'pc', label: 'Pulmonic closes', side: 'R', sound: 'S2', note: 'P2' },
+    { at: T.to, id: 'to', label: 'Tricuspid opens', side: 'R', sound: null },
+    { at: T.mo, id: 'mo', label: 'Mitral opens', side: 'L', sound: null },
+  ].filter(e => e.at !== null).sort((a, b) => a.at - b.at);
+  const m = measure(run);
+  const c = {
+    preset: key, ok, beat, T, PHASES: PH, EVENTS,
+    rAt: p.pr / beat,
+    lvPressure: at(run.plv), aoPressure: at(run.pao), laPressure: at(run.pla), lvVolume: at(run.v.lv),
+    rvPressure: at(run.prv), paPressure: at(run.ppa), raPressure: at(run.pra),
+    aorticFlow: at(run.qav), mitralFlow: at(run.qmv),
+    EDV: m.edv, ESV: m.esv, SV: m.sv, EF: m.ef,
+    max: { p: Math.max.apply(null, run.plv.concat(run.pao, run.pla)), v: Math.max.apply(null, run.v.lv) },
+    min: { v: Math.min.apply(null, run.v.lv) },
+    phaseAt(t) { t = ((t % 1) + 1) % 1; for (const ph of PH) if (t >= ph.from && t < ph.to) return ph; return PH[PH.length - 1]; },
+    sample(t) { return { lvP: c.lvPressure(t), aoP: c.aoPressure(t), laP: c.laPressure(t), lvV: c.lvVolume(t) }; },
+    wrap: t => ((t % 1) + 1) % 1,
+    run,
+  };
+  cycles.set(key, c);
+  return c;
+}
+
+root.Circulation = { simulate, measure, params, cycle, PRESETS, NORMAL, VALIDATION };
 
 })(typeof window !== 'undefined' ? window : this);

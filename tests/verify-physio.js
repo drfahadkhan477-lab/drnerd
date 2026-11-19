@@ -506,6 +506,29 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }));
   ok('the phase note is live text, not a static caption', new Set(notes).size > 1, notes.map(n => n.slice(0, 18)).join(' | '));
 
+  head('a lesion chip draws that lesion\'s beat (docs/ROADMAP.md, S8)');
+  {
+    /* The chip's handler sets the beat as it is tapped; nothing renders, so nothing is waited for. */
+    const lz = await page.evaluate(() => {
+      const chips = [...document.querySelectorAll('[data-physio-lesion]')].map(c => c.getAttribute('data-physio-lesion'));
+      document.querySelector('[data-physio-lesion="as"]').click();
+      physio.setTime(Circulation.cycle('as').T.peak + 0.01);
+      const c = physio.cycle();
+      const out = { chips, preset: c && c.preset, hot: document.querySelector('[data-physio-lesion].hot')?.getAttribute('data-physio-lesion'),
+        phase: physio.phaseNow().id, want: Circulation.cycle('as').phaseAt(physio.time()).id, ok: c && c.ok,
+        note: document.getElementById('physioNote').textContent, kept: localStorage.getItem('accsap12.physiolesion'),
+        gap: c ? c.lvPressure(c.T.peak) - c.aoPressure(c.T.peak) : 0 };
+      document.querySelector('[data-physio-lesion="normal"]').click();
+      out.back = physio.cycle(); out.backPhase = physio.phaseNow().id; out.physioPhase = Physio.phaseAt(physio.time()).id;
+      return out;
+    });
+    ok('the Wiggers view offers each lesion as a chip', JSON.stringify(lz.chips) === JSON.stringify(['normal', 'as', 'ar', 'ms', 'mr', 'hfref', 'hfpef', 'tamponade', 'constriction']), JSON.stringify(lz.chips));
+    ok('a tap on AS draws aortic stenosis\'s computed beat, the chip marked and the choice kept', lz.preset === 'as' && lz.ok === true && lz.hot === 'as' && lz.kept === 'as', JSON.stringify({ preset: lz.preset, hot: lz.hot, kept: lz.kept }));
+    ok('whose LV peaks far above its aorta', lz.gap > 40, lz.gap.toFixed(0) + ' mmHg');
+    ok('the phase it reports is that beat\'s, and the note says which lesion and that it is computed', lz.phase === lz.want && /AS\./.test(lz.note) && /Computed by the circulation model/.test(lz.note), lz.phase + ' / ' + lz.want + ' · ' + lz.note.slice(0, 80));
+    ok('Normal goes back to the drawn cycle', lz.back === null && lz.backPhase === lz.physioPhase, String(lz.back) + ' ' + lz.backPhase);
+  }
+
   head('scrubbing pauses the live clock and reads back a chosen instant');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(150);
