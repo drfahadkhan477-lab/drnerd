@@ -2716,9 +2716,10 @@ function figFromEl(el){
 function openFigureFrom(el){
   if(!el) return Promise.resolve(null);
   const scope=el.closest&&el.closest(FIG_GROUP);
-  /* A figure that names the action (docs/ROADMAP.md, E2) and one that still carries the handler are the same kind of
-     figure, so both are gathered, in the order they are drawn. */
-  const els=scope?[...scope.querySelectorAll('figure[onclick="openFigureFrom(this)"],figure[data-action="openFigureFrom"]')]:[];
+  /* Every figure that opens full size names one of two actions (docs/ROADMAP.md, E2): a note's, a reply's and the Apex
+     strip's openFigureFrom, and the pearl's openPearlFigure, which has keys of its own. Both are gathered, in the order
+     they are drawn. */
+  const els=scope?[...scope.querySelectorAll('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')]:[];
   if(els.indexOf(el)<0) return openFigures([figFromEl(el)].filter(Boolean),0);
   const items=els.map(figFromEl), at=els.indexOf(el);
   return openFigures(items.filter(Boolean),items.slice(0,at).filter(Boolean).length);
@@ -5457,6 +5458,10 @@ const ACTIONS={
   aiSettings:()=>aiSettings(),
   toggleAI:()=>toggleAI(),
   openFigureFrom:el=>openFigureFrom(el),
+  /* the pearl's figure, which is openFigureFrom() too but has keys of its own (KEY_ACTIONS), and a question's figure's
+     full-screen button, which carries its question and its place among that question's figures */
+  openPearlFigure:el=>openFigureFrom(el),
+  openQuestionFigures:(el,ev)=>openQuestionFigures(el.dataset.qid,Number(el.dataset.i),ev),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5491,6 +5496,10 @@ Actions.install(document,CHANGE_ACTIONS,'change');
 const KEY_ACTIONS={
   homeGo:(el,ev)=>homeTabKey(ev),
   brainTap:(el,ev)=>brainKey(ev),
+  /* the pearl's figure: Enter and Space open it, and the arrows, Home, End and the page keys scroll a figure taller than
+     its box. Enter is taken here first, as it was on the figure, so the click of a focused role="button" below does not
+     open it a second time. */
+  openPearlFigure:(el,ev)=>pearlFigureKey(ev,el),
 };
 Actions.install(document,KEY_ACTIONS,'keydown');
 /* What a scroll does. A scroll does not bubble, so this listens as it goes down to the element that scrolled, and acts
@@ -5856,7 +5865,7 @@ function buildFigures(q){
         <span class="fig-zoom-hint">${on?'Tap to shrink':'Tap to enlarge'}</span></div>
     </div>
       <button class="fig-full" type="button" aria-label="Open ${e(figLabel(q,i,n))} full screen"
-        onclick="openQuestionFigures('${e(q.id)}',${i},event)">${icon('expand','icon-sm')}</button>
+        data-action="openQuestionFigures" data-qid="${e(q.id)}" data-i="${i}">${icon('expand','icon-sm')}</button>
     </div>`;
   }).join('');
 }
@@ -6593,8 +6602,7 @@ function pearlFigure(p){
   const src=(typeof refImgSrc==='function')?refImgSrc(p.figKey):'';
   if(!src) return '';
   const cap=(p.figCap||'').trim();
-  return `<figure class="pearl-fig" id="pearlFig" onclick="openFigureFrom(this)" role="button" tabindex="0"
-    onkeydown="pearlFigureKey(event,this)"
+  return `<figure class="pearl-fig" id="pearlFig" data-action="openPearlFigure" role="button" tabindex="0"
     title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')} Figure <i>${icon('expand','icon-sm')} Tap to enlarge</i></span>
     <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;

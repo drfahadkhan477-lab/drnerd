@@ -320,7 +320,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const fromEl = await page.evaluate(async () => {
     if (typeof openFigureFrom !== 'function') return null;
     const box = document.createElement('div'); box.className = 'fig-list';
-    box.innerHTML = [1, 2, 3].map(i => `<figure class="ai-fig" onclick="openFigureFrom(this)"><img src="${__svg(300 + i * 50, 200)}" alt="Fig ${i}"><figcaption>Figure ${i}<span>Note ${i}</span></figcaption></figure>`).join('');
+    /* As the app draws a figure that opens full size: it names the action (docs/ROADMAP.md, E2); none carries a handler. */
+    box.innerHTML = [1, 2, 3].map(i => `<figure class="ai-fig" data-action="openFigureFrom"><img src="${__svg(300 + i * 50, 200)}" alt="Fig ${i}"><figcaption>Figure ${i}<span>Note ${i}</span></figcaption></figure>`).join('');
     document.body.appendChild(box);
     const ps = await __rest(await openFigureFrom(box.children[2]));
     const out = ps ? { n: ps.getNumItems(), at: ps.currIndex, cap: document.querySelector('.pswp__figv-cap').textContent } : null;

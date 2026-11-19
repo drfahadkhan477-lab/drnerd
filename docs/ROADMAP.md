@@ -331,7 +331,14 @@ full page, Apex's settings, close and a figure are in `ACTIONS`, and a figure is
 handed to `openFigureFrom()`, which gathers a figure that names the action with
 the ones that still carry the handler (`verify-apexpanel-pure` holds the markup
 and the table; `verify-apexpage` taps the four buttons and `verify-figzoom` a
-figure). Next: the other screens, one at a time.
+figure). Every figure that opens full size names an action: markdown's
+(`verify-md-pure` now counts any `on*` attribute in `md()`'s output as an
+offence) and the Apex strip's `openFigureFrom`, the pearl's `openPearlFigure`,
+whose keys are in `KEY_ACTIONS` (`verify-pearl` opens it with Enter;
+`verify-homepager` holds that End scrolls it and goes no further), and a
+question figure's full-screen button `openQuestionFigures` (`verify-figzoom`
+taps it; `verify-chatfigs` taps a reply's figure). Next: the other screens, one
+at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
