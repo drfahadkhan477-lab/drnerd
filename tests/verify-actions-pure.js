@@ -18,7 +18,10 @@
  *     have as its own function (a name every object inherits included), or for an empty name;
  *   - find() says which element a tap would act for, and nothing changes the table or the element;
  *   - asked to capture, it listens as the event goes down, and what it returns removes that listener; asked to act only
- *     for the element the event is on, an event on something inside an element with data-action calls nothing.
+ *     for the element the event is on, an event on something inside an element with data-action calls nothing;
+ *   - no on* attribute is left in the shell or in any module under src/, read with comments blanked, by a scan seen to
+ *     find one written as they write markup and to pass over a handler set by script, a comment and a word that starts
+ *     with "on".
  */
 'use strict';
 const { Actions } = require('../src/core/actions.js');
@@ -157,6 +160,32 @@ head('find');
   calls.length = 0;
   let threw = null; try { r2.tap(fb); } catch (err) { threw = err.message; }
   ok('a frozen table and a frozen element: the action is called, nothing is written', threw === null && J(calls) === J([['frozen', 'button']]), threw || J(calls));
+}
+
+head('no inline handler is left in what the app is built from');
+{
+  /* docs/ROADMAP.md, E2: when no on* attribute is left in the markup the app writes, the split build can ship a script-src
+     that refuses one (scripts/csp.js, scriptPolicy). Read here: the shell and every module under src/, each with its
+     comments blanked (tests/_source.js), since the comments quote the very attributes looked for. An attribute is a name
+     with a space before it and a value after it that opens with a quote or with ${...}; a handler set by script
+     (el.onclick=...) has a dot before it and is not one. */
+  const fs = require('fs'), path = require('path');
+  const { blankComments } = require('./_source.js');
+  const ROOT = path.join(__dirname, '..');
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(x => x.isDirectory() ? walk(path.join(d, x.name)) : /\.js$/.test(x.name) ? [path.join(d, x.name)] : []);
+  const files = [path.join(ROOT, 'app', 'systole.html'), ...walk(path.join(ROOT, 'src'))];
+  const ATTR = /\son[a-z]{3,}\s*=\s*(?:\\?["'`]|\$\{)/gi;
+  const hits = text => { const out = []; const b = blankComments(text); let m; ATTR.lastIndex = 0;
+    while ((m = ATTR.exec(b))) out.push((b.slice(0, m.index).match(/\n/g) || []).length + 1 + ': ' + m[0].trim()); return out; };
+  /* The scan, seen to find what it is there to find, on lines shaped as the app writes them. */
+  const SHOULD = ['<button onclick="go()">', "x+'<a onclick=\\\"go()\\\">'", '<img src="${u}" onerror=${bad}>', "html=`<div onkeydown='k(event)'>`"];
+  const SHOULD_NOT = ['el.onclick=()=>go();', 'img.onerror = fallback;', '// <button onclick="go()">', '/* onclick="go()" */', 'const ion=1;', 'data-action="goOn"', 'aria-label="Turn on"'];
+  ok('the scan finds an inline handler written as the shell and the modules write markup',
+     SHOULD.every(t => hits(t).length === 1), SHOULD.map(t => hits(t).length).join(' '));
+  ok('and nothing that is not one: a handler set by script, a comment, a word that starts with "on"',
+     SHOULD_NOT.every(t => hits(t).length === 0), SHOULD_NOT.map(t => t + ':' + hits(t).length).join(' | '));
+  const found = files.flatMap(f => hits(fs.readFileSync(f, 'utf8')).map(h => path.relative(ROOT, f) + ':' + h));
+  ok('no on* attribute in the shell or in any module under src/ (' + files.length + ' files read)', files.length > 20 && found.length === 0, found.slice(0, 6).join(' | ') || 'none');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

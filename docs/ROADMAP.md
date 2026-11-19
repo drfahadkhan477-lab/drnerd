@@ -345,8 +345,10 @@ voice dock's Stop (`verify-studyvisuals`). The crash screen's Reload has a
 listener of its own, added when the screen is drawn, because that screen is
 shown when something has already failed (`verify-failsafe` taps it), and the
 last-resort fallback links to the page itself rather than to `javascript:`. No
-`on*` attribute is left in `app/systole.html` or `src/`. Next: a check that keeps
-it so, then ship `scriptPolicy` in the split build.
+`on*` attribute is left in `app/systole.html` or `src/`, and `verify-actions-pure`
+keeps it so: it reads the shell and every module with comments blanked and fails,
+naming the file and line, on one put back. Next: ship `scriptPolicy` in the split
+build.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
