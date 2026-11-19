@@ -686,6 +686,17 @@ async function heapAfterBoot(page, url) {
       { timeout: 30000 }).then(() => true, () => false);
     ok('the Lab, out of app.js, draws on its first visit offline', labDrawn === true && await page.evaluate(() =>
       typeof window.LAB_SRC === 'string' && !!document.querySelector('script[src="' + window.LAB_SRC + '"]')));
+    /* The circulation engine leaves app.js too (build-pwa, 3.747), and loads when a lesion is first drawn in the
+       Rhythm Lab's cycle panel: first drawn here, offline, so it must come from the precache. */
+    await page.evaluate(() => { goLab(); });
+    await settled(page, () => !!document.querySelector('[data-physio-lesion="as"]') && typeof physio !== 'undefined' && !!physio, { timeout: 30000 });
+    const circBefore = await page.evaluate(() => typeof Circulation === 'undefined');
+    await page.evaluate(() => document.querySelector('[data-physio-lesion="as"]').click());
+    const circDrawn = await settled(page, () => typeof Circulation !== 'undefined' && !!physio.cycle() && physio.cycle().preset === 'as',
+      { timeout: 30000 }).then(() => true, () => false);
+    ok('the circulation engine, out of app.js, is not loaded until a lesion is drawn, then draws it on its first visit offline',
+       circBefore === true && circDrawn === true && await page.evaluate(() => typeof window.CIRC_SRC === 'string' && !!document.querySelector('script[src="' + window.CIRC_SRC + '"]')),
+       JSON.stringify({ circBefore, circDrawn }));
     transport.resume();
     await ctx.close();
     transport.close();

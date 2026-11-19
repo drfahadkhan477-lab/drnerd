@@ -2088,6 +2088,24 @@ function physioCycle(id){
   if(id==='normal'||typeof Circulation==='undefined') return null;
   try{ return Circulation.cycle(id); }catch(_){ return null; }
 }
+/* Hands the live diagram the chosen lesion's beat. The split build lifts the engine into vendor/ and leaves CIRC_SRC
+   naming the file (scripts/build-pwa.js, 3.747): the first lesion drawn loads it, and is drawn when it is there. A
+   failed load is not remembered. */
+let circLibP=null;
+function physioApplyLesion(){
+  if(!physio) return;
+  if(physioLesion!=='normal'&&typeof Circulation==='undefined'){
+    if(window.CIRC_SRC&&!circLibP){
+      const s=document.createElement('script'); s.src=window.CIRC_SRC;
+      circLibP=new Promise(res=>{ s.onload=()=>{ res(); physioApplyLesion(); __physioNotePhase=''; paintPhysioNote(); };
+        s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
+      document.head.appendChild(s);
+    }
+    physio.setCycle(null);
+    return;
+  }
+  physio.setCycle(physioCycle(physioLesion));
+}
 /* Half real time by default. A whole cycle then takes about 1.8 seconds, which
    is long enough to follow the cursor through isovolumic contraction — 50ms in
    life — and short enough that the loop still reads as a loop. */
@@ -2181,13 +2199,13 @@ function mountPhysio(){
   if(!physio) return;
   physioCanvasEl=cv;
   physio.setIntervention(physioIv);
-  physio.setCycle(physioCycle(physioLesion));
+  physioApplyLesion();
   document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>{
     physioLesion=b.dataset.physioLesion;
     try{localStorage.setItem('accsap12.physiolesion',physioLesion);}catch(_){}
     /* In the PV loop the interventions come and go with Normal, so the panel is drawn again. */
     if(physioView==='pv'){ render(); return; }
-    physio.setCycle(physioCycle(physioLesion));
+    physioApplyLesion();
     document.querySelectorAll('[data-physio-lesion]').forEach(x=>x.classList.toggle('hot',x===b));
     __physioNotePhase=''; paintPhysioNote();
   });
