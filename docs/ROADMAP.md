@@ -315,7 +315,12 @@ tapped, as its handler did: Restart reads the chapter then. What a field does
 as it is typed in is in a table of its own, `INPUT_ACTIONS`, listened to for
 input only, so a tap on a field calls nothing and a key in a button calls
 nothing; what a choice does when another is chosen is in `CHANGE_ACTIONS`,
-listened to for change only. Next: the other screens, one at a time.
+listened to for change only. Settings (`openSettings()` and the rows it draws)
+carries none either: its text sizes, widths, themes, reset, close and Apex
+memory are in `ACTIONS`, its two sliders in `INPUT_ACTIONS` and its layout in
+`CHANGE_ACTIONS` (`verify-settings` scans the open dialog for any `on*`
+attribute and taps, types into or chooses from each control; `verify-theme`
+taps a theme). Next: the other screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
