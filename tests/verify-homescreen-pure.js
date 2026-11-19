@@ -382,7 +382,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const ENTRY = { goAnnotations: 'goAnnotations:()=>goAnnotations(),', goEcho: 'goEcho:()=>goEcho(),', goLab: 'goLab:()=>goLab(),', goMemory: 'goMemory:()=>goMemory(),', goPractice: 'goPractice:()=>goPractice(),',
     goRefs: 'goRefs:()=>goRefs(),', goSessions: 'goSessions:()=>goSessions(),', goStats: 'goStats:()=>goStats(),', goStudy: 'goStudy:()=>goStudy(),', openSearch: 'openSearch:()=>openSearch(),',
     dismissHello: 'dismissHello:()=>dismissHello(),', homeGo: 'homeGo:el=>homeGo(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),', pearlReading: 'pearlReading:()=>pearlReading(),',
-    pearlRecall: 'pearlRecall:()=>pearlRecall(),', pearlSourceToggle: 'pearlSourceToggle:()=>pearlSourceToggle(),', pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', reviewAllDue: "reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),",
+    pearlRecall: 'pearlRecall:()=>pearlRecall(),', pearlSourceToggle: 'pearlSourceToggle:()=>pearlSourceToggle(),', pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', reviewAllDue: "reviewAllDue:()=>startQuiz(null,'due',reviewDeck(dueQuestions())),",
     startPlan: 'startPlan:el=>startPlan(Number(el.dataset.plan)),', toggleAtlas3D: 'toggleAtlas3D:()=>toggleAtlas3D(),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
     toggleHeroMechanics: 'toggleHeroMechanics:()=>toggleHeroMechanics(),', toggleHeroMenu: 'toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),', brainTap: 'brainTap:(el,ev)=>brainTap(ev),',
     startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', startDue: "startDue:()=>startQuiz(null,'due'),"};
@@ -396,9 +396,9 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('the thirty actions of the three pages: each in the tables for what it answers once, as written, and in no other; a tab and the brain in ACTIONS and KEY_ACTIONS, the two scrolls in SCROLL_ACTIONS alone',
      named.length === 30 && named.every(held),
      named.length + ' · ' + named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (held(n) ? '' : ' (not as held)')).join(' '));
-  const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen', 'pearlReading',
+  const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'reviewDeck', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen', 'pearlReading',
     'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu', 'homeTabKey', 'brainKey', 'homePagerScroll', 'pearlScroll'];
-  ok('they call thirty-one functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
+  ok('they call thirty-two functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
      CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,KEY_ACTIONS,'keydown');") === 1 && count("Actions.install(document,SCROLL_ACTIONS,'scroll',{capture:true,own:true});") === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and the ids the page looks for are drawn: the brain, its tilt, its net and the info', ['brain3d', 'brainTilt', 'brainInfo'].every(id => times(brainPage(), 'id="' + id + '"') === 1) && ['brainArt', 'brainNet'].every(id => times(art(), 'id="' + id + '"') === 1)
      && ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')"].every(t => count(t) >= 1) && count("'#brainArt") >= 1, ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')", "'#brainArt"].map(t => count(t)).join(' '));
@@ -511,7 +511,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const homeTaps = fire('click', greeted);
   ok('tapped, the Home page: the notes, the heart\'s explore, pause and menu (handed the click), its chambers, motion and credit, the pearl\'s six, the review of every card due, Got it, and each tab with its page',
      greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroMenu ["undefined","the event"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
-       'pearlNext', 'pearlToggleAll', 'pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen', 'dueQuestions', 'startQuiz [null,"due","DUE"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
+       'pearlNext', 'pearlToggleAll', 'pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen', 'dueQuestions', 'reviewDeck ["DUE"]', 'startQuiz [null,"due","undefined"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
   const keys = fire('keydown', full + bpage + greeted), scrolls = fire('scroll', full + bpage + greeted);
   ok('a key: on the brain, brainKey() handed the key; on each tab, homeTabKey() handed it; on anything else, nothing',
      J(keys) === J(['brainKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]']), J(keys));

@@ -525,6 +525,14 @@ verify-statsscreen-pure, verify-results-pure, verify-calibrate.
 first understanding; telling similar diagnoses apart improves with interleaving.
 Build "confusable pair" sets from Apex's `gap` memories (constriction against
 restriction, for example), and interleave chapters in review and mocks. *Opus.*
+*Done:* `src/core/confusable.js` reads each `gap` memory as the two things it
+names ("X as Y", "X vs Y", "X with Y", "between X and Y" …) and finds the
+bank's questions that hold every word of a side. A review session, and Home's
+review of every card due, deal a question on the other side straight after one
+on a side when the deck holds none of it (at most `PAIR_MAX`, a card already met
+first), keep every due card, and take chapters in turn; so does the mock block.
+A gap that names no two things is left out, not guessed at. Apex's `remember`
+tool now asks for a gap written as the two things. verify-confusable-pure.
 
 **S7 — Readiness with its uncertainty.** `studyplan.readiness` gives a verdict
 from point estimates. Use per-chapter beta-binomial posteriors weighted by the

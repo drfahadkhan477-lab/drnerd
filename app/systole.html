@@ -1844,6 +1844,7 @@ function refImportText(){
 @@SLOT[src:src/lab/ui.js]@@
 @@SLOT[src:src/core/studyplan.js]@@
 @@SLOT[src:src/core/topicrun.js]@@
+@@SLOT[src:src/core/confusable.js]@@
 @@SLOT[src:src/core/voicemode.js]@@
 @@SLOT[src:src/core/mockexam.js]@@
 @@SLOT[src:src/core/flagset.js]@@
@@ -1883,6 +1884,18 @@ function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),
 function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO()); }
 function newQuestionsForReview(limit){ return ReviewQueue.fresh(POOL,S.srs,limit); }
 function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target); }
+/* docs/ROADMAP.md, S6. A review session as it is asked, from the questions it is to hold (the queue, or every card
+   due): shuffled, then, for a question on one side of a
+   confusion Apex has noted (a gap memory naming two things), a question on the other side straight after it, up to
+   PAIR_MAX of them, a card already met before one never met; then no two in a row from one chapter while another
+   has questions left (src/core/confusable.js). Every due card stays in it. */
+const PAIR_MAX=4;
+function reviewDeck(qs){
+  const base=shuf(qs);
+  const sets=Confusable.sets((typeof Memory!=='undefined')?Memory.all():[],POOL);
+  const extra=Confusable.partners(base,sets,POOL,{max:PAIR_MAX,prefer:id=>S.srs[id]?0:1});
+  return Confusable.arrange(base,{partners:extra,byId:QBYID});
+}
 
 /* ── active-recall rating (shown after the explanation, review sessions only) ── */
 const RATINGS=[['again','Again',1,'#EF4444'],['hard','Hard',2,'#F59E0B'],
@@ -2310,7 +2323,7 @@ const TOOLS=[
   description:"Keep one durable fact about this fellow, so you still know it in a month. Use it for things that outlive the current question: their exam date and training year, a confusion they keep repeating across topics, how they like to be taught. Do NOT use it for facts about the item in front of you — the transcript already carries those — and do not ask permission first, just keep it. If something you were told stops being true, call forget and keep the corrected version.",
   input_schema:{type:'object',properties:{
     text:{type:'string',description:'One sentence, written about them in the third person, e.g. "Sitting the boards in October 2026."'},
-    kind:{type:'string',enum:['fact','gap','preference'],description:'fact = true about them; gap = a confusion worth pressing on; preference = how they want to be taught'},
+    kind:{type:'string',enum:['fact','gap','preference'],description:'fact = true about them; gap = a confusion worth pressing on, naming the two things it mixes up as "X as Y" or "X vs Y", which review then asks side by side; preference = how they want to be taught'},
     said:{type:'boolean',description:'true only if the fellow ACTUALLY SAID this, in their own words, in this conversation. false if you concluded it from how they were answering. Leave it out when unsure — an unmarked memory is stored as your inference, which is the safe reading, and you can set it to true later if they confirm.'}},
    required:['text']}},
  {name:'forget',
@@ -5111,7 +5124,7 @@ function startQuiz(ch,mode='all',deck){
   if(mode==='missed') qs=[...S.missed].map(id=>QBYID[id]).filter(q=>q&&!q.bad);
   else if(mode==='flagged') qs=flaggedQs();
   else if(mode==='certain') qs=certainWrongQs();
-  else if(mode==='due') qs=deck||reviewQueue(20);
+  else if(mode==='due') qs=deck||reviewDeck(reviewQueue(20));
   else qs=(ch?POOL.filter(q=>q.ch===ch):[...POOL]);
   if(!qs.length&&mode==='flagged'){toast('Nothing is flagged. Tap Flag on a question, or press F, to keep it here.');return;}
   if(!qs.length&&mode==='certain'){toast('Nothing answered Certain is still wrong.');return;}
@@ -5136,7 +5149,8 @@ function startQuiz(ch,mode='all',deck){
     if(live) live.textContent='Resumed at question '+(back.i+1)+' of '+back.deck.length;
     return;
   }
-  if(!deck) qs=shuf(qs);
+  /* A review is dealt in its order (reviewDeck); shuffling it would take each look-alike from its pair. */
+  if(!deck&&mode!=='due') qs=shuf(qs);
   Object.assign(S,{screen:'quiz',chapter:ch,questions:qs,qIdx:0,selected:null,
     answered:false,mode,zoomed:-1,quizCorrect:0,quizTotal:0,answers:{},resumed:false});
   /* The order is kept the moment it is dealt, so leaving from the first question comes back to it (restoreDeck). */
@@ -5428,7 +5442,7 @@ const ACTIONS={
   pearlReading:()=>pearlReading(),
   pearlSourceToggle:()=>pearlSourceToggle(),
   pearlOpen:()=>pearlOpen(),
-  reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),
+  reviewAllDue:()=>startQuiz(null,'due',reviewDeck(dueQuestions())),
   dismissHello:()=>dismissHello(),
   homeGo:el=>homeGo(Number(el.dataset.page)),
   goLab:()=>goLab(),
@@ -5586,7 +5600,8 @@ function startMock(){
   if(S.mock){ resumeMock(); return; }
   try{ stopVoice(); }catch(_){}
   const ch=_mockCfg.ch&&CHAPTERS.includes(_mockCfg.ch)?_mockCfg.ch:null;
-  const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen});
+  /* docs/ROADMAP.md, S6: the block MockExam dealt, its chapters taken in turn where it has more than one. */
+  const ids=Confusable.arrange(MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen}).map(id=>QBYID[id]).filter(Boolean)).map(q=>q.id);
   if(!ids.length){ toast('There are no questions to build a block from.'); return; }
   S.mock=MockExam.start({ids,secPerQ:_mockCfg.sec,chapter:ch,now:Date.now()});
   S.mockView='q'; _mockSaid=mockSaidNow(); _mockArm=false; _mockLost=false; mockFresh();
