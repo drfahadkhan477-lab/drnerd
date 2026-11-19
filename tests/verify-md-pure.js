@@ -146,16 +146,15 @@ function tags(html) {
 const ALLOWED_TAGS = new Set(['p', 'br', 'strong', 'em', 'code', 'pre', 'h3', 'h4',
   'ul', 'li', 'ol', 'hr', 'blockquote', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
   'figure', 'img', 'figcaption']);
-/* md() emits exactly one event handler of its own, a literal from
-   figview-patch. Any OTHER on-handler in a tag came from the input. */
-const OWN_HANDLER = /^onclick="openFigureFrom\(this\)"$/;
+/* md() emits no event handler of its own: its figure names an action (data-action="openFigureFrom", docs/ROADMAP.md,
+   E2), heard by the page's one listener. So any on-handler in a tag came from the input. */
 function offences(html) {
   const bad = [];
   for (const t of tags(html)) {
     if (!ALLOWED_TAGS.has(t.name)) { bad.push(`<${t.name}>`); continue; }
     for (const a of t.attrs.matchAll(/([a-zA-Z-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g)) {
       const pair = `${a[1]}=${a[2]}`;
-      if (/^on/i.test(a[1]) && !OWN_HANDLER.test(pair)) bad.push(pair);
+      if (/^on/i.test(a[1])) bad.push(pair);
     }
   }
   return bad;
@@ -172,8 +171,8 @@ head('the inspector can tell a live tag from an escaped one');
   ok('a real handler on an allowed tag is',
      offences('<img src="a" onerror="alert(1)">').join() === 'onerror="alert(1)"',
      offences('<img src="a" onerror="alert(1)">').join());
-  ok("and md()'s own figure handler is not",
-     offences('<figure onclick="openFigureFrom(this)">').length === 0);
+  ok('and so is the handler md()\'s figure used to carry: it carries none now',
+     offences('<figure onclick="openFigureFrom(this)">').join() === 'onclick="openFigureFrom(this)"');
 }
 
 head('escaping happens first, and the raw input is never reached again');
@@ -239,6 +238,9 @@ head('the figure rule is the one place md() writes an attribute');
   ok('a well-formed citation still renders its figure',
      /<figure class="ref-fig"/.test(out) && /alt="a plain caption"/.test(out),
      (out.match(/<img[^>]*>/) || [''])[0].slice(0, 80));
+  ok('and the figure names the action that opens it full size, and carries no handler of its own',
+     /<figure class="ref-fig" data-action="openFigureFrom" role="button" tabindex="0"/.test(out) && offences(out).length === 0,
+     (out.match(/<figure[^>]*>/) || [''])[0].replace(/\s+/g, ' ').slice(0, 110) + ' · offences: ' + (offences(out).join(' ') || 'none'));
   ok('an unknown key renders nothing rather than a broken image',
      md('![x](refimg://nope)').indexOf('<img') < 0, md('![x](refimg://nope)').slice(0, 60));
   const attacked = md('![x" onerror="alert(1)](refimg://k)');
