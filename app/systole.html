@@ -2027,7 +2027,7 @@ function buildStats(){
     setTimeout(function(){ offlineSurvey(); },0);
   }
   return StatsScreen.screenHtml(S,LOG,CHAPTERS,CH_COLORS,{Calib,MockExam,TOTAL_Q,CH_SHORT,pendingBackupSave,last30,forecast7,avgRetention,
-    startedCount,dueQuestions,masteryFor,storageOK,storageLine,safariTabStorage,offlineCapable,chIcon,e,icon});
+    certainWrongQs,startedCount,dueQuestions,masteryFor,storageOK,storageLine,safariTabStorage,offlineCapable,chIcon,e,icon});
 }
 /* The text colour for a semantic fill: var(--green) fills a bar or a ring, var(--green-ink) writes its figure, a step of
    the same green that reads on the theme's ground (base.css). Anything else is its own text colour. */
@@ -5104,13 +5104,17 @@ function recentPerDay(){
   for(let i=0;i<7;i++){ const v=S.daily[FSRS.localDateToISO(d)]; if(v&&v.a>0) total+=v.a; d.setDate(d.getDate()-1); }
   return total/7;
 }
+/* docs/ROADMAP.md, S5: the bank's questions answered Certain and wrong and not since answered right, newest first. */
+function certainWrongQs(){ return Calib.certainWrong(LOG).map(id=>QBYID[id]).filter(q=>q&&!q.bad); }
 function startQuiz(ch,mode='all',deck){
   let qs;
   if(mode==='missed') qs=[...S.missed].map(id=>QBYID[id]).filter(q=>q&&!q.bad);
   else if(mode==='flagged') qs=flaggedQs();
+  else if(mode==='certain') qs=certainWrongQs();
   else if(mode==='due') qs=deck||reviewQueue(20);
   else qs=(ch?POOL.filter(q=>q.ch===ch):[...POOL]);
   if(!qs.length&&mode==='flagged'){toast('Nothing is flagged. Tap Flag on a question, or press F, to keep it here.');return;}
+  if(!qs.length&&mode==='certain'){toast('Nothing answered Certain is still wrong.');return;}
   if(!qs.length){alert(mode==='due'?'Nothing left to review right now — the whole bank is scheduled.':'No questions available for that selection.');return;}
   /* A deck handed in (the study plan) is asked in the order it was planned in, not shuffled below. (Only
      'all' decks are ever saved for resuming: resumeKey is null for review, so a plan has nothing to resume.) */
@@ -5355,6 +5359,7 @@ const ACTIONS={
   startChapter:el=>startQuiz(el.dataset.ch),
   /* the figures card's one button, which says Stop while a download runs (offlinePaint() writes its words) */
   offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),
+  startCertainWrong:()=>startQuiz(null,'certain'),
   exportMarkup:()=>exportMarkup(),
   confirmBackupSaved:()=>confirmBackupSaved(),
   importMarkup:()=>importMarkup(),

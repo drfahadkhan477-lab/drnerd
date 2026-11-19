@@ -511,6 +511,15 @@ and the Practice Lab's drill items pass theirs.
 **S5 — Calibration as a skill.** `src/core/calib.js` measures it; make it
 trainable: a queue of answers marked Certain and wrong, and a Brier-score trend on
 Brain once the bands have enough answers. *Sonnet.*
+*Done, on Progress rather than Brain:* the standing rule in section 6 keeps new
+elements off Home, and Progress already holds the calibration panel. A question
+answered Certain and wrong joins a queue (`Calib.certainWrong`) and leaves it the
+next time it is answered right; the panel's button practises the queue as a quiz
+of its own (`startQuiz(null,'certain')`). A Brier score a week
+(`Calib.brierTrend`), over answers rated with a band, each band read as a stated
+chance (Guess 0.25, Unsure 0.5, Fairly sure 0.75, Certain 0.95, in `BANDS`), is
+drawn once two weeks each have `MIN_SAMPLES` rated answers. verify-calib-pure,
+verify-statsscreen-pure, verify-results-pure, verify-calibrate.
 
 **S6 — Interleave the look-alikes.** Topic runs are blocked practice, which helps
 first understanding; telling similar diagnoses apart improves with interleaving.

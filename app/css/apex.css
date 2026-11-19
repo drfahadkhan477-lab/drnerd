@@ -225,6 +225,7 @@
 .cb-fill{display:block;height:100%;background:var(--accent);border-radius:999px}
 .cb-val{font-size:var(--t-tiny);color:var(--muted);width:6.5em;text-align:right;flex:none}
 .cb-thin{font-size:var(--t-tiny);color:var(--muted);padding:2px 0}
+.cb-go{margin-top:10px;background:var(--red-bg);color:var(--red-ink);border:1.5px solid var(--red-b)}
 .miss-lab{width:100%}
 /* Only the tutor's own prompt row folds away. It is hidden by id rather than
    by class so the Lab and the search screen, which share .chips and have no
