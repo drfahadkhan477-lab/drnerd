@@ -501,6 +501,56 @@ async function heapAfterBoot(page, url) {
        !!heartDigest && heartRef.indexOf('heart-' + heartDigest + '.webp') > 0, `${heartRef} / ${heartDigest}`);
   }
 
+  head('the shipped page runs only the scripts it brought');
+  {
+    /* docs/ROADMAP.md, E2; scripts/csp.js, scriptMeta. The shell's <meta> policy now carries a script-src: 'self' and
+       the hash of each inline script in index.html as served. So the app has to boot and work with no violation, and an
+       injected onclick, an injected inline script and a javascript: link each have to be refused, and said to be. */
+    const idx = await (await fetch(ORIGIN + '/index.html')).text();
+    const meta = (idx.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)">/) || [])[1] || '';
+    const listed = [...(meta.match(/script-src ([^;]*)/) || ['', ''])[1].matchAll(/'sha256-([^']+)'/g)].map(m => m[1]).sort();
+    const inline = [...idx.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => require('crypto').createHash('sha256').update(m[1], 'utf8').digest('base64')).sort();
+    ok('index.html\'s policy has a script-src of \'self\' and the hash of each of its inline scripts, and of nothing else',
+       /script-src 'self' 'sha256-/.test(meta) && inline.length > 0 && JSON.stringify(listed) === JSON.stringify(inline) && idx.indexOf('Content-Security-Policy') < idx.search(/<script\b/i),
+       `${listed.length} listed, ${inline.length} inline`);
+
+    const transport = await originTransport(target);
+    const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 } });
+    /* A listener before anything on the page runs, so a violation during the boot is heard too. */
+    await ctx.addInitScript(() => { window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.effectiveDirective + ' ' + String(e.blockedURI || e.sample || '').slice(0, 40))); });
+    const page = watch(await ctx.newPage(), events, 'script-src', errors);
+    await page.goto(transport.url, { waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+    /* Screens opened as a reader opens them, by taps the page's one listener hears: Settings, Study, a question, Labs. */
+    const tap = async sel => { await page.click(sel, { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(400); };
+    await tap('#settingsBtn');
+    await tap('#generalSettings [data-action="closeSettings"]');
+    await page.evaluate(() => goStudy()); await page.waitForTimeout(600);
+    await tap('[data-action="startAll"]');
+    const onQuiz = await page.evaluate(() => S.screen);
+    await tap('#navbar .nav-brand');
+    const after = await page.evaluate(() => ({ screen: S.screen, csp: window.__csp.slice(), app: typeof ACTIONS === 'object' }));
+    ok('it boots and works under that policy: Settings, Study, a question and Home, tapped, raise no violation',
+       after.app && onQuiz === 'quiz' && after.screen === 'home' && after.csp.length === 0, JSON.stringify({ onQuiz, ...after }));
+
+    const refused = await page.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      window.__csp = [];
+      const box = document.createElement('div'); document.body.appendChild(box);
+      box.innerHTML = '<button id="cspPlanted" onclick="window.__plantedRan=true">x</button>';
+      document.getElementById('cspPlanted').click();
+      const s = document.createElement('script'); s.textContent = 'window.__scriptRan=true'; document.body.appendChild(s);
+      box.innerHTML += '<a id="cspLink" href="javascript:window.__linkRan=true">y</a>';
+      document.getElementById('cspLink').click();
+      await wait(300);
+      box.remove();
+      return { handler: window.__plantedRan === true, script: window.__scriptRan === true, link: window.__linkRan === true, csp: window.__csp.slice() };
+    });
+    ok('an injected onclick, an injected inline script and a javascript: link do not run, and each is reported',
+       !refused.handler && !refused.script && !refused.link && refused.csp.length >= 3 && refused.csp.every(v => /^script-src/.test(v)), JSON.stringify(refused));
+    await ctx.close();
+  }
+
   head('content is served intact');
   {
     const qs = await (await fetch(ORIGIN + '/content/questions.json')).json();

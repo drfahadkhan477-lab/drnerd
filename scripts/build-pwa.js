@@ -1089,6 +1089,24 @@ const APP_INTEGRITY = 'sha256-' + crypto.createHash('sha256').update(appCode).di
 if (html.split('__APP_INTEGRITY__').length !== 2) throw new Error('the loader lost its unique app integrity placeholder');
 html = html.replace('__APP_INTEGRITY__', APP_INTEGRITY);
 
+/* THE SCRIPT-SRC (docs/ROADMAP.md, E2; scripts/csp.js, scriptMeta). With no inline handler left in the app, the
+   shell can say which scripts may run: its own inline ones, by the hash of each as written out here, and files from
+   this origin (app.js and the vendor files, which the loader and the app add by src). Nothing else: not an injected
+   <script>, not an onclick, not a javascript: URL, not eval. So this is the last thing done to the shell, and it
+   refuses to build anything it cannot account for. */
+step('ship a script-src that admits only the shell\'s own scripts', () => {
+  const opens = (html.match(/<script\b/gi) || []).length;
+  const inline = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  if (inline.length !== opens) throw new Error(`the shell has ${opens} <script> tags but ${inline.length} whole ones were found`);
+  if (inline.some(m => /\bsrc\s*=/i.test(m[1]))) throw new Error('the shell loads a script by src in its markup; the loader is meant to add them');
+  if (/\son[a-z]{3,}\s*=\s*["']/i.test(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) throw new Error('the shell\'s markup carries an inline handler, which this policy refuses');
+  if (/javascript:/i.test(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) throw new Error('the shell\'s markup carries a javascript: URL, which this policy refuses');
+  const hashes = inline.map(m => crypto.createHash('sha256').update(m[2], 'utf8').digest('base64'));
+  if (html.split(CSP.META).length !== 2) throw new Error('the base <meta> policy is not in the shell exactly once');
+  html = html.replace(CSP.META, CSP.scriptMeta(hashes));
+  if (html.indexOf('Content-Security-Policy') > html.search(/<script\b/i)) throw new Error('the policy comes after a script it is meant to govern');
+});
+
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 fs.writeFileSync(path.join(DIST, 'app.js'), appCode);
 

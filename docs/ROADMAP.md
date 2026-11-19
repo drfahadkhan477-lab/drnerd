@@ -44,9 +44,9 @@ The risks, in the order they matter:
    real study sessions, so Phase 0 is studying.
 2. **The app lives in the shell.** `src/` holds the models; most application
    logic is one inline script in `app/systole.html` over a global `S`, wired by
-   inline `onclick` handlers. It cannot be tested without a browser, every
-   change to it is a change to one very large file, and the inline handlers are
-   why the split build cannot have a `script-src` (`scripts/csp.js` says so).
+   inline `onclick` handlers. It cannot be tested without a browser, and every
+   change to it is a change to one very large file. (The inline handlers are
+   gone since E2, and the split build now ships a `script-src`.)
 3. **Two design languages.** The landing pages (Quiet Atlas: warm surface, teal
    rail, serif) and the inner screens (navy bar, cool gradient, dark gradient
    buttons) differ by accident rather than decision. F1 is one result.
@@ -347,8 +347,15 @@ shown when something has already failed (`verify-failsafe` taps it), and the
 last-resort fallback links to the page itself rather than to `javascript:`. No
 `on*` attribute is left in `app/systole.html` or `src/`, and `verify-actions-pure`
 keeps it so: it reads the shell and every module with comments blanked and fails,
-naming the file and line, on one put back. Next: ship `scriptPolicy` in the split
-build.
+naming the file and line, on one put back. *Done:* the split build ships the
+`script-src`. `scripts/build-pwa.js`, as the last thing it does to the shell,
+hashes each inline script and puts `scriptMeta(hashes)` in place of the base
+`<meta>`, and refuses to build a shell with a script it cannot account for, an
+inline handler or a `javascript:` URL in its markup; the Worker's header keeps
+the other directives, since it ships verbatim. `verify-pwa` holds on the served
+build that the hashes are exactly the inline scripts', that the app boots and
+works with no violation, and that an injected `onclick`, inline script and
+`javascript:` link are each refused and reported.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
