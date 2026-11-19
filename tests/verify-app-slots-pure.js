@@ -219,9 +219,11 @@ head('every module of src/ the app runs is a slot of the committed shell');
      vision.js were such copies, the inline ones newer, until they were cut.
      src/worker and src/lab are other deployables. The two bank modules are
      read by the split build's own scripts (build-pwa, csp, extract-content),
-     not by the shell. */
+     not by the shell. circulation.js is run by its suite alone until the
+     views are wired to it (docs/ROADMAP.md, S8); then it takes a slot and
+     leaves this list. */
   const SHELL = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
-  const NOT_IN_SHELL = ['src/core/bankpack.js', 'src/core/bankstore.js'];
+  const NOT_IN_SHELL = ['src/core/bankpack.js', 'src/core/bankstore.js', 'src/core/circulation.js'];
   const mods = Object.keys(Slots.repoSources(ROOT).srcs).filter(n => !/^src\/(worker|lab)\//.test(n)).sort();
   const slots = n => SHELL.split(Slots.token('src', n)).length - 1;
   const loose = mods.filter(n => !NOT_IN_SHELL.includes(n) && slots(n) !== 1);

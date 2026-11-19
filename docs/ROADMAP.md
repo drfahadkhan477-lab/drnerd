@@ -561,6 +561,18 @@ regurgitation, HFrEF, HFpEF, and tamponade against constriction with respiratory
 variation. Validate each lesion against textbook haemodynamics with tolerance
 tables, and keep the rule that valve events are curve crossings. *Fable* (very
 high effort) for the model and its validation; *Opus* to wire the views.
+*Started, the engine:* `src/core/circulation.js` is the closed circulation
+above, with no view wired to it yet. It has four elastance chambers, Bernoulli
+valves with forward and regurgitant orifices and no inertance, so a valve moves
+only where two pressures cross. Its beds are three-element Windkessels, and a
+pericardium holds the chambers and any fluid. Breathing reaches the chambers
+only through a pericardium that passes it on. Each lesion is a change from
+normal, run to a steady state and held by `Circulation.VALIDATION` to its
+textbook ranges (verify-circulation-pure). Not yet reproduced: constriction's
+breathing signs (the mitral E wave falls a few percent where the textbook has a
+quarter or more), so constriction is held to its catheter signs alone. Next:
+that gap, then the Wiggers diagram, PV loop, sounds, Doppler and 3D heart
+driven from it, one view per change.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them
