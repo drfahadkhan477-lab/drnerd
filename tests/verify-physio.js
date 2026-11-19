@@ -579,6 +579,26 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('and Normal goes back to physio.js', fl.after === 'physio');
   }
 
+  head('the right-heart view draws a lesion\'s right heart (docs/ROADMAP.md, S8)');
+  {
+    await page.evaluate(() => { window.__oldPhysioCanvas = document.getElementById('physioCanvas'); });
+    await page.evaluate(() => document.querySelector('[data-physio-view="right"]').click());
+    await afterRender(page, () => { const cv = document.getElementById('physioCanvas'); return !!cv && cv !== window.__oldPhysioCanvas && !!physio && physioCanvasEl === cv && physio.view() === 'right'; },
+                      { label: 'the panel mounted again (Right heart)', timeout: 30000 });
+    const rh = await page.evaluate(() => {
+      const normal = physio.rightNow();
+      document.querySelector('[data-physio-lesion="as"]').click();
+      const as = physio.rightNow();
+      const note = document.getElementById('physioNote').textContent;
+      document.querySelector('[data-physio-lesion="normal"]').click();
+      return { normal: { source: normal.source, s2: normal.s2Split }, as: { source: as.source, s2: as.s2Split, waves: as.waves.map(w => w[0]) }, note, after: physio.rightNow().source };
+    });
+    ok('on Normal the right-heart view reads physio.js, A2 before P2', rh.normal.source === 'physio' && rh.normal.s2 > 0, JSON.stringify(rh.normal));
+    ok('a tap on AS draws its right heart: S2 split reversed, P2 before A2, and the JVP\'s waves found on its own trace',
+       rh.as.source === 'as' && rh.as.s2 < 0 && ['a', 'v', 'x', 'y'].every(w => rh.as.waves.includes(w)), JSON.stringify(rh.as));
+    ok('the note names the lesion, and Normal goes back to physio.js', /AS\./.test(rh.note) && rh.after === 'physio', rh.note.slice(0, 60));
+  }
+
   head('scrubbing pauses the live clock and reads back a chosen instant');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(150);

@@ -613,8 +613,12 @@ PV view draws a lesion's loop over the normal one, and offers the interventions
 on Normal alone. *Flow, wired:* a lesion's valve flows, below the line where a
 leak runs back (AR in diastole, MR in systole), and its coronary flow by
 physio.js's own rule, so AR and AS starve the left coronary as the textbook
-says. Next: the constriction gap, then the right heart, sounds and the 3D heart,
-one view per change, and Normal from the engine once every view reads it.
+says. *The right heart, wired:* a lesion's RA, RV and PA on axes that fit, the
+JVP's waves found on its own trace, and S2's split off the crossings: reversed
+in severe AS, wide in MR. S1's split is left unsaid for a lesion: with no
+inertia the mitral valve shuts at the end of the atrial kick in a stiff
+ventricle. Next: the constriction gap, then sounds and the 3D heart, one view
+per change, and Normal from the engine once every view reads it.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them

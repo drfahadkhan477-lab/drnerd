@@ -32,7 +32,7 @@
         describes it. A chip for every rhythm, in RHYTHM_KEYS' order, the chosen one marked.
      2. The cycle panel is headed with the chosen view's name, and falls back to the first view when what
         is stored names none. Play or Pause says what a tap would do. One speed and one view are marked.
-        The lesions are offered in the Wiggers view, the PV loop and Flow and nowhere else, the chosen one
+        The lesions are offered in the Wiggers view, the PV loop, Flow and the right heart and nowhere else, the chosen one
         marked; the interventions in the PV loop on the normal heart alone, since each changes physio.js's
         loop and a lesion's is the engine's.
      3. The 12-lead panel has a canvas only for a rhythm that has a modelled 12-lead. Any other rhythm gets
@@ -60,7 +60,7 @@ function physioHtml(p){
            title="${n===1?'Real time':'\u0024{label} of real time'}">${e(label)}</button>`).join('')}</div>
     <div class="physio-chips">${PHYSIO_VIEWS.map(([k,label])=>
       `<button class="chip${physioView===k?' hot':''}" data-physio-view="${k}">${e(label)}</button>`).join('')}</div>
-    ${(v[0]==='wiggers'||v[0]==='pv'||v[0]==='flow')&&PHYSIO_LESIONS?`<div class="physio-chips lesion-chips">${PHYSIO_LESIONS.map(([k,label])=>
+    ${(v[0]==='wiggers'||v[0]==='pv'||v[0]==='flow'||v[0]==='right')&&PHYSIO_LESIONS?`<div class="physio-chips lesion-chips">${PHYSIO_LESIONS.map(([k,label])=>
       `<button class="chip mini${physioLesion===k?' hot':''}" data-physio-lesion="${k}">${e(label)}</button>`).join('')}</div>`:''}
     <div class="physio-stage"><canvas id="physioCanvas" aria-label="Cardiac cycle diagram"></canvas></div>
     ${physioView==='pv'&&(physioLesion||'normal')==='normal'?`<div class="physio-chips iv-chips">${Physio.INTERVENTIONS.map(iv=>

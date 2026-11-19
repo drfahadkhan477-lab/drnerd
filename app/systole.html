@@ -2155,6 +2155,8 @@ function physioNoteHtml(){
     return `<b>Flow follows the gradient.</b> The left coronary bed is squeezed shut by the muscle
       around it during systole and fills in diastole; the right is perfused throughout, because RV
       cavity pressure never rises far. Shorten diastole and you starve the left side first.`;
+  if(physioView==='right'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The splits are measured where the pressures cross. Computed by the circulation model.`;
   if(physioView==='right')
     return `<b>Same cycle, quarter the pressure, different timing.</b> The right ventricle has
       about 10 mmHg to overcome instead of 80, so it opens earlier and shuts later — which is the

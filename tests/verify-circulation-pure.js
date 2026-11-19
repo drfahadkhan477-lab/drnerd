@@ -142,6 +142,17 @@ head('flow for the views: leaks run backward, and the coronaries follow their pr
      [0.05, 0.3, 0.45, 0.8].every(t => Math.abs(n.coronaryFlow(t, 'left') - Math.max(0, (n.aoPressure(t) - 0.86 * n.lvPressure(t)) * 0.011)) < 1e-12));
 }
 
+head('the right heart for the views: the second sound splits as the textbook says');
+{
+  const split = name => { const y = C.cycle(name); return (y.T.pc - y.T.ac) * 1000 * y.beat; };
+  ok('normal: A2 before P2, split by 10 to 60 ms', split('normal') >= 10 && split('normal') <= 60, split('normal').toFixed(0) + ' ms');
+  ok('severe aortic stenosis: the split reversed, P2 before A2 (paradoxical), as the LV takes longer to empty', split('as') < 0, split('as').toFixed(0) + ' ms');
+  ok('severe mitral regurgitation: the split wide, as A2 comes early with the LV emptying both ways', split('mr') > split('normal') + 30, split('mr').toFixed(0) + ' ms');
+  const ms = C.cycle('ms'), n = C.cycle('normal');
+  const peak = (y, f) => { let m = -Infinity; for (let i = 0; i < 600; i++) m = Math.max(m, f(i / 600)); return m; };
+  ok('mitral stenosis loads the right heart: PA systolic well above normal', peak(ms, ms.paPressure) > peak(n, n.paPressure) + 8, `${peak(ms, ms.paPressure).toFixed(0)} against ${peak(n, n.paPressure).toFixed(0)}`);
+}
+
 head('the presets are changes from normal, and nothing else');
 {
   const before = JSON.stringify(C.NORMAL);

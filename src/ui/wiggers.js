@@ -203,7 +203,7 @@ function mount(canvas, opts) {
     ctx.restore();
   }
   /* What the Wiggers view reads: the lesion's beat when one is set, else physio.js. */
-  const D = () => ((S.view === 'wiggers' || S.view === 'pv' || S.view === 'flow') && S.cycle) ? S.cycle : Ph;
+  const D = () => ((S.view === 'wiggers' || S.view === 'pv' || S.view === 'flow' || S.view === 'right') && S.cycle) ? S.cycle : Ph;
   /* The loop the PV view draws: the lesion's beat's, or physio.js's with the intervention chosen. */
   function loopNow() {
     if (S.view === 'pv' && S.cycle) return S.cycle.loop;
@@ -616,34 +616,37 @@ function mount(canvas, opts) {
     const hh = (H - TOP - BOT - gap) / 2;
     const Br = box(L, TOP, w, hh);
     const Bl = box(L, TOP + hh + gap, w, hh);
+    const Q = D(), drawn = Q === Ph, r = rightNow();
+    /* physio.js's fixed axes, or as far as a lesion's pressures reach. */
+    const rHi = drawn ? 34 : Math.max(34, Math.ceil((r.max + 4) / 10) * 10), rStep = rHi > 60 ? 20 : 10;
+    const lHi = drawn ? 130 : Math.max(130, Math.ceil(Q.max.p / 40) * 40);
 
     for (const B of [Br, Bl]) phaseBands(B, p);
 
-    vaxis(Br, 0, 34, 10, p, 'mmHg');
-    trace(Br, Ph.raPressure, 0, 34, p.ra, 1.9);
-    trace(Br, Ph.paPressure, 0, 34, p.pa, 2.3);
-    trace(Br, Ph.rvPressure, 0, 34, p.rv, 2.3);
-    text('PA', xAt(Br, .60), yAt(Br, Ph.paPressure(.60), 0, 34) - 11, p.pa, 10.5, 700);
-    text('RV', xAt(Br, .24), yAt(Br, Ph.rvPressure(.24), 0, 34) - 11, p.rv, 10.5, 700);
-    text('RA / JVP', xAt(Br, .47), yAt(Br, Ph.raPressure(.47), 0, 34) - 10, p.ra, 10.5, 700);
+    vaxis(Br, 0, rHi, rStep, p, 'mmHg');
+    trace(Br, Q.raPressure, 0, rHi, p.ra, 1.9);
+    trace(Br, Q.paPressure, 0, rHi, p.pa, 2.3);
+    trace(Br, Q.rvPressure, 0, rHi, p.rv, 2.3);
+    text('PA', xAt(Br, .60), yAt(Br, Q.paPressure(.60), 0, rHi) - 11, p.pa, 10.5, 700);
+    text('RV', xAt(Br, .24), yAt(Br, Q.rvPressure(.24), 0, rHi) - 11, p.rv, 10.5, 700);
+    text('RA / JVP', xAt(Br, .47), yAt(Br, Q.raPressure(.47), 0, rHi) - 10, p.ra, 10.5, 700);
     /* a, c and v named on the JVP — because this trace is what you are looking
-       at in the neck, and naming the waves is how it becomes readable. */
-    [['a', .058], ['c', .148], ['v', .448]].forEach(([lab, at]) =>
-      text(lab, xAt(Br, at), yAt(Br, Ph.raPressure(at), 0, 34) - 10, p.ra, 10, 800, 'center', true));
-    [['x', .205], ['y', .545]].forEach(([lab, at]) =>
-      text(lab, xAt(Br, at), yAt(Br, Ph.raPressure(at), 0, 34) + 11, p.ra, 10, 800, 'center', true));
+       at in the neck, and naming the waves is how it becomes readable. A lesion's
+       are found on its own trace (rightNow). */
+    r.waves.filter(([, , up]) => up).forEach(([lab, at]) =>
+      text(lab, xAt(Br, at), yAt(Br, Q.raPressure(at), 0, rHi) - 10, p.ra, 10, 800, 'center', true));
+    r.waves.filter(([, , up]) => !up).forEach(([lab, at]) =>
+      text(lab, xAt(Br, at), yAt(Br, Q.raPressure(at), 0, rHi) + 11, p.ra, 10, 800, 'center', true));
 
-    vaxis(Bl, 0, 130, 40, p, 'mmHg');
-    trace(Bl, Ph.aoPressure, 0, 130, p.ao, 2.1);
-    trace(Bl, Ph.lvPressure, 0, 130, p.lv, 2.1);
+    vaxis(Bl, 0, lHi, 40, p, 'mmHg');
+    trace(Bl, Q.aoPressure, 0, lHi, p.ao, 2.1);
+    trace(Bl, Q.lvPressure, 0, lHi, p.lv, 2.1);
     text('the left side, to scale', Bl.r - 4, Bl.y + 12, p.dim, 10, 600, 'right');
 
     /* The splits, measured off the crossings rather than annotated. */
-    const d = Ph.derived(secs());
-    const x = d.crossings;
     ctx.save();
     let lastX = -99;
-    for (const ev of Ph.EVENTS) {
+    for (const ev of Q.EVENTS) {
       if (!ev.sound) continue;
       const xx = xAt(Br, ev.at);
       const stack = xx - lastX < 18;
@@ -656,13 +659,41 @@ function mount(canvas, opts) {
     ctx.restore();
 
     for (const B of [Br, Bl]) cursor(B, p);
-    text('S1 split  M1→T1  ' + d.s1Split.toFixed(0) + ' ms', L, Bl.b + 18, p.muted, 10.5, 600);
-    text('S2 split  A2→P2  ' + d.s2Split.toFixed(0) + ' ms', L, Bl.b + 34, p.muted, 10.5, 600);
-    text('RV ' + d.rvSys.toFixed(0) + '/' + d.rvEdp.toFixed(0)
-       + '   PA ' + d.paSys.toFixed(0) + '/' + d.paDia.toFixed(0)
-       + '   RA mean ' + d.raMean.toFixed(0), W - 14, Bl.b + 18, p.dim, 10, 500, 'right', true);
-    text('The right ventricle opens earlier and shuts later, because it has 10 mmHg to beat, not 80.',
+    /* S1's split is said for physio.js's cycle alone. In a lesion's beat the mitral valve shuts at a pressure
+       crossing with no inertia to hold it open, so in a stiff ventricle it shuts at the end of the atrial kick
+       (HFpEF: M1 129 ms before T1), which no stethoscope hears. S2's split is robust and is said for both. */
+    if (drawn) text('S1 split  M1→T1  ' + r.s1Split.toFixed(0) + ' ms', L, Bl.b + 18, p.muted, 10.5, 600);
+    text('S2 split  A2→P2  ' + r.s2Split.toFixed(0) + ' ms' + (r.s2Split < 0 ? '  (reversed: P2 first)' : ''), L, Bl.b + 34, p.muted, 10.5, 600);
+    text('RV ' + r.rvSys.toFixed(0) + '/' + r.rvEdp.toFixed(0)
+       + '   PA ' + r.paSys.toFixed(0) + '/' + r.paDia.toFixed(0)
+       + '   RA mean ' + r.raMean.toFixed(0), W - 14, Bl.b + 18, p.dim, 10, 500, 'right', true);
+    if (drawn) text('The right ventricle opens earlier and shuts later, because it has 10 mmHg to beat, not 80.',
          W - 14, Bl.b + 34, p.dim, 10, 500, 'right');
+  }
+  /* What the right-heart view says in numbers, from the beat it draws: the S1 and S2 splits in ms off the measured
+     crossings (A2 to P2 negative where P2 comes first), RV and PA pressures, RA mean, and where the JVP's waves are.
+     physio.js's own for its cycle; for a lesion, the a wave is the RA's highest point before the tricuspid shuts,
+     the v its highest from pulmonic closure to tricuspid opening, the x descent its lowest between the two, the y
+     its lowest after the tricuspid opens. */
+  function rightNow() {
+    const Q = (S.cycle && S.view === 'right') ? S.cycle : Ph;
+    if (Q === Ph) {
+      const d = Ph.derived(secs());
+      return { source: 'physio', s1Split: d.s1Split, s2Split: d.s2Split, rvSys: d.rvSys, rvEdp: d.rvEdp, paSys: d.paSys, paDia: d.paDia, raMean: d.raMean, max: 34,
+               waves: [['a', .058, true], ['c', .148, true], ['v', .448, true], ['x', .205, false], ['y', .545, false]] };
+    }
+    const ms = 1000 * Q.beat, N = 600, ts = [];
+    for (let i = 0; i < N; i++) ts.push(i / N);
+    const ext = (fn, lo, hi, big) => { let best = null; for (const t of ts) if (t >= lo && t < hi && (best === null || (big ? fn(t) > fn(best) : fn(t) < fn(best)))) best = t; return best; };
+    const T = Q.T;
+    let rvSys = -Infinity, paSys = -Infinity, paDia = Infinity, ra = 0, max = 0;
+    for (const t of ts) {
+      rvSys = Math.max(rvSys, Q.rvPressure(t)); paSys = Math.max(paSys, Q.paPressure(t)); paDia = Math.min(paDia, Q.paPressure(t));
+      ra += Q.raPressure(t) / N; max = Math.max(max, Q.rvPressure(t), Q.paPressure(t), Q.raPressure(t));
+    }
+    const waves = [['a', ext(Q.raPressure, 0, T.tc, true), true], ['v', ext(Q.raPressure, T.pc, T.to, true), true],
+                   ['x', ext(Q.raPressure, T.tc, T.pc, false), false], ['y', ext(Q.raPressure, T.to, 1, false), false]].filter(w => w[1] !== null);
+    return { source: Q.preset, s1Split: (T.tc - T.mc) * ms, s2Split: (T.pc - T.ac) * ms, rvSys, rvEdp: Q.rvPressure(Q.rAt), paSys, paDia, raMean: ra, max, waves };
   }
 
   /* ════════════════════ view: Starling and Guyton ════════════════════════ */
@@ -999,6 +1030,7 @@ function mount(canvas, opts) {
     phaseNow: () => D().phaseAt(S.t),
     loopNow,
     flowNow,
+    rightNow,
     intervention: () => S.iv,
     play() { S.playing = true; S.last = 0; return api; },
     pause() { S.playing = false; return api; },
