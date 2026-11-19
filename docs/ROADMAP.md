@@ -337,8 +337,16 @@ offence) and the Apex strip's `openFigureFrom`, the pearl's `openPearlFigure`,
 whose keys are in `KEY_ACTIONS` (`verify-pearl` opens it with Enter;
 `verify-homepager` holds that End scrolls it and goes no further), and a
 question figure's full-screen button `openQuestionFigures` (`verify-figzoom`
-taps it; `verify-chatfigs` taps a reply's figure). Next: the other screens, one
-at a time.
+taps it; `verify-chatfigs` taps a reply's figure). The last ones name actions
+too: Leave focus mode (`verify-focus` taps it), the related question's Close and
+Go to this question (`verify-figzoom`), a note card's Edit and Delete
+(`verify-backup-ids`), Apex's actions on this device (`verify-chat`) and the
+voice dock's Stop (`verify-studyvisuals`). The crash screen's Reload has a
+listener of its own, added when the screen is drawn, because that screen is
+shown when something has already failed (`verify-failsafe` taps it), and the
+last-resort fallback links to the page itself rather than to `javascript:`. No
+`on*` attribute is left in `app/systole.html` or `src/`. Next: a check that keeps
+it so, then ship `scriptPolicy` in the split build.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
