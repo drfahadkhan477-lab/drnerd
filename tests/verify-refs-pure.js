@@ -189,13 +189,18 @@ head('the page hands the module what it has, and keeps what the markup names');
     + '\nvar listeners=[]; var doc={ addEventListener:(t,f)=>listeners.push([t,f]), removeEventListener(){}, contains:()=>true };\nActions.install(doc,ACTIONS);\nActions.install(doc,INPUT_ACTIONS,"input");\nActions.install(doc,CHANGE_ACTIONS,"change");', tctx);
   const tapAll = html => { tcalls.length = 0; [...html.matchAll(/<button\b([^>]*)>/g)].forEach(m => {
     const at = Object.fromEntries([...m[1].matchAll(/([a-z-]+)="([^"]*)"/g)].map(x => [x[1], x[2]]));
-    const el = { nodeType: 1, dataset: {}, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
+    /* dataset as a browser builds it: each data-* attribute, its name in camel case (data-ref-id is refId). */
+    const dataset = Object.fromEntries(Object.entries(at).filter(([k]) => k.startsWith('data-')).map(([k, v]) => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), v]));
+    const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
     tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ type: 'click', target: el })); }); return tcalls.slice(); };
   const tapsEdited = tapAll(edited), tapsLooked = tapAll(looked);
-  ok('tapped through the real Actions and the page\'s tables, with a note edited: Save, Cancel, Import, Export, Back, then the pager, each its own function with nothing',
-     J(tapsEdited) === J(['refSave', 'refCancel', 'refImportText', 'refExport', 'goHome', 'refMore']), J(tapsEdited));
-  ok('and with one note looked at: the hidden form\'s, then Back to study and Show all notes, with nothing, so the whole library is shown',
-     J(tapsLooked) === J(['refSave', 'refImportText', 'refExport', 'goHome', 'goHome', 'goRefs']), J(tapsLooked));
+  /* A card's Edit and Delete name actions too (refCard(), docs/ROADMAP.md, E2), each with its own note's id: worked out
+     here from the cards drawn, in the order drawn, newest first. */
+  const cardTaps = html => [...html.matchAll(/data-ref-id="([^"]*)" data-action="refEdit"/g)].flatMap(m => ['refEdit ' + J([m[1]]), 'refRemove ' + J([m[1]])]);
+  ok('tapped through the real Actions and the page\'s tables, with a note edited: Save, Cancel, Import, Export, Back with nothing, then each card\'s Edit and Delete with its own note\'s id, then the pager',
+     cardTaps(edited).length === 48 && cardTaps(edited)[0] === 'refEdit ["n29"]' && J(tapsEdited) === J(['refSave', 'refCancel', 'refImportText', 'refExport', 'goHome', ...cardTaps(edited), 'refMore']), J(tapsEdited).slice(0, 220));
+  ok('and with one note looked at: the hidden form\'s, then Back to study and Show all notes, with nothing, so the whole library is shown, then that note\'s Edit and Delete',
+     J(tapsLooked) === J(['refSave', 'refImportText', 'refExport', 'goHome', 'goHome', 'goRefs', 'refEdit ["n3"]', 'refRemove ["n3"]']), J(tapsLooked));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
