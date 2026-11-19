@@ -203,7 +203,7 @@ function mount(canvas, opts) {
     ctx.restore();
   }
   /* What the Wiggers view reads: the lesion's beat when one is set, else physio.js. */
-  const D = () => ((S.view === 'wiggers' || S.view === 'pv') && S.cycle) ? S.cycle : Ph;
+  const D = () => ((S.view === 'wiggers' || S.view === 'pv' || S.view === 'flow') && S.cycle) ? S.cycle : Ph;
   /* The loop the PV view draws: the lesion's beat's, or physio.js's with the intervention chosen. */
   function loopNow() {
     if (S.view === 'pv' && S.cycle) return S.cycle.loop;
@@ -539,29 +539,44 @@ function mount(canvas, opts) {
     const Bq = box(L, TOP, w, hh);
     const Bc = box(L, TOP + hh + gap, w, hh);
     const sec = secs();
+    /* physio.js's flows are per cycle and scaled by its length; a lesion's beat gives mL/s as it ran. */
+    const Q = D(), drawn = Q === Ph;
+    const aoF = drawn ? t => Ph.aorticFlow(t, sec) : Q.aorticFlow;
+    const mvF = drawn ? t => Ph.mitralFlow(t, sec) : Q.mitralFlow;
+    const corF = drawn ? Ph.coronaryFlow : Q.coronaryFlow;
 
     for (const B of [Bq, Bc]) { phaseBands(B, p); eventLines(B, p, 'L'); }
 
-    vaxis(Bq, 0, 650, 200, p, 'mL/s');
-    trace(Bq, t => Ph.aorticFlow(t, sec), 0, 650, p.ao, 2.2, { fill: .13 });
-    trace(Bq, t => Ph.mitralFlow(t, sec), 0, 650, p.vol, 2.2, { fill: .13 });
+    /* The flow axis: physio.js's fixed 0 to 650, or as far as a lesion's flows reach, below zero where a valve
+       leaks, since a regurgitant jet IS flow the wrong way. */
+    let fMin = 0, fMax = 650;
+    if (!drawn) {
+      let lo = 0, hi = 0;
+      for (let i = 0; i < 400; i++) { const t = i / 400; lo = Math.min(lo, aoF(t), mvF(t)); hi = Math.max(hi, aoF(t), mvF(t)); }
+      fMin = lo < -20 ? Math.floor(lo / 200) * 200 : 0; fMax = Math.max(650, Math.ceil(hi / 200) * 200);
+    }
+    vaxis(Bq, fMin, fMax, 200, p, 'mL/s');
+    if (fMin < 0) hline(Bq, yAt(Bq, 0, fMin, fMax), p.gridB, 1);
+    trace(Bq, aoF, fMin, fMax, p.ao, 2.2, { fill: .13 });
+    trace(Bq, mvF, fMin, fMax, p.vol, 2.2, { fill: .13 });
     text('Aortic', xAt(Bq, .24), Bq.y + 12, p.ao, 10.5, 700);
     text('Mitral', xAt(Bq, .60), Bq.y + 12, p.vol, 10.5, 700);
+    if (fMin < 0) text('regurgitant', Bq.x + 4, Bq.b - 8, p.dim, 9.5, 600);
     /* E and A, marked where the model puts them rather than where a figure
        would. The ratio is the number that gets used at the bedside. */
     let E = 0, Et = 0, A = 0, At = 0;
     for (let i = 0; i < 900; i++) {
-      const t = i / 900, q = Ph.mitralFlow(t, sec);
-      if (t >= Ph.T.mo && t < Ph.T.dias && q > E) { E = q; Et = t; }
-      if (t < Ph.T.mc && q > A) { A = q; At = t; }
+      const t = i / 900, q = mvF(t);
+      if (t >= Q.T.mo && t < Math.max(Q.T.dias, Q.T.mo + 0.001) && q > E) { E = q; Et = t; }
+      if (t < Q.T.mc && q > A) { A = q; At = t; }
     }
-    text('E', xAt(Bq, Et), yAt(Bq, E, 0, 650) - 10, p.vol, 11, 800, 'center', true);
-    text('A', xAt(Bq, At), yAt(Bq, A, 0, 650) - 10, p.vol, 11, 800, 'center', true);
-    text('E/A ' + (E / A).toFixed(1), Bq.r - 4, Bq.y + 12, p.muted, 10, 700, 'right', true);
+    if (E > 0) text('E', xAt(Bq, Et), yAt(Bq, E, fMin, fMax) - 10, p.vol, 11, 800, 'center', true);
+    if (A > 0) text('A', xAt(Bq, At), yAt(Bq, A, fMin, fMax) - 10, p.vol, 11, 800, 'center', true);
+    if (E > 0 && A > 0) text('E/A ' + (E / A).toFixed(1), Bq.r - 4, Bq.y + 12, p.muted, 10, 700, 'right', true);
 
     vaxis(Bc, 0, 1.4, 0.4, p, 'mL/s', 1);
-    trace(Bc, t => Ph.coronaryFlow(t, 'left'), 0, 1.4, p.cor, 2.3, { fill: .16 });
-    trace(Bc, t => Ph.coronaryFlow(t, 'right'), 0, 1.4, p.rv, 2.0, { dash: [5, 3] });
+    trace(Bc, t => corF(t, 'left'), 0, 1.4, p.cor, 2.3, { fill: .16 });
+    trace(Bc, t => corF(t, 'right'), 0, 1.4, p.rv, 2.0, { dash: [5, 3] });
     text('Left coronary', xAt(Bc, .58), Bc.y + 12, p.cor, 10.5, 700);
     text('Right coronary', xAt(Bc, .16), Bc.y + 12, p.rv, 10.5, 700);
 
@@ -569,16 +584,29 @@ function mount(canvas, opts) {
        that the left curve is almost flat inside the shading. */
     ctx.save();
     ctx.fillStyle = p.ink; ctx.globalAlpha = .05;
-    ctx.fillRect(xAt(Bc, Ph.T.mc), Bc.y, (Ph.T.ac - Ph.T.mc) * Bc.w, Bc.h);
+    ctx.fillRect(xAt(Bc, Q.T.mc), Bc.y, (Q.T.ac - Q.T.mc) * Bc.w, Bc.h);
     ctx.restore();
-    text('systole', xAt(Bc, (Ph.T.mc + Ph.T.ac) / 2), Bc.b - 10, p.dim, 9.5, 600, 'center');
+    text('systole', xAt(Bc, (Q.T.mc + Q.T.ac) / 2), Bc.b - 10, p.dim, 9.5, 600, 'center');
 
-    const d = Ph.derived(sec);
-    text((d.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole',
+    const f = flowNow();
+    text((f.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole',
          Bc.x, Bc.b + 16, p.muted, 10.5, 600);
-    text('Peak aortic flow ' + Ph.extrema(t => Ph.aorticFlow(t, sec)).max.toFixed(0) + ' mL/s',
+    text('Peak aortic flow ' + f.peakAortic.toFixed(0) + ' mL/s',
          Bc.r, Bc.b + 16, p.dim, 10, 500, 'right');
     for (const B of [Bq, Bc]) cursor(B, p);
+  }
+  /* What the Flow view says in numbers, from the beat it draws: the share of left coronary flow outside systole
+     (mitral closure to aortic closure), and the peak aortic flow. physio.js's own figures for its cycle. */
+  function flowNow() {
+    const Q = (S.cycle && S.view === 'flow') ? S.cycle : Ph;
+    if (Q === Ph) { const d = Ph.derived(secs()); return { source: 'physio', leftDiastolicFraction: d.leftDiastolicFraction, peakAortic: Ph.extrema(t => Ph.aorticFlow(t, secs())).max }; }
+    let all = 0, dia = 0, peak = 0;
+    for (let i = 0; i < 800; i++) {
+      const t = i / 800, c = Q.coronaryFlow(t, 'left');
+      all += c; if (t < Q.T.mc || t >= Q.T.ac) dia += c;
+      peak = Math.max(peak, Q.aorticFlow(t));
+    }
+    return { source: Q.preset, leftDiastolicFraction: all ? dia / all : 0, peakAortic: peak };
   }
 
   /* ════════════════════ view: the right heart ════════════════════════════ */
@@ -970,6 +998,7 @@ function mount(canvas, opts) {
     cycle: () => S.cycle,
     phaseNow: () => D().phaseAt(S.t),
     loopNow,
+    flowNow,
     intervention: () => S.iv,
     play() { S.playing = true; S.last = 0; return api; },
     pause() { S.playing = false; return api; },

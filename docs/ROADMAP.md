@@ -610,8 +610,11 @@ draws its beat, with axes sized to it; Normal stays physio.js's drawn cycle
 carries its loop, its corners where the physiologist puts them (end-diastole at
 the R wave, end-systole at peak elastance) and on its own ESPVR and EDPVR; the
 PV view draws a lesion's loop over the normal one, and offers the interventions
-on Normal alone. Next: the constriction gap, then sounds, Doppler and the 3D
-heart, one view per change, and Normal from the engine once every view reads it.
+on Normal alone. *Flow, wired:* a lesion's valve flows, below the line where a
+leak runs back (AR in diastole, MR in systole), and its coronary flow by
+physio.js's own rule, so AR and AS starve the left coronary as the textbook
+says. Next: the constriction gap, then the right heart, sounds and the 3D heart,
+one view per change, and Normal from the engine once every view reads it.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them

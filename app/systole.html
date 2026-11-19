@@ -2149,6 +2149,8 @@ function physioNoteHtml(){
     return `<b>Two curves, one intersection.</b> Cardiac output is not set by the heart alone —
       it is set where what the heart can pump meets what the circulation returns. That is why an
       inotrope moves it so little, and why volume moves it so much in a failing ventricle.`;
+  if(physioView==='flow'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} Flow below the line runs back through a leaking valve. Computed by the circulation model.`;
   if(physioView==='flow')
     return `<b>Flow follows the gradient.</b> The left coronary bed is squeezed shut by the muscle
       around it during systole and fills in diastole; the right is perfused throughout, because RV

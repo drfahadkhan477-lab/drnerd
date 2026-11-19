@@ -122,6 +122,26 @@ head('the PV loop of each beat: its corners on its own lines, and each lesion wh
   ok('tamponade: a small loop on a raised floor', L('tamponade').edv < n.edv * 0.6 && L('tamponade').strokeWork < n.strokeWork / 3 && L('tamponade').edp > n.edp + 8, `EDV ${L('tamponade').edv.toFixed(0)}, EDP ${L('tamponade').edp.toFixed(0)}`);
 }
 
+head('flow for the views: leaks run backward, and the coronaries follow their pressure');
+{
+  const scan = (y, f) => { const xs = []; for (let i = 0; i < 800; i++) xs.push([i / 800, f(i / 800)]); return xs; };
+  const ar = C.cycle('ar'), mr = C.cycle('mr'), n = C.cycle('normal');
+  const arBack = scan(ar, ar.aorticFlow).filter(([, q]) => q < -1);
+  ok('aortic regurgitation: aortic flow runs backward, and only while the LV is below the aortic root, in diastole',
+     arBack.length > 100 && arBack.every(([t]) => ar.lvPressure(t) < ar.aoPressure(t) && (t < ar.T.ao || t >= ar.T.ac)), `${arBack.length} samples back, least ${Math.min.apply(null, arBack.map(x => x[1])).toFixed(0)} mL/s`);
+  const mrBack = scan(mr, mr.mitralFlow).filter(([, q]) => q < -1);
+  ok('mitral regurgitation: mitral flow runs backward through systole, while the LV is above the LA', mrBack.length > 100 && mrBack.every(([t]) => mr.lvPressure(t) > mr.laPressure(t)) && mrBack.some(([t]) => t > mr.T.ao && t < mr.T.ac),
+     `${mrBack.length} samples back`);
+  ok('a normal valve runs no flow backward', scan(n, n.aorticFlow).every(([, q]) => q >= 0) && scan(n, n.mitralFlow).every(([, q]) => q >= 0));
+  const cor = y => { let all = 0, dia = 0; for (const [t, q] of scan(y, t => y.coronaryFlow(t, 'left'))) { all += q; if (t < y.T.mc || t >= y.T.ac) dia += q; } return { mean: all / 800, dia: dia / all }; };
+  const cn = cor(n), car = cor(ar), cas = cor(C.cycle('as'));
+  ok('the left coronary fills mostly in diastole', cn.dia > 0.7, (cn.dia * 100).toFixed(0) + '%');
+  ok('aortic regurgitation starves it, by the low diastolic pressure that drives it', car.mean < cn.mean * 0.8, `${car.mean.toFixed(3)} against ${cn.mean.toFixed(3)} mL/s`);
+  ok('and aortic stenosis, by the wall that squeezes harder in systole', cas.mean < cn.mean * 0.9, `${cas.mean.toFixed(3)} against ${cn.mean.toFixed(3)} mL/s`);
+  ok('the coronary rule is physio.js\'s: root pressure less 0.86 of the LV\'s, through 0.011 mL/s per mmHg, never below zero',
+     [0.05, 0.3, 0.45, 0.8].every(t => Math.abs(n.coronaryFlow(t, 'left') - Math.max(0, (n.aoPressure(t) - 0.86 * n.lvPressure(t)) * 0.011)) < 1e-12));
+}
+
 head('the presets are changes from normal, and nothing else');
 {
   const before = JSON.stringify(C.NORMAL);

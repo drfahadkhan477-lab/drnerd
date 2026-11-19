@@ -463,6 +463,11 @@ function cycle(preset) {
     lvPressure: at(run.plv), aoPressure: at(run.pao), laPressure: at(run.pla), lvVolume: at(run.v.lv),
     rvPressure: at(run.prv), paPressure: at(run.ppa), raPressure: at(run.pra),
     aorticFlow: at(run.qav), mitralFlow: at(run.qmv),
+    /* Coronary flow by physio.js's own rule, so the two compare: the aortic root's pressure less the pressure in
+       the wall squeezing the vessels (0.86 of the LV's, 0.80 of the RV's), through a bed of 0.011 mL/s per mmHg.
+       Aortic regurgitation lowers the diastolic root pressure that drives the left; aortic stenosis raises the
+       wall pressure that throttles it in systole. */
+    coronaryFlow: (t, side) => Math.max(0, (at(run.pao)(t) - (side === 'right' ? 0.80 * at(run.prv)(t) : 0.86 * at(run.plv)(t))) * 0.011),
     EDV: m.edv, ESV: m.esv, SV: m.sv, EF: m.ef,
     max: { p: Math.max.apply(null, run.plv.concat(run.pao, run.pla)), v: Math.max.apply(null, run.v.lv) },
     min: { v: Math.min.apply(null, run.v.lv) },

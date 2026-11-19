@@ -553,6 +553,32 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('Normal brings back physio.js\'s loop and its interventions', back.ivs > 0 && back.esp === back.want, JSON.stringify(back));
   }
 
+  head('the Flow view draws a lesion\'s flows (docs/ROADMAP.md, S8)');
+  {
+    const tap = async (sel, label) => {
+      await page.evaluate(() => { window.__oldPhysioCanvas = document.getElementById('physioCanvas'); });
+      await page.evaluate(sel => document.querySelector(sel).click(), sel);
+      await afterRender(page, () => { const cv = document.getElementById('physioCanvas'); return !!cv && cv !== window.__oldPhysioCanvas && !!physio && physioCanvasEl === cv; },
+                        { label: `the panel mounted again (${label})`, timeout: 30000 });
+    };
+    await tap('[data-physio-view="flow"]', 'Flow');
+    /* In Flow a lesion chip sets the beat as it is tapped, as in the Wiggers view: nothing renders. */
+    const fl = await page.evaluate(() => {
+      const normal = physio.flowNow();
+      document.querySelector('[data-physio-lesion="ar"]').click();
+      const ar = physio.flowNow(), c = physio.cycle();
+      let back = 0; for (let i = 0; i < 400; i++) back = Math.min(back, c.aorticFlow(i / 400));
+      const note = document.getElementById('physioNote').textContent;
+      document.querySelector('[data-physio-lesion="normal"]').click();
+      return { normal, ar, back, note, after: physio.flowNow().source };
+    });
+    ok('on Normal the Flow view reads physio.js', fl.normal.source === 'physio', JSON.stringify(fl.normal));
+    ok('a tap on AR draws aortic regurgitation\'s flows: its aortic flow runs back in diastole, and less of the left coronary\'s flow is diastolic',
+       fl.ar.source === 'ar' && fl.back < -100 && fl.ar.leftDiastolicFraction < fl.normal.leftDiastolicFraction, JSON.stringify({ source: fl.ar.source, back: Math.round(fl.back), dia: +fl.ar.leftDiastolicFraction.toFixed(2), normal: +fl.normal.leftDiastolicFraction.toFixed(2) }));
+    ok('the note names the lesion and the flow below the line', /AR\./.test(fl.note) && /below the line/.test(fl.note), fl.note.slice(0, 90));
+    ok('and Normal goes back to physio.js', fl.after === 'physio');
+  }
+
   head('scrubbing pauses the live clock and reads back a chosen instant');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(150);
