@@ -67,7 +67,7 @@ head('one policy, not three copies of one');
   ok('and the <meta> form does not pretend to', !/frame-ancestors/.test(CSP.META));
 
   const buildPwa = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'build-pwa.js'), 'utf8');
-  ok('the shell is stamped with the meta policy', buildPwa.includes('CSP.META'));
+  ok('the shell is stamped with the meta policy, then given its script-src', buildPwa.includes('CSP.META') && buildPwa.includes('CSP.scriptMeta(hashes)'));
   ok('and the build refuses to ship a Worker that has drifted',
      buildPwa.includes('CSP.HEADER_POLICY'));
 }
@@ -381,10 +381,11 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
      form.some(v => v.directive === 'form-action'), JSON.stringify(form) || 'no violation');
 
   /* ── E2: what a script-src would refuse, and what it would keep ───────── */
-  head('E2: today an injected handler runs; with a script-src it is refused');
-  /* Today's policy has no script-src (see scripts/csp.js), so markup an attacker gets into the page carries a handler
-     that runs. Said here so that it is measured, not only written: the day it stops being true, this check fails and
-     the header of scripts/csp.js has to be read again. */
+  head('E2: under the header alone an injected handler runs; with the page\'s script-src it is refused');
+  /* The Worker's header (HEADER_POLICY, the same directives as META) has no script-src, since it is shipped verbatim
+     and cannot know a build's hashes: under it alone, markup an attacker gets into the page carries a handler that
+     runs. The split build's page adds the script-src (scriptMeta), and a browser enforces both. Measured here, so the
+     day the header grows a script-src of its own, this check fails and the header of scripts/csp.js is read again. */
   /* A page of its own: the planted form above leaves the first page's navigation pending in Chromium. */
   const today = watch(await (await browser.newContext()).newPage(), events);
   today.on('pageerror', e => errors.push('today: ' + e.message));
@@ -395,7 +396,7 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
     document.body.appendChild(d);
   });
   await today.click('#planted');
-  ok('under the policy shipped today, an injected onclick runs: it has no script-src to refuse it',
+  ok('under the header\'s directives alone, an injected onclick runs: they have no script-src to refuse it',
      await today.evaluate(() => window.__planted === true));
 
   const e2 = watch(await (await browser.newContext()).newPage(), events);
@@ -408,7 +409,7 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
       [n, re.source], { timeout: 5000 }).catch(() => {});
     return (await v2()).slice(n);
   };
-  ok('the policy E2 ships has a script-src of \'self\' and the boot\'s hash, and is today\'s policy otherwise',
+  ok('the policy the page ships has a script-src of \'self\' and the boot\'s hash, and is the header\'s directives otherwise',
      E2_POLICY === CSP.POLICY + "; script-src 'self' 'sha256-" + BOOT_HASH + "'" && !/script-src/.test(CSP.POLICY), E2_POLICY.slice(-80));
   ok('under it, the boot script runs, by its hash, and a script file from this origin runs',
      await e2.evaluate(() => window.__boot === true && window.__selfScript === true));
