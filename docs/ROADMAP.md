@@ -325,8 +325,13 @@ taps a theme). The bar along the top (`buildNav()`) carries none: its brand is
 light and dark button (which asks which the theme is when tapped) and Settings
 are in `ACTIONS` (`verify-theme` scans the bar on Home and on a question and taps
 its brand, search and light and dark button; `verify-focus` taps focus mode,
-`verify-notesearch` the notes search and `verify-settings` Settings). Next: the
-other screens, one at a time.
+`verify-notesearch` the notes search and `verify-settings` Settings). The Apex
+panel's head and its figure strip (`src/app/apexpanel.js`) carry none: grounding,
+full page, Apex's settings, close and a figure are in `ACTIONS`, and a figure is
+handed to `openFigureFrom()`, which gathers a figure that names the action with
+the ones that still carry the handler (`verify-apexpanel-pure` holds the markup
+and the table; `verify-apexpage` taps the four buttons and `verify-figzoom` a
+figure). Next: the other screens, one at a time.
 
 **E3 — Make the CI workflow reviewable.** Most of `verify.yml` is rationale in
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express

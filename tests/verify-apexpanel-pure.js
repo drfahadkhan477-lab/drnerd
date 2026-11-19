@@ -57,7 +57,10 @@ const HIST = [{ role: 'user', content: 'Why <b>?' }, { role: 'assistant', conten
 const headOf = (q, over) => run(() => M.headHtml(q, kitOf(over)));
 const panel = (q, hist, over) => run(() => M.panelHtml('[HEAD]', q, hist, kitOf(over)));
 const setup = over => run(() => M.setupPanelHtml('[HEAD]', kitOf(over)));
-const handlersOf = html => [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(m => m[1]);
+/* docs/ROADMAP.md, E2: each control names an action (data-action) heard by the page's one listener; none carries an
+   inline handler, read as any attribute whose name starts "on". */
+const actionsOf = html => [...html.matchAll(/\sdata-action="([^"]*)"/g)].map(m => m[1]);
+const inlineOf = html => [...html.matchAll(/\s(on[a-z]+)\s*=/gi)].map(m => m[1]);
 
 head('the head');
 {
@@ -67,13 +70,15 @@ head('the head');
   const g = headOf(Q, { AI_GROUNDED: true }), g1n = headOf(null, { AI_GROUNDED: true, REF: [1] });
   ok('grounded, the notes it answers from instead, and "note" for one', g.includes('<div class="ai-sub"><span class="grounded-tag">grounded · 3 notes</span></div>') && g1n.includes('grounded · 1 note</span>') && headOf(null, { AI_GROUNDED: true, REF: [] }).includes('grounded · 0 notes</span>'));
   const gb = x => g1(x, /(<button class="icon-btn grounded-btn[\s\S]*?<\/button>)/) || '';
-  ok('grounding, by toggleGrounded(): pressed and titled for answering from the notes when on', gb(g) === '<button class="icon-btn grounded-btn on"\n        onclick="toggleGrounded()" aria-pressed="true"\n        title="Grounded: answering only from your reference library">[icon folder]</button>', gb(g));
-  ok('and when off, not pressed, titled for Apex\'s own knowledge', gb(h) === '<button class="icon-btn grounded-btn"\n        onclick="toggleGrounded()" aria-pressed="false"\n        title="Open: Apex uses its own knowledge">[icon folder]</button>', gb(h));
-  const fb = x => g1(x, /(<button[^>]*\n\s*onclick="toggleApexFull\(\)"[\s\S]*?<\/button>)/) || '';
-  ok('full screen, by toggleApexFull(), from the side panel', fb(h).endsWith('onclick="toggleApexFull()" aria-pressed="false"\n        title="Open Apex full screen"\n        aria-label="Open Apex full screen">[icon expand]</button>'), fb(h));
+  ok('grounding, by toggleGrounded(): pressed and titled for answering from the notes when on', gb(g) === '<button class="icon-btn grounded-btn on"\n        data-action="toggleGrounded" aria-pressed="true"\n        title="Grounded: answering only from your reference library">[icon folder]</button>', gb(g));
+  ok('and when off, not pressed, titled for Apex\'s own knowledge', gb(h) === '<button class="icon-btn grounded-btn"\n        data-action="toggleGrounded" aria-pressed="false"\n        title="Open: Apex uses its own knowledge">[icon folder]</button>', gb(h));
+  const fb = x => g1(x, /(<button[^>]*\n\s*data-action="toggleApexFull"[\s\S]*?<\/button>)/) || '';
+  ok('full screen, by toggleApexFull(), from the side panel', fb(h).endsWith('data-action="toggleApexFull" aria-pressed="false"\n        title="Open Apex full screen"\n        aria-label="Open Apex full screen">[icon expand]</button>'), fb(h));
   ok('and back, pressed, from full screen', fb(headOf(Q, { apexIsFull: () => true })).endsWith('aria-pressed="true"\n        title="Back to the side panel"\n        aria-label="Back to the side panel">[icon collapse]</button>'));
-  ok('then settings, by aiSettings(), and close, by toggleAI(), and the head ends', h.endsWith('onclick="aiSettings()" title="Settings">[icon settings]</button>\n      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"\n        onclick="toggleAI()" title="Close">[icon x]</button>\n    </div>'), h.slice(-120));
-  ok('four buttons, in that order', J(handlersOf(h)) === J(['toggleGrounded()', 'toggleApexFull()', 'aiSettings()', 'toggleAI()']), J(handlersOf(h)));
+  ok('then settings, by aiSettings(), and close, by toggleAI(), and the head ends', h.endsWith('data-action="aiSettings" title="Settings">[icon settings]</button>\n      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"\n        data-action="toggleAI" title="Close">[icon x]</button>\n    </div>'), h.slice(-120));
+  ok('four buttons, in that order, each naming its action', J(actionsOf(h)) === J(['toggleGrounded', 'toggleApexFull', 'aiSettings', 'toggleAI']), J(actionsOf(h)));
+  ok('and the head carries no inline handler, grounded or not, in the side panel or full screen',
+     [h, g, headOf(null), headOf(Q, { apexIsFull: () => true })].every(x => inlineOf(x).length === 0), [h, g].map(x => inlineOf(x).join(' ')).join(' | ') || 'none');
 }
 
 head('with no key to call with');
@@ -115,7 +120,7 @@ head('the figures');
   const fs_ = g1(p, /(<div class="fig-strip[\s\S]*?<\/div><\/div>)/) || '';
   ok('shut, its toggle says how many and from where', fs_.startsWith('<div class="fig-strip" id="aiFigWrap">\n    <button class="src-lbl fig-toggle" type="button" id="aiFigs" aria-controls="aiFigList"\n      aria-expanded="false">[icon chevron-down icon-sm]2 figures from those notes</button>\n    <div class="fig-list" id="aiFigList">'), fs_.slice(0, 260));
   ok('open, said so; one figure is "figure"', panel(Q, HIST, { apexFigsOpen: true }).includes('<div class="fig-strip open" id="aiFigWrap">') && panel(Q, HIST, { apexFigsOpen: true }).includes('aria-expanded="true">[icon chevron-down icon-sm]2 figures') && panel(Q, HIST, { apexFigsFor: () => [FIGS[0]] }).includes('1 figure from those notes</button>'));
-  ok('each a way to open it full size, by openFigureFrom(), its caption through e() and clipped to 150 as alt and caption, and its note clipped to 44', fs_.includes('<figure class="ai-fig" onclick="openFigureFrom(this)" role="button" tabindex="0"\n      title="Open this figure full size"><img src="data:image/png;base64,AA" alt="E(Cap <1>)" loading="lazy">\n      <figcaption>E(CLIP150(Cap <1>))<span class="ai-fig-src">E(CLIP44(Note <one>))</span></figcaption></figure>') && times(fs_, '<figure class="ai-fig"') === 2);
+  ok('each a way to open it full size, by openFigureFrom(), its caption through e() and clipped to 150 as alt and caption, and its note clipped to 44', fs_.includes('<figure class="ai-fig" data-action="openFigureFrom" role="button" tabindex="0"\n      title="Open this figure full size"><img src="data:image/png;base64,AA" alt="E(Cap <1>)" loading="lazy">\n      <figcaption>E(CLIP150(Cap <1>))<span class="ai-fig-src">E(CLIP44(Note <one>))</span></figcaption></figure>') && times(fs_, '<figure class="ai-fig"') === 2);
   ok('none, no strip', !panel(Q, HIST, { apexFigsFor: () => [] }).includes('fig-strip'));
 }
 
@@ -193,9 +198,18 @@ ${' '.repeat(2)}`;
   ok('the figures\' memo is the page\'s: keyed on the notes, the reply\'s length and whether one is being written, kept in apexFigMemo, which it alone writes', memo.startsWith(MEMO) && memo.includes("const figKey=hits.map(h=>h.id).join(',')+'|'+lastBot.length+'|'+(aiBusy?1:0);") && memo.includes('if(apexFigMemo.key!==figKey){') && memo.endsWith('  return apexFigMemo.figs;\n}') && count('let apexFigMemo={key:null,figs:[]};') === 1 && count('apexFigMemo=') === 2, memo.slice(0, 80));
   ok('and finds none while a reply is being written or with no thread, three at most, none the reply already placed', memo.includes("apexFigMemo={ key:figKey, figs:(hist.length&&!aiBusy)\n      ? refFiguresForHits(hits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)\n      : [] };"));
   const all = headOf(Q) + panel(Q, HIST) + setup();
-  const handlers = [...new Set(handlersOf(all).map(h => (h.match(/^[A-Za-z_$][\w$]*/) || ['NO NAME'])[0]))].sort();
-  ok('its markup names five handlers', J(handlers) === J(['aiSettings', 'openFigureFrom', 'toggleAI', 'toggleApexFull', 'toggleGrounded']), handlers.join(' '));
+  const handlers = [...new Set(actionsOf(all))].sort();
+  ok('its markup names five actions, and carries no inline handler', J(handlers) === J(['aiSettings', 'openFigureFrom', 'toggleAI', 'toggleApexFull', 'toggleGrounded']) && inlineOf(all).length === 0, handlers.join(' ') + ' · inline: ' + (inlineOf(all).join(' ') || 'none'));
   ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  /* Each in the page's ACTIONS table once, calling the page's function of that name; a figure hands itself, as its
+     handler's (this) did, so openFigureFrom() can bring the figures around it. */
+  const TABLE = { aiSettings: 'aiSettings:()=>aiSettings(),', openFigureFrom: 'openFigureFrom:el=>openFigureFrom(el),', toggleAI: 'toggleAI:()=>toggleAI(),',
+    toggleApexFull: 'toggleApexFull:()=>toggleApexFull(),', toggleGrounded: 'toggleGrounded:()=>toggleGrounded(),' };
+  const table = (page.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
+  ok('each is in the page\'s ACTIONS table once, calling the page\'s function of that name; a figure is handed itself',
+     handlers.length === 5 && handlers.every(n => table.split(TABLE[n] || '\u0000').length === 2), handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1)).join(' '));
+  ok('and openFigureFrom() gathers a figure that names the action with the ones that carry the handler',
+     count(`querySelectorAll('figure[onclick="openFigureFrom(this)"],figure[data-action="openFigureFrom"]')`) === 1);
   const IDS = ['apexAvatar', 'aiBody', 'aiLive', 'aiFigWrap', 'aiFigs', 'aiFigList', 'aiChips', 'aiMore', 'aiIn', 'aiSend'];
   ok('the ids the page finds again are each drawn once: the avatar, the conversation, the figures, the prompts, the box', IDS.every(id => times(headOf(Q) + panel(Q, HIST, { aiBusy: true }), 'id="' + id + '"') === 1) && IDS.every(id => count("getElementById('" + id + "')") >= 1 || id === 'aiFigList' || id === 'aiLive' || id === 'aiChips'), IDS.map(id => id + ':' + count("getElementById('" + id + "')")).join(' '));
   const WORDS = ['Cardiology tutor', 'Ask me anything about the item', 'Reused explanation · matching context', 'from those notes', 'Explain draft · no tools', 'Clear thread', 'called directly from this device'];
