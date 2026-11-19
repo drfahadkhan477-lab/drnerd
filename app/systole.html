@@ -231,7 +231,7 @@ function icon(name, cls){
 @@SLOT[src:src/ui/coronaryTree.js]@@
 
 /* the heart's surfaces, baked by scripts/heart-bake.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='a223435e67acb2d4';
+window.HEART3D_MESH_KEY='df91092f5cae3498';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -5575,6 +5575,8 @@ Actions.install(document,INPUT_ACTIONS,'input');
 /* What a choice does when another is chosen: the change event, as its onchange was. A table of its own too, so the
    input a select also fires calls nothing here, and a change that a field fires on losing focus calls nothing above. */
 const CHANGE_ACTIONS={
+  /* the lesion the Home heart shows (src/app/home.js) */
+  heroLesion:el=>setHeroLesion(el.value),
   /* the topic search's chapter */
   searchChapter:el=>searchChapter(el.value),
   /* the mock block's chapter, on the Sessions screen */
@@ -6196,6 +6198,32 @@ function buildNav(){
 }
 
 let heroMon=null, heroHeart3d=null, heroHeart3dCanvas=null, heroRotateTimer=null, heroCurrentKind=null, heroCutaway=false;
+/* docs/ROADMAP.md, S8. The lesion the Home heart shows, from the cycle panel's list, remembered: its chambers, squeeze
+   and valves are Circulation.heartSpec()'s, read off the engine's beat. The split build lifts the engine (CIRC_SRC),
+   so the first lesion chosen loads it, sharing the cycle panel's load, and is shown when it is there. */
+let heroLesion=(()=>{try{const v=localStorage.getItem('accsap12.herolesion');
+  return PHYSIO_LESIONS.some(x=>x[0]===v)?v:'normal';}catch(_){return 'normal';}})();
+function setHeroLesion(id){
+  heroLesion=PHYSIO_LESIONS.some(x=>x[0]===id)?id:'normal';
+  try{ localStorage.setItem('accsap12.herolesion',heroLesion); }catch(_){}
+  applyHeroLesion();
+}
+function applyHeroLesion(){
+  if(!heroHeart3d||!heroHeart3d.setLesion) return;
+  if(heroLesion!=='normal'&&typeof Circulation==='undefined'){
+    heroHeart3d.setLesion(null);
+    if(window.CIRC_SRC){
+      if(!circLibP){
+        const s=document.createElement('script'); s.src=window.CIRC_SRC;
+        circLibP=new Promise(res=>{ s.onload=()=>res(); s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
+        document.head.appendChild(s);
+      }
+      circLibP.then(()=>{ if(typeof Circulation!=='undefined') applyHeroLesion(); });
+    }
+    return;
+  }
+  try{ heroHeart3d.setLesion(heroLesion==='normal'?null:Circulation.heartSpec(heroLesion)); }catch(_){ heroHeart3d.setLesion(null); }
+}
 function toggleHeroMechanics(){
   if(!heroHeart3d)return;
   heroCutaway=!heroCutaway;
@@ -6512,6 +6540,7 @@ function mountHeroHeart3d(){
     heroHeart3d.setDark(darkNow);
     heroHeart3d.setRhythm(heroCurrentKind||'sinus');
     heroHeart3d.setMode(heroCutaway?'cutaway':'whole');
+    applyHeroLesion();
     heroHeart3d.start();
     document.getElementById('heroHeart')?.classList.add('heart-3d-active');
     paintHeroScanCredit();
@@ -6577,6 +6606,7 @@ function mountHeroHeart3d(){
   const mechanics=document.getElementById('heroMechanics'); if(mechanics)mechanics.disabled=!heroHeart3d;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');
+  applyHeroLesion();
   syncHomeMotion();
   heroLoadScan(heroHeart3d);
 }
@@ -6993,7 +7023,7 @@ function dismissHello(){
 @@SLOT[src:src/app/home.js]@@
 function buildHome(){
   atlasReading=!!pearlNow();
-  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,pearlAsWritten,
+  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,heroLesion,PHYSIO_LESIONS,pearlAsWritten,
     ATLAS_IMG:'<img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">',
     HERO_IMG:'<img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async">',
     dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,e,icon});

@@ -480,6 +480,31 @@ function cycle(preset) {
   return c;
 }
 
-root.Circulation = { simulate, measure, params, cycle, PRESETS, NORMAL, VALIDATION };
+/* ── the lesion as the 3D heart shows it ──────────────────────────────────────────────────────────────
+   heartSpec(preset) → what src/core/heart3d.js needs to show a lesion, all of it read off the engine's beat
+   against the normal one, none of it drawn by hand:
+     dil      each chamber's size against normal, LV RV LA RA: the cube root of its largest volume's ratio,
+              since a chamber's span grows as the cube root of its volume (clamped to 0.6..1.6)
+     vAmp     how deeply the ventricles squeeze against normal: the ratio of their ejection fractions
+     aAmp     how hard the atria kick: 1, or 0.5 where the atrium pumps against a stenotic valve
+     open     how far each valve opens against normal, mitral tricuspid aortic pulmonic: the square root
+              of its area's ratio (a leaflet's swing for an orifice of that area)
+     leak     how far each stays open when it should be shut: its regurgitant orifice against its area
+   Normal is all ones and no leak. */
+function heartSpec(preset) {
+  const n = cycle('normal'), y = cycle(preset);
+  if (preset === 'normal') return { preset, dil: [1, 1, 1, 1], vAmp: 1, aAmp: 1, open: [1, 1, 1, 1], leak: [0, 0, 0, 0] };
+  const big = (c, a) => Math.max.apply(null, c.run.v[a]);
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  const r = (a) => clamp(Math.cbrt(big(y, a) / big(n, a)), 0.6, 1.6);
+  const pv = params(preset), pn = NORMAL;
+  const names = ['mitral', 'tricuspid', 'aortic', 'pulmonic'];
+  const open = names.map(k => clamp(Math.sqrt(pv.valves[k][0] / pn.valves[k][0]), 0.15, 1));
+  const leak = names.map(k => clamp(pv.valves[k][1] / pv.valves[k][0] * 2, 0, 0.45));
+  return { preset, dil: [r('lv'), r('rv'), r('la'), r('ra')], vAmp: clamp(y.EF / n.EF, 0.2, 1.3),
+           aAmp: pv.valves.mitral[0] < pn.valves.mitral[0] / 2 ? 0.5 : 1, open, leak };
+}
+
+root.Circulation = { simulate, measure, params, cycle, heartSpec, PRESETS, NORMAL, VALIDATION };
 
 })(typeof window !== 'undefined' ? window : this);

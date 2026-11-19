@@ -642,10 +642,19 @@ moves MS, HFpEF and tamponade out of their rows. An abdominal push on venous
 return raised the normal RA on inspiration, which is wrong. One mechanism not
 yet tried is a septum with its own mechanics, so that a filling RV pushes into
 the LV; that is the modelling still open here.
-Next, each the owner's to choose: that model; Normal from the engine (the PV
-loop's interventions act on physio.js's loop, so Normal and they would part);
-the 3D heart (driven by rhythm activation, not physio, on Home, and edited by
-PRs #339 and #342).
+*The 3D heart, wired (the owner asked for it on Home, 2026-11-19):*
+`Circulation.heartSpec(preset)` reads a lesion off the engine's beat against
+the normal one (each chamber's size, how deeply the ventricles squeeze, how far
+each valve opens or fails to shut), and `Heart3D.setLesion` shows it: chamber
+sizes in the beat's shader, the squeeze and the valves on each moment of the
+cycle. The Home heart's menu offers the lesions. The engine has no remodelling,
+so the chronic enlargement of the LA in MS and MR, and the thick wall of AS,
+show only as far as one beat's volumes do.
+Next: Normal from the engine (the PV loop's interventions act on physio.js's
+loop, so Normal and they would part); a septum with its own mechanics, for
+constriction; remodelling, for the chronic lesions. The split build's shell is
+at 287 KB of 288: the next change that adds to app.js lifts something first
+(src/ui/wiggers.js, read only by the Rhythm Lab, is the obvious one).
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them
@@ -660,6 +669,7 @@ after two weeks of real use, and let them choose the next feature. *Sonnet.*
 - **Phase 3, chosen by what Phases 0 to 2 show.** S3, S7, S8, E2, E6, D6, A4 to A6.
 
 One standing rule until S9 has data: no new screen and no new element on Home.
+(The owner lifted it for the Home heart's lesion chooser, S8, 2026-11-19.)
 
 ## 7. Which model and effort for which work
 

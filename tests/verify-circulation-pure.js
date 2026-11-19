@@ -153,6 +153,44 @@ head('the right heart for the views: the second sound splits as the textbook say
   ok('mitral stenosis loads the right heart: PA systolic well above normal', peak(ms, ms.paPressure) > peak(n, n.paPressure) + 8, `${peak(ms, ms.paPressure).toFixed(0)} against ${peak(n, n.paPressure).toFixed(0)}`);
 }
 
+head('the lesion as the 3D heart shows it: read off the engine\'s beat');
+{
+  const H = C.heartSpec;
+  const n = H('normal');
+  ok('the normal heart is all ones and no leak', JSON.stringify([n.dil, n.vAmp, n.aAmp, n.open, n.leak]) === JSON.stringify([[1, 1, 1, 1], 1, 1, [1, 1, 1, 1], [0, 0, 0, 0]]));
+  ok('HFrEF: a dilated LV that squeezes about a third as deeply', H('hfref').dil[0] > 1.2 && H('hfref').vAmp < 0.5, `LV ${H('hfref').dil[0].toFixed(2)}, squeeze ${H('hfref').vAmp.toFixed(2)}`);
+  ok('aortic regurgitation: a dilated LV, and an aortic valve that never quite shuts', H('ar').dil[0] > 1.15 && H('ar').leak[2] > 0.15 && H('ar').leak[0] === 0, `LV ${H('ar').dil[0].toFixed(2)}, leak ${H('ar').leak[2].toFixed(2)}`);
+  ok('aortic stenosis: an aortic valve that opens less than half way, the others whole', H('as').open[2] < 0.5 && H('as').open[0] === 1 && H('as').open[3] === 1, H('as').open.map(x => x.toFixed(2)).join(','));
+  ok('mitral stenosis: a mitral valve that opens about a third, and a weaker atrial kick against it', H('ms').open[0] < 0.45 && H('ms').aAmp < 1, `${H('ms').open[0].toFixed(2)}, kick ${H('ms').aAmp}`);
+  ok('mitral regurgitation: a mitral valve that never quite shuts', H('mr').leak[0] > 0.15, H('mr').leak[0].toFixed(2));
+  ok('tamponade: every chamber squeezed smaller', H('tamponade').dil.every(d => d < 0.85), H('tamponade').dil.map(x => x.toFixed(2)).join(','));
+  ok('every size within 0.6 to 1.6, every squeeze within 0.2 to 1.3, every opening and leak a fraction', Object.keys(C.PRESETS).every(p => { const h = H(p);
+    return h.dil.every(d => d >= 0.6 && d <= 1.6) && h.vAmp >= 0.2 && h.vAmp <= 1.3 && h.open.every(x => x > 0 && x <= 1) && h.leak.every(x => x >= 0 && x < 0.5); }));
+}
+
+head('the 3D heart takes the lesion (src/core/heart3d.js)');
+{
+  const hsrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'heart3d.js'), 'utf8');
+  const hx = {}; vm.createContext(hx); vm.runInContext(hsrc, hx);
+  const H3 = hx.Heart3D, W = H3.withLesion;
+  /* A moment of a sinus beat in mid-systole, and one in diastole, from the heart's own clock. */
+  const sys = H3.cycle(400, 'sinus', {}), st = {}; for (let t = 0; t <= 400; t += 10) H3.cycle(t, 'sinus', st);
+  const mid = H3.cycle(400, 'sinus', st), st2 = {}; for (let t = 0; t <= 800; t += 10) H3.cycle(t, 'sinus', st2);
+  const dia = H3.cycle(800, 'sinus', st2);
+  ok('with no lesion the moment is the heart\'s own, unchanged', W(sys, null) === sys);
+  const hf = W(mid, C.heartSpec('hfref'));
+  ok('HFrEF squeezes the ventricles as deeply as its spec says, and changes nothing else of the moment', Math.abs(hf.v - mid.v * C.heartSpec('hfref').vAmp) < 1e-12 && hf.cyc === mid.cyc && hf.a === mid.a && mid.v > 0.3,
+     `${mid.v.toFixed(2)} -> ${hf.v.toFixed(2)}`);
+  const as = W(mid, C.heartSpec('as')), ar = W(dia, C.heartSpec('ar'));
+  ok('aortic stenosis: in systole, with the aortic valve open, it opens no further than its spec', mid.valves[2] > 0.9 && Math.abs(as.valves[2] - C.heartSpec('as').open[2]) < 1e-12, `${mid.valves[2].toFixed(2)} -> ${as.valves[2].toFixed(2)}`);
+  ok('aortic regurgitation: in diastole, with the aortic valve shut, it stays open by its leak', dia.valves[2] < 0.1 && Math.abs(ar.valves[2] - C.heartSpec('ar').leak[2]) < 1e-12, `${dia.valves[2].toFixed(2)} -> ${ar.valves[2].toFixed(2)}`);
+  ok('and the moment handed in is left as it was', mid.valves[2] > 0.9 && dia.valves[2] < 0.1 && mid.v === H3.cycle(400, 'sinus', (() => { const q = {}; for (let t = 0; t <= 400; t += 10) H3.cycle(t, 'sinus', q); return q; })()).v);
+  const blanked = require('./_source.js').blankComments(hsrc);
+  ok('the beat\'s shader sizes each chamber by uDil, in the heart\'s mesh and the scanned one, and the page sets it in both',
+     (blanked.match(/uniform vec4 uDil;/g) || []).length === 2 && /p \+= \(p - uLvApex\) \* \(\(uDil\.x - 1\.0\) \* aW\.x\);/.test(hsrc)
+     && /'laC','raC','dil'\];/.test(blanked) && /'laC','raC','dil','base'/.test(blanked) && /gl\.uniform4fv\(loc\.dil,/.test(blanked) && /gl\.uniform4fv\(uScan\.dil,/.test(blanked));
+}
+
 head('the presets are changes from normal, and nothing else');
 {
   const before = JSON.stringify(C.NORMAL);
