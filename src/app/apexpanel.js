@@ -78,16 +78,16 @@ function headHtml(q, kit){
           : (q?e(q.ch)+' · item '+q.n+visionBadge(q):'Cardiology tutor')}</div>
       </div>
       <button class="icon-btn grounded-btn${AI_GROUNDED?' on':''}"
-        onclick="toggleGrounded()" aria-pressed="${AI_GROUNDED?'true':'false'}"
+        data-action="toggleGrounded" aria-pressed="${AI_GROUNDED?'true':'false'}"
         title="${AI_GROUNDED?'Grounded: answering only from your reference library':'Open: Apex uses its own knowledge'}">${icon("folder")}</button>
       <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-        onclick="toggleApexFull()" aria-pressed="${apexIsFull()?'true':'false'}"
+        data-action="toggleApexFull" aria-pressed="${apexIsFull()?'true':'false'}"
         title="${apexIsFull()?'Back to the side panel':'Open Apex full screen'}"
         aria-label="${apexIsFull()?'Back to the side panel':'Open Apex full screen'}">${icon(apexIsFull()?"collapse":"expand")}</button>
       <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-        onclick="aiSettings()" title="Settings">${icon("settings")}</button>
+        data-action="aiSettings" title="Settings">${icon("settings")}</button>
       <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-        onclick="toggleAI()" title="Close">${icon("x")}</button>
+        data-action="toggleAI" title="Close">${icon("x")}</button>
     </div>`;
   return head;
 }
@@ -120,7 +120,7 @@ function panelHtml(head, q, hist, kit){
     <button class="src-lbl fig-toggle" type="button" id="aiFigs" aria-controls="aiFigList"
       aria-expanded="${apexFigsOpen?'true':'false'}">${icon('chevron-down','icon-sm')}${figs.length} figure${figs.length===1?'':'s'} from those notes</button>
     <div class="fig-list" id="aiFigList">
-    ${figs.map(f=>`<figure class="ai-fig" onclick="openFigureFrom(this)" role="button" tabindex="0"
+    ${figs.map(f=>`<figure class="ai-fig" data-action="openFigureFrom" role="button" tabindex="0"
       title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}" loading="lazy">
       <figcaption>${e(clip(f.caption,150))}<span class="ai-fig-src">${e(clip(f.noteTitle,44))}</span></figcaption></figure>`).join('')}</div></div>`:'';
   return head+
