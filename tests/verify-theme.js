@@ -156,7 +156,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the active theme is marked', /midnight/i.test(menu.checked || ''), menu.checked);
 
   const picked = await page.evaluate(async () => {
-    document.querySelector('[onclick="setTheme(\'nocturne\')"]').click();
+    document.querySelector('#generalSettings .theme-opt[data-theme-id="nocturne"]').click();
     await new Promise(r => setTimeout(r, 60));
     return { theme: S.theme, attr: document.documentElement.getAttribute('data-palette'),
              menuOpen: !!document.getElementById('generalSettings')?.open };

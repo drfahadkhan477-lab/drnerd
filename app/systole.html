@@ -4665,14 +4665,14 @@ function readWidthHtml(){
   return `<div class="theme-menu-h" id="readWidthH">Reading width</div>
     <div class="read-row" role="group" aria-labelledby="readWidthH">${READ_WIDTHS.map((label,i)=>
       `<button class="width-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-width="${i}"
-        aria-label="${label}" title="${label}" onclick="setReadWidth(${i})"><span class="width-glyph" style="width:${[8,12,16,20][i]}px"></span></button>`).join('')}</div>`;
+        aria-label="${label}" title="${label}" data-action="setReadWidth"><span class="width-glyph" style="width:${[8,12,16,20][i]}px"></span></button>`).join('')}</div>`;
 }
 function readSizeHtml(){
   const cur=readSize();
   return `<div class="theme-menu-h" id="readSizeH">Text size</div>
     <div class="read-row" role="group" aria-labelledby="readSizeH">${READ_SIZES.map((label,i)=>
       `<button class="read-opt${i===cur?' on':''}" type="button" role="menuitemradio" tabindex="${i===cur?0:-1}" aria-checked="${i===cur}" data-read="${i}"
-        aria-label="${label}" title="${label}" onclick="setReadSize(${i})"><span style="font-size:${[13,16,19,23][i]}px">A</span></button>`).join('')}</div>`;
+        aria-label="${label}" title="${label}" data-action="setReadSize"><span style="font-size:${[13,16,19,23][i]}px">A</span></button>`).join('')}</div>`;
 }
 /* Brightness and contrast, per device (round seven). A filter on the root element: the one element whose filter does not
    become the containing block for fixed-position descendants, so the bars, the rail and Apex stay where they are. At
@@ -4721,15 +4721,15 @@ function tuneHtml(){
   const row=(k,ic)=>`<label class="tune-row" for="tune-${k}"><span class="tune-l">${ic}${TUNE[k].label}</span>
       <output class="tune-v" id="tune-${k}-v" for="tune-${k}">${t[k]}%</output>
       <input class="tune-in" type="range" id="tune-${k}" min="${TUNE[k].min}" max="${TUNE[k].max}" step="5" value="${t[k]}"
-        aria-valuetext="${t[k]}%" oninput="setTune('${k}',this.value)"></label>`;
+        aria-valuetext="${t[k]}%" data-tune="${k}" data-action="setTune"></label>`;
   return `<div class="tune" role="group" aria-labelledby="tuneH"><div class="theme-menu-h" id="tuneH">Brightness and contrast</div>
     ${row('b',icon('sun','icon-sm'))}${row('c',icon('sun-moon','icon-sm'))}
-    <button class="tune-reset" id="tuneReset" type="button" onclick="resetTune()"${t.b===100&&t.c===100?' disabled':''}>Reset to 100%</button></div>`;
+    <button class="tune-reset" id="tuneReset" type="button" data-action="resetTune"${t.b===100&&t.c===100?' disabled':''}>Reset to 100%</button></div>`;
 }
 function themeOptHtml(t){
   const on=themeDef().id===t.id;
   return `<button class="theme-opt${on?' on':''}" role="menuitemradio" tabindex="${on?0:-1}" aria-checked="${on}"
-    onclick="setTheme('${t.id}')">
+    data-theme-id="${t.id}" data-action="setTheme">
     <span class="theme-sw" style="background:linear-gradient(135deg,${t.bg} 0 55%,${t.ac} 55% 100%)"></span>
     <span class="tk">${e(t.name)}</span>
     <span class="tc">${icon('check')}</span></button>`;
@@ -4803,7 +4803,7 @@ function settingsApex(p=AI.provider){
     <div id="removeApexConfirm" hidden><p>Remove this provider's saved key from this device?</p>
       <button type="button" class="btn" id="confirmRemoveApexKey">Remove key</button>
       <button type="button" class="btn" id="cancelRemoveApexKey">Cancel</button></div>
-    <button type="button" class="btn" onclick="closeSettings();goMemory()">Apex memory</button>`;
+    <button type="button" class="btn" data-action="settingsMemory">Apex memory</button>`;
   bindSetup(box,()=>settingsProvider,settingsApex,()=>{if(document.getElementById('settingsApex'))settingsApex(AI.provider);},true);
   const remove=box.querySelector('#removeApexKey'),confirmation=box.querySelector('#removeApexConfirm');
   const cancel=box.querySelector('#cancelRemoveApexKey');
@@ -4822,16 +4822,16 @@ function openSettings(section='reading'){
   if(document.getElementById('generalSettings')){document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle')?.focus();return;}
   closeThemeMenu();settingsReturnFocus=document.activeElement;
   const box=document.createElement('dialog');box.id='generalSettings';box.setAttribute('aria-labelledby','settingsTitle');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
-  box.innerHTML=`<header><h2 id="settingsTitle" tabindex="-1">Settings</h2><button type="button" class="icon-btn" onclick="closeSettings()" aria-label="Close settings">${icon('x')}</button></header>
+  box.innerHTML=`<header><h2 id="settingsTitle" tabindex="-1">Settings</h2><button type="button" class="icon-btn" data-action="closeSettings" aria-label="Close settings">${icon('x')}</button></header>
     <section aria-labelledby="readingSettingsHeading"><h3 id="readingSettingsHeading">Reading</h3>
-      <label>Question layout<select name="layout" onchange="updateDisplaySetting('layout',this.value)"><option value="focused">Focused</option><option value="split">Side by side</option></select></label>
+      <label>Question layout<select name="layout" data-action="setLayout"><option value="focused">Focused</option><option value="split">Side by side</option></select></label>
       <p>Side by side appears after answering when both columns have room to read comfortably.</p>
       ${readSizeHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}
       ${readWidthHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}</section>
     <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading">Appearance</h3><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
       ${tuneHtml()}
       <p>Brightness and contrast affect Systole only; device brightness is unchanged.</p>
-      <button type="button" class="btn" onclick="resetDisplaySettings()">Reset display settings</button></section>
+      <button type="button" class="btn" data-action="resetDisplaySettings">Reset display settings</button></section>
     <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>`;
   document.body.append(box);syncSettingsControls();refreshSettingsThemes();settingsApex();
   box.addEventListener('cancel',ev=>{ev.preventDefault();closeSettings();});
@@ -5433,6 +5433,15 @@ const ACTIONS={
   goStats:()=>goStats(),
   goMemory:()=>goMemory(),
   brainTap:(el,ev)=>brainTap(ev),
+  /* Settings (openSettings() and the rows it draws): a text size and a reading width carry their number, a theme its
+     id, read back as what the handlers were given. Apex memory closes Settings before it goes, as its handler did. */
+  setReadSize:el=>setReadSize(Number(el.dataset.read)),
+  setReadWidth:el=>setReadWidth(Number(el.dataset.width)),
+  setTheme:el=>setTheme(el.dataset.themeId),
+  resetTune:()=>resetTune(),
+  resetDisplaySettings:()=>resetDisplaySettings(),
+  closeSettings:()=>closeSettings(),
+  settingsMemory:()=>{closeSettings();goMemory();},
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5442,6 +5451,8 @@ const INPUT_ACTIONS={
   annoInput:el=>annoInput(el.value),
   /* the topic search's box, the same */
   searchInput:el=>searchInput(el.value),
+  /* a brightness or contrast slider in Settings: which one it is, and where it stands */
+  setTune:el=>setTune(el.dataset.tune,el.value),
 };
 Actions.install(document,INPUT_ACTIONS,'input');
 /* What a choice does when another is chosen: the change event, as its onchange was. A table of its own too, so the
@@ -5453,6 +5464,8 @@ const CHANGE_ACTIONS={
   mockChapter:el=>setMockCfg('ch',el.value),
   /* the Study screen's exam date */
   setExamDate:el=>setExamDate(el.value),
+  /* Settings' question layout */
+  setLayout:el=>updateDisplaySetting('layout',el.value),
 };
 Actions.install(document,CHANGE_ACTIONS,'change');
 /* What a key does, by the name of the element it is pressed on or in: a home tab, which moves along the tabs, and the
