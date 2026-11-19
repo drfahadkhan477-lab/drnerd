@@ -203,7 +203,7 @@ function mount(canvas, opts) {
     ctx.restore();
   }
   /* What the Wiggers view reads: the lesion's beat when one is set, else physio.js. */
-  const D = () => ((S.view === 'wiggers' || S.view === 'pv' || S.view === 'flow' || S.view === 'right') && S.cycle) ? S.cycle : Ph;
+  const D = () => ((S.view === 'wiggers' || S.view === 'pv' || S.view === 'flow' || S.view === 'right' || S.view === 'coronary') && S.cycle) ? S.cycle : Ph;
   /* The loop the PV view draws: the lesion's beat's, or physio.js's with the intervention chosen. */
   function loopNow() {
     if (S.view === 'pv' && S.cycle) return S.cycle.loop;
@@ -910,6 +910,19 @@ function mount(canvas, opts) {
     }
     return (corPeak = m);
   }
+  /* What the Coronary view says in numbers, from the beat it draws: the share of left coronary flow in diastole,
+     the mean left coronary flow, and the peak of either; physio.js's own share for its cycle. */
+  function coronaryNow() {
+    const Q = (S.cycle && S.view === 'coronary') ? S.cycle : Ph;
+    const cor = Q === Ph ? Ph.coronaryFlow : Q.coronaryFlow;
+    let all = 0, dia = 0, peak = 0;
+    for (let i = 0; i < 800; i++) {
+      const t = i / 800, l = cor(t, 'left');
+      all += l; if (t < Q.T.mc || t >= Q.T.ac) dia += l;
+      peak = Math.max(peak, l, cor(t, 'right'));
+    }
+    return { source: Q === Ph ? 'physio' : Q.preset, leftDiastolicFraction: Q === Ph ? Ph.derived(secs()).leftDiastolicFraction : (all ? dia / all : 0), leftMean: all / 800, peak };
+  }
   function drawCoronary(p) {
     const CT = root.CoronaryTree;
     if (!CT) {
@@ -920,7 +933,9 @@ function mount(canvas, opts) {
     const TOP = 28, stripH = Math.max(70, Math.min(120, H * 0.26)), BOT = 34;
     const Bs = box(L, H - BOT - stripH, W - L - R, stripH);
     const Bt = box(L, TOP + 8, W - L - R, Bs.y - TOP - 30);
-    const peak = coronaryPeak();
+    /* A lesion's coronaries, on a scale that holds the normal heart's peak too, so a starved bed reads dimmer. */
+    const Q = D(), cor = Q === Ph ? Ph.coronaryFlow : Q.coronaryFlow, c = coronaryNow();
+    const peak = Q === Ph ? coronaryPeak() : Math.max(coronaryPeak(), c.peak);
 
     text('Coronary flow', L, TOP - 12, p.ink, 11.5, 800);
     text('brightness is the flow at this instant, on one scale for both', W - R, TOP - 12, p.dim, 9.5, 500, 'right');
@@ -930,7 +945,7 @@ function mount(canvas, opts) {
       { side: 'right', label: 'Right coronary', col: p.rv,  cx: Bt.x + Bt.w * 0.73 },
     ];
     for (const sd of sides) {
-      const I = CT.intensity(Ph.coronaryFlow(S.t, sd.side), 0, peak);
+      const I = CT.intensity(cor(S.t, sd.side), 0, peak);
       const segs = CT.tree({ x: sd.cx, y: Bt.b - 18, angle: -Math.PI / 2,
                              length: Bt.h * 0.26, maxDepth: 5, spread: 0.42 });
       ctx.save();
@@ -950,15 +965,14 @@ function mount(canvas, opts) {
     /* The same traces the Flow view draws, on the same scale as the glow. */
     ctx.save();
     ctx.fillStyle = p.ink; ctx.globalAlpha = .05;
-    ctx.fillRect(xAt(Bs, Ph.T.mc), Bs.y, (Ph.T.ac - Ph.T.mc) * Bs.w, Bs.h);
+    ctx.fillRect(xAt(Bs, Q.T.mc), Bs.y, (Q.T.ac - Q.T.mc) * Bs.w, Bs.h);
     ctx.restore();
-    text('systole', xAt(Bs, (Ph.T.mc + Ph.T.ac) / 2), Bs.b - 9, p.dim, 9.5, 600, 'center');
-    trace(Bs, t => Ph.coronaryFlow(t, 'left'), 0, peak, p.cor, 2.2, { fill: .14 });
-    trace(Bs, t => Ph.coronaryFlow(t, 'right'), 0, peak, p.rv, 1.9, { dash: [5, 3] });
+    text('systole', xAt(Bs, (Q.T.mc + Q.T.ac) / 2), Bs.b - 9, p.dim, 9.5, 600, 'center');
+    trace(Bs, t => cor(t, 'left'), 0, peak, p.cor, 2.2, { fill: .14 });
+    trace(Bs, t => cor(t, 'right'), 0, peak, p.rv, 1.9, { dash: [5, 3] });
     cursor(Bs, p);
 
-    const d = Ph.derived(secs());
-    text((d.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole. ' +
+    text((c.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole. ' +
          'A faster rate shortens diastole, and with it the left ventricle\'s perfusion time.',
          L, H - 14, p.dim, 10, 500);
   }
@@ -1031,6 +1045,7 @@ function mount(canvas, opts) {
     loopNow,
     flowNow,
     rightNow,
+    coronaryNow,
     intervention: () => S.iv,
     play() { S.playing = true; S.last = 0; return api; },
     pause() { S.playing = false; return api; },

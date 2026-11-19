@@ -599,6 +599,28 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('the note names the lesion, and Normal goes back to physio.js', /AS\./.test(rh.note) && rh.after === 'physio', rh.note.slice(0, 60));
   }
 
+  head('the Coronary view draws a lesion\'s coronaries (docs/ROADMAP.md, S8)');
+  {
+    await page.evaluate(() => { window.__oldPhysioCanvas = document.getElementById('physioCanvas'); });
+    await page.evaluate(() => document.querySelector('[data-physio-view="coronary"]').click());
+    await afterRender(page, () => { const cv = document.getElementById('physioCanvas'); return !!cv && cv !== window.__oldPhysioCanvas && !!physio && physioCanvasEl === cv && physio.view() === 'coronary'; },
+                      { label: 'the panel mounted again (Coronary)', timeout: 30000 });
+    const co = await page.evaluate(() => {
+      const normal = physio.coronaryNow();
+      document.querySelector('[data-physio-lesion="normal"]').click();
+      const ref = Circulation.cycle('normal'); let refMean = 0; for (let i = 0; i < 800; i++) refMean += ref.coronaryFlow(i / 800, 'left') / 800;
+      document.querySelector('[data-physio-lesion="ar"]').click();
+      const ar = physio.coronaryNow();
+      const note = document.getElementById('physioNote').textContent;
+      document.querySelector('[data-physio-lesion="normal"]').click();
+      return { normal: normal.source, ar, refMean, note, after: physio.coronaryNow().source };
+    });
+    ok('on Normal the Coronary view reads physio.js', co.normal === 'physio');
+    ok('a tap on AR draws its coronaries: less left coronary flow than the engine\'s normal heart, and less of it in diastole',
+       co.ar.source === 'ar' && co.ar.leftMean < co.refMean * 0.8 && co.ar.leftDiastolicFraction < 0.8, JSON.stringify({ source: co.ar.source, mean: +co.ar.leftMean.toFixed(3), normal: +co.refMean.toFixed(3), dia: +co.ar.leftDiastolicFraction.toFixed(2) }));
+    ok('the note names the lesion and the scale, and Normal goes back to physio.js', /AR\./.test(co.note) && /normal heart's peak/.test(co.note) && co.after === 'physio', co.note.slice(0, 60));
+  }
+
   head('scrubbing pauses the live clock and reads back a chosen instant');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(150);

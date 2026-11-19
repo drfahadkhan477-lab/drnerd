@@ -152,7 +152,7 @@ head('it reads what it is given, and changes nothing');
   ok('and the rhythms and the lists are as they were, in the same order', J([given.RHYTHMS, given.RHYTHM_KEYS, given.PHYSIO_VIEWS, given.PHYSIO_SPEEDS, given.LEAD12_MAP]) === J([before.RHYTHMS, before.RHYTHM_KEYS, before.PHYSIO_VIEWS, before.PHYSIO_SPEEDS, before.LEAD12_MAP]));
 }
 
-head('the lesions: offered in the Wiggers view, the PV loop, Flow and the right heart (docs/ROADMAP.md, S8)');
+head('the lesions: offered in every view a lesion changes (docs/ROADMAP.md, S8)');
 {
   const lesions = h => [...h.matchAll(/<button class="chip mini( hot)?" data-physio-lesion="([^"]*)">([^<]*(?:<b>)?[^<]*)<\/button>/g)].map(m => [m[2], m[3], !!m[1]]);
   const w = draw(page({ physioLesion: 'as' }), 'physioHtml');
@@ -160,9 +160,9 @@ head('the lesions: offered in the Wiggers view, the PV loop, Flow and the right 
      J(lesions(w)) === J([['normal', 'E(Normal)', false], ['as', 'E(AS<b>)', true], ['tamponade', 'E(Tamponade)', false]]), J(lesions(w)));
   ok('above the canvas, in a row of their own', w.indexOf('lesion-chips') > 0 && w.indexOf('lesion-chips') < w.indexOf('id="physioCanvas"'));
   ok('the PV loop offers the same chips', J(lesions(draw(page({ physioView: 'pv', physioLesion: 'tamponade' }), 'physioHtml'))) === J([['normal', 'E(Normal)', false], ['as', 'E(AS<b>)', false], ['tamponade', 'E(Tamponade)', true]]));
-  const more = VIEWS.concat([['right', 'Right heart'], ['curves', 'Curves']]);
-  ok('and so do Flow and the right heart, and no other view does', ['flow', 'right'].every(v => draw(page({ physioView: v, PHYSIO_VIEWS: more }), 'physioHtml').includes('data-physio-lesion="as"'))
-     && ['curves'].every(v => !draw(page({ physioView: v, PHYSIO_VIEWS: more }), 'physioHtml').includes('data-physio-lesion')));
+  const more = VIEWS.concat([['right', 'Right heart'], ['curves', 'Curves'], ['conduction', 'Conduction'], ['coronary', 'Coronary']]);
+  ok('and so do Flow, the right heart and Coronary; Curves and Conduction, whose figures no lesion changes, do not', ['flow', 'right', 'coronary'].every(v => draw(page({ physioView: v, PHYSIO_VIEWS: more }), 'physioHtml').includes('data-physio-lesion="as"'))
+     && ['curves', 'conduction'].every(v => !draw(page({ physioView: v, PHYSIO_VIEWS: more }), 'physioHtml').includes('data-physio-lesion')));
   ok('in the PV loop the interventions are offered on the normal heart and not with a lesion chosen, whose loop is not physio.js\'s',
      draw(page({ physioView: 'pv', physioLesion: 'normal' }), 'physioHtml').includes('data-physio-iv') && !draw(page({ physioView: 'pv', physioLesion: 'as' }), 'physioHtml').includes('data-physio-iv'));
   ok('a page with no lesions to offer draws none, and does not throw', (() => { const h = draw(page({ PHYSIO_LESIONS: undefined }), 'physioHtml'); return !h.startsWith('THREW') && !h.includes('lesion-chips'); })());

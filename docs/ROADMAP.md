@@ -621,8 +621,12 @@ ventricle. *Heart sounds, wired:* the Practice Lab places AS, AR, MS and MR's
 sounds and murmurs on the engine's valve events (`HeartSounds.eventsFor`), so
 AS is heard with P2 before A2 and its murmur running to its own late A2; the
 other lesions keep physio.js's events, and the heart map still draws physio's
-spans. Next: the constriction gap, then the 3D heart, and Normal from the engine
-once every view reads it.
+spans (it only names each lesion systolic or diastolic, and on the engine's
+events every one is named the same). *Coronary, wired:* a lesion's coronary
+glow and traces, on a scale that holds the normal heart's peak, so AR's starved
+left bed reads dimmer. Curves and Conduction take no lesion. Next: the
+constriction gap, then the 3D heart (driven by rhythm activation, not physio,
+and edited by PRs #339 and #342), and Normal from the engine.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them
