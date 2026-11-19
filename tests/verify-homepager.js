@@ -516,7 +516,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   await settled(page,()=>!window.__vtLive,{label:'due action'});
   const actual=await page.evaluate(()=>({screen:S.screen,ids:S.questions.map(q=>q.id),mode:S.mode}));
-  ok('the next-session review opens only the cards actually due',wanted.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&JSON.stringify(actual.ids)===JSON.stringify(wanted),JSON.stringify({count:actual.ids.length}));
+  /* Which cards, not in what order: a review is dealt shuffled, with chapters in turn (docs/ROADMAP.md, S6). */
+  ok('the next-session review opens only the cards actually due, each once',wanted.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&actual.ids.length===new Set(actual.ids).size&&JSON.stringify(actual.ids.slice().sort())===JSON.stringify(wanted.slice().sort()),JSON.stringify({count:actual.ids.length}));
 
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));
