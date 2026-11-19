@@ -126,8 +126,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       await onScreen(page, 'search', { marker });
       await quiet(page);
     };
-    /* A word of a question's own stem, from the synthetic bank, so it is found; and that question's chapter. */
-    const pick = await page.evaluate(() => { const q = ALL_Q.find(x => !x.bad && (x.s.match(/[A-Za-z]{6,}/) || [])[0]); return { word: q.s.match(/[A-Za-z]{6,}/)[0].toLowerCase(), ch: q.ch }; });
+    /* A word of a question's own stem, so it is found, and that question's chapter. The word is one the page's own
+       tok() keeps: the first long word of a real stem can be one search drops as a stop word ("history"), which no
+       typed query can find, so the check would fail on the bank and not on the screen. */
+    const pick = await page.evaluate(() => {
+      for (const x of ALL_Q) if (!x.bad) for (const w of x.s.match(/[A-Za-z]{6,}/g) || []) if (tok(w).length) return { word: w.toLowerCase(), ch: x.ch };
+      return { word: '', ch: '' };
+    });
 
     await drawnFor('', '', '.chips.sug .chip');
     const topic = await page.evaluate(() => document.querySelector('.chips.sug .chip').textContent);

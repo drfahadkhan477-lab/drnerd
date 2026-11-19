@@ -224,7 +224,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const before = await snap();
     const r = await page.evaluate(() => ({
       screen: S.screen, n: S.mock.ids.length, attr: document.documentElement.hasAttribute('data-mock'),
-      nav: [...document.querySelectorAll('#navbar button')].map(b => b.getAttribute('onclick') || ''),
+      nav: [...document.querySelectorAll('#navbar button')].map(b => b.getAttribute('data-action') || b.getAttribute('onclick') || ''),
       fab: getComputedStyle(document.getElementById('aiFab')).display, panel: getComputedStyle(document.getElementById('ai')).display,
       shell: document.getElementById('shell').className, text: document.getElementById('app').innerText,
       ch: QBYID[S.mock.ids[0]].ch, header: document.querySelector('.mock-bar').innerText,
