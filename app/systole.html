@@ -173,7 +173,7 @@ try{var _t=(JSON.parse(localStorage.getItem('accsap12.v2')||'{}')||{}).theme||'a
   </div>
 </div>
 <header id="navbar"></header>
-<button id="focusExit" type="button" onclick="toggleFocusMode()" aria-label="Leave focus mode" title="Leave focus mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9H9V4.5M19.5 9H15V4.5M4.5 15H9v4.5M19.5 15H15v4.5"/></svg></button>
+<button id="focusExit" type="button" data-action="toggleFocusMode" aria-label="Leave focus mode" title="Leave focus mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9H9V4.5M19.5 9H15V4.5M4.5 15H9v4.5M19.5 15H15v4.5"/></svg></button>
 <div id="shell">
   <main id="app"></main>
   <!-- Outside #app on purpose: render() rebuilds #app wholesale, and a live
@@ -2566,7 +2566,7 @@ function peekQuestion(id){
         <div><div class="peek-ch">${e(q.ch)} · item ${q.n}</div>
              <div class="peek-sub">related item from your question bank</div></div>
         <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"
-          aria-label="Close" onclick="closePeek()">${icon('x','icon-sm')}</button>
+          aria-label="Close" data-action="closePeek">${icon('x','icon-sm')}</button>
       </div>
       <div class="peek-body">
         <p>${e(q.s)}</p>
@@ -2575,7 +2575,7 @@ function peekQuestion(id){
         <div class="peek-ex">${e(q.ex)}</div>
       </div>
       <div class="peek-foot">
-        <button class="btn btn-next" onclick="jumpTo('${q.id}')">Go to this question ${icon('arrow-right','icon-sm')}</button>
+        <button class="btn btn-next" data-action="jumpTo" data-qid="${e(q.id)}">Go to this question ${icon('arrow-right','icon-sm')}</button>
       </div>
     </div>`;
   wrap.onclick=ev=>{ if(ev.target===wrap) closePeek(); };
@@ -2842,8 +2842,8 @@ function refCard(r){
       <div class="ref-top">
         <h2 class="ref-title">${e(r.title||'Untitled note')}</h2>
         <div class="ref-acts">
-          <button class="chip" data-ref-id="${e(r.id)}" onclick="refEdit(this.dataset.refId)">Edit</button>
-          <button class="chip" data-ref-id="${e(r.id)}" onclick="refRemove(this.dataset.refId)">Delete</button>
+          <button class="chip" data-ref-id="${e(r.id)}" data-action="refEdit">Edit</button>
+          <button class="chip" data-ref-id="${e(r.id)}" data-action="refRemove">Delete</button>
         </div>
       </div>
       ${r.source?`<div class="ref-src">${icon('folder','icon-sm')} ${e(r.source)}</div>`:''}
@@ -3644,7 +3644,7 @@ function apexLocalHtml(){
   return `<div class="src-strip" data-apex-local-actions role="group" aria-label="On this device — no AI request">
     <span class="src-lbl">On this device · no AI request</span>
     ${[['notes','Find notes'],['bank','Find questions'],['progress','My progress'],['review',due?'Review due cards ('+due+')':'No cards due']].map(([action,label])=>
-      `<button type="button" class="src-pill" onclick="apexLocalAction('${action}')" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
+      `<button type="button" class="src-pill" data-action="apexLocalAction" data-local="${action}" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
   </div>`;
 }
 /* The Apex panel's markup is src/app/apexpanel.js. buildAI() keeps what touches the page: it reads what
@@ -5096,7 +5096,7 @@ function voiceDock(state,text){
     d.innerHTML=`<span class="vd-orb" aria-hidden="true"><span class="vd-ring"></span>${icon('mic')}</span>
       <span class="vd-bars" aria-hidden="true">${'<i></i>'.repeat(5)}</span>
       <span class="vd-text"><b class="vd-state"></b><span class="vd-sub"></span></span>
-      <button class="vd-stop" id="voiceStop" onclick="stopVoice()" aria-label="Stop the voice session">${icon('stop')}<span>Stop</span></button>`;
+      <button class="vd-stop" id="voiceStop" data-action="stopVoice" aria-label="Stop the voice session">${icon('stop')}<span>Stop</span></button>`;
     document.body.appendChild(d);
   }
   document.body.classList.add('voice-on');
@@ -5537,6 +5537,14 @@ const ACTIONS={
      full-screen button, which carries its question and its place among that question's figures */
   openPearlFigure:el=>openFigureFrom(el),
   openQuestionFigures:(el,ev)=>openQuestionFigures(el.dataset.qid,Number(el.dataset.i),ev),
+  /* the related question (peekQuestion()): its close, and Go to this question, which is jumpTo above with the id in
+     data-qid; a note card's Edit and Delete, which carry the note's id; Apex's actions on this device, each carrying
+     which; and the voice dock's Stop. Leave focus mode is toggleFocusMode above. */
+  closePeek:()=>closePeek(),
+  refEdit:el=>refEdit(el.dataset.refId),
+  refRemove:el=>refRemove(el.dataset.refId),
+  apexLocalAction:el=>apexLocalAction(el.dataset.local),
+  stopVoice:()=>stopVoice(),
 };
 Actions.install(document,ACTIONS);
 /* What a field does as it is typed in. A table of its own, so a tap on a field calls nothing here and a key typed into
@@ -5968,15 +5976,19 @@ function showCrashScreen(err){
       '<p style="opacity:.7;margin:0 0 1.1rem;font-size:.9rem;line-height:1.4;">'+
       'This screen could not draw itself. Nothing already answered or saved is lost — '+
       'reloading should bring it back.</p>'+
-      '<button onclick="location.reload()" style="padding:.55rem 1.3rem;border:none;'+
+      '<button id="crashReload" type="button" style="padding:.55rem 1.3rem;border:none;'+
       'border-radius:.6rem;background:#3b82f6;color:#fff;font-size:.9rem;font-weight:600;'+
       'cursor:pointer;">Reload</button>'+
       '<details style="margin-top:1.1rem;text-align:left;opacity:.55;font-size:.72rem;">'+
       '<summary style="cursor:pointer;">Details</summary>'+
       '<pre style="white-space:pre-wrap;word-break:break-word;margin:.5rem 0 0;">'+e(msg)+'\n'+e(stack)+'</pre>'+
       '</details></div>';
+    /* Its own listener, not an action: this screen is drawn when something has already failed, perhaps before the
+       page's one listener was installed. A listener added by script is no inline handler (docs/ROADMAP.md, E2). */
+    app.querySelector('#crashReload').addEventListener('click',()=>location.reload());
   }catch(_){
-    try{ document.body.innerHTML='<p style="padding:2rem;font-family:sans-serif;">Something went wrong. <a href="javascript:location.reload()">Reload</a></p>'; }catch(__){}
+    /* A link to this page itself: following it loads the page again, with no script in the markup. */
+    try{ document.body.innerHTML='<p style="padding:2rem;font-family:sans-serif;">Something went wrong. <a href="">Reload</a></p>'; }catch(__){}
   }
 }
 function render(){

@@ -382,6 +382,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const peekBehind = await page.evaluate(() => ({screen:S.screen,answered:S.answered,index:S.qIdx,open:!!document.querySelector('.peek-card'),viewer:!!document.querySelector('.pswp')}));
   await page.keyboard.press('Escape');
   const peekClosed = await page.evaluate(() => !document.querySelector('.peek-card') && S.screen === 'quiz' && !S.answered && S.qIdx === 0);
+  /* docs/ROADMAP.md, E2: the related question's two buttons name actions (closePeek, and jumpTo with the id in
+     data-qid), heard by the page's one listener, so they are tapped. */
+  const peekTaps = await page.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const target = POOL.find(q => !q.bad && q.id !== (S.questions[S.qIdx] || {}).id);
+    peekQuestion(target.id); await wait(80);
+    const close = document.querySelector('.peek-card [data-action="closePeek"]');
+    if (close) close.click();
+    await wait(80);
+    const closed = !!close && !document.querySelector('.peek-card');
+    peekQuestion(target.id); await wait(80);
+    const go = document.querySelector('.peek-card [data-action="jumpTo"]');
+    if (go) go.click();
+    for (let t = 0; t < 40 && !(S.screen === 'quiz' && S.questions.length === 1); t++) await wait(50);
+    return { closed, went: !!go && go.dataset.qid === target.id && S.screen === 'quiz' && S.questions.length === 1 && S.questions[0].id === target.id && !document.querySelector('.peek-card') };
+  });
+  ok('its Close, tapped, closes it; its Go to this question, tapped, opens that question alone', peekTaps.closed && peekTaps.went, JSON.stringify(peekTaps));
   ok('the related dialog keeps quiz keys outside and Escape closes only it', peek.viewer === false && !peekBehind.viewer && peekBehind.screen === 'quiz' && !peekBehind.answered && peekBehind.index === 0 && peekBehind.open && peekClosed, JSON.stringify(peekBehind));
   await close();
 

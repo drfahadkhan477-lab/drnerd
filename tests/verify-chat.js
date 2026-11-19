@@ -392,10 +392,15 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
     window.fetch=()=>{calls++;return Promise.reject(new Error('Unexpected provider request'));};
     const destinations=[];
     try{
+      /* Tapped (docs/ROADMAP.md, E2): each button names apexLocalAction and carries which in data-local, heard by the
+         page's one listener. Looked for again each time, since the panel is drawn again as the screen changes. */
       for(const action of ['notes','bank','progress']){
-        if(typeof apexLocalAction==='function') apexLocalAction(action);
-        destinations.push(S.screen);
+        const b=document.querySelector('[aria-label="On this device — no AI request"] [data-action="apexLocalAction"][data-local="'+action+'"]');
+        if(b) b.click();
+        destinations.push(b?S.screen:'no button for '+action);
       }
+      /* While an answer is being written the buttons are drawn disabled, so a tap could not show the function's own
+         guard: it is called, as before. */
       aiBusy=true;
       if(typeof apexLocalAction==='function') apexLocalAction('bank');
       const busyBlocked=S.screen==='stats'; aiBusy=false;
@@ -404,7 +409,7 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
   });
   ok('local actions are available without a key',local.visible);
   ok('notes, question search and progress open without provider calls',
-    local.destinations.join(',')==='notesearch,search,stats'&&local.calls===0);
+    local.destinations.join(',')==='notesearch,search,stats'&&local.calls===0, local.destinations.join(','));
   ok('local navigation cannot interrupt an active answer',local.busyBlocked);
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 2).join(' | '));
