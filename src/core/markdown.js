@@ -35,7 +35,7 @@ function render(t, e, refImgSrc) {
     const src=refImgSrc(key);
     if(!src) return '';
       /* The caption is the image's alt and is shown under it: the shown copy is hidden from a screen reader, which read it twice. */
-  return `<figure class="ref-fig" onclick="openFigureFrom(this)" role="button" tabindex="0"
+  return `<figure class="ref-fig" data-action="openFigureFrom" role="button" tabindex="0"
       title="Open this figure full size"><img src="${src}" alt="${cap}" loading="lazy"><figcaption aria-hidden="true">${cap}</figcaption></figure>`;
   });
   /* Headings before inline marks, so a ## line never becomes a paragraph. */

@@ -451,7 +451,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await still('expanded caption reading');
   const expandedFigure=await page.evaluate(()=>getComputedStyle(document.getElementById('pearlFig')).display!=='none');
   ok('Show all expands a figure kept as a compact thumbnail',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
+  /* The figure's own keys (pearlFigureKey(), KEY_ACTIONS.openPearlFigure): End scrolls it and goes no further, so nothing
+     past the document hears it. A listener on window hears a key only if the figure let it go; a browser scrolling the
+     figure by itself would pass the scroll check below and fail this one. */
+  await page.evaluate(()=>{window.__pastFigure=[];window.__pastFigureL=e=>window.__pastFigure.push(e.key+(e.defaultPrevented?'(prevented)':''));window.addEventListener('keydown',window.__pastFigureL);});
   if(expandedFigure){await page.locator('#pearlFig').focus();await page.keyboard.press('End');}
+  const pastFigure=await page.evaluate(()=>{window.removeEventListener('keydown',window.__pastFigureL);return window.__pastFigure;});
+  ok('the figure takes End for itself: it goes no further than the figure',expandedFigure&&pastFigure.length===0,JSON.stringify(pastFigure));
 
   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
   const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});

@@ -320,7 +320,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const fromEl = await page.evaluate(async () => {
     if (typeof openFigureFrom !== 'function') return null;
     const box = document.createElement('div'); box.className = 'fig-list';
-    box.innerHTML = [1, 2, 3].map(i => `<figure class="ai-fig" onclick="openFigureFrom(this)"><img src="${__svg(300 + i * 50, 200)}" alt="Fig ${i}"><figcaption>Figure ${i}<span>Note ${i}</span></figcaption></figure>`).join('');
+    /* As the app draws a figure that opens full size: it names the action (docs/ROADMAP.md, E2); none carries a handler. */
+    box.innerHTML = [1, 2, 3].map(i => `<figure class="ai-fig" data-action="openFigureFrom"><img src="${__svg(300 + i * 50, 200)}" alt="Fig ${i}"><figcaption>Figure ${i}<span>Note ${i}</span></figcaption></figure>`).join('');
     document.body.appendChild(box);
     const ps = await __rest(await openFigureFrom(box.children[2]));
     const out = ps ? { n: ps.getNumItems(), at: ps.currIndex, cap: document.querySelector('.pswp__figv-cap').textContent } : null;
@@ -329,6 +330,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('tapping the third of three opens all three, at the third', !!fromEl && fromEl.n === 3 && fromEl.at === 2, JSON.stringify(fromEl));
   ok('with its own caption and the note it came from', !!fromEl && /Figure 3/.test(fromEl.cap) && /Note 3/.test(fromEl.cap), fromEl && fromEl.cap);
+  /* docs/ROADMAP.md, E2: the Apex panel's figures name the action (data-action="openFigureFrom") rather than carry the
+     handler, and are tapped, not called: the page's one listener hands the figure to openFigureFrom(), which has to gather
+     those figures as it gathers the others. What openFigures() is handed is watched, then the real one is called. */
+  const tapped = await page.evaluate(async () => {
+    if (typeof openFigureFrom !== 'function' || typeof openFigures !== 'function') return null;
+    const box = document.createElement('div'); box.className = 'fig-list';
+    box.innerHTML = [1, 2, 3].map(i => `<figure class="ai-fig" data-action="openFigureFrom" role="button" tabindex="0"><img src="${__svg(300 + i * 50, 200)}" alt="Fig ${i}"><figcaption>Figure ${i}<span>Note ${i}</span></figcaption></figure>`).join('');
+    document.body.appendChild(box);
+    const real = openFigures; let seen = null;
+    openFigures = (items, at) => { seen = { n: items.length, at, caps: items.map(f => f.caption) }; return real(items, at); };
+    try { box.children[2].querySelector('img').click(); } finally { openFigures = real; }
+    for (let t = 0; t < 60 && !document.querySelector('.pswp'); t++) await new Promise(r => setTimeout(r, 50));
+    const open = !!document.querySelector('.pswp');
+    closePeek(); box.remove();
+    return { seen, open };
+  });
+  ok('a figure that names the action, tapped, opens all three of its card at the third, through the page\'s listener',
+     !!tapped && !!tapped.seen && tapped.seen.n === 3 && tapped.seen.at === 2 && tapped.open, JSON.stringify(tapped));
 
   head('a figure that will not load still opens, and says so');
   const broken = await page.evaluate(async () => {
