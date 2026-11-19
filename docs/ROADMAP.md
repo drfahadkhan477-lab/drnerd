@@ -575,9 +575,12 @@ quarter or more), so constriction is held to its catheter signs alone.
 with the chest held still, its valve events measured where the pressures cross
 and its phases between them. The Wiggers view offers each lesion as a chip and
 draws its beat, with axes sized to it; Normal stays physio.js's drawn cycle
-(verify-physio, verify-rhythmlab-pure). Next: the constriction gap, then the PV
-loop, sounds, Doppler and the 3D heart, one view per change, and Normal from
-the engine once every view reads it.
+(verify-physio, verify-rhythmlab-pure). *The PV loop, wired:* each beat
+carries its loop, its corners where the physiologist puts them (end-diastole at
+the R wave, end-systole at peak elastance) and on its own ESPVR and EDPVR; the
+PV view draws a lesion's loop over the normal one, and offers the interventions
+on Normal alone. Next: the constriction gap, then sounds, Doppler and the 3D
+heart, one view per change, and Normal from the engine once every view reads it.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them

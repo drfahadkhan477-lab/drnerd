@@ -107,6 +107,21 @@ head('one beat for the views: its events are crossings, its phases tile the beat
   ok('the same lesion asked again is the same beat, not a second run', C.cycle('ar') === C.cycle('ar'));
 }
 
+head('the PV loop of each beat: its corners on its own lines, and each lesion where the textbook draws it');
+{
+  const L = name => C.cycle(name).loop;
+  const off = Object.keys(C.PRESETS).map(name => { const l = L(name); return [name, Math.abs(l.esp - l.espvrAt(l.esv)), Math.abs(l.edp - l.edpvrAt(l.edv))]; });
+  ok('in every preset, end-systole lies on the ESPVR and end-diastole on the EDPVR, to a mmHg', off.every(([, a, b]) => a < 1 && b < 1), off.map(([n, a, b]) => `${n} ${a.toFixed(2)}/${b.toFixed(2)}`).join(', '));
+  ok('its SV and EF are the run\'s, as an echo would read them', Object.keys(C.PRESETS).every(name => { const y = C.cycle(name); return y.loop.sv === y.SV && y.loop.ef === y.EF; }));
+  ok('the loop closes on itself and encloses the stroke work', Object.keys(C.PRESETS).every(name => { const l = L(name), a = l.points[0], b = l.points[l.points.length - 1]; return Math.abs(a.v - b.v) < 0.5 && Math.abs(a.p - b.p) < 0.5 && l.strokeWork > 500; }));
+  const n = L('normal');
+  ok('aortic stenosis: the loop is pushed up, end-systolic pressure far above normal', L('as').esp > n.esp + 40, `${L('as').esp.toFixed(0)} against ${n.esp.toFixed(0)}`);
+  ok('aortic regurgitation: a wide loop, a large end-diastolic volume and stroke', L('ar').edv > n.edv + 60 && L('ar').sv > n.sv * 1.6, `EDV ${L('ar').edv.toFixed(0)}, SV ${L('ar').sv.toFixed(0)}`);
+  ok('HFrEF: shifted right, a dilated ventricle with a small stroke and a shallow ESPVR', L('hfref').esv > n.esv * 3 && L('hfref').ees < n.ees / 2 && L('hfref').ef < 0.4, `ESV ${L('hfref').esv.toFixed(0)}, EF ${(L('hfref').ef * 100).toFixed(0)}%`);
+  ok('HFpEF: a normal ESPVR, filled up a steeper EDPVR to a higher pressure', L('hfpef').ees === n.ees && L('hfpef').edpvrAt(120) > n.edpvrAt(120) * 2 && L('hfpef').edp > n.edp + 5, `EDPVR at 120 mL ${L('hfpef').edpvrAt(120).toFixed(1)} against ${n.edpvrAt(120).toFixed(1)}`);
+  ok('tamponade: a small loop on a raised floor', L('tamponade').edv < n.edv * 0.6 && L('tamponade').strokeWork < n.strokeWork / 3 && L('tamponade').edp > n.edp + 8, `EDV ${L('tamponade').edv.toFixed(0)}, EDP ${L('tamponade').edp.toFixed(0)}`);
+}
+
 head('the presets are changes from normal, and nothing else');
 {
   const before = JSON.stringify(C.NORMAL);

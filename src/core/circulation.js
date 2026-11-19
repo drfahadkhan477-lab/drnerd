@@ -432,7 +432,32 @@ function cycle(preset) {
     { at: T.mo, id: 'mo', label: 'Mitral opens', side: 'L', sound: null },
   ].filter(e => e.at !== null).sort((a, b) => a.at - b.at);
   const m = measure(run);
+  /* The PV loop, in the shape the view reads physio.js's loopWith() in. Its corners are where the
+     physiologist puts them: end-diastole as the ventricle is excited (the R wave), and end-systole where its
+     pressure over its volume above Vd is greatest, its moment of peak elastance. Neither is a valve's: in
+     aortic stenosis or mitral regurgitation the aortic valve shuts well away from end-systole. Its ESPVR and
+     EDPVR are this ventricle's own lines, raised by what surrounds it at that corner (the pericardium's
+     pressure, and the chest's): in tamponade the whole loop sits on a pressure the ventricle did not make. */
+  const lvP = at(run.plv), lvV = at(run.v.lv), around = at(run.pperi);
+  const N = 300, pts = [];
+  for (let i = 0; i <= N; i++) { const t = i / N; pts.push({ t, v: lvV(t), p: lvP(t) }); }
+  let area = 0;
+  for (let i = 0; i < N; i++) area += pts[i].v * pts[i + 1].p - pts[i + 1].v * pts[i].p;
+  let iEs = 0;
+  for (let i = 0; i < n; i++) if ((run.plv[i] - run.pperi[i]) / Math.max(1, run.v.lv[i] - p.lv.vd) > (run.plv[iEs] - run.pperi[iEs]) / Math.max(1, run.v.lv[iEs] - p.lv.vd)) iEs = i;
+  const tEs = frac(iEs), tEd = p.pr / beat;
+  const edv = lvV(tEd), edp = lvP(tEd), esv = lvV(tEs), esp = lvP(tEs);
+  const aroundEs = around(tEs), aroundEd = around(tEd);
+  const loop = {
+    /* SV and EF as an echo reads them, from the largest and smallest volumes, which are not the corners
+       where a valve's lesion keeps the ventricle moving past them. */
+    tEd, tEs, edv, edp, esv, esp, sv: m.sv, ef: m.ef, ea: esp / Math.max(1e-9, edv - esv),
+    ees: p.lv.ees, v0: p.lv.vd, strokeWork: Math.abs(area / 2), points: pts, vAt: lvV, pAt: lvP,
+    espvrAt: v => Math.max(0, p.lv.ees * (v - p.lv.vd)) + aroundEs,
+    edpvrAt: v => p.lv.p0 * (Math.exp(p.lv.lam * (v - p.lv.v0)) - 1) + aroundEd,
+  };
   const c = {
+    loop,
     preset: key, ok, beat, T, PHASES: PH, EVENTS,
     rAt: p.pr / beat,
     lvPressure: at(run.plv), aoPressure: at(run.pao), laPressure: at(run.pla), lvVolume: at(run.v.lv),

@@ -2121,6 +2121,8 @@ function setPhysioPlaying(on){
 }
 
 function physioNoteHtml(){
+  if(physioView==='pv'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The dashed loop is the normal heart's. Computed by the circulation model.`;
   if(physioView==='pv'){
     const iv=Physio.INTERVENTIONS.find(x=>x.id===physioIv)||Physio.INTERVENTIONS[0];
     return `<b>${e(iv.label)}</b> ${e(iv.note)}`;
@@ -2183,6 +2185,8 @@ function mountPhysio(){
   document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>{
     physioLesion=b.dataset.physioLesion;
     try{localStorage.setItem('accsap12.physiolesion',physioLesion);}catch(_){}
+    /* In the PV loop the interventions come and go with Normal, so the panel is drawn again. */
+    if(physioView==='pv'){ render(); return; }
     physio.setCycle(physioCycle(physioLesion));
     document.querySelectorAll('[data-physio-lesion]').forEach(x=>x.classList.toggle('hot',x===b));
     __physioNotePhase=''; paintPhysioNote();

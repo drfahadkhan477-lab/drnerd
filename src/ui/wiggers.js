@@ -203,7 +203,16 @@ function mount(canvas, opts) {
     ctx.restore();
   }
   /* What the Wiggers view reads: the lesion's beat when one is set, else physio.js. */
-  const D = () => (S.view === 'wiggers' && S.cycle) ? S.cycle : Ph;
+  const D = () => ((S.view === 'wiggers' || S.view === 'pv') && S.cycle) ? S.cycle : Ph;
+  /* The loop the PV view draws: the lesion's beat's, or physio.js's with the intervention chosen. */
+  function loopNow() {
+    if (S.view === 'pv' && S.cycle) return S.cycle.loop;
+    const iv = Ph.INTERVENTIONS.find(i => i.id === S.iv) || Ph.INTERVENTIONS[0];
+    const l = Ph.loopWith(iv.args);
+    l.espvrAt = v => Ph.espvr(v, l.ees, l.v0);
+    l.edpvrAt = v => Ph.edpvr(v, l.stiff, l.shift);
+    return l;
+  }
   function phaseBands(B, p) {
     const PH = D().PHASES;
     for (const ph of PH) {
@@ -412,10 +421,12 @@ function mount(canvas, opts) {
   function drawPV(p) {
     const L = 44, R = 14, TOP = 14, BOT = 80;
     const B = box(L, TOP, W - L - R, H - TOP - BOT);
-    const iv = Ph.INTERVENTIONS.find(i => i.id === S.iv) || Ph.INTERVENTIONS[0];
-    const cur = Ph.loopWith(iv.args);
+    const cur = loopNow();
     const base = Ph.loopWith();
-    const vLo = 0, vHi = 220, pLo = 0, pHi = 170;
+    const lesion = cur !== null && S.cycle && cur === S.cycle.loop;
+    /* physio.js's fixed axes, or as far as a lesion's loop reaches, in steps of 40. */
+    const vLo = 0, vHi = lesion ? Math.max(220, Math.ceil((S.cycle.max.v + 20) / 40) * 40) : 220;
+    const pLo = 0, pHi = lesion ? Math.max(170, Math.ceil((S.cycle.max.p + 10) / 40) * 40) : 170;
 
     const X = v => B.x + (v - vLo) / (vHi - vLo) * B.w;
     const Y = q => B.b - (q - pLo) / (pHi - pLo) * B.h;
@@ -438,7 +449,7 @@ function mount(canvas, opts) {
     ctx.beginPath();
     let started = false;
     for (let v = cur.v0; v <= vHi; v += 4) {
-      const q = Ph.espvr(v, cur.ees, cur.v0);
+      const q = cur.espvrAt(v);
       if (q > pHi) break;
       started ? ctx.lineTo(X(v), Y(q)) : (ctx.moveTo(X(v), Y(q)), started = true);
     }
@@ -447,7 +458,7 @@ function mount(canvas, opts) {
     ctx.strokeStyle = p.vol; ctx.globalAlpha = .8;
     ctx.beginPath();
     for (let v = 20; v <= vHi; v += 3) {
-      const q = Ph.edpvr(v, cur.stiff, cur.shift);
+      const q = cur.edpvrAt(v);
       if (q > 72) break;
       ctx.lineTo(X(v), Y(q));
     }
@@ -456,17 +467,17 @@ function mount(canvas, opts) {
     ctx.strokeStyle = p.muted; ctx.globalAlpha = .5; ctx.setLineDash([2, 4]);
     ctx.beginPath(); ctx.moveTo(X(cur.edv), Y(0)); ctx.lineTo(X(cur.esv), Y(cur.esp)); ctx.stroke();
     ctx.restore();
-    let esX = vHi, esY = Ph.espvr(vHi, cur.ees, cur.v0);
-    if (esY > pHi) { esY = pHi; esX = cur.v0 + pHi / cur.ees; }
+    let esX = vHi, esY = cur.espvrAt(vHi);
+    if (esY > pHi) { esY = pHi; esX = cur.v0 + (pHi - cur.espvrAt(cur.v0)) / cur.ees; }
     text('ESPVR', clamp(X(esX) - 6, B.x + 44, B.r - 6),
          clamp(Y(esY) + (esY >= pHi ? 11 : -11), B.y + 8, B.b - 8), p.ao, 9.5, 700, 'right', true);
     let edEnd = vHi;
-    for (let v = 20; v <= vHi; v += 2) if (Ph.edpvr(v, cur.stiff, cur.shift) > 72) { edEnd = v; break; }
+    for (let v = 20; v <= vHi; v += 2) if (cur.edpvrAt(v) > 72) { edEnd = v; break; }
     text('EDPVR', clamp(X(edEnd) + 6, B.x, B.r - 44), Y(70) + 2, p.vol, 9.5, 700, 'left', true);
     text('Ea', (X(cur.edv) + X(cur.esv)) / 2 + 14, (Y(0) + Y(cur.esp)) / 2 + 8, p.muted, 9.5, 700, 'left', true);
 
-    /* the resting loop as a ghost, whenever we have moved off it */
-    if (S.iv !== 'base') {
+    /* the resting loop as a ghost, whenever we have moved off it: an intervention, or a lesion */
+    if (lesion || S.iv !== 'base') {
       ctx.save(); ctx.strokeStyle = p.ghost; ctx.lineWidth = 1.6; ctx.setLineDash([4, 4]);
       ctx.beginPath(); base.points.forEach((q, i) => i ? ctx.lineTo(X(q.v), Y(q.p)) : ctx.moveTo(X(q.v), Y(q.p)));
       ctx.closePath(); ctx.stroke(); ctx.restore();
@@ -958,6 +969,7 @@ function mount(canvas, opts) {
     setCycle(c) { S.cycle = c || null; rOffset = null; draw(); return api; },
     cycle: () => S.cycle,
     phaseNow: () => D().phaseAt(S.t),
+    loopNow,
     intervention: () => S.iv,
     play() { S.playing = true; S.last = 0; return api; },
     pause() { S.playing = false; return api; },

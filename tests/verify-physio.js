@@ -529,6 +529,30 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('Normal goes back to the drawn cycle', lz.back === null && lz.backPhase === lz.physioPhase, String(lz.back) + ' ' + lz.backPhase);
   }
 
+  head('the PV loop draws a lesion\'s loop over the normal one (docs/ROADMAP.md, S8)');
+  {
+    /* Each tap here draws the panel again (the interventions come and go with Normal), so each waits for the new canvas. */
+    const tap = async (sel, label) => {
+      await page.evaluate(() => { window.__oldPhysioCanvas = document.getElementById('physioCanvas'); });
+      await page.evaluate(sel => document.querySelector(sel).click(), sel);
+      await afterRender(page, () => { const cv = document.getElementById('physioCanvas'); return !!cv && cv !== window.__oldPhysioCanvas && !!physio && physioCanvasEl === cv; },
+                        { label: `the panel mounted again (${label})`, timeout: 30000 });
+    };
+    await tap('[data-physio-view="pv"]', 'PV loop');
+    const before = await page.evaluate(() => ({ lesions: document.querySelectorAll('[data-physio-lesion]').length, ivs: document.querySelectorAll('[data-physio-iv]').length,
+      esp: physio.loopNow().esp, want: Physio.loopWith((Physio.INTERVENTIONS.find(x => x.id === physio.intervention()) || {}).args).esp, iv: physio.intervention() }));
+    ok('on the normal heart the PV loop offers the lesions and the interventions, and draws physio.js\'s loop with the intervention chosen', before.lesions === 9 && before.ivs > 0 && before.esp === before.want, JSON.stringify(before));
+    await tap('[data-physio-lesion="as"]', 'AS');
+    const as = await page.evaluate(() => { const l = physio.loopNow(), c = Circulation.cycle('as');
+      return { same: l === c.loop, esp: l.esp, onLine: Math.abs(l.esp - l.espvrAt(l.esv)), ivs: document.querySelectorAll('[data-physio-iv]').length,
+               hot: document.querySelector('[data-physio-lesion].hot')?.getAttribute('data-physio-lesion'), note: document.getElementById('physioNote').textContent }; });
+    ok('a tap on AS draws aortic stenosis\'s own loop, its end-systole on its ESPVR', as.same && as.esp > 160 && as.onLine < 1 && as.hot === 'as', JSON.stringify({ same: as.same, esp: Math.round(as.esp), hot: as.hot }));
+    ok('the interventions are gone, and the note names the lesion against the dashed normal loop', as.ivs === 0 && /AS\./.test(as.note) && /dashed loop is the normal/.test(as.note), as.note.slice(0, 90));
+    await tap('[data-physio-lesion="normal"]', 'Normal');
+    const back = await page.evaluate(() => ({ ivs: document.querySelectorAll('[data-physio-iv]').length, esp: physio.loopNow().esp, want: Physio.loopWith((Physio.INTERVENTIONS.find(x => x.id === physio.intervention()) || {}).args).esp, iv: physio.intervention() }));
+    ok('Normal brings back physio.js\'s loop and its interventions', back.ivs > 0 && back.esp === back.want, JSON.stringify(back));
+  }
+
   head('scrubbing pauses the live clock and reads back a chosen instant');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(150);
