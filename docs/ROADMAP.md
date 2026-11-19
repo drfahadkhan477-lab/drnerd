@@ -539,6 +539,16 @@ from point estimates. Use per-chapter beta-binomial posteriors weighted by the
 exam blueprint, and show an interval rather than one number. The owner supplies
 the official blueprint weights; do not estimate them. *Fable* for the model;
 *Sonnet* for the screen.
+*Done, all but the weights:* `StudyPlan.readiness` gives each chapter a Beta
+posterior (a prior worth `PRIOR_N` answers centred on the fellow's own pooled
+accuracy, updated by the chapter's right and wrong) and its middle 80%. With a
+blueprint it gives the exam score as the Beta matching the weighted sum's mean
+and variance, chapters taken as independent (checked against sums drawn
+at random in verify-plan-pure). The readiness line names the weakest chapters as
+intervals. `src/core/blueprint.js` ships empty: the line says a likely exam
+score waits for the blueprint, and a table naming a chapter the bank lacks is
+refused by name. Still the owner's: the weights, mapped onto the bank's
+chapter names, and their source.
 
 **S8 — One physiology engine.** `src/core/physio.js` draws the resting cycle as
 curves whose crossings are measured, and solves the PV loop from the elastances
