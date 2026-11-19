@@ -624,9 +624,19 @@ other lesions keep physio.js's events, and the heart map still draws physio's
 spans (it only names each lesion systolic or diastolic, and on the engine's
 events every one is named the same). *Coronary, wired:* a lesion's coronary
 glow and traces, on a scale that holds the normal heart's peak, so AR's starved
-left bed reads dimmer. Curves and Conduction take no lesion. Next: the
-constriction gap, then the 3D heart (driven by rhythm activation, not physio,
-and edited by PRs #339 and #342), and Normal from the engine.
+left bed reads dimmer. Curves and Conduction take no lesion.
+*The constriction gap, measured:* the mitral E wave's inspiratory fall reaches
+a quarter only with a pulmonary-vein-to-LA resistance of about 0.12 mmHg·s/mL
+and a venous compliance of 40 to 60 mL/mmHg (with the stressed volume they hold
+added back). That resistance drops 11 mmHg between the veins and the LA at a
+normal output, where the real gradient is one or two, and the normal LA mean
+falls to about zero and tamponade loses its pulsus. Within this structure the
+gap cannot be closed by its numbers; it needs a mechanism (pulmonary venous
+inertance, or septal mechanics) and is the *Fable* modelling still open here.
+Next, each the owner's to choose: that model; Normal from the engine (the PV
+loop's interventions act on physio.js's loop, so Normal and they would part);
+the 3D heart (driven by rhythm activation, not physio, on Home, and edited by
+PRs #339 and #342).
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them
