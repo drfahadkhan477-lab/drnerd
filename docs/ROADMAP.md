@@ -675,6 +675,20 @@ hypertrophied LV contracts later and longer and relaxes slowly (so its loop
 still sits high and its S2 still reverses); AR's dilated LV is more compliant
 and its leak wider (so its coronaries still starve); MS's valve and blood
 volume moved so the spared LV is not left empty.
+*Valves with mass (the owner chose the notch before Normal, 2026-11-20):* drawn
+from the engine, the normal Wiggers diagram had no incisura, which physio.js
+draws by hand. Each valve now has leaflets that open on a forward gradient and
+shut on a reversed one, and the blood through it has mass (after Mynard,
+Davidson, Penny and Smolich, 2012, with a closing rate that reaches shut in a
+finite time). The blood runs on against the gradient (the hangout), a valve
+lets a little back as it shuts, and that backflow against the aortic root's
+impedance is the incisura, which a VALIDATION row now holds; it is absent in
+AS and AR, as the textbook has it. Valve events are where leaflets open and
+seal, no longer where two pressures cross, and the checks that assumed
+massless valves were re-derived, each with its injected defect. The AV
+valves' blood columns are short, or the atrial kick's flow runs on and shuts
+the tricuspid before systole; a check holds M1 before T1. AR and MS were
+refitted again. A beat costs about half as much again to compute.
 Next: Normal from the engine (the PV loop's interventions act on physio.js's
 loop, so Normal and they would part); a septum with its own mechanics, for
 constriction; a chronic MR. The split build lifts

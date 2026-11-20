@@ -8,10 +8,15 @@
 
      · each chamber is a time-varying elastance: its pressure is a blend, by its own activation e(t), of
        an end-systolic line Ees·(V − Vd) and an exponential passive curve P0·(e^{λ(V − V0)} − 1);
-     · each valve passes 50·A·√ΔP mL/s for a gradient ΔP in mmHg across an area A in cm²: Bernoulli,
-       ΔP = 4v², with v in m/s. Forward through the valve's area, backward through its regurgitant
-       orifice. There is no inertance, so blood moves only down a gradient, and every valve event is the
-       instant two pressure curves cross: the rule physio.js keeps, kept here by construction;
+     · each valve has leaflets, and the blood in it has mass (valveDyn, below, after Mynard et al., 2012).
+       Its steady flow is Bernoulli's, 50·A·√ΔP mL/s for a gradient ΔP in mmHg across an area A in cm²
+       (ΔP = 4v², v in m/s), forward through the open leaflets and backward through a regurgitant orifice;
+       but the flow changes only as fast as the gradient can accelerate the blood, and the leaflets open
+       while the gradient is forward and shut while it is reversed. So the blood runs on for a moment
+       against a reversed gradient (the hangout), a valve seals a few milliseconds after its gradient turns,
+       letting a little blood back as it does, and that backflow against the aortic root's impedance is the
+       incisura. Every valve event is the moment leaflets open or seal, not the instant two pressure curves
+       cross (physio.js's rule, and this file's until its valves had mass);
      · the systemic and pulmonary beds are each a root impedance, an arterial compliance and a resistance
        (a three-element Windkessel) into a venous compliance;
      · the pericardium holds the four chambers and any fluid in it, its pressure rising exponentially
@@ -52,8 +57,9 @@ const NORMAL = {
   /* ees, vd: the end-systolic line; p0, lam, v0: the passive curve; hill: the ventricles' activation, below;
      tr, td: seconds the atria's activation takes to rise to its peak and to fall back. */
   lv: { ees: 2.8, vd: 5, p0: 0.6, lam: 0.033, v0: 35, hill: [0.215, 0.362, 1.32, 27.4] },
-  /* The RV's contraction outlasts the LV's by a little. The engine has no inertance, so no pulmonary hangout
-     interval: this stands in for it, and puts P2 after A2 by the 10 to 60 ms the tests hold a normal S2 to. */
+  /* The RV's contraction outlasts the LV's by a little. The valves' mass makes a pulmonary hangout, but a short
+     one: the leaflets shut on the reversed gradient inside it. This stands in for the rest of it, and puts P2
+     after A2 by the 10 to 60 ms the tests hold a normal S2 to. */
   rv: { ees: 0.60, vd: 20, p0: 0.5, lam: 0.030, v0: 40, hill: [0.215, 0.38, 1.32, 27.4] },
   la: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.040, v0: 15, tr: 0.15, td: 0.12 },
   ra: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.035, v0: 15, tr: 0.15, td: 0.12 },
@@ -64,6 +70,11 @@ const NORMAL = {
   pul: { zc: 0.02, ca: 4.0, r: 0.07, cv: 12, rv: 0.03 },
   valves: { mitral: [5.0, 0], aortic: [4.0, 0], tricuspid: [7.0, 0], pulmonic: [4.0, 0] },   // [area, regurgitant orifice], cm²
   peri: { v0: 640, s: 40, k: 0.5, fluid: 0, rigid: false },
+  /* The valves' mass and leaflets (valveDyn): l, each valve's effective blood column in cm; k, the leaflets'
+     opening and closing rates, per mmHg per second. Fitted, not measured: the aortic column and closing rate
+     that give a visible incisura while every lesion keeps its rows and checks, and AV columns short enough
+     that the atrial kick's flow does not run on and shut the tricuspid before systole (M1 comes before T1). */
+  dyn: { l: { mitral: 1, aortic: 0.5, tricuspid: 0.5, pulmonic: 0.5 }, k: [27, 20] },
   stressed: 1350,         // mL of stressed blood volume in the whole loop
   resp: { period: 4, depth: 5, mean: -3 },             // chest pressure: its mean, and how far it falls at full inspiration
 };
@@ -78,9 +89,9 @@ const PRESETS = {
      hypertensive LV. */
   /* The hypertrophied LV also contracts and relaxes slowly: its activation builds later and more steeply, lasts
      longer, and falls away gently (impaired relaxation), so it empties late and A2 follows P2. */
-  as: { valves: { aortic: [0.7, 0] }, lv: { ees: 3.6, lam: 0.036, hill: [0.28, 0.39, 1.8, 16] }, wall: 1.35 },
-  ar: { valves: { aortic: [4.0, 0.6] }, lv: { v0: 60, lam: 0.018 }, stressed: 1550 },
-  ms: { valves: { mitral: [0.85, 0] }, la: { v0: 70 }, stressed: 2400 },
+  as: { valves: { aortic: [0.7, 0] }, lv: { ees: 3.6, lam: 0.036, hill: [0.28, 0.40, 1.8, 16] }, wall: 1.35 },
+  ar: { valves: { aortic: [4.0, 0.65] }, lv: { v0: 60, lam: 0.020 }, stressed: 1550 },
+  ms: { valves: { mitral: [0.85, 0] }, la: { v0: 70 }, stressed: 2600 },
   mr: { valves: { mitral: [5.0, 0.65] }, la: { p0: 0.8, lam: 0.05 }, stressed: 1550 },
   hfref: { lv: { ees: 0.6, vd: 50, v0: 90, lam: 0.02 }, stressed: 1750 },
   hfpef: { lv: { lam: 0.060, p0: 0.30, ees: 3.2 }, wall: 1.2, stressed: 1650 },
@@ -134,7 +145,9 @@ function chamberP(c, v, e) {
   return { p: e * c.ees * (v - c.vd) + (1 - e) * passive, passive: (1 - e) * passive };
 }
 
-/* Flow through a valve for a gradient dp (upstream minus downstream): forward through `area`, backward
+/* Valves without mass, where p.dyn is unset (a preset may set dyn: null, to compare): flow is Bernoulli's at
+   every instant, and a valve opens and shuts exactly where its gradient crosses zero.
+   Flow through a valve for a gradient dp (upstream minus downstream): forward through `area`, backward
    through `ero`. √|dp| is softened below 0.1 mmHg so the step can pass a crossing without dividing by zero. */
 function valveQ(av, dp) {
   const a = dp >= 0 ? av[0] : av[1];
@@ -154,7 +167,35 @@ function outQ(av, zc, dp) {
   return Math.sign(dp) * 2 * x / (zc + Math.sqrt(zc * zc + 4 * k * x));
 }
 
-/* The state: [V_lv, V_la, V_rv, V_ra, V_sa, V_sv, V_pa, V_pv]. Stressed volumes in the beds. */
+/* A valve with mass and leaflets (after Mynard, Davidson, Penny and Smolich, 2012), where p.dyn is set. Two states
+   each: the flow q, which the blood's inertia makes change only as fast as the gradient across it drives it, and
+   how open the leaflets are, z from 0 to 1, which opens while the gradient is forward, as (1 − z) times it, and
+   closes while it is reversed, in proportion to it, reaching 0 in a finite time (Mynard's closes as z times the
+   gradient, which never quite shuts, so a valve would have no moment of closing). The open area runs from the
+   regurgitant orifice (0 for a competent valve) at z = 0 to the full area at 1:
+     L dq/dt = dp − q|q| / (50 A)²        L = ρ l / A, the blood column of effective length l through the area
+   so a steady flow is the Bernoulli flow above, 50 A √dp. A shutting valve lets a little blood back before it
+   seals: that backflow, against the aortic root's impedance, is the incisura. A competent valve at z = 0 is
+   shut, and its flow is nothing.
+   As the leaflets meet, the area falls faster than the flow can follow and the equation turns stiffer than the
+   0.5 ms step can integrate. Where the flow would settle on its Bernoulli value, q* = 50 A √dp, faster than
+   RATE_MAX a second, it is taken to that value at RATE_MAX instead: a change quicker than the step is one the
+   step cannot show, and the rest of the equation is integrated as written. */
+const RHO = 1.06 / 1333.2;       // blood's density, in mmHg·s²·cm per mL: L = RHO · l / A in mmHg·s²/mL
+const RATE_MAX = 2000;           // s⁻¹: a rate RK4 at 0.5 ms integrates stably
+function valveDyn(av, l, k, dp, q, z) {
+  const zz = Math.max(0, Math.min(1, z));
+  const a = av[1] + (av[0] - av[1]) * zz;
+  const dz = dp > 0 ? k[0] * (1 - zz) * dp : (zz > 0 ? k[1] * dp : 0);
+  if (!(a > 0)) return { q: 0, dq: -q * RATE_MAX, dz };
+  const qs = 50 * a * Math.sign(dp) * Math.sqrt(Math.abs(dp));
+  const rate = (Math.abs(q) + Math.abs(qs)) / (2500 * a * RHO * l);
+  if (rate > RATE_MAX) return { q, dq: (qs - q) * RATE_MAX, dz };
+  return { q, dq: (a * dp - q * Math.abs(q) / (2500 * a)) / (RHO * l), dz };
+}
+
+/* The state: [V_lv, V_la, V_rv, V_ra, V_sa, V_sv, V_pa, V_pv], stressed volumes in the beds; with p.dyn, then each
+   valve's flow and opening: [q_mv, q_av, q_tv, q_pv, z_mv, z_av, z_tv, z_pv]. */
 function evaluate(p, y, t) {
   const beat = 60 / p.hr;
   const tb = t % beat;
@@ -176,24 +217,35 @@ function evaluate(p, y, t) {
   const psa = y[4] / p.sys.ca, psv = y[5] / p.sys.cv;
   const ppa = y[6] / p.pul.ca + pth, ppv = y[7] / p.pul.cv + pth;
 
-  const qmv = valveQ(p.valves.mitral, pla - plv);
-  const qav = outQ(p.valves.aortic, p.sys.zc, plv - psa);
-  const qtv = valveQ(p.valves.tricuspid, pra - prv);
-  const qpv = outQ(p.valves.pulmonic, p.pul.zc, prv - ppa);
+  let qmv, qav, qtv, qpv, dyn = null;
+  if (p.dyn) {
+    const d = p.dyn, V = p.valves;
+    const m = valveDyn(V.mitral, d.l.mitral, d.k, pla - plv, y[8], y[12]);
+    const a = valveDyn(V.aortic, d.l.aortic, d.k, plv - psa - p.sys.zc * y[9], y[9], y[13]);
+    const tr = valveDyn(V.tricuspid, d.l.tricuspid, d.k, pra - prv, y[10], y[14]);
+    const pu = valveDyn(V.pulmonic, d.l.pulmonic, d.k, prv - ppa - p.pul.zc * y[11], y[11], y[15]);
+    qmv = m.q; qav = a.q; qtv = tr.q; qpv = pu.q;
+    dyn = [m.dq, a.dq, tr.dq, pu.dq, m.dz, a.dz, tr.dz, pu.dz];
+  } else {
+    qmv = valveQ(p.valves.mitral, pla - plv);
+    qav = outQ(p.valves.aortic, p.sys.zc, plv - psa);
+    qtv = valveQ(p.valves.tricuspid, pra - prv);
+    qpv = outQ(p.valves.pulmonic, p.pul.zc, prv - ppa);
+  }
   const qs = (psa - psv) / p.sys.r, qsv = (psv - pra) / p.sys.rv;
   const qp = (ppa - ppv) / p.pul.r, qpvn = (ppv - pla) / p.pul.rv;
-
-  return {
-    dy: [qmv - qav, qpvn - qmv, qtv - qpv, qsv - qtv, qav - qs, qs - qsv, qpv - qp, qp - qpvn],
-    s: { plv, pla, prv, pra, pao: psa + p.sys.zc * qav, psv, ppa: ppa + p.pul.zc * qpv, ppv, pperi: around, pth, insp, qmv, qav, qtv, qpv, qs, eV, eA },
-  };
+  const dy = [qmv - qav, qpvn - qmv, qtv - qpv, qsv - qtv, qav - qs, qs - qsv, qpv - qp, qp - qpvn];
+  const s = { plv, pla, prv, pra, pao: psa + p.sys.zc * qav, psv, ppa: ppa + p.pul.zc * qpv, ppv, pperi: around, pth, insp, qmv, qav, qtv, qpv, qs, eV, eA };
+  if (dyn) { for (const x of dyn) dy.push(x); s.zmv = y[12]; s.zav = y[13]; s.ztv = y[14]; s.zpv = y[15]; }
+  return { dy, s };
 }
 
 /* The starting volumes: a guess the run forgets. The beds get what the chambers leave of the stressed volume. */
 function start(p) {
   const ch = [100, 50, 110, 50];
   const rest = Math.max(100, p.stressed - (ch[0] - p.lv.v0) - (ch[2] - p.rv.v0));
-  return ch.concat([rest * 0.13, rest * 0.62, rest * 0.08, rest * 0.17]);
+  const y = ch.concat([rest * 0.13, rest * 0.62, rest * 0.08, rest * 0.17]);
+  return p.dyn ? y.concat([0, 0, 0, 0, 0, 0, 0, 0]) : y;
 }
 
 /* simulate(preset, { seconds, dt, every, keep })
@@ -208,7 +260,8 @@ function simulate(preset, o) {
   const beat = 60 / p.hr;
   const n = Math.round(secs / dt), from = Math.round(Math.floor((secs - keep) / beat) * beat / dt);
   const out = { t: [], v: { lv: [], la: [], rv: [], ra: [] }, p };
-  const total0 = y.reduce((a, b) => a + b, 0);
+  const blood = y => y[0] + y[1] + y[2] + y[3] + y[4] + y[5] + y[6] + y[7];
+  const total0 = blood(y);
   for (let i = 0; i < n; i++) {
     const t = i * dt;
     if (i >= from && (i - from) % every === 0) {
@@ -225,8 +278,11 @@ function simulate(preset, o) {
     const y4 = y.map((v, j) => v + dt * k3[j]);
     const k4 = evaluate(p, y4, t + dt).dy;
     y = y.map((v, j) => v + dt / 6 * (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j]));
+    /* A leaflet is no more than open and no less than shut: a step that would carry it past either end (a
+       large gradient moves it further in one step than there is to go) stops it there. */
+    if (p.dyn) for (let j = 12; j < 16; j++) y[j] = Math.max(0, Math.min(1, y[j]));
   }
-  out.conserved = { start: total0, end: y.reduce((a, b) => a + b, 0) };
+  out.conserved = { start: total0, end: blood(y) };
   out.beat = 60 / p.hr;
   out.dt = dt * every;
   return out;
@@ -265,18 +321,31 @@ function measure(run) {
       if (qm > 0) { fwdM += qm * dt; mvGrad += run.pla[i] - run.plv[i]; mvN++; } else backM -= qm * dt;
     }
     const edv = run.v.lv[iEd], esv = run.v.lv[iEs];
-    /* The left heart's valve events, from the flows: the aortic valve's first forward flow after the R wave,
-       the mitral valve's last forward flow before it, the aortic valve's end of forward flow, and the mitral
-       valve's next forward flow. Between them, the isovolumic contraction, the ejection and the isovolumic
+    /* The left heart's valve events: the aortic valve's opening after the R wave, the mitral valve's closing
+       before it, the aortic valve's closing, and the mitral valve's next opening; read from the leaflets where
+       the valves have them (p.dyn), else from the flows, a valve being open while blood runs forward through it. Between them, the isovolumic contraction, the ejection and the isovolumic
        relaxation, in ms. A beat in which one is not found gives NaN, which no range holds. */
+    const avOpen = run.zav ? i => run.zav[i] > 0 : i => run.qav[i] > 0;
+    const mvOpen = run.zmv ? i => run.zmv[i] > 0 : i => run.qmv[i] > 0;
     let iAo = -1, iMc = -1, iAc = -1, iMo = -1;
-    for (let i = iR; i < i1; i++) if (run.qav[i] > 0) { iAo = i; break; }
-    if (iAo >= 0) for (let i = iAo - 1; i >= i0; i--) if (run.qmv[i] > 0) { iMc = i + 1; break; }
-    if (iAo >= 0) for (let i = iAo; i < i1; i++) if (!(run.qav[i] > 0)) { iAc = i; break; }
-    if (iAc >= 0) for (let i = iAc; i < i1; i++) if (run.qmv[i] > 0) { iMo = i; break; }
+    for (let i = iR; i < i1; i++) if (avOpen(i)) { iAo = i; break; }
+    if (iAo >= 0) for (let i = iAo - 1; i >= i0; i--) if (mvOpen(i)) { iMc = i + 1; break; }
+    if (iAo >= 0) for (let i = iAo; i < i1; i++) if (!avOpen(i)) { iAc = i; break; }
+    if (iAc >= 0) for (let i = iAc; i < i1; i++) if (mvOpen(i)) { iMo = i; break; }
     const span = (a, b) => (a >= 0 && b >= 0) ? (b - a) * dt * 1000 : NaN;
+    /* The incisura: from the end of forward flow through the aortic valve (the backflow that shuts it starts
+       there; the flow starts a little after the leaflets open, the blood having to be set moving), the root's lowest pressure in the next 40 ms, and how far it recovers in the 60 ms after that. A
+       root that only falls recovers nothing. */
+    let incisura = NaN, iQ0 = -1, iF = -1;
+    if (iAo >= 0) for (let i = iAo; i < i1; i++) if (run.qav[i] > 0) { iF = i; break; }
+    if (iF >= 0) for (let i = iF; i < i1; i++) if (!(run.qav[i] > 0)) { iQ0 = i; break; }
+    if (iQ0 >= 0) {
+      let lo = iQ0; for (let i = iQ0; i < Math.min(i1, iQ0 + Math.round(0.04 / dt)); i++) if (run.pao[i] < run.pao[lo]) lo = i;
+      let hi = lo; for (let i = lo; i < Math.min(i1, lo + Math.round(0.06 / dt)); i++) if (run.pao[i] > run.pao[hi]) hi = i;
+      incisura = run.pao[hi] - run.pao[lo];
+    }
     return {
-      ivc: span(iMc, iAo), lvet: span(iAo, iAc), ivr: span(iAc, iMo),
+      ivc: span(iMc, iAo), lvet: span(iAo, iAc), ivr: span(iAc, iMo), incisura,
       edv, esv, sv: edv - esv, fwd: fwdA - backA, backA, backM,
       lvSys: max(run.plv, i0, i1), lvEdp: at(run.plv, iR),
       aoSys: max(run.pao, i0, i1), aoDia: min(run.pao, i0, i1),
@@ -351,6 +420,7 @@ const VALIDATION = [
   ['normal', 'ivc', 20, 80, 'isovolumic contraction about 50 ms'],
   ['normal', 'lvet', 250, 330, 'ejection about 0.29 s at 75 a minute'],
   ['normal', 'ivr', 40, 100, 'isovolumic relaxation 50 to 100 ms'],
+  ['normal', 'incisura', 2, 15, 'the dicrotic notch: the aortic pressure dips as the valve shuts, then recovers'],
   ['dyspnoea', 'pulsus', 0, 10, 'breathing hard is not pulsus paradoxus: the normal heart stays under 10'],
 
   ['as', 'avGrad', 40, I, 'severe aortic stenosis: mean gradient 40 or more'],
@@ -401,10 +471,11 @@ const VALIDATION = [
    shape the views read physio.js in: each trace as a function of the cycle fraction t (0 is atrial
    excitation), the eight valve events, the seven left-heart phases between them, and a sample at any t.
 
-   EVERY EVENT IS A CROSSING, measured on the run: the mitral valve closes where the LV's pressure rises
-   through the LA's, the aortic opens where it rises through the aortic root's, and so on. A valve that
-   leaks still "closes" there, at the crossing: from then the gradient runs the other way, and so does the
-   leak. Rapid filling gives way to diastasis where the mitral flow has fallen to a quarter of its peak; where
+   EVERY EVENT IS A VALVE'S LEAFLETS, measured on the run: a valve opens at the first sample its leaflets are
+   off zero and shuts at the first they are back on it. That is a few milliseconds after its gradient turns
+   (the leaflets take time to move, and the blood runs on: the hangout), not where two pressure curves cross,
+   so a drawn A2 sits at the incisura. A valve that leaks still shuts: its leaflets meet, and the leak runs on
+   through its orifice. Without p.dyn, each event is where the two pressures cross instead. Rapid filling gives way to diastasis where the mitral flow has fallen to a quarter of its peak; where
    it never does before the beat ends (mitral stenosis: the gradient runs all through diastole), diastasis
    has no width.
    The same preset asked again is the same object: a run is worth keeping. */
@@ -441,14 +512,34 @@ function cycle(preset) {
   const iA = argmax(run.qav), iP = argmax(run.qpv);
   const idx = t => Math.round(t * n) % n;
   const T = {};
-  T.ao = cross(run.plv, run.pao, 1, iA, -1);
-  T.ac = cross(run.plv, run.pao, -1, iA, 1);
-  T.mc = cross(run.plv, run.pla, 1, idx(T.ao), -1);
-  T.mo = cross(run.plv, run.pla, -1, idx(T.ac), 1);
-  T.po = cross(run.prv, run.ppa, 1, iP, -1);
-  T.pc = cross(run.prv, run.ppa, -1, iP, 1);
-  T.tc = cross(run.prv, run.pra, 1, idx(T.po), -1);
-  T.to = cross(run.prv, run.pra, -1, idx(T.pc), 1);
+  if (p.dyn) {
+    /* Valves with leaflets open and shut when their leaflets do: the first sample a valve is open (z above 0)
+       after it was shut, and the first it is shut again, searched from i in step direction s. */
+    const leaf = (z, open, i, s) => {
+      for (let k = 0; k < n; k++) {
+        const j = (i + s * k + n) % n, j2 = (j + 1) % n;
+        if (open ? (z[j] <= 0 && z[j2] > 0) : (z[j] > 0 && z[j2] <= 0)) return j2 / n;
+      }
+      return null;
+    };
+    T.ao = leaf(run.zav, true, iA, -1);
+    T.ac = leaf(run.zav, false, iA, 1);
+    T.mc = leaf(run.zmv, false, idx(T.ao), -1);
+    T.mo = leaf(run.zmv, true, idx(T.ac), 1);
+    T.po = leaf(run.zpv, true, iP, -1);
+    T.pc = leaf(run.zpv, false, iP, 1);
+    T.tc = leaf(run.ztv, false, idx(T.po), -1);
+    T.to = leaf(run.ztv, true, idx(T.pc), 1);
+  } else {
+    T.ao = cross(run.plv, run.pao, 1, iA, -1);
+    T.ac = cross(run.plv, run.pao, -1, iA, 1);
+    T.mc = cross(run.plv, run.pla, 1, idx(T.ao), -1);
+    T.mo = cross(run.plv, run.pla, -1, idx(T.ac), 1);
+    T.po = cross(run.prv, run.ppa, 1, iP, -1);
+    T.pc = cross(run.prv, run.ppa, -1, iP, 1);
+    T.tc = cross(run.prv, run.pra, 1, idx(T.po), -1);
+    T.to = cross(run.prv, run.pra, -1, idx(T.pc), 1);
+  }
   T.peak = frac(argmax(run.plv));
   /* Diastasis: from the E wave's peak on, the first sample where the mitral flow is a quarter of it. */
   let iE = idx(T.mo); for (let k = 0, j = iE; k < n / 2; k++, j = (j + 1) % n) if (run.qmv[j] > run.qmv[iE]) iE = j;
