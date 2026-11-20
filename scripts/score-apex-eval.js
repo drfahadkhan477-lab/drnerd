@@ -47,6 +47,8 @@ function scoreReview(review) {
   const saved = new Map();
   for (const entry of review.cases) {
     requireValid(fixtureById.has(entry?.id), 'Unknown case ID in review.');
+    requireValid(entry.question === undefined || entry.question === fixtureById.get(entry.id).question,
+      `${entry.id}: saved question differs from the current fixture.`);
     requireValid(!saved.has(entry.id), `Duplicate case: ${entry.id}`);
     requireValid((entry.answer === null || hasText(entry.answer)) && Array.isArray(entry.criteria),
       `${entry.id}: provide an answer or null, and a criteria array.`);

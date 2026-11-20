@@ -57,6 +57,10 @@ try {
   assert.deepEqual(partial.totals, {pass: 0, fail: 0, unmeasured: fixtures.cases.length});
   assert.equal(partial.cases[0].criteria[0].verdict, 'supported');
   fs.unlinkSync(output);
+  blank.cases[0].question += ' Edited.';
+  fs.writeFileSync(input, JSON.stringify(blank));
+  assert.match(run().stderr, /question differs/);
+  blank.cases[0].question = supported.question;
   blank.cases[0].answer = null;
   fs.writeFileSync(input, JSON.stringify(blank));
   assert.match(run().stderr, /reviewed criterion needs an answer/);
