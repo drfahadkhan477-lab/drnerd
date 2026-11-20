@@ -37,6 +37,7 @@
      Circulation.simulate(preset, opts)   run to a steady state and return the last window, sampled
      Circulation.measure(run)             what a catheter and an echo would report from it
      Circulation.PRESETS                  normal, and each lesion, as parameter changes from normal
+     Circulation.INTERVENTIONS            the PV loop's interventions on the normal heart, the same way
      Circulation.VALIDATION               for each preset, the textbook range each measure must fall in
 
    The tests (tests/verify-circulation-pure.js) run every preset and hold every row of VALIDATION. The
@@ -99,6 +100,19 @@ const PRESETS = {
   tamponade: { peri: { fluid: 600, s: 25 }, stressed: 1800, resp: { depth: 10 } },
   /* A small, stiff sac that does not pass the chest's pressure on, and the fluid the kidneys keep. */
   constriction: { peri: { v0: 340, s: 25, k: 1.0, rigid: true }, stressed: 2450 },
+};
+
+/* The PV loop's interventions on the normal heart, each one change from it, under physio.js's ids (Physio.INTERVENTIONS
+   names and explains them). Preload: a fluid load, the stressed volume raised until the LV fills to a raised end-
+   diastolic pressure; this LV's EDPVR is steep, so its loop widens by less than physio.js draws. Afterload: the
+   systemic resistance 1.75 times normal. Contractility: Ees 1.5 times normal. The two failures are the lesions. */
+const INTERVENTIONS = {
+  base: 'normal',
+  preload: { stressed: 3000 },
+  after: { sys: { r: NORMAL.sys.r * 1.75 } },
+  inotrope: { lv: { ees: NORMAL.lv.ees * 1.5 } },
+  hfref: 'hfref',
+  hfpef: 'hfpef',
 };
 
 function merge(base, over) {
@@ -567,7 +581,8 @@ function cycle(preset) {
      pressure over its volume above Vd is greatest, its moment of peak elastance. Neither is a valve's: in
      aortic stenosis or mitral regurgitation the aortic valve shuts well away from end-systole. Its ESPVR and
      EDPVR are this ventricle's own lines, raised by what surrounds it at that corner (the pericardium's
-     pressure, and the chest's): in tamponade the whole loop sits on a pressure the ventricle did not make. */
+     pressure, and the chest's, and at end-diastole the full RV's, through the septum): in tamponade the whole
+     loop sits on a pressure the ventricle did not make. */
   const lvP = at(run.plv), lvV = at(run.v.lv), around = at(run.pperi);
   const N = 300, pts = [];
   for (let i = 0; i <= N; i++) { const t = i / N; pts.push({ t, v: lvV(t), p: lvP(t) }); }
@@ -577,7 +592,9 @@ function cycle(preset) {
   for (let i = 0; i < n; i++) if ((run.plv[i] - run.pperi[i]) / Math.max(1, run.v.lv[i] - p.lv.vd) > (run.plv[iEs] - run.pperi[iEs]) / Math.max(1, run.v.lv[iEs] - p.lv.vd)) iEs = i;
   const tEs = frac(iEs), tEd = p.pr / beat;
   const edv = lvV(tEd), edp = lvP(tEd), esv = lvV(tEs), esp = lvP(tEs);
-  const aroundEs = around(tEs), aroundEd = around(tEd);
+  /* The RV is relaxed at the R wave: its passive pressure at that moment, a share of which the septum passes on. */
+  const rvEd = at(run.v.rv)(tEd), septalEd = p.septum * p.rv.p0 * (Math.exp(p.rv.lam * (rvEd - p.rv.v0)) - 1);
+  const aroundEs = around(tEs), aroundEd = around(tEd) + septalEd;
   const loop = {
     /* SV and EF as an echo reads them, from the largest and smallest volumes, which are not the corners
        where a valve's lesion keeps the ventricle moving past them. */
@@ -637,6 +654,6 @@ function heartSpec(preset) {
            aAmp: pv.valves.mitral[0] < pn.valves.mitral[0] / 2 ? 0.5 : 1, open, leak };
 }
 
-root.Circulation = { simulate, measure, params, cycle, heartSpec, PRESETS, NORMAL, VALIDATION };
+root.Circulation = { simulate, measure, params, cycle, heartSpec, PRESETS, INTERVENTIONS, NORMAL, VALIDATION };
 
 })(typeof window !== 'undefined' ? window : this);

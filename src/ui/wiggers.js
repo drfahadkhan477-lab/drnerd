@@ -61,6 +61,10 @@ function mount(canvas, opts) {
     t: 0,
     playing: opts.playing !== false,
     iv: 'base',
+    /* The beat drawn (a Circulation.cycle(), or null for physio.js's), and the normal heart it is measured against:
+       the engine's own normal beat where the caller hands one, else physio.js's. */
+    cycle: null,
+    ref: null,
     scrub: false,
     raf: 0,
     last: 0,
@@ -422,7 +426,8 @@ function mount(canvas, opts) {
     const L = 44, R = 14, TOP = 14, BOT = 80;
     const B = box(L, TOP, W - L - R, H - TOP - BOT);
     const cur = loopNow();
-    const base = Ph.loopWith();
+    /* The resting loop the ghost draws: the reference beat's, or physio.js's. */
+    const base = S.ref ? S.ref.loop : Ph.loopWith();
     const lesion = cur !== null && S.cycle && cur === S.cycle.loop;
     /* physio.js's fixed axes, or as far as a lesion's loop reaches, in steps of 40. */
     const vLo = 0, vHi = lesion ? Math.max(220, Math.ceil((S.cycle.max.v + 20) / 40) * 40) : 220;
@@ -477,7 +482,7 @@ function mount(canvas, opts) {
     text('Ea', (X(cur.edv) + X(cur.esv)) / 2 + 14, (Y(0) + Y(cur.esp)) / 2 + 8, p.muted, 9.5, 700, 'left', true);
 
     /* the resting loop as a ghost, whenever we have moved off it: an intervention, or a lesion */
-    if (lesion || S.iv !== 'base') {
+    if (S.cycle ? S.cycle !== S.ref : S.iv !== 'base') {
       ctx.save(); ctx.strokeStyle = p.ghost; ctx.lineWidth = 1.6; ctx.setLineDash([4, 4]);
       ctx.beginPath(); base.points.forEach((q, i) => i ? ctx.lineTo(X(q.v), Y(q.p)) : ctx.moveTo(X(q.v), Y(q.p)));
       ctx.closePath(); ctx.stroke(); ctx.restore();
@@ -900,15 +905,19 @@ function mount(canvas, opts) {
      anatomy: a vessel-like structure for the pulse to travel across. It is
      looked up here, not captured at mount(), for the reason drawConduction
      gives — six other views must not go dark for want of it. */
-  let corPeak = null;
+  /* The normal heart's coronary peak: the reference beat's, or physio.js's; worked out once for each. */
+  const corPeaks = new Map();
   function coronaryPeak() {
-    if (corPeak != null) return corPeak;
+    const key = S.ref || Ph;
+    if (corPeaks.has(key)) return corPeaks.get(key);
+    const f = S.ref ? S.ref.coronaryFlow : Ph.coronaryFlow;
     let m = 0;
     for (let i = 0; i < 400; i++) {
       const t = i / 400;
-      m = Math.max(m, Ph.coronaryFlow(t, 'left'), Ph.coronaryFlow(t, 'right'));
+      m = Math.max(m, f(t, 'left'), f(t, 'right'));
     }
-    return (corPeak = m);
+    corPeaks.set(key, m);
+    return m;
   }
   /* What the Coronary view says in numbers, from the beat it draws: the share of left coronary flow in diastole,
      the mean left coronary flow, and the peak of either; physio.js's own share for its cycle. */
@@ -1037,10 +1046,11 @@ function mount(canvas, opts) {
     setTime(t) { S.t = Ph.wrap(t); draw(); return api; },
     time: () => S.t,
     setIntervention(id) { S.iv = id; draw(); return api; },
-    /* The beat the Wiggers view draws (a Circulation.cycle(), or null for physio.js), and the phase that view
-       is in now, from whichever it draws. */
-    setCycle(c) { S.cycle = c || null; rOffset = null; draw(); return api; },
+    /* The beat the views draw (a Circulation.cycle(), or null for physio.js), the normal beat it is measured
+       against (the engine's, or null for physio.js's), and the phase the drawn beat is in now. */
+    setCycle(c, ref) { S.cycle = c || null; S.ref = ref || null; rOffset = null; draw(); return api; },
     cycle: () => S.cycle,
+    reference: () => S.ref,
     phaseNow: () => D().phaseAt(S.t),
     loopNow,
     flowNow,

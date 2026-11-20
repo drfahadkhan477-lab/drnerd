@@ -142,6 +142,25 @@ head('the PV loop of each beat: its corners on its own lines, and each lesion wh
   ok('tamponade: a small loop on a raised floor', L('tamponade').edv < n.edv * 0.6 && L('tamponade').strokeWork < n.strokeWork / 3 && L('tamponade').edp > n.edp + 8, `EDV ${L('tamponade').edv.toFixed(0)}, EDP ${L('tamponade').edp.toFixed(0)}`);
 }
 
+head('the PV loop\'s interventions on the engine\'s normal heart: each moves the loop as the textbook says');
+{
+  const IV = C.INTERVENTIONS, L = k => C.cycle(IV[k]).loop, n = L('base');
+  ok('the interventions are physio.js\'s six, each one change from normal (resistance 1.75 times, Ees 1.5 times), and the failures are the lesions',
+     JSON.stringify(Object.keys(IV)) === JSON.stringify(['base', 'preload', 'after', 'inotrope', 'hfref', 'hfpef']) && IV.base === 'normal' && IV.hfref === 'hfref' && IV.hfpef === 'hfpef'
+     && JSON.stringify(IV.preload) === JSON.stringify({ stressed: IV.preload.stressed }) && IV.preload.stressed > C.NORMAL.stressed
+     && JSON.stringify(IV.after) === JSON.stringify({ sys: { r: C.NORMAL.sys.r * 1.75 } }) && JSON.stringify(IV.inotrope) === JSON.stringify({ lv: { ees: C.NORMAL.lv.ees * 1.5 } }));
+  const pre = L('preload'), af = L('after'), ino = L('inotrope');
+  /* physio.js's suite asks its drawn preload for 10 mL more stroke; this LV's steeper EDPVR gives less, and this asks 5. */
+  ok('preload: the loop widens to the right, filled at a higher pressure, and the stroke rises, contractility untouched',
+     pre.edv > n.edv + 10 && pre.edp > n.edp + 3 && pre.sv > n.sv + 5 && pre.ees === n.ees, `EDV ${n.edv.toFixed(0)}→${pre.edv.toFixed(0)}, SV ${n.sv.toFixed(0)}→${pre.sv.toFixed(0)}, EDP ${n.edp.toFixed(1)}→${pre.edp.toFixed(1)}`);
+  ok('afterload: end-systolic volume rises and the ejection fraction falls, contractility untouched',
+     af.esv > n.esv + 5 && af.ef < n.ef - 0.05 && af.ees === n.ees, `ESV ${n.esv.toFixed(0)}→${af.esv.toFixed(0)}, EF ${(n.ef * 100).toFixed(0)}%→${(af.ef * 100).toFixed(0)}%`);
+  ok('contractility: the ESPVR steepens, end-systolic volume falls and the ejection fraction rises',
+     ino.ees > n.ees && ino.esv < n.esv - 5 && ino.ef > n.ef + 0.05, `ESV ${n.esv.toFixed(0)}→${ino.esv.toFixed(0)}, EF ${(n.ef * 100).toFixed(0)}%→${(ino.ef * 100).toFixed(0)}%`);
+  const off = Object.keys(IV).map(k => { const l = L(k); return [k, Math.abs(l.esp - l.espvrAt(l.esv)), Math.abs(l.edp - l.edpvrAt(l.edv))]; });
+  ok('on every intervention, end-systole lies on the ESPVR and end-diastole on the EDPVR, to a mmHg', off.every(([, a, b]) => a < 1 && b < 1), off.map(([k, a, b]) => `${k} ${a.toFixed(2)}/${b.toFixed(2)}`).join(', '));
+}
+
 head('flow for the views: leaks run backward, and the coronaries follow their pressure');
 {
   const scan = (y, f) => { const xs = []; for (let i = 0; i < 800; i++) xs.push([i / 800, f(i / 800)]); return xs; };

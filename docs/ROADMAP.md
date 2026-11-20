@@ -690,9 +690,20 @@ massless valves were re-derived, each with its injected defect. The AV
 valves' blood columns are short, or the atrial kick's flow runs on and shuts
 the tricuspid before systole; a check holds M1 before T1. AR and MS were
 refitted again. A beat costs about half as much again to compute.
-Next: Normal from the engine (the PV loop's interventions act on physio.js's
-loop, so Normal and they would part); a septum with its own mechanics, for
-constriction; a chronic MR. The split build lifts
+*Normal from the engine:* the cycle panel's Normal is now the engine's normal
+beat in the Wiggers, PV, Flow, Right heart and Coronary views, so a lesion is
+drawn against the same heart it is measured against: the PV loop's dashed loop
+and the coronary glow's scale are the engine's normal. The PV loop's
+interventions are engine runs too (`Circulation.INTERVENTIONS`: a fluid load,
+the systemic resistance raised, Ees raised, and the two failures as their
+lesions), each held to what the textbook says it does; the resting loop's note
+gives the engine's own Ees, Ea and EDV. This LV's EDPVR is steep, so preload
+widens its loop less than physio.js draws. physio.js still draws until the
+engine has loaded (the split build), and draws the Starling, Guyton and
+conduction views, and ambient mode's loop.
+Next: a septum with its own mechanics, for constriction; a chronic MR; a
+normal EDPVR as compliant as the textbook's (it would widen preload's loop,
+and every preset would be fitted again). The split build lifts
 src/ui/wiggers.js too (it was the shell's last kilobyte): the shell is at 278 KB
 of 288.
 

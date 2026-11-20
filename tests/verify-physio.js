@@ -485,10 +485,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.waitForTimeout(150);
   const ivSwap = await page.evaluate(() => {
     document.querySelector('[data-physio-iv="after"]')?.click();
-    return { iv: physio.intervention(), note: document.getElementById('physioNote').textContent };
+    const l = physio.loopNow(), want = Circulation.cycle(Circulation.INTERVENTIONS.after).loop;
+    return { iv: physio.intervention(), same: l === want, ref: physio.reference() === Circulation.cycle('normal'), esv: l.esv, normalEsv: Circulation.cycle('normal').loop.esv,
+             note: document.getElementById('physioNote').textContent };
   });
-  ok('clicking an intervention chip changes the loop', ivSwap.iv === 'after');
-  ok('the explanatory note updates with it', /afterload/i.test(ivSwap.note), ivSwap.note.slice(0, 60));
+  ok('clicking an intervention chip draws the engine\'s loop for it, against the engine\'s normal heart: afterload raises end-systolic volume',
+     ivSwap.iv === 'after' && ivSwap.same && ivSwap.ref && ivSwap.esv > ivSwap.normalEsv + 5, JSON.stringify({ iv: ivSwap.iv, same: ivSwap.same, ref: ivSwap.ref, esv: Math.round(ivSwap.esv), normal: Math.round(ivSwap.normalEsv) }));
+  ok('the explanatory note updates with it, and says the model computed it', /afterload/i.test(ivSwap.note) && /Computed by the circulation model/.test(ivSwap.note), ivSwap.note.slice(0, 60));
+  /* The resting loop's figures are the engine's, read off the loop it draws, not physio.js's. */
+  const rest = await page.evaluate(() => {
+    document.querySelector('[data-physio-iv="base"]')?.click();
+    const l = Circulation.cycle('normal').loop;
+    return { note: document.getElementById('physioNote').textContent, want: `Ees ${l.ees.toFixed(1)} mmHg/mL, Ea ${l.ea.toFixed(2)}, EDV ${l.edv.toFixed(0)} mL` };
+  });
+  ok('the resting loop\'s note gives the engine\'s own Ees, Ea and EDV', rest.note.includes(rest.want), rest.want + ' · ' + rest.note.slice(0, 70));
 
   head('the note follows the live phase on the Wiggers view');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
@@ -519,14 +529,14 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
         note: document.getElementById('physioNote').textContent, kept: localStorage.getItem('accsap12.physiolesion'),
         gap: c ? c.lvPressure(c.T.peak) - c.aoPressure(c.T.peak) : 0 };
       document.querySelector('[data-physio-lesion="normal"]').click();
-      out.back = physio.cycle(); out.backPhase = physio.phaseNow().id; out.physioPhase = Physio.phaseAt(physio.time()).id;
+      out.back = physio.cycle() === Circulation.cycle('normal'); out.backPhase = physio.phaseNow().id; out.normalPhase = Circulation.cycle('normal').phaseAt(physio.time()).id;
       return out;
     });
     ok('the Wiggers view offers each lesion as a chip', JSON.stringify(lz.chips) === JSON.stringify(['normal', 'as', 'ar', 'ms', 'mr', 'hfref', 'hfpef', 'tamponade', 'constriction']), JSON.stringify(lz.chips));
     ok('a tap on AS draws aortic stenosis\'s computed beat, the chip marked and the choice kept', lz.preset === 'as' && lz.ok === true && lz.hot === 'as' && lz.kept === 'as', JSON.stringify({ preset: lz.preset, hot: lz.hot, kept: lz.kept }));
     ok('whose LV peaks far above its aorta', lz.gap > 40, lz.gap.toFixed(0) + ' mmHg');
     ok('the phase it reports is that beat\'s, and the note says which lesion and that it is computed', lz.phase === lz.want && /AS\./.test(lz.note) && /Computed by the circulation model/.test(lz.note), lz.phase + ' / ' + lz.want + ' · ' + lz.note.slice(0, 80));
-    ok('Normal goes back to the drawn cycle', lz.back === null && lz.backPhase === lz.physioPhase, String(lz.back) + ' ' + lz.backPhase);
+    ok('Normal goes back to the engine\'s normal beat, and the phase it reports is that beat\'s', lz.back === true && lz.backPhase === lz.normalPhase, String(lz.back) + ' ' + lz.backPhase + ' / ' + lz.normalPhase);
   }
 
   head('the PV loop draws a lesion\'s loop over the normal one (docs/ROADMAP.md, S8)');
@@ -539,9 +549,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
                         { label: `the panel mounted again (${label})`, timeout: 30000 });
     };
     await tap('[data-physio-view="pv"]', 'PV loop');
-    const before = await page.evaluate(() => ({ lesions: document.querySelectorAll('[data-physio-lesion]').length, ivs: document.querySelectorAll('[data-physio-iv]').length,
-      esp: physio.loopNow().esp, want: Physio.loopWith((Physio.INTERVENTIONS.find(x => x.id === physio.intervention()) || {}).args).esp, iv: physio.intervention() }));
-    ok('on the normal heart the PV loop offers the lesions and the interventions, and draws physio.js\'s loop with the intervention chosen', before.lesions === 9 && before.ivs > 0 && before.esp === before.want, JSON.stringify(before));
+    const engineLoop = () => ({ ivs: document.querySelectorAll('[data-physio-iv]').length, iv: physio.intervention(),
+      same: physio.loopNow() === Circulation.cycle(Circulation.INTERVENTIONS[physio.intervention()]).loop });
+    const before = await page.evaluate(engineLoop);
+    before.lesions = await page.evaluate(() => document.querySelectorAll('[data-physio-lesion]').length);
+    ok('on the normal heart the PV loop offers the lesions and the interventions, and draws the engine\'s loop for the intervention chosen', before.lesions === 9 && before.ivs > 0 && before.same, JSON.stringify(before));
     await tap('[data-physio-lesion="as"]', 'AS');
     const as = await page.evaluate(() => { const l = physio.loopNow(), c = Circulation.cycle('as');
       return { same: l === c.loop, esp: l.esp, onLine: Math.abs(l.esp - l.espvrAt(l.esv)), ivs: document.querySelectorAll('[data-physio-iv]').length,
@@ -549,8 +561,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('a tap on AS draws aortic stenosis\'s own loop, its end-systole on its ESPVR', as.same && as.esp > 160 && as.onLine < 1 && as.hot === 'as', JSON.stringify({ same: as.same, esp: Math.round(as.esp), hot: as.hot }));
     ok('the interventions are gone, and the note names the lesion against the dashed normal loop', as.ivs === 0 && /AS\./.test(as.note) && /dashed loop is the normal/.test(as.note), as.note.slice(0, 90));
     await tap('[data-physio-lesion="normal"]', 'Normal');
-    const back = await page.evaluate(() => ({ ivs: document.querySelectorAll('[data-physio-iv]').length, esp: physio.loopNow().esp, want: Physio.loopWith((Physio.INTERVENTIONS.find(x => x.id === physio.intervention()) || {}).args).esp, iv: physio.intervention() }));
-    ok('Normal brings back physio.js\'s loop and its interventions', back.ivs > 0 && back.esp === back.want, JSON.stringify(back));
+    const back = await page.evaluate(engineLoop);
+    ok('Normal brings back the engine\'s loop for the intervention chosen, and the interventions', back.ivs > 0 && back.same, JSON.stringify(back));
   }
 
   head('the Flow view draws a lesion\'s flows (docs/ROADMAP.md, S8)');
@@ -572,11 +584,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       document.querySelector('[data-physio-lesion="normal"]').click();
       return { normal, ar, back, note, after: physio.flowNow().source };
     });
-    ok('on Normal the Flow view reads physio.js', fl.normal.source === 'physio', JSON.stringify(fl.normal));
+    ok('on Normal the Flow view reads the engine\'s normal heart', fl.normal.source === 'normal', JSON.stringify(fl.normal));
     ok('a tap on AR draws aortic regurgitation\'s flows: its aortic flow runs back in diastole, and less of the left coronary\'s flow is diastolic',
        fl.ar.source === 'ar' && fl.back < -100 && fl.ar.leftDiastolicFraction < fl.normal.leftDiastolicFraction, JSON.stringify({ source: fl.ar.source, back: Math.round(fl.back), dia: +fl.ar.leftDiastolicFraction.toFixed(2), normal: +fl.normal.leftDiastolicFraction.toFixed(2) }));
     ok('the note names the lesion and the flow below the line', /AR\./.test(fl.note) && /below the line/.test(fl.note), fl.note.slice(0, 90));
-    ok('and Normal goes back to physio.js', fl.after === 'physio');
+    ok('and Normal goes back to the engine\'s normal heart', fl.after === 'normal', String(fl.after));
   }
 
   head('the right-heart view draws a lesion\'s right heart (docs/ROADMAP.md, S8)');
@@ -593,10 +605,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       document.querySelector('[data-physio-lesion="normal"]').click();
       return { normal: { source: normal.source, s2: normal.s2Split }, as: { source: as.source, s2: as.s2Split, waves: as.waves.map(w => w[0]) }, note, after: physio.rightNow().source };
     });
-    ok('on Normal the right-heart view reads physio.js, A2 before P2', rh.normal.source === 'physio' && rh.normal.s2 > 0, JSON.stringify(rh.normal));
+    ok('on Normal the right-heart view reads the engine\'s normal heart, A2 before P2', rh.normal.source === 'normal' && rh.normal.s2 > 0, JSON.stringify(rh.normal));
     ok('a tap on AS draws its right heart: S2 split reversed, P2 before A2, and the JVP\'s waves found on its own trace',
        rh.as.source === 'as' && rh.as.s2 < 0 && ['a', 'v', 'x', 'y'].every(w => rh.as.waves.includes(w)), JSON.stringify(rh.as));
-    ok('the note names the lesion, and Normal goes back to physio.js', /AS\./.test(rh.note) && rh.after === 'physio', rh.note.slice(0, 60));
+    ok('the note names the lesion, and Normal goes back to the engine\'s normal heart', /AS\./.test(rh.note) && rh.after === 'normal', rh.note.slice(0, 60));
   }
 
   head('the Coronary view draws a lesion\'s coronaries (docs/ROADMAP.md, S8)');
@@ -615,10 +627,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       document.querySelector('[data-physio-lesion="normal"]').click();
       return { normal: normal.source, ar, refMean, note, after: physio.coronaryNow().source };
     });
-    ok('on Normal the Coronary view reads physio.js', co.normal === 'physio');
+    ok('on Normal the Coronary view reads the engine\'s normal heart', co.normal === 'normal', String(co.normal));
     ok('a tap on AR draws its coronaries: less left coronary flow than the engine\'s normal heart, and less of it in diastole',
        co.ar.source === 'ar' && co.ar.leftMean < co.refMean * 0.8 && co.ar.leftDiastolicFraction < 0.8, JSON.stringify({ source: co.ar.source, mean: +co.ar.leftMean.toFixed(3), normal: +co.refMean.toFixed(3), dia: +co.ar.leftDiastolicFraction.toFixed(2) }));
-    ok('the note names the lesion and the scale, and Normal goes back to physio.js', /AR\./.test(co.note) && /normal heart's peak/.test(co.note) && co.after === 'physio', co.note.slice(0, 60));
+    ok('the note names the lesion and the scale, and Normal goes back to the engine\'s normal heart', /AR\./.test(co.note) && /normal heart's peak/.test(co.note) && co.after === 'normal', co.note.slice(0, 60));
   }
 
   head('scrubbing pauses the live clock and reads back a chosen instant');
