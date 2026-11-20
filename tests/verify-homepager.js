@@ -435,6 +435,31 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('the bank\'s line, then the rhythm under it, both inside the hero, and no 3D switch',hero.above&&hero.inside&&!hero.entry,JSON.stringify(hero));
   ok('no round tool stands beside the heart; they are in its menu, closed',hero.loose===0&&hero.menuHidden===true,JSON.stringify(hero));
+  /* A dot only between two items on one row: the line wraps on a narrower iPad held sideways, and a dot left hanging at the
+     end of a row read as a list with an item missing. Each item's dot is its ::before; the row is clipped on the left by
+     its clip-path, so what is drawn is read off the geometry and the clip together, and a wrap is a precondition. */
+  const dots=async(w,h)=>{
+    await page.setViewportSize({width:w,height:h}); await page.evaluate(()=>homeGo(0,false)); await still(`the hero at ${w}x${h}`);
+    return page.evaluate(()=>{
+      const line=document.querySelector('#homePage0 .hero-line'), lr=line.getBoundingClientRect();
+      const m=/inset\(\s*(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px/.exec(getComputedStyle(line).clipPath||'');
+      const clipLeft=m?lr.left+Number(m[4]):-Infinity;
+      const items=[...line.querySelectorAll('.hl-item')].map(el=>{const r=el.getBoundingClientRect(), b=getComputedStyle(el,'::before');
+        const drawn=b.content!=='none'&&b.display!=='none'&&parseFloat(b.width)>0&&parseFloat(b.opacity)>0;
+        const dotLeft=r.left+(parseFloat(b.left)||0), dotRight=dotLeft+(parseFloat(b.width)||0);
+        return {top:Math.round(r.top),left:Math.round(r.left),shown:drawn&&dotRight>clipLeft};});
+      const rows=[...new Set(items.map(i=>i.top))];
+      const first=items.map(i=>i.left===Math.min(...items.filter(j=>j.top===i.top).map(j=>j.left)));
+      const wrong=items.map((it,k)=>first[k]?(it.shown?'dot at the start of a row':''):(!it.shown?'no dot between two items':(items[k-1].top!==it.top?'dot after a wrap':''))).map((x,k)=>x&&k+': '+x).filter(Boolean);
+      const spans=[...line.querySelectorAll('.hl-dot')].filter(d=>d.getClientRects().length&&d.getBoundingClientRect().width>0).length;
+      return {rows:rows.length,items:items.length,shown:items.filter(i=>i.shown).length,wrong,spans};
+    });
+  };
+  const narrow=await dots(1024,768), wide=await dots(1366,1024);
+  ok('at 1024x768 the bank\'s line wraps (precondition)',narrow.rows>=2,JSON.stringify(narrow));
+  ok('and a dot stands only between two items on one row, never at a row\'s start or end',narrow.rows>=2&&narrow.wrong.length===0&&narrow.spans===0&&narrow.shown===narrow.items-narrow.rows,JSON.stringify(narrow));
+  ok('at 1366x1024, one row with a dot between each pair',wide.rows===1&&wide.wrong.length===0&&wide.spans===0&&wide.shown===wide.items-1,JSON.stringify(wide));
+  await page.setViewportSize({width:1180,height:820}); await page.evaluate(()=>homeGo(0,false)); await still('the hero back at 1180x820');
   await page.locator('#heroHeartBtn').click();
   const opened=await page.evaluate(()=>{const m=document.getElementById('heroMenu'),b=document.getElementById('heroHeartBtn');
     const items=[...m.querySelectorAll('button')].filter(x=>!x.hidden).map(x=>({t:x.textContent.trim(),h:Math.round(x.getBoundingClientRect().height)}));

@@ -925,7 +925,14 @@ html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(
 #app[data-screen="home"] #homePage0 .hero-line .hl-item{display:inline;min-height:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;
   font-size:var(--t-body);color:var(--muted)}
 #app[data-screen="home"] #homePage0 .hero-line .hl-item b{font-size:inherit;font-weight:750;color:var(--text);font-variant-numeric:tabular-nums}
-#app[data-screen="home"] #homePage0 .hero-line .hl-dot{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--muted);opacity:.6}
+/* A dot only ever between two items on one row. Each item but the first carries its dot in the gap before it, and the row
+   is drawn 18px further left than it stands and clipped back by as much, so an item that wraps to the start of a row has
+   its dot cut off rather than one left hanging at the end of the row above (verify-homepager). */
+#app[data-screen="home"] #homePage0 .hero-line{column-gap:0;margin-left:-18px;clip-path:inset(-6px -6px -6px 18px)}
+#app[data-screen="home"] #homePage0 .hero-line .hl-dot{display:none}
+#app[data-screen="home"] #homePage0 .hero-line .hl-item{position:relative;padding-left:18px}
+#app[data-screen="home"] #homePage0 .hero-line .hl-item::before{content:'';position:absolute;left:7px;top:50%;width:4px;height:4px;margin-top:-2px;
+  border-radius:50%;background:var(--muted);opacity:.6}
 #app[data-screen="home"] #homePage0 .hero-rhythm-label{position:static;margin:0;font-family:var(--font-mono);font-size:var(--t-meta);color:var(--teal-ink)}
 /* Its height is given with !important because the earlier layers give theirs so (home.css, the Quiet Atlas rounds). */
 #app[data-screen="home"] #homePage0 .hero-ecg{position:absolute;left:0;right:0;bottom:10px;z-index:1;width:100%;height:clamp(84px,12vh,120px)!important;
