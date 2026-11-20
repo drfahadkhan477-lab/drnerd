@@ -71,12 +71,14 @@ const PRESETS = {
   normal: {},
   /* The same heart breathing as hard as the tamponade below: the control for its pulsus. */
   dyspnoea: { resp: { depth: 10 } },
-  as: { valves: { aortic: [0.7, 0] } },
+  /* Chronic lesions carry the remodelling they cause: AS's concentric hypertrophy (a stronger, somewhat stiffer LV,
+     and its wall, which only the 3D heart reads), MS's dilated atrium, HFpEF's hypertensive LV. */
+  as: { valves: { aortic: [0.7, 0] }, lv: { ees: 3.6, lam: 0.036 }, wall: 1.35 },
   ar: { valves: { aortic: [4.0, 0.5] }, lv: { v0: 60, lam: 0.022 }, stressed: 1550 },
-  ms: { valves: { mitral: [0.7, 0] }, stressed: 1800 },
+  ms: { valves: { mitral: [0.7, 0] }, la: { v0: 70 }, stressed: 1800 },
   mr: { valves: { mitral: [5.0, 0.65] }, la: { p0: 0.8, lam: 0.05 }, stressed: 1550 },
   hfref: { lv: { ees: 0.6, vd: 50, v0: 90, lam: 0.02 }, stressed: 1750 },
-  hfpef: { lv: { lam: 0.060, p0: 0.30 }, stressed: 1650 },
+  hfpef: { lv: { lam: 0.060, p0: 0.30, ees: 3.2 }, wall: 1.2, stressed: 1650 },
   /* Fluid in the sac, a breathless patient, and the veins tightened to keep the pressure up. */
   tamponade: { peri: { fluid: 600, s: 25 }, stressed: 1800, resp: { depth: 10 } },
   /* A small, stiff sac that does not pass the chest's pressure on, and the fluid the kidneys keep. */
@@ -487,13 +489,15 @@ function cycle(preset) {
               since a chamber's span grows as the cube root of its volume (clamped to 0.6..1.6)
      vAmp     how deeply the ventricles squeeze against normal: the ratio of their ejection fractions
      aAmp     how hard the atria kick: 1, or 0.5 where the atrium pumps against a stenotic valve
+     wall     how thick the LV's wall is against normal: the preset's own (a hypertrophy the beat's volumes do not
+              show; the stiffness and strength it brings are in the preset's LV)
      open     how far each valve opens against normal, mitral tricuspid aortic pulmonic: the square root
               of its area's ratio (a leaflet's swing for an orifice of that area)
      leak     how far each stays open when it should be shut: its regurgitant orifice against its area
    Normal is all ones and no leak. */
 function heartSpec(preset) {
   const n = cycle('normal'), y = cycle(preset);
-  if (preset === 'normal') return { preset, dil: [1, 1, 1, 1], vAmp: 1, aAmp: 1, open: [1, 1, 1, 1], leak: [0, 0, 0, 0] };
+  if (preset === 'normal') return { preset, wall: 1, dil: [1, 1, 1, 1], vAmp: 1, aAmp: 1, open: [1, 1, 1, 1], leak: [0, 0, 0, 0] };
   const big = (c, a) => Math.max.apply(null, c.run.v[a]);
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
   const r = (a) => clamp(Math.cbrt(big(y, a) / big(n, a)), 0.6, 1.6);
@@ -501,7 +505,7 @@ function heartSpec(preset) {
   const names = ['mitral', 'tricuspid', 'aortic', 'pulmonic'];
   const open = names.map(k => clamp(Math.sqrt(pv.valves[k][0] / pn.valves[k][0]), 0.15, 1));
   const leak = names.map(k => clamp(pv.valves[k][1] / pv.valves[k][0] * 2, 0, 0.45));
-  return { preset, dil: [r('lv'), r('rv'), r('la'), r('ra')], vAmp: clamp(y.EF / n.EF, 0.2, 1.3),
+  return { preset, wall: clamp(pv.wall || 1, 1, 1.6), dil: [r('lv'), r('rv'), r('la'), r('ra')], vAmp: clamp(y.EF / n.EF, 0.2, 1.3),
            aAmp: pv.valves.mitral[0] < pn.valves.mitral[0] / 2 ? 0.5 : 1, open, leak };
 }
 

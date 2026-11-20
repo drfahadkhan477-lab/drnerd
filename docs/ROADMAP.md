@@ -656,12 +656,16 @@ the LV; that is the modelling still open here.
 the normal one (each chamber's size, how deeply the ventricles squeeze, how far
 each valve opens or fails to shut), and `Heart3D.setLesion` shows it: chamber
 sizes in the beat's shader, the squeeze and the valves on each moment of the
-cycle. The Home heart's menu offers the lesions. The engine has no remodelling,
-so the chronic enlargement of the LA in MS and MR, and the thick wall of AS,
-show only as far as one beat's volumes do.
+cycle. The Home heart's menu offers the lesions. *Remodelling:* the chronic
+presets now carry what they do over years: AS's concentric hypertrophy (a
+stronger, somewhat stiffer LV, and a wall 1.35 times as thick, which the 3D
+heart draws), MS's dilated atrium (LA 1.6 times the normal volume), HFpEF's
+hypertensive LV; every VALIDATION row still holds. MR is left acute (a stiff,
+small LA and its tall v wave); a chronic MR, its LA large and compliant, would
+be a preset of its own.
 Next: Normal from the engine (the PV loop's interventions act on physio.js's
 loop, so Normal and they would part); a septum with its own mechanics, for
-constriction; remodelling, for the chronic lesions. The split build lifts
+constriction; a chronic MR. The split build lifts
 src/ui/wiggers.js too (it was the shell's last kilobyte): the shell is at 278 KB
 of 288.
 

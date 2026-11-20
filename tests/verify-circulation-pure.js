@@ -118,7 +118,7 @@ head('the PV loop of each beat: its corners on its own lines, and each lesion wh
   ok('aortic stenosis: the loop is pushed up, end-systolic pressure far above normal', L('as').esp > n.esp + 40, `${L('as').esp.toFixed(0)} against ${n.esp.toFixed(0)}`);
   ok('aortic regurgitation: a wide loop, a large end-diastolic volume and stroke', L('ar').edv > n.edv + 60 && L('ar').sv > n.sv * 1.6, `EDV ${L('ar').edv.toFixed(0)}, SV ${L('ar').sv.toFixed(0)}`);
   ok('HFrEF: shifted right, a dilated ventricle with a small stroke and a shallow ESPVR', L('hfref').esv > n.esv * 3 && L('hfref').ees < n.ees / 2 && L('hfref').ef < 0.4, `ESV ${L('hfref').esv.toFixed(0)}, EF ${(L('hfref').ef * 100).toFixed(0)}%`);
-  ok('HFpEF: a normal ESPVR, filled up a steeper EDPVR to a higher pressure', L('hfpef').ees === n.ees && L('hfpef').edpvrAt(120) > n.edpvrAt(120) * 2 && L('hfpef').edp > n.edp + 5, `EDPVR at 120 mL ${L('hfpef').edpvrAt(120).toFixed(1)} against ${n.edpvrAt(120).toFixed(1)}`);
+  ok('HFpEF: an ESPVR at least normal (the hypertensive ventricle is stiff in systole too), filled up a steeper EDPVR to a higher pressure', L('hfpef').ees >= n.ees && L('hfpef').edpvrAt(120) > n.edpvrAt(120) * 2 && L('hfpef').edp > n.edp + 5, `EDPVR at 120 mL ${L('hfpef').edpvrAt(120).toFixed(1)} against ${n.edpvrAt(120).toFixed(1)}`);
   ok('tamponade: a small loop on a raised floor', L('tamponade').edv < n.edv * 0.6 && L('tamponade').strokeWork < n.strokeWork / 3 && L('tamponade').edp > n.edp + 8, `EDV ${L('tamponade').edv.toFixed(0)}, EDP ${L('tamponade').edp.toFixed(0)}`);
 }
 
@@ -157,7 +157,9 @@ head('the lesion as the 3D heart shows it: read off the engine\'s beat');
 {
   const H = C.heartSpec;
   const n = H('normal');
-  ok('the normal heart is all ones and no leak', JSON.stringify([n.dil, n.vAmp, n.aAmp, n.open, n.leak]) === JSON.stringify([[1, 1, 1, 1], 1, 1, [1, 1, 1, 1], [0, 0, 0, 0]]));
+  ok('the normal heart is all ones and no leak', JSON.stringify([n.wall, n.dil, n.vAmp, n.aAmp, n.open, n.leak]) === JSON.stringify([1, [1, 1, 1, 1], 1, 1, [1, 1, 1, 1], [0, 0, 0, 0]]));
+  ok('chronic remodelling: AS\'s wall thickened, and HFpEF\'s less so; MS\'s atrium dilated', H('as').wall === 1.35 && H('hfpef').wall > 1 && H('hfpef').wall < H('as').wall && H('ms').dil[2] > 1.15 && H('hfref').wall === 1,
+     `AS wall ${H('as').wall}, HFpEF ${H('hfpef').wall}, MS LA ${H('ms').dil[2].toFixed(2)}`);
   ok('HFrEF: a dilated LV that squeezes about a third as deeply', H('hfref').dil[0] > 1.2 && H('hfref').vAmp < 0.5, `LV ${H('hfref').dil[0].toFixed(2)}, squeeze ${H('hfref').vAmp.toFixed(2)}`);
   ok('aortic regurgitation: a dilated LV, and an aortic valve that never quite shuts', H('ar').dil[0] > 1.15 && H('ar').leak[2] > 0.15 && H('ar').leak[0] === 0, `LV ${H('ar').dil[0].toFixed(2)}, leak ${H('ar').leak[2].toFixed(2)}`);
   ok('aortic stenosis: an aortic valve that opens less than half way, the others whole', H('as').open[2] < 0.5 && H('as').open[0] === 1 && H('as').open[3] === 1, H('as').open.map(x => x.toFixed(2)).join(','));
@@ -186,9 +188,11 @@ head('the 3D heart takes the lesion (src/core/heart3d.js)');
   ok('aortic regurgitation: in diastole, with the aortic valve shut, it stays open by its leak', dia.valves[2] < 0.1 && Math.abs(ar.valves[2] - C.heartSpec('ar').leak[2]) < 1e-12, `${dia.valves[2].toFixed(2)} -> ${ar.valves[2].toFixed(2)}`);
   ok('and the moment handed in is left as it was', mid.valves[2] > 0.9 && dia.valves[2] < 0.1 && mid.v === H3.cycle(400, 'sinus', (() => { const q = {}; for (let t = 0; t <= 400; t += 10) H3.cycle(t, 'sinus', q); return q; })()).v);
   const blanked = require('./_source.js').blankComments(hsrc);
-  ok('the beat\'s shader sizes each chamber by uDil, in the heart\'s mesh and the scanned one, and the page sets it in both',
+  ok('the beat\'s shader sizes each chamber by uDil, and thickens the LV\'s wall by uWall (the outer surface out, the cavity in, the valves not), in the heart\'s mesh and the scanned one, and the page sets them in both',
      (blanked.match(/uniform vec4 uDil;/g) || []).length === 2 && /p \+= \(p - uLvApex\) \* \(\(uDil\.x - 1\.0\) \* aW\.x\);/.test(hsrc)
-     && /'laC','raC','dil'\];/.test(blanked) && /'laC','raC','dil','base'/.test(blanked) && /gl\.uniform4fv\(loc\.dil,/.test(blanked) && /gl\.uniform4fv\(uScan\.dil,/.test(blanked));
+     && (blanked.match(/uniform float uWall, uSurf;/g) || []).length === 2 && /p \+= n \* \(uSurf \* \(uWall - 1\.0\) \* 0\.55 \* aW\.x\);/.test(hsrc)
+     && /gl\.uniform1f\(u\.surf, m === mCav \? -1 : 1\);/.test(blanked) && /gl\.uniform1f\(uv\.surf, 0\);/.test(blanked)
+     && /'laC','raC','dil','wall','surf'\];/.test(blanked) && /'laC','raC','dil','wall','surf','base'/.test(blanked) && /gl\.uniform4fv\(loc\.dil,/.test(blanked) && /gl\.uniform4fv\(uScan\.dil,/.test(blanked));
 }
 
 head('the presets are changes from normal, and nothing else');
@@ -198,7 +202,8 @@ head('the presets are changes from normal, and nothing else');
   ok('making a preset changes nothing in the normal heart', JSON.stringify(C.NORMAL) === before);
   ok('a preset that does not exist is refused, not run as normal', (() => { try { C.params('nope'); return false; } catch (e) { return /No such preset/.test(e.message); } })());
   const p = C.params('as');
-  ok('aortic stenosis is the normal heart with a narrower aortic valve', p.valves.aortic[0] === 0.7 && p.valves.mitral[0] === C.NORMAL.valves.mitral[0] && p.lv.ees === C.NORMAL.lv.ees);
+  ok('aortic stenosis is the normal heart with a narrower aortic valve and the LV its hypertrophy makes, and nothing else',
+     p.valves.aortic[0] === 0.7 && p.valves.mitral[0] === C.NORMAL.valves.mitral[0] && p.lv.ees === 3.6 && p.lv.lam === 0.036 && p.lv.v0 === C.NORMAL.lv.v0 && p.la.v0 === C.NORMAL.la.v0 && p.rv.ees === C.NORMAL.rv.ees);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
