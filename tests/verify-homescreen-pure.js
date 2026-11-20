@@ -251,7 +251,8 @@ head('the bank in the hero, and no session strip');
   /* The owner took the strip away (November 2026): its counts are the hero's line and the Brain page's, its button the
      plans in Chapters and the review on Brain. */
   const html = homePage();
-  const lineOf = h => String(g1(h, /<div class="hero-line">([\s\S]*?)<\/div>/) || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  /* What the line says, item by item: each item's number and the word after it. */
+  const lineOf = h => [...String(g1(h, /<div class="hero-line">([\s\S]*?)<\/div>/) || '').matchAll(/<span class="hl-item"><b>([^<]*)<\/b>([^<]*)<\/span>/g)].map(m => m[1] + ' ' + m[2].trim()).join(' ');
   const all = [html, homePage({}, { dueQuestions: () => [] }), homePage({}, { dueQuestions: () => [], startedCount: () => 0 }), homePage({}, { showHello: () => true })];
   ok('no strip, with cards due, with none, or with nothing answered yet: no Explored, no Answers today, no Due, no Review, Continue or Start',
      all.every(h => !/atlas-session|observatory-|Explored|Answers today|reviewAllDue|startPlan|>(Review|Continue|Start) /.test(h)), all.map(h => /atlas-session|observatory-|Explored|Answers today|reviewAllDue|startPlan/.test(h)).join(' '));
