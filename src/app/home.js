@@ -7,11 +7,11 @@
    brainAxon(), and brainInfoHtml() in app/systole.html. They are here as functions of what they are given, so what
    the pages say can be held without a browser:
 
-     homeHtml(S, CHAPTERS, kit)         the home screen: its three pages side by side, and the tabs
+     homeHtml(S, CHAPTERS, kit)         the home screen: its three pages side by side, Home with doors to the other two
        S           read, never changed: sessionTotal, sessionCorrect, daily and homeLayout
        CHAPTERS    the bank's chapters, for how much of the bank is mastered
        kit         POOL, TOTAL_Q; the page's switches as they stand when it is drawn (atlas3D, atlasPaused,
-                   atlasReading, heroCutaway, pearlAsWritten); the two heart images, each a whole <img>
+                   atlasReading, heroCutaway); the two heart images, each a whole <img>
                    element with the build's slot in it (ATLAS_IMG, HERO_IMG: the build fills a slot in the
                    page only, and the split build finds each image by its element); dueQuestions(),
                    startedCount(), todayISO(), masteryFor(); the pearl's pearlNow(), pearlAll(),
@@ -66,13 +66,13 @@
    WHAT THE HOME PAGE SAYS:
 
      1. With no pearl to read, what the daily pearl is for and the way to the notes; with one, the pearl
-        itself: what it is about, the statement as a ladder or as written, the prompt to explain it, the
-        ways to recall, read, see the source and open the note, and its figure or its chapter's emblem.
-     2. The living heart: the illustration and the 3D model's place, whether it is live, the way to
-        switch between them, to pause, and the menu with chambers and flow, motion and the model's credit.
-     3. How much of the bank is explored, answered today and due, the mastery, and the session strip.
+        itself: what it is about and its chapter, the statement as a ladder, the way to another pearl and
+        to its note, and its figure or its chapter's emblem.
+     2. The hero: a greeting, Systole, and the living heart, with the 3D model's place and the menu with
+        chambers and flow, motion and the model's credit.
+     3. In the hero, how many questions there are, how much of the bank is started and how many were answered today.
      4. For someone new, what Chapters and Apex are.
-     5. The Brain page and the Labs page beside it, and the three tabs.
+     5. A door to the Brain page and one to the Labs page; each of those opens with a way back Home.
 
    WHAT THE BRAIN PAGE SAYS:
 
@@ -86,13 +86,12 @@
         practise it.
 
    The buttons name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's ACTIONS table calls
-   (src/core/actions.js). The Home page's: goRefs, toggleAtlas3D, toggleAtlasMotion, toggleHeroMenu,
-   toggleHeroMechanics, toggleHeroCredit, pearlNext, pearlToggleAll, pearlRecall, pearlReading, pearlSourceToggle,
-   pearlOpen and dismissHello; its strip reviewAllDue, goStudy, or startPlan with 20 in data-plan; and each tab
-   homeGo, with its page in data-page. The Labs page's: goLab, goEcho, goPractice, goSessions, goStudy, openSearch,
+   (src/core/actions.js). The Home page's: goRefs, toggleHeroMenu, toggleAtlasMotion, toggleHeroMechanics,
+   toggleHeroCredit, pearlNext, pearlToggleAll, pearlOpen and dismissHello; and its two
+   doors homeOpen, with the page in data-page, as the Home button at the top of Brain and Labs. The Labs page's: goLab, goEcho, goPractice, goSessions, goStudy, openSearch,
    goStats, goRefs, goMemory and goAnnotations. The Brain page's: brainTap on the brain, startDue, and startChapter
-   with the chapter in data-ch through e(). A key on a tab or in the brain is the page's KEY_ACTIONS under the
-   same names, homeGo and brainTap, which call homeTabKey() and brainKey(); the pager and the pearl's statement name
+   with the chapter in data-ch through e(). A key in the brain is the page's KEY_ACTIONS under the same name,
+   brainTap, which calls brainKey(); the pager and the pearl's statement name
    homePagerScroll and pearlScroll, which SCROLL_ACTIONS calls for a scroll of that element itself. No inline handler
    is left. The functions stay the page's.
    ═════════════════════════════════════════════ */
@@ -100,12 +99,9 @@
 'use strict';
 
 function homeHtml(S, CHAPTERS, kit){
-  const {POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,heroLesion,PHYSIO_LESIONS,pearlAsWritten,ATLAS_IMG,HERO_IMG,
-    dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,e,icon}=kit;
+  const {POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,heroLesion,PHYSIO_LESIONS,ATLAS_IMG,HERO_IMG,
+    dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,greet,e,icon}=kit;
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
-  /* The session strip's button: with cards due, Review them; with history and nothing due, Continue opens Chapters;
-     with nothing answered yet, Start begins the 20-minute plan Study offers, because a first visit should not open
-     on a menu (docs/ux-discovery, principle 1). */
   const dueN=dueQuestions().length, seenN=startedCount();
 
   const today=S.daily[todayISO()]||{a:0,c:0};
@@ -118,7 +114,7 @@ function homeHtml(S, CHAPTERS, kit){
 
   return `<div class="home-pages${atlasPaused?' atlas-paused':''}" id="homePages">
     <div class="home-pager" id="homePager" data-action="homePagerScroll">
-    <section class="home-page" id="homePage0" role="tabpanel" aria-labelledby="homeTab0"><div class="home-page-in">
+    <section class="home-page" id="homePage0" role="region" aria-label="Home"><div class="home-page-in">
     <div class="home-wrap anim-fade${atlasReading?' atlas-reading':''}" data-home="${S.homeLayout}">
     <section class="atlas-intro" id="atlasIntro"${atlasReading?' hidden':''} aria-labelledby="atlasTitle">
       <div class="atlas-eyebrow">${icon('sun')} <span>Daily pearl</span></div>
@@ -135,21 +131,20 @@ function homeHtml(S, CHAPTERS, kit){
       ${ATLAS_IMG}
       <div class="hero-orbit" aria-hidden="true"><span></span><span></span></div>
       <canvas id="heroECG" class="hero-ecg" aria-hidden="true"></canvas>
-      <div class="hero-inner atlas-hero-summary">
-        <div class="hero-h1">The living heart</div>
-
-
+      <div class="hero-inner">
+        <div class="hero-greet">${e(greet())}</div>
+        <div class="hero-h1">Systole</div>
+        <div class="hero-line">
+          <span class="hl-item"><b>${TOTAL_Q}</b> questions</span><span class="hl-dot" aria-hidden="true"></span>
+          <span class="hl-item"><b>${covered}%</b> started</span><span class="hl-dot" aria-hidden="true"></span>
+          <span class="hl-item"><b>${today.a}</b> today</span>
+        </div>
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
-        <div class="hero-line hero-stats-row" hidden></div>
       </div>
       <div class="hero-heart-plate" id="heroHeart" aria-hidden="true">
         <div class="h-beat">${HERO_IMG}</div>
       </div>
       <div id="heroHeart3dSlot" class="hero-heart-3d" aria-hidden="true"></div>
-      <span class="hero-live-status"><i aria-hidden="true"></i> ${atlas3D?'Live cardiac cycle':'Illustrative anatomy'}</span>
-      <button class="hero-mechanics${heroCutaway?' is-active':''}" id="atlasExplore" data-action="toggleAtlas3D"
-        aria-label="${atlas3D?'Show heart illustration':'Explore heart in 3D'}" aria-pressed="${atlas3D}" title="${atlas3D?'Show heart illustration':'Explore heart in 3D'}">${icon('layers','icon-sm')} ${atlas3D?'Illustration':'Explore in 3D'}</button>
-      <button class="atlas-pause" id="atlasLandingPause" data-action="toggleAtlasMotion" aria-label="${atlasPaused?'Play animation':'Pause animation'}">${icon(atlasPaused?'play':'pause','icon-sm')}</button>
       <button class="hero-heart-hit" id="heroHeartBtn" data-action="toggleHeroMenu" aria-label="Heart model: motion, chambers and credit"
         aria-expanded="false" aria-controls="heroMenu" title="Heart model"></button>
       <div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>
@@ -174,7 +169,7 @@ function homeHtml(S, CHAPTERS, kit){
           <div class="pearl-head">
 
             <span class="pearl-tag">${icon('zap','icon-sm')} Pearl</span>
-            <span class="pearl-cap sr-only" id="pearlCap">${e(p.chapter||'From your notes')}</span>
+            <span class="pearl-cap" id="pearlCap">${e(p.chapter||'From your notes')}</span>
             <button class="pearl-next" data-action="pearlNext"
               title="Another pearl" aria-label="Another pearl"${pearlAll().length<2?' disabled':''}>${icon('rotate-ccw','icon-sm')}</button>
           </div>
@@ -183,24 +178,14 @@ function homeHtml(S, CHAPTERS, kit){
           <div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" data-action="pearlScroll">${pearlLadder(p)}</div>
           <button class="pearl-morecue" id="pearlMore" data-action="pearlToggleAll" aria-controls="pearlBody" aria-expanded="false" hidden>${icon('chevron-down','icon-sm')}<span>Show all</span></button>
           <div class="sr-only" id="pearlAnnounce" aria-live="polite" aria-atomic="true"></div>
-          <div class="pearl-prompt" id="pearlPrompt" hidden>
-            <span class="pearl-prompt-icon" aria-hidden="true">${icon('brain')}</span>
-            <strong>Explain it in your own words.</strong>
-            <span>State the key rule, then any condition or exception. Reveal it when you're ready to compare.</span>
-          </div>
           <div class="pearl-actions">
-            <button class="pearl-recall" id="pearlRecall" data-action="pearlRecall" aria-controls="pearlBody" aria-expanded="true">Recall</button>
-            <button class="pearl-reading" id="pearlReading" data-action="pearlReading" aria-controls="pearlBody" aria-pressed="${pearlAsWritten}" title="Read the complete statement as a paragraph">${icon('book','icon-sm')} Paragraph</button>
-            <button class="pearl-reading" id="pearlSourceToggle" data-action="pearlSourceToggle" aria-controls="pearlSource" aria-expanded="false">Source</button>
             <button class="pearl-open" data-action="pearlOpen" title="${e(p.source||'Your reference notes')}">Read note ${icon('arrow-right','icon-sm')}</button>
           </div>
-          <div class="pearl-source" id="pearlSource" role="region" aria-label="Pearl source" hidden>${e(p.source||'Your reference notes')}</div>
 
         </div>
         ${pearlFigure(p)}${pearlEmblem(p)}
       </div>`; })()}
 
-    <div class="atlas-session"><div class="observatory-progress"><div class="observatory-stats"><div><strong>${covered}<small>%</small></strong><span>Explored</span></div><div><strong>${today.a}</strong><span>Answers today</span></div><div><strong>${dueN}</strong><span>Due</span></div></div><div class="observatory-meter" role="progressbar" aria-label="Question bank explored" aria-valuemin="0" aria-valuemax="${Math.max(1,TOTAL_Q)}" aria-valuenow="${Math.min(seenN,Math.max(1,TOTAL_Q))}" aria-valuetext="${seenN} of ${TOTAL_Q} questions explored"><span style="width:${covered}%"></span></div></div><button ${dueN?'data-action="reviewAllDue"':seenN?'data-action="goStudy"':'data-action="startPlan" data-plan="20"'}${dueN||seenN?'':' aria-label="Start a 20-minute study session"'}>${dueN?'Review':seenN?'Continue':'Start'} ${icon('arrow-right','icon-sm')}</button></div>
     ${showHello()?`<div class="hello" id="homeHello">
       <span class="hello-ic">${icon('zap')}</span>
       <div class="hello-txt">
@@ -211,15 +196,13 @@ function homeHtml(S, CHAPTERS, kit){
         <button class="hello-x" data-action="dismissHello">Got it</button>
       </div>
     </div>`:''}
+    <nav class="home-doors" aria-label="More of Systole">
+      <button class="home-door" data-action="homeOpen" data-page="1">${icon('brain','icon-sm')}<span><b>Brain</b><i>What you remember</i></span>${icon('arrow-right','icon-sm')}</button>
+      <button class="home-door" data-action="homeOpen" data-page="2">${icon('activity','icon-sm')}<span><b>Labs</b><i>Rhythms, echo, sessions</i></span>${icon('arrow-right','icon-sm')}</button>
+    </nav>
     </div></div></section>
-    <section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>
-    <section class="home-page home-labs" id="homePage2" role="tabpanel" aria-labelledby="homeTab2"><div class="home-page-in">${buildLabs(dueN)}</div></section>
-    </div>
-    <div class="home-tabs" role="tablist" aria-label="Home pages">
-      <span class="home-tab-pill" aria-hidden="true"></span>
-      <button class="home-tab" role="tab" id="homeTab0" aria-controls="homePage0" data-action="homeGo" data-page="0">${icon('home','icon-sm')}<span>Home</span></button>
-      <button class="home-tab" role="tab" id="homeTab1" aria-controls="homePage1" data-action="homeGo" data-page="1">${icon('brain','icon-sm')}<span>Brain</span></button>
-      <button class="home-tab" role="tab" id="homeTab2" aria-controls="homePage2" data-action="homeGo" data-page="2">${icon('activity','icon-sm')}<span>Labs</span></button>
+    <section class="home-page home-brain" id="homePage1" role="region" aria-label="Brain"><div class="home-page-in"><button class="home-back" data-action="homeOpen" data-page="0">${icon('arrow-left','icon-sm')}<span>Home</span></button>${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>
+    <section class="home-page home-labs" id="homePage2" role="region" aria-label="Labs"><div class="home-page-in"><button class="home-back" data-action="homeOpen" data-page="0">${icon('arrow-left','icon-sm')}<span>Home</span></button>${buildLabs(dueN)}</div></section>
     </div>
   </div>`;
 }

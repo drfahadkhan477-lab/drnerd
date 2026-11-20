@@ -5,9 +5,11 @@ Open the existing repository in Claude Code or Codex and use this prompt:
 > Read AGENTS.md and inspect Git status before editing. Continue the Quiet Atlas
 > design in app/css/home.css and app/systole.html. Preserve private inputs,
 > reference notes and images, study state, backups, stashes and other worktrees.
-> Keep Memorizer outside this task. The selected design uses a warm paper
-> surface, teal navigation rail, serif pearl heading, the existing interactive
-> heart and a next-session strip. Tablet Home, Brain and Labs landing pages
+> Keep Memorizer outside this task. The selected design (the owner's, November
+> 2026) is one glass page: the early hero (a greeting, Systole, the bank in one
+> line and the live rhythm), the pearl under a small heading, the existing
+> interactive heart, and a door to Brain and one to Labs at its foot. There is
+> no navigation rail, tab bar, sideways swipe or session strip. Tablet Home, Brain and Labs landing pages
 > should fit the viewport; long reading, enlarged text and small windows must
 > remain accessible through scrolling. Preserve alternative palettes and dark
 > mode. Do not replace the physiological heart with a static illustration.
@@ -26,11 +28,10 @@ Open the existing repository in Claude Code or Codex and use this prompt:
 > limitations, artifact provenance and deployment status accurately.
 
 The Home styling is scoped to the landing pages so question reading keeps its
-existing measure. Navigation remains a horizontal swipe pager; its controls
-form a vertical rail on tablets and bottom tabs on phones. The selected tab's
-orientation updates on resize. The review strip uses due questions when
-available and opens Chapters otherwise; on a first visit, with nothing
-answered yet, it says Start and begins the 20-minute plan Study offers.
+existing measure. The three pages still sit side by side in the pager, but only
+Home's doors move it (homeOpen), and Brain and Labs each open with a Home
+button that goes back to the door it came by. What is due is reviewed from
+Brain's Review; the 20-minute plan is in Chapters.
 
 A different account cannot automatically access another session's files or
 credentials. Prefer using the existing laptop checkout. Otherwise transfer

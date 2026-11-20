@@ -88,8 +88,9 @@ A floating control reserves its own space in the scroll container and never sits
 over text. Check: at phone width, on Home, a question and an explanation, no
 floating control's box intersects a text node's box. Read PR #339 first; it
 touches Home. *Sonnet.*
-*Done, for Home:* on a phone the Apex button is a round button at the end of the
-tab bar's row, which the pages never reach; verify-home asserts its box never
+*Done, for Home:* on a phone the Apex button is a round button in a band of its
+own under the pages (where the tab bar stood until the owner removed it in
+November 2026), which the pages never reach; verify-home asserts its box never
 meets the pager's at three phone sizes. PR #339 hides the chip. On the quiz the
 button still floats over text mid-scroll and the page's end scrolls clear of it,
 which is the ordinary trade for a floating button; it was left as it is.

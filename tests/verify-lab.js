@@ -146,10 +146,10 @@ const pixels = () => {
     }
     return p;
   };
-  /* Into the Lab the way a fellow goes: the Labs page of Systole's home screen (its tab), and the Practice Lab card. */
+  /* Into the Lab the way a fellow goes: the Labs page of Systole's home screen (Home's Labs door), and the Practice Lab card. */
   /* After a reload the proposition is what the Lab shows, not the way in, which the home section clicks through. Clicking
      again there failed in headless WebKit (CI, and here on master before Sessions too): for 30-60 s after a load it draws a
-     frame only every 0.7-1.6 s, and the tab's and card's clicks wait on frames. So a reopen goes through goPractice(). */
+     frame only every 0.7-1.6 s, and the door's and card's clicks wait on frames. So a reopen goes through goPractice(). */
   const reopenLab = async p => {
     await p.evaluate(() => goPractice());
     const opened = await p.locator('#plabRoot .plab-tiles').waitFor({ timeout: 30000 }).then(() => true, () => false);
@@ -157,12 +157,12 @@ const pixels = () => {
     return opened;
   };
   /* Each step's failure is kept, the first one in p.__missed, so a way in that does not open the Lab says where it
-     stopped: the tab, the page, the card, or the Lab drawn after it. The steps still run as before after one fails. */
+     stopped: the door, the page, the card, or the Lab drawn after it. The steps still run as before after one fails. */
   const toLab = async p => {
     const missed = [];
     await p.evaluate(() => { if (S.screen !== 'home') goHome(); });
     await quiet(p);
-    await p.locator('#homeTab2').click({ timeout: 8000 }).catch(() => missed.push('the Labs tab could not be tapped'));
+    await p.locator('#homePage0 .home-door[data-page="2"]').click({ timeout: 8000 }).catch(() => missed.push('the Labs door could not be tapped'));
     await settled(p, () => typeof homePage !== 'undefined' && homePage === 2 && !homeTween, { timeout: 8000, label: 'the Labs page' }).catch(() => missed.push('the Labs page did not come up'));
     const tapped = await p.locator('#homePage2 button.lab-card', { hasText: 'Practice Lab' }).click({ timeout: 8000 }).then(() => true, () => false);
     if (!tapped) missed.push('the Practice Lab card could not be tapped');
