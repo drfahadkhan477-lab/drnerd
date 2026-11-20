@@ -907,8 +907,10 @@ html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(
 
 /* ── the hero, as it was: words at the left, the heart small at the top right, the trace across the foot ── */
 #app[data-screen="home"] #homePage0 .hero-live{position:relative;overflow:hidden;border-radius:28px;padding:26px 30px 0;min-height:250px;color:var(--text)}
+/* The tint glows behind the heart, at the top right, not under the words: at the top left it lifted the glass under the
+   greeting, in the theme's own accent, below AA in Nocturne (verify-contrast, 4.04:1). */
 #app[data-screen="home"] #homePage0 .hero-live::before{content:'';display:block;position:absolute;top:0;right:0;bottom:0;left:0;z-index:0;pointer-events:none;
-  background:radial-gradient(130% 120% at 0% 0%,var(--teal) 0,transparent 62%);opacity:.2;border-radius:inherit}
+  background:radial-gradient(90% 110% at 100% 0%,var(--teal) 0,transparent 62%);opacity:.2;border-radius:inherit}
 /* A sheen that crosses the glass now and then. */
 #app[data-screen="home"] #homePage0 .hero-live::after{content:'';display:block;position:absolute;top:0;bottom:0;left:-40%;width:30%;z-index:1;pointer-events:none;
   background:linear-gradient(100deg,transparent,rgba(255,255,255,.14),transparent);transform:skewX(-18deg) translateX(0);
