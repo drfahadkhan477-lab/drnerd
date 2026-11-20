@@ -199,10 +199,14 @@ head('the Home page');
 {
   hcalls.length = 0;
   const html = homePage();
-  ok('three pages side by side in a pager, scrolled by its homePagerScroll action, each a tab panel, and the tabs to them', /^<div class="home-pages" id="homePages">\s*<div class="home-pager" id="homePager" data-action="homePagerScroll">/.test(html) && [0, 1, 2].every(i => html.includes('id="homePage' + i + '" role="tabpanel" aria-labelledby="homeTab' + i + '"')) && html.endsWith('</div>\n  </div>'));
-  const tabs = [...html.matchAll(/<button class="home-tab" role="tab" id="homeTab(\d)" aria-controls="homePage(\d)" data-action="homeGo" data-page="(\d)">([^<]*)<span>([^<]*)<\/span><\/button>/g)].map(m => m.slice(1));
-  ok('three tabs, Home, Brain and Labs, each to its own page by homeGo with the page in data-page, which also names what a key on it does', J(tabs) === J([['0', '0', '0', '[icon home icon-sm]', 'Home'], ['1', '1', '1', '[icon brain icon-sm]', 'Brain'], ['2', '2', '2', '[icon activity icon-sm]', 'Labs']]) && html.includes('<div class="home-tabs" role="tablist" aria-label="Home pages">'), J(tabs));
-  ok('the Brain and Labs pages are the page\'s, handed what was counted here: due, started, the share explored, the share mastered, and today', html.includes('<section class="home-page home-brain" id="homePage1" role="tabpanel" aria-labelledby="homeTab1"><div class="home-page-in">[BRAIN]</div></section>') && html.includes('<div class="home-page-in">[LABS]</div></section>')
+  /* One page to the reader (the owner's choice, November 2026): the pager still holds the three pages, but no tab bar; Home
+     ends with a door to each of the others, and each of them begins with a way Home, all by homeOpen with the page in
+     data-page. */
+  ok('three pages side by side in a pager, scrolled by its homePagerScroll action, each a region named for itself, and no tab bar', /^<div class="home-pages" id="homePages">\s*<div class="home-pager" id="homePager" data-action="homePagerScroll">/.test(html) && J([0, 1, 2].map(i => g1(html, new RegExp('id="homePage' + i + '" role="region" aria-label="([^"]*)"')))) === J(['Home', 'Brain', 'Labs']) && !/home-tabs|role="tab|homeTab/.test(html) && html.endsWith('</div>\n  </div>'));
+  const doors = [...html.matchAll(/<button class="home-door" data-action="homeOpen" data-page="(\d)">([^<]*)<span><b>([^<]*)<\/b><i>([^<]*)<\/i><\/span>/g)].map(m => m.slice(1));
+  ok('at Home\'s foot, a door to Brain and one to Labs, each by homeOpen with its page in data-page', J(doors) === J([['1', '[icon brain icon-sm]', 'Brain', 'What you remember'], ['2', '[icon activity icon-sm]', 'Labs', 'Rhythms, echo, sessions']]) && html.indexOf('class="home-doors"') > html.indexOf('class="atlas-session"') && html.indexOf('class="home-doors"') < html.indexOf('id="homePage1"'), J(doors));
+  const BACK = '<button class="home-back" data-action="homeOpen" data-page="0">[icon arrow-left icon-sm]<span>Home</span></button>';
+  ok('the Brain and Labs pages are the page\'s, each opening with the way Home, handed what was counted here: due, started, the share explored, the share mastered, and today', html.includes('<section class="home-page home-brain" id="homePage1" role="region" aria-label="Brain"><div class="home-page-in">' + BACK + '[BRAIN]</div></section>') && html.includes('<div class="home-page-in">' + BACK + '[LABS]</div></section>')
      && J(hcalls.filter(c => !c.startsWith('pearl'))) === J(['brain [2,4,80,50,{"a":6,"c":4}]', 'labs [2]']), J(hcalls));
   ok('in the layout chosen, reading when there is a pearl, and paused when the heart is', html.includes('<div class="home-wrap anim-fade atlas-reading" data-home="focus">') && homePage({}, { atlasReading: false }).includes('<div class="home-wrap anim-fade" data-home="focus">') && homePage({}, { atlasPaused: true }).startsWith('<div class="home-pages atlas-paused" id="homePages">'));
   ok('with no pearl being read, what the daily pearl is for, the three steps, and the way to the notes', homePage({}, { atlasReading: false, pearlNow: () => null }).includes('<section class="atlas-intro" id="atlasIntro" aria-labelledby="atlasTitle">') && html.includes('<section class="atlas-intro" id="atlasIntro" hidden aria-labelledby="atlasTitle">') && html.includes('<h1 id="atlasTitle">Make one <br>idea stick.</h1>') && html.includes('<button class="atlas-primary" data-action="goRefs">Open notes[icon arrow-right]</button>') && (html.match(/<strong>(Observe|Explain|Recall)<\/strong>/g) || []).length === 3);
@@ -242,16 +246,18 @@ head('the hero');
   ok('chambers and flow pressed only with the cutaway on', homePage({}, { heroCutaway: true }).includes('id="heroMechanics" data-action="toggleHeroMechanics"\n          aria-pressed="true"') && html.includes('aria-pressed="false">[icon layers icon-sm]<span>Chambers and flow</span>'));
 }
 
-head('the session strip and the greeting');
+head('the bank in the hero, and no session strip');
 {
+  /* The owner took the strip away (November 2026): its counts are the hero's line and the Brain page's, its button the
+     plans in Chapters and the review on Brain. */
   const html = homePage();
-  const strip = g1(html, /(<div class="atlas-session">[\s\S]*?<\/button><\/div>)/) || '';
-  ok('explored, answered today and due', /<strong>80<small>%<\/small><\/strong><span>Explored<\/span><\/div><div><strong>6<\/strong><span>Answers today<\/span><\/div><div><strong>2<\/strong><span>Due<\/span>/.test(strip), strip.slice(0, 200));
-  ok('a meter of the bank explored, said to a screen reader', strip.includes('aria-valuemax="5" aria-valuenow="4" aria-valuetext="4 of 5 questions explored"><span style="width:80%"></span>'));
-  ok('explored is capped at all of it, and nothing with no bank', /<strong>100<small>/.test(homePage({}, { startedCount: () => 9 })) && /<strong>0<small>/.test(homePage({}, { TOTAL_Q: 0 })) && homePage({}, { TOTAL_Q: 0 }).includes('aria-valuemax="1" aria-valuenow="1"'));
-  ok('with cards due, Review them (reviewAllDue); with history, Continue (goStudy); with nothing, Start the 20-minute plan (startPlan, 20 in data-plan)', strip.includes('<button data-action="reviewAllDue">Review [icon arrow-right icon-sm]</button>') && homePage({}, { dueQuestions: () => [] }).includes('<button data-action="goStudy">Continue')
-     && homePage({}, { dueQuestions: () => [], startedCount: () => 0 }).includes('<button data-action="startPlan" data-plan="20" aria-label="Start a 20-minute study session">Start'));
-  ok('today\'s answers are today\'s, not another day\'s, and none with none', /<strong>0<\/strong><span>Answers today/.test(homePage({ daily: { '2026-11-16': { a: 9, c: 9 } } })));
+  const lineOf = h => String(g1(h, /<div class="hero-line">([\s\S]*?)<\/div>/) || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  const all = [html, homePage({}, { dueQuestions: () => [] }), homePage({}, { dueQuestions: () => [], startedCount: () => 0 }), homePage({}, { showHello: () => true })];
+  ok('no strip, with cards due, with none, or with nothing answered yet: no Explored, no Answers today, no Due, no Review, Continue or Start',
+     all.every(h => !/atlas-session|observatory-|Explored|Answers today|reviewAllDue|startPlan|>(Review|Continue|Start) /.test(h)), all.map(h => /atlas-session|observatory-|Explored|Answers today|reviewAllDue|startPlan/.test(h)).join(' '));
+  ok('started is capped at all of the bank, and nothing with no bank', lineOf(homePage({}, { startedCount: () => 9 })) === '5 questions 100% started 6 today' && lineOf(homePage({}, { TOTAL_Q: 0 })) === '0 questions 0% started 6 today',
+     lineOf(homePage({}, { startedCount: () => 9 })) + ' | ' + lineOf(homePage({}, { TOTAL_Q: 0 })));
+  ok('today\'s answers are today\'s, not another day\'s, and none with none', lineOf(homePage({ daily: { '2026-11-16': { a: 9, c: 9 } } })) === '5 questions 80% started 0 today', lineOf(homePage({ daily: { '2026-11-16': { a: 9, c: 9 } } })));
   ok('mastery is the chapters\' weighed by their size: (0.666×3 + 0.25×2 + 0×0) of 5 is 50%, handed to the Brain page', (hcalls.length = 0, homePage(), hcalls.some(c => c.startsWith('brain [2,4,80,50,'))), J(hcalls));
   ok('for someone new, what Chapters and Apex are, with the bank\'s size, and Got it by dismissHello; for others, nothing', homePage({}, { showHello: () => true }).includes('<i><b>Chapters</b> holds all 5 questions, grouped by topic.') && homePage({}, { showHello: () => true }).includes('<button class="hello-x" data-action="dismissHello">Got it</button>') && !html.includes('homeHello'));
 }
@@ -335,7 +341,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const handed = String(g1(page, /HomeScreen\.labsHtml\(S,CHAPTERS,dueN,\{([^}]*)\}\); \}/)).split(',').map(x => x.split(':')[0]);
   ok('the kit is the four names the module was seen to ask for', KIT_READS.size === 4 && handed.slice().sort().join(' ') === [...KIT_READS].sort().join(' '), handed.join(','));
   const mod = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'home.js'), 'utf8'));
-  ok('the Home page draws the Labs page with the page\'s line, handing on the count of cards due; nothing in the page calls it', mod.split('<div class="home-page-in">${buildLabs(dueN)}</div></section>').length === 2 && (page.match(/[^.\w$]buildLabs\(/g) || []).length === 1, String((page.match(/[^.\w$]buildLabs\(/g) || []).length));
+  ok('the Home page draws the Labs page with the page\'s line, handing on the count of cards due; nothing in the page calls it', mod.split("<button class=\"home-back\" data-action=\"homeOpen\" data-page=\"0\">${icon('arrow-left','icon-sm')}<span>Home</span></button>${buildLabs(dueN)}</div></section>").length === 2 && (page.match(/[^.\w$]buildLabs\(/g) || []).length === 1, String((page.match(/[^.\w$]buildLabs\(/g) || []).length));
   const WORDS = ['Hear it, see it, read it', 'Study tools', 'Views, findings and the arithmetic', 'Every trace, drawn live', 'Sounds, tracings, strips', 'things Apex knows', 'A mock block is open · resume it'];
   ok('and the Labs page\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = labs() + labs({ mock: { ids: ['a'] } }, 0);
@@ -359,17 +365,18 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('the split build\'s patterns for the two heart images are the ones held here, and each finds its image in the page\'s line as built', pwa.includes('const heroRe = ' + HERO_RE + ';') && pwa.includes('const atlasRe = ' + ATLAS_RE + ';') && re(HERO_RE).test(built) && re(ATLAS_RE).test(built) && built.length > 60000,
      pwa.includes('const heroRe = ' + HERO_RE + ';') + ' ' + pwa.includes('const atlasRe = ' + ATLAS_RE + ';') + ' ' + built.length);
   ok('each image is filled from the asset the splash shares, once each in the page\'s line, and in no module', (count('@@SLOT[asset:assets/hero-heart/heart.webp]@@') >= 2) && (HOME.split('@@SLOT[asset:').length - 1) === 2 && !fs.readdirSync(path.join(__dirname, '..', 'src', 'app')).some(f => fs.readFileSync(path.join(__dirname, '..', 'src', 'app', f), 'utf8').includes('@@SLOT[')), String(count('@@SLOT[asset:assets/hero-heart/heart.webp]@@')));
-  const HWORDS = ['Make one <br>idea stick.', 'questions</span>', 'Answers today', 'New here?', 'Chambers and flow'];
+  const HWORDS = ['Make one <br>idea stick.', 'questions</span>', 'Rhythms, echo, sessions', 'New here?', 'Chambers and flow'];
   ok('and the Home page\'s own words are no longer in the page', HWORDS.every(t => count(t) === 0), HWORDS.map(t => count(t)).join(' '));
   const hall = homePage({}, { showHello: () => true }) + homePage({}, { dueQuestions: () => [], startedCount: () => 0 }) + homePage({}, { dueQuestions: () => [] });
   const ha = [...new Set(actionsOf(hall))].sort();
-  ok('the Home page names fifteen actions', J(ha) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'homePagerScroll', 'pearlNext', 'pearlOpen', 'pearlScroll', 'pearlToggleAll', 'reviewAllDue', 'startPlan', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
+  ok('the Home page names twelve actions', J(ha) === J(['dismissHello', 'goRefs', 'homeOpen', 'homePagerScroll', 'pearlNext', 'pearlOpen', 'pearlScroll', 'pearlToggleAll', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
+  ok('and the strip\'s review of every card due is gone from the tables with it', ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS', 'KEY_ACTIONS', 'SCROLL_ACTIONS'].every(t => !new RegExp('(^|\\s)reviewAllDue:').test((page.match(new RegExp('const ' + t + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '')));
   ok('and the four the old hero and pearl named are gone from the page with their functions', ['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'toggleAtlas3D'].every(n => count('function ' + n + '(') === 0 && !new RegExp('[^.\\w$]' + n + '[:(]').test(page)), ['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'toggleAtlas3D'].map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and carries no inline handler', inlineOf(hall).length === 0, inlineOf(hall).join(' ') || 'no on* attribute');
   const kitNames = re => String(g1(page, re)).replace(/\s+/g, '').split(',').map(x => x.split(':')[0]).sort().join(' ');
   ok('each hands the names its member was seen to ask for', kitNames(/HomeScreen\.brainHtml\([^{]*\{([^}]*)\}\); \}/) === [...BK_READS].sort().join(' ') && kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/) === [...ART_READS].sort().join(' ') && kitNames(/HomeScreen\.brainInfoHtml\(\{([^}]*)\}\); \}/) === [...INFO_READS].sort().join(' '),
      kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/));
-  ok('the Home page draws the Brain page with what it counted; brainPick() draws the info again with the page\'s line', mod.split('<div class="home-page-in">${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>').length === 2 && count("const info=document.getElementById('brainInfo'); if(info) info.innerHTML=brainInfoHtml();") === 1
+  ok('the Home page draws the Brain page with what it counted; brainPick() draws the info again with the page\'s line', mod.split("<span>Home</span></button>${buildBrain(dueN,seenN,covered,masteryPct,today)}</div></section>").length === 2 && count("const info=document.getElementById('brainInfo'); if(info) info.innerHTML=brainInfoHtml();") === 1
      && (page.match(/[^.\w$]buildBrain\(/g) || []).length === 1 && (page.match(/[^.\w$]buildBrainArt\(/g) || []).length === 1 && (page.match(/[^.\w$]brainInfoHtml\(/g) || []).length === 2);
   ok('brainHash(), brainDendrites() and brainAxon() are no longer the page\'s; brainUnits(), brainLayoutNow() and brainPick() are', ['brainHash', 'brainDendrites', 'brainAxon'].every(n => count('function ' + n + '(') === 0 && !new RegExp('[^.\\w$]' + n + '\\(').test(page)) && ['brainUnits', 'brainLayoutNow', 'brainPick'].every(n => count('function ' + n + '(') === 1));
   const BWORDS = ['What you remember', 'recall, cards scheduled', 'Practise this chapter', 'Tap a neuron', 'parts of the bank lit', 'percent mastered'];
@@ -385,25 +392,24 @@ head('the page hands the module what it has, and keeps what the markup names');
   const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS', 'KEY_ACTIONS', 'SCROLL_ACTIONS'];
   const ENTRY = { goAnnotations: 'goAnnotations:()=>goAnnotations(),', goEcho: 'goEcho:()=>goEcho(),', goLab: 'goLab:()=>goLab(),', goMemory: 'goMemory:()=>goMemory(),', goPractice: 'goPractice:()=>goPractice(),',
     goRefs: 'goRefs:()=>goRefs(),', goSessions: 'goSessions:()=>goSessions(),', goStats: 'goStats:()=>goStats(),', goStudy: 'goStudy:()=>goStudy(),', openSearch: 'openSearch:()=>openSearch(),',
-    dismissHello: 'dismissHello:()=>dismissHello(),', homeGo: 'homeGo:el=>homeGo(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),',
-    pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', reviewAllDue: "reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),",
-    startPlan: 'startPlan:el=>startPlan(Number(el.dataset.plan)),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
+    dismissHello: 'dismissHello:()=>dismissHello(),', homeOpen: 'homeOpen:el=>homeOpen(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),',
+    pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
     toggleHeroMechanics: 'toggleHeroMechanics:()=>toggleHeroMechanics(),', toggleHeroMenu: 'toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),', brainTap: 'brainTap:(el,ev)=>brainTap(ev),',
     startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', startDue: "startDue:()=>startQuiz(null,'due'),"};
   /* Where an action is in a table besides ACTIONS, or only there: the table and the entry. */
-  const ELSEWHERE = { homeGo: [['KEY_ACTIONS', 'homeGo:(el,ev)=>homeTabKey(ev),']], brainTap: [['KEY_ACTIONS', 'brainTap:(el,ev)=>brainKey(ev),']],
+  const ELSEWHERE = { brainTap: [['KEY_ACTIONS', 'brainTap:(el,ev)=>brainKey(ev),']],
     homePagerScroll: [['SCROLL_ACTIONS', 'homePagerScroll:()=>homePagerScroll(),']], pearlScroll: [['SCROLL_ACTIONS', 'pearlScroll:()=>pearlScroll(),']] };
   const SCROLL_ONLY = new Set(['homePagerScroll', 'pearlScroll']);
   const entries = n => (SCROLL_ONLY.has(n) ? [] : [['ACTIONS', ENTRY[n]]]).concat(ELSEWHERE[n] || []);
   const held = n => (SCROLL_ONLY.has(n) || ENTRY[n]) && TABLES.every(t => keyed(t, n) === (entries(n).some(e => e[0] === t) ? 1 : 0)) && entries(n).every(([t, e]) => tableOf(t).split(e).length === 2);
   const named = [...new Set(la.concat(ha, ba))].sort();
-  ok('the twenty-six actions of the three pages: each in the tables for what it answers once, as written, and in no other; a tab and the brain in ACTIONS and KEY_ACTIONS, the two scrolls in SCROLL_ACTIONS alone',
-     named.length === 26 && named.every(held),
+  ok('the twenty-four actions of the three pages: each in the tables for what it answers once, as written, and in no other; the brain in ACTIONS and KEY_ACTIONS, the two scrolls in SCROLL_ACTIONS alone',
+     named.length === 24 && named.every(held),
      named.length + ' · ' + named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (held(n) ? '' : ' (not as held)')).join(' '));
-  const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen',
-    'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu', 'homeTabKey', 'brainKey', 'homePagerScroll', 'pearlScroll'];
-  ok('they call twenty-seven functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
-     CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,KEY_ACTIONS,'keydown');") === 1 && count("Actions.install(document,SCROLL_ACTIONS,'scroll',{capture:true,own:true});") === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const CALLS = ['brainTap', 'dismissHello', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen',
+    'pearlToggleAll', 'startQuiz', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu', 'homeOpen', 'brainKey', 'homePagerScroll', 'pearlScroll'];
+  ok('they call twenty-five functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
+     CALLS.length === 25 && CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,KEY_ACTIONS,'keydown');") === 1 && count("Actions.install(document,SCROLL_ACTIONS,'scroll',{capture:true,own:true});") === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and the ids the page looks for are drawn: the brain, its tilt, its net and the info', ['brain3d', 'brainTilt', 'brainInfo'].every(id => times(brainPage(), 'id="' + id + '"') === 1) && ['brainArt', 'brainNet'].every(id => times(art(), 'id="' + id + '"') === 1)
      && ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')"].every(t => count(t) >= 1) && count("'#brainArt") >= 1, ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')", "'#brainArt"].map(t => count(t)).join(' '));
 
@@ -513,12 +519,12 @@ head('the page hands the module what it has, and keeps what the markup names');
   hask('pearlCache=[{concept:"One",title:"A",text:"First.",chapter:"Rhythm notes",source:"N1"},{concept:"Two",title:"B",text:"Second.",chapter:"Rhythm notes",source:"N2"}]; pearlCurrent=null; dueQuestions=()=>[1];');
   const greeted = String(hask('buildHome()'));
   const homeTaps = fire('click', greeted);
-  ok('tapped, the Home page: the notes, the heart\'s menu (handed the click), its chambers, motion and credit, the pearl\'s three, the review of every card due, Got it, and each tab with its page',
+  ok('tapped, the Home page: the notes, the heart\'s menu (handed the click), its chambers, motion and credit, the pearl\'s three, Got it, the doors to Brain and Labs, and the way Home from each',
      greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleHeroMenu ["undefined","the event"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
-       'pearlNext', 'pearlToggleAll', 'pearlOpen', 'dueQuestions', 'startQuiz [null,"due","DUE"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
+       'pearlNext', 'pearlToggleAll', 'pearlOpen', 'dismissHello', 'homeOpen [1]', 'homeOpen [2]', 'homeOpen [0]', 'homeOpen [0]']), J(homeTaps));
   const keys = fire('keydown', full + bpage + greeted), scrolls = fire('scroll', full + bpage + greeted);
-  ok('a key: on the brain, brainKey() handed the key; on each tab, homeTabKey() handed it; on anything else, nothing',
-     J(keys) === J(['brainKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]']), J(keys));
+  ok('a key: on the brain, brainKey() handed the key; on anything else, nothing (no tab is left to walk)',
+     J(keys) === J(['brainKey ["the event"]']), J(keys));
   ok('a scroll: of the pager, homePagerScroll(); of the pearl\'s statement, pearlScroll(); of anything else, nothing', J(scrolls) === J(['homePagerScroll', 'pearlScroll']), J(scrolls));
   ok('and something typed or chosen on any of the three pages calls nothing here', J(fire('input', full + bpage + greeted).concat(fire('change', full + bpage + greeted))) === J([]));
 

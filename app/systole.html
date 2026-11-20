@@ -5412,9 +5412,9 @@ const ACTIONS={
   clearFlags:()=>clearFlags(),
   goAnnotations:()=>goAnnotations(),
   /* the home screen (src/app/home.js). Its Labs card and doors reuse goSessions, goStudy, goRefs and goAnnotations
-     above, its strip startPlan with data-plan, and the Brain page's chapters and Review startChapter and startDue.
-     The heart's button hands toggleHeroMenu() the click, which reads whether a pointer made it; the brain hands
-     brainTap() the click, which finds the neuron under it. A tab carries its page in data-page. */
+     above, and the Brain page's chapters and Review startChapter and startDue. The heart's button hands
+     toggleHeroMenu() the click, which reads whether a pointer made it; the brain hands brainTap() the click, which
+     finds the neuron under it. A door, and the Home button on Brain and Labs, carries its page in data-page. */
   toggleAtlasMotion:()=>toggleAtlasMotion(),
   toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),
   toggleHeroMechanics:()=>toggleHeroMechanics(),
@@ -5422,9 +5422,8 @@ const ACTIONS={
   pearlNext:()=>pearlNext(),
   pearlToggleAll:()=>pearlToggleAll(),
   pearlOpen:()=>pearlOpen(),
-  reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),
   dismissHello:()=>dismissHello(),
-  homeGo:el=>homeGo(Number(el.dataset.page)),
+  homeOpen:el=>homeOpen(Number(el.dataset.page)),
   goLab:()=>goLab(),
   goEcho:()=>goEcho(),
   goPractice:()=>goPractice(),
@@ -5492,13 +5491,12 @@ const CHANGE_ACTIONS={
   setLayout:el=>updateDisplaySetting('layout',el.value),
 };
 Actions.install(document,CHANGE_ACTIONS,'change');
-/* What a key does, by the name of the element it is pressed on or in: a home tab, which moves along the tabs, and the
-   brain, whose neurons the arrows walk and Enter practises. A key reached the tab list's and the svg's own handler
+/* What a key does, by the name of the element it is pressed on or in: the brain, whose neurons the arrows walk and Enter
+   practises. A key reached the tab list's and the svg's own handler
    first when it was written on them; here it reaches the document first only past the listeners for Escape, the echo
    tabs and the peek, none of which a key on a tab or a neuron answers, and before the one that clicks a focused
    role="button" on Enter, which brainKey() keeps from clicking a neuron by taking the key first, as it did. */
 const KEY_ACTIONS={
-  homeGo:(el,ev)=>homeTabKey(ev),
   brainTap:(el,ev)=>brainKey(ev),
   /* the pearl's figure: Enter and Space open it, and the arrows, Home, End and the page keys scroll a figure taller than
      its box. Enter is taken here first, as it was on the figure, so the click of a focused role="button" below does not
@@ -7029,33 +7027,24 @@ function mountBrainLive(){
   requestAnimationFrame(frame);
 }
 function homeMotionOK(){ return !(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
-/* Where the scroller is, as a fraction of a page (0 to 2): the pill's place, each page's depth, and which page is the
-   current one. Read in a frame, so a fast swipe costs one layout read per frame. */
+/* Where the scroller is, as a fraction of a page (0 to 2): each page's depth, and which page is the current one. Read in
+   a frame, so a glide costs one layout read per frame. */
 function homePagerScroll(){ if(!homeRaf) homeRaf=requestAnimationFrame(()=>{ homeRaf=0; homePagerSync(); }); }
 function homePagerSync(){
   const pg=document.getElementById('homePager'), root=document.getElementById('homePages');
   if(!pg||!root) return;
   const w=pg.clientWidth||1, f=Math.max(0,Math.min(2,pg.scrollLeft/w));
-  root.style.setProperty('--hp-f',f.toFixed(4));
   pg.querySelectorAll('.home-page').forEach((el,i)=>el.style.setProperty('--hp-d',Math.min(1,Math.abs(f-i)).toFixed(4)));
   const i=Math.round(f);
   if(i!==homePage||!root.dataset.page){ homePage=i; homeMark(); }
 }
-/* The current page is the tab that is selected and the panel a screen reader reads; the others are inert until a swipe
-   or a tab brings them in, so Tab never walks into a page that is off the screen. */
+/* The current page is the one a screen reader reads; the others are inert until a door brings them in, so Tab never
+   walks into a page that is off the screen. */
 function homeMark(){
   const root=document.getElementById('homePages'); if(!root) return;
   root.dataset.page=String(homePage);
-  /* Guarded like the line above it: this now runs on every resize event, and a throw there repeats
-     for as long as the drag lasts rather than once. 700px is the stylesheet's breakpoint too —
-     tests/verify-homepager.js reads the rail's direction off the screen rather than off this number,
-     so the two cannot drift apart unnoticed. */
-  const tabs=root.querySelector('.home-tabs');
-  if(tabs) tabs.setAttribute('aria-orientation',matchMedia('(min-width:700px)').matches?'vertical':'horizontal');
-
   for(let i=0;i<3;i++){
-    const tab=document.getElementById('homeTab'+i), page=document.getElementById('homePage'+i);
-    if(tab){ tab.setAttribute('aria-selected',String(i===homePage)); tab.tabIndex=i===homePage?0:-1; }
+    const page=document.getElementById('homePage'+i);
     if(page){ if(i===homePage){ page.removeAttribute('aria-hidden'); page.inert=false; page.removeAttribute('inert'); }
       else { page.setAttribute('aria-hidden','true'); page.inert=true; page.setAttribute('inert',''); } }
   }
@@ -7102,12 +7091,21 @@ function homeGo(i){
   };
   homeTween=requestAnimationFrame(step);
 }
-function homeTabKey(ev){
-  const k=ev.key, vertical=matchMedia('(min-width:700px)').matches;
-  const n=(k==='ArrowRight'||(vertical&&k==='ArrowDown'))?homePage+1:(k==='ArrowLeft'||(vertical&&k==='ArrowUp'))?homePage-1:k==='Home'?0:k==='End'?2:null;
-  if(n==null) return;
-  ev.preventDefault(); homeGo(n);
-  const tab=document.getElementById('homeTab'+homePage); if(tab) tab.focus();
+/* Home is one page to the reader (the owner's choice, November 2026): no tab bar and no sideways swipe. Brain and Labs
+   are reached by the two doors at its foot and left by the Home button at their top; the keyboard follows, to the page's
+   Home button, or back to the door that was used. */
+function homeOpen(i){
+  const from=homePage; homeGo(i);
+  const to=i===0?document.querySelector('#homePage0 .home-door[data-page="'+from+'"]'):document.querySelector('#homePage'+i+' .home-back');
+  /* While the pages glide, each frame marks the page nearer the middle current and the others inert (homePagerSync), and
+     an inert button loses focus: so focus is offered once the glide is over (homeTween is 0), each frame until it holds,
+     for at most a few seconds. */
+  let tries=240;
+  const offer=()=>{ if(!to||!to.isConnected||--tries<=0) return;
+    if(homeTween){ requestAnimationFrame(offer); return; }
+    try{ to.focus({preventScroll:true}); }catch(_){ to.focus(); }
+    if(document.activeElement!==to) requestAnimationFrame(offer); };
+  requestAnimationFrame(offer);
 }
 /* After every render of the home screen: back to the page that was showing, without a glide, and kept there if the
    iPad turns (the page width changes and the scroller would otherwise land between two pages). */
