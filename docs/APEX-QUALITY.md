@@ -73,6 +73,32 @@ statement on the outgoing request. Grounded search has already budgeted complete
 note blocks, so the send loop must not cut it again with the generic tool-result
 character cap. Other tools retain that cap.
 
+## Collect one answer through Gemini
+
+Build the synthetic app as above. Choose a case ID from the fixtures and a model
+ID available on your Gemini account. After approving spend, configure
+`GEMINI_API_KEY` in the runner's environment. For example, with the chosen ID
+in `GEMINI_MODEL`, this allows up to two requests for one case:
+
+```sh
+node scripts/run-apex-eval.js build/apex-eval/systole.html conflicting-notes "$GEMINI_MODEL" 2 build/apex-eval/conflict-review.json
+```
+
+The runner uses a fresh browser context and the app's grounded prompts, note
+search, and tool loop. Node sends each request to Gemini's generateContent
+endpoint and supplies the response to Apex. The output records the requested
+model, UTC date, request and response bodies (including any returned model
+version and tool exchanges), final answer and finish reason. A MAX_TOKENS
+answer may be partial. A request limit of 1–6 counts provider calls, including
+tool follow-ups. Token charges depend on the model and the exchanges.
+
+The output is a review file with all criteria initially unmeasured. Fill in the
+criteria and score it using the command below. A failed run exits nonzero and
+retains its completed exchanges for diagnosis. Use a fresh output path for
+any retry. To test the tool loop and request limit locally with invented
+responses and no key, run
+`node tests/verify-apex-eval-runner.js build/apex-eval/systole.html`.
+
 ## Score saved answers offline
 
 Review each answer against the invented passages and the rubric in
