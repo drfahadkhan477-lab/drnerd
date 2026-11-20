@@ -49,10 +49,12 @@ const obj = v => (v && typeof v === 'object') ? v : {};
 const NORMAL = {
   hr: 75,                 // beats a minute
   pr: 0.16,               // s from atrial to ventricular activation
-  /* ees, vd: the end-systolic line; p0, lam, v0: the passive curve; tr, td: seconds the activation takes to
-     rise to its peak and to fall back. */
-  lv: { ees: 2.8, vd: 5, p0: 0.6, lam: 0.033, v0: 35, tr: 0.30, td: 0.15 },
-  rv: { ees: 0.60, vd: 20, p0: 0.5, lam: 0.030, v0: 40, tr: 0.30, td: 0.15 },
+  /* ees, vd: the end-systolic line; p0, lam, v0: the passive curve; hill: the ventricles' activation, below;
+     tr, td: seconds the atria's activation takes to rise to its peak and to fall back. */
+  lv: { ees: 2.8, vd: 5, p0: 0.6, lam: 0.033, v0: 35, hill: [0.215, 0.362, 1.32, 27.4] },
+  /* The RV's contraction outlasts the LV's by a little. The engine has no inertance, so no pulmonary hangout
+     interval: this stands in for it, and puts P2 after A2 by the 10 to 60 ms the tests hold a normal S2 to. */
+  rv: { ees: 0.60, vd: 20, p0: 0.5, lam: 0.030, v0: 40, hill: [0.215, 0.38, 1.32, 27.4] },
   la: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.040, v0: 15, tr: 0.15, td: 0.12 },
   ra: { ees: 0.15, vd: 10, p0: 0.30, lam: 0.035, v0: 15, tr: 0.15, td: 0.12 },
   septum: 0.05,           // share of each ventricle's passive pressure felt by the other
@@ -72,10 +74,13 @@ const PRESETS = {
   /* The same heart breathing as hard as the tamponade below: the control for its pulsus. */
   dyspnoea: { resp: { depth: 10 } },
   /* Chronic lesions carry the remodelling they cause: AS's concentric hypertrophy (a stronger, somewhat stiffer LV,
-     and its wall, which only the 3D heart reads), MS's dilated atrium, HFpEF's hypertensive LV. */
-  as: { valves: { aortic: [0.7, 0] }, lv: { ees: 3.6, lam: 0.036 }, wall: 1.35 },
-  ar: { valves: { aortic: [4.0, 0.5] }, lv: { v0: 60, lam: 0.022 }, stressed: 1550 },
-  ms: { valves: { mitral: [0.7, 0] }, la: { v0: 70 }, stressed: 1800 },
+     and its wall, which only the 3D heart reads), AR's dilated, compliant LV, MS's dilated atrium, HFpEF's
+     hypertensive LV. */
+  /* The hypertrophied LV also contracts and relaxes slowly: its activation builds later and more steeply, lasts
+     longer, and falls away gently (impaired relaxation), so it empties late and A2 follows P2. */
+  as: { valves: { aortic: [0.7, 0] }, lv: { ees: 3.6, lam: 0.036, hill: [0.28, 0.39, 1.8, 16] }, wall: 1.35 },
+  ar: { valves: { aortic: [4.0, 0.6] }, lv: { v0: 60, lam: 0.018 }, stressed: 1550 },
+  ms: { valves: { mitral: [0.85, 0] }, la: { v0: 70 }, stressed: 2400 },
   mr: { valves: { mitral: [5.0, 0.65] }, la: { p0: 0.8, lam: 0.05 }, stressed: 1550 },
   hfref: { lv: { ees: 0.6, vd: 50, v0: 90, lam: 0.02 }, stressed: 1750 },
   hfpef: { lv: { lam: 0.060, p0: 0.30, ees: 3.2 }, wall: 1.2, stressed: 1650 },
@@ -100,10 +105,26 @@ function params(preset) {
 }
 
 /* ── activation ───────────────────────────────────────────────────────────────────────────────────────
-   A smooth rise over tr seconds after the chamber is excited and a smooth fall over td more: each half a
-   cosine. A ventricle contracts slowly and relaxes quickly, as a heart does. The atria are excited at the
-   start of each beat, the ventricles pr seconds later. */
+   The atria are excited at the start of each beat, the ventricles pr seconds later.
+   An atrium: a smooth rise over tr seconds and a smooth fall over td more, each half a cosine.
+   A ventricle: the double-Hill elastance curve (Stergiopulos, Meister and Westerhof, 1996), hill: [tau1, tau2,
+   m1, m2], the taus in seconds: a slow rise with exponent m1 about tau1, cut off by a steep fall with exponent m2
+   about tau2, scaled to a peak of 1 (the scale found once per curve). The half-cosine it replaced rose for 0.30 s and
+   fell for 0.15 s, and gave isovolumic times near 100 ms and ejection near 220 ms; this curve's are those the
+   VALIDATION rows on timing ask for. At 75 a minute it is spent well inside the beat. */
+const hillPeak = new Map();
+function hill(t, h) {
+  const r = Math.pow(t / h[0], h[2]), f = Math.pow(t / h[1], h[3]);
+  return (r / (1 + r)) * (1 / (1 + f));
+}
+function hillAct(tIn, h) {
+  if (tIn <= 0) return 0;
+  const key = h.join(',');
+  if (!hillPeak.has(key)) { let m = 0; for (let t = 0.0005; t < 3 * h[1]; t += 0.0005) m = Math.max(m, hill(t, h)); hillPeak.set(key, m); }
+  return hill(tIn, h) / hillPeak.get(key);
+}
 function act(tIn, c) {
+  if (c.hill) return hillAct(tIn, c.hill);
   if (tIn < 0 || tIn > c.tr + c.td) return 0;
   return tIn < c.tr ? 0.5 * (1 - Math.cos(Math.PI * tIn / c.tr)) : 0.5 * (1 + Math.cos(Math.PI * (tIn - c.tr) / c.td));
 }
@@ -244,7 +265,18 @@ function measure(run) {
       if (qm > 0) { fwdM += qm * dt; mvGrad += run.pla[i] - run.plv[i]; mvN++; } else backM -= qm * dt;
     }
     const edv = run.v.lv[iEd], esv = run.v.lv[iEs];
+    /* The left heart's valve events, from the flows: the aortic valve's first forward flow after the R wave,
+       the mitral valve's last forward flow before it, the aortic valve's end of forward flow, and the mitral
+       valve's next forward flow. Between them, the isovolumic contraction, the ejection and the isovolumic
+       relaxation, in ms. A beat in which one is not found gives NaN, which no range holds. */
+    let iAo = -1, iMc = -1, iAc = -1, iMo = -1;
+    for (let i = iR; i < i1; i++) if (run.qav[i] > 0) { iAo = i; break; }
+    if (iAo >= 0) for (let i = iAo - 1; i >= i0; i--) if (run.qmv[i] > 0) { iMc = i + 1; break; }
+    if (iAo >= 0) for (let i = iAo; i < i1; i++) if (!(run.qav[i] > 0)) { iAc = i; break; }
+    if (iAc >= 0) for (let i = iAc; i < i1; i++) if (run.qmv[i] > 0) { iMo = i; break; }
+    const span = (a, b) => (a >= 0 && b >= 0) ? (b - a) * dt * 1000 : NaN;
     return {
+      ivc: span(iMc, iAo), lvet: span(iAo, iAc), ivr: span(iAc, iMo),
       edv, esv, sv: edv - esv, fwd: fwdA - backA, backA, backM,
       lvSys: max(run.plv, i0, i1), lvEdp: at(run.plv, iR),
       aoSys: max(run.pao, i0, i1), aoDia: min(run.pao, i0, i1),
@@ -314,6 +346,11 @@ const VALIDATION = [
   ['normal', 'pulsus', 0, 10, 'systolic falls under 10 mmHg on inspiration'],
   ['normal', 'raInspMinusExp', -I, 0, 'right atrial pressure falls on inspiration'],
   ['normal', 'earlyFill', 0, 0.75, 'filling spread through diastole, not all early'],
+  /* At 75 a minute: isovolumic contraction about 50 ms, ejection about 290 ms (Weissler: 413 − 1.7 × rate),
+     isovolumic relaxation 50 to 100 ms on echo. */
+  ['normal', 'ivc', 20, 80, 'isovolumic contraction about 50 ms'],
+  ['normal', 'lvet', 250, 330, 'ejection about 0.29 s at 75 a minute'],
+  ['normal', 'ivr', 40, 100, 'isovolumic relaxation 50 to 100 ms'],
   ['dyspnoea', 'pulsus', 0, 10, 'breathing hard is not pulsus paradoxus: the normal heart stays under 10'],
 
   ['as', 'avGrad', 40, I, 'severe aortic stenosis: mean gradient 40 or more'],

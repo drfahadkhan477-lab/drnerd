@@ -297,7 +297,7 @@ jobs:
         run: node tests/verify-topicrun-pure.js
       - name: a gap Apex noted is read as the two things it names; a review deals a question on the other side straight after one on a side, keeps every due card, and takes chapters in turn, as the mock block does (37 checks)
         run: node tests/verify-confusable-pure.js
-      - name: one circulation of elastance chambers, Bernoulli valves and Windkessel beds makes each lesion fall in its textbook ranges, keeps its blood, settles, and moves a valve only where two pressures cross, and hands the views one beat whose events are those crossings and whose loop has its corners on its own lines and whose leaks run backward and whose second sound splits as the textbook says, and gives the 3D heart each lesion read off its beat (128 checks)
+      - name: one circulation of elastance chambers, Bernoulli valves and Windkessel beds makes each lesion fall in its textbook ranges, keeps its blood, settles, and moves a valve only where two pressures cross, and hands the views one beat whose events are those crossings and whose loop has its corners on its own lines and whose leaks run backward and whose second sound splits as the textbook says, and gives the 3D heart each lesion read off its beat (131 checks)
         run: node tests/verify-circulation-pure.js
       - name: a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary (35 checks)
         run: node tests/verify-voice-pure.js

@@ -663,6 +663,18 @@ heart draws), MS's dilated atrium (LA 1.6 times the normal volume), HFpEF's
 hypertensive LV; every VALIDATION row still holds. MR is left acute (a stiff,
 small LA and its tall v wave); a chronic MR, its LA large and compliant, would
 be a preset of its own.
+*Timing (before Normal can come from the engine):* the ventricles' half-cosine
+activation gave isovolumic phases about twice the textbook's and a short
+ejection. They now carry the double-Hill elastance curve (Stergiopulos,
+Meister and Westerhof, 1996), and three VALIDATION rows hold the normal heart's
+isovolumic contraction, ejection and isovolumic relaxation to the textbook's
+ranges; the old curve fails all three. The RV's curve lasts a little longer,
+standing in for the pulmonary hangout the engine has no inertance to make, so
+S2 splits as it should. Three lesions were refitted, not their checks: AS's
+hypertrophied LV contracts later and longer and relaxes slowly (so its loop
+still sits high and its S2 still reverses); AR's dilated LV is more compliant
+and its leak wider (so its coronaries still starve); MS's valve and blood
+volume moved so the spared LV is not left empty.
 Next: Normal from the engine (the PV loop's interventions act on physio.js's
 loop, so Normal and they would part); a septum with its own mechanics, for
 constriction; a chronic MR. The split build lifts
