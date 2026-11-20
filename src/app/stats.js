@@ -21,6 +21,8 @@
        CH_COLORS   the chapters' accents
        kit         what the screen uses of the page, under the page's names:
                      Calib, MockExam                  src/core/calib.js and src/core/mockexam.js
+                     certainWrongQs()                 the bank's questions answered Certain and wrong and not since
+                                                      answered right (Calib.certainWrong over the log), newest first
                      TOTAL_Q, CH_SHORT                how many questions the bank has; the chapters' short names
                      pendingBackupSave                a backup written and not yet confirmed saved, as it stands
                                                       when the screen is drawn
@@ -46,8 +48,9 @@
      3. Where figures can be kept on this device, the card the page's survey fills in, with the download.
      4. Predicted retention with its colour, across how many scheduled cards, and a bar for each of the
         next seven days.
-     5. Calibration: how often "Certain" was wrong, a bar for each band, the pace right and wrong, and
-        where the misses come from.
+     5. Calibration: how often "Certain" was wrong, a bar for each band, the button that practises the
+        questions answered Certain and wrong, a Brier score a week, the pace right and wrong, and where
+        the misses come from.
      6. The mock blocks handed in: the last eight as bars, and the last one in words.
      7. The last thirty days as a line and a heat map.
      8. A ring for each chapter's mastery, each starting a quiz in that chapter.
@@ -55,7 +58,7 @@
         tab's warning, how many reviews are logged and the state of the storage.
 
    The buttons name actions, not inline handlers (docs/ROADMAP.md, E2), which the page's ACTIONS table calls
-   (src/core/actions.js): goHome, exportMarkup, confirmBackupSaved, importMarkup and resetProgress, each by
+   (src/core/actions.js): goHome, startCertainWrong, exportMarkup, confirmBackupSaved, importMarkup and resetProgress, each by
    the page's function of that name; startChapter, which starts a quiz in the chapter a ring carries in
    data-ch, through e(); and offlineButton, the figures card's button, which stops a download while one runs
    and starts one otherwise. The functions stay the page's. The page also
@@ -68,8 +71,9 @@
 function pct(x){ return Math.round(x*100)+"%"; }
 function secs(ms){ return ms==null?"—":(ms<10000?(ms/1000).toFixed(1):Math.round(ms/1000))+"s"; }
 function calibHtml(LOG, kit){
-  const {Calib,e}=kit;
-  const cal=Calib.calibration(LOG), sp=Calib.speed(LOG), rs=Calib.reasons(LOG);
+  const {Calib,certainWrongQs,e}=kit;
+  const cal=Calib.calibration(LOG), sp=Calib.speed(LOG), rs=Calib.reasons(LOG), tr=Calib.brierTrend(LOG,8);
+  const cw=certainWrongQs().length;
   if(!cal.rated && !sp.n && !rs.tagged) return "";
   const bars=cal.bands.map(function(b){
     const w = b.accuracy==null ? 0 : Math.round(b.accuracy*100);
@@ -82,6 +86,20 @@ function calibHtml(LOG, kit){
     ? '<div class="cb-head cb-thin">Rate a few more answers and this will show how often "Certain" was wrong.</div>'
     : '<div class="cb-head">Certain, and wrong: <b>'+pct(cal.certainButWrong)+'</b>'
       + '<span class="cb-sub">the gap you cannot feel from the inside</span></div>';
+  /* docs/ROADMAP.md, S5: the questions answered Certain and wrong and not since answered right, to practise. */
+  const queue = !cw ? '' : '<button class="btn cb-go" type="button" data-action="startCertainWrong">Practise the '
+    + (cw===1 ? 'one' : cw) + ' answered Certain and wrong</button>';
+  /* A Brier score a week, once two weeks each have enough rated answers; a week with too few says so. */
+  const week = function(w){
+    const d=new Date(w.week+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    return '<div class="cb-row"><span class="cb-lab">'+e(d)+'</span>'
+      + '<span class="cb-track"><span class="cb-fill" style="width:'+(w.brier==null?0:Math.round(w.brier*100))+'%"></span></span>'
+      + '<span class="cb-val'+(w.brier==null?' cb-thin':'')+'">'+e(w.brier==null?w.n+' rated':w.brier.toFixed(2))+'</span></div>';
+  };
+  const trend = !cal.rated ? '' : '<div class="panel-h cb-h2">Calibration by week</div>' + (!tr.enough
+    ? '<div class="cb-thin">A score a week shows here once two weeks each have '+Calib.MIN_SAMPLES+' rated answers.</div>'
+    : '<div class="cb-sub">Brier score: the gap between how sure you said you were and how it went. Lower is better.</div>'
+      + tr.weeks.map(week).join(''));
   const speed = !sp.enough ? '<div class="cb-thin">Not enough timed answers yet.</div>'
     : '<div class="cb-row2">Correct in <b>'+secs(sp.correctMs)+'</b> · wrong in <b>'+secs(sp.wrongMs)+'</b>'
       + (sp.fragile ? '<span class="cb-sub">right, but slower than your wrong answers — the concept is there, the retrieval is not yet</span>' : "")
@@ -93,7 +111,7 @@ function calibHtml(LOG, kit){
           + '<span class="cb-val">'+pct(c.share)+'</span></div>';
       }).join("");
   return '<div class="panel"><div class="panel-h">Calibration · '+cal.rated+' rated</div>'
-    + head + bars
+    + head + bars + queue + trend
     + '<div class="panel-h cb-h2">Pace</div>' + speed
     + '<div class="panel-h cb-h2">Where the misses come from</div>' + mix
     + '</div>';

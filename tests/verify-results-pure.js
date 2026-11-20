@@ -165,6 +165,7 @@ head('what the buttons offer');
   const RESTART = [
     ['due', 'Alpha', 'Continue Reviewing', 'restartQuiz none due'],
     ['flagged', 'Alpha', 'Flagged Again', 'restartQuiz chapter flagged'],
+    ['certain', null, 'Certain and Wrong Again', 'restartQuiz chapter certain'],
     ['missed', 'Alpha', 'Restart Chapter', 'restartQuiz chapter missed'],
     ['missed', null, 'Restart Quiz', 'restartQuiz chapter missed'],
     ['all', 'Alpha', 'Restart Chapter', 'restartQuiz chapter all'],

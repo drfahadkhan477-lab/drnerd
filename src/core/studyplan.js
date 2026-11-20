@@ -8,7 +8,9 @@
      plan({ minutes, pool, srs, chStats, missed })
         "I have 20 minutes."  → which questions, in what order, and why each one.
      readiness({ pool, srs, chStats, examDate, recentPerDay })
-        "Am I on track?"      → coverage, retention, what is weakest, and a plain verdict.
+        "Am I on track?"      → coverage, retention, what is weakest, and a plain verdict; each chapter's
+                                 accuracy as an interval, and, once the owner gives the exam blueprint
+                                 (src/core/blueprint.js), a likely score across the exam as one.
 
    THE RULES, because a planner that cannot say why it chose something is a
    shuffle with a nice name:
@@ -68,12 +70,118 @@ function chapterRows(chStats, minAttempts) {
   return { rows, mean };
 }
 
+/* ── how sure: a beta-binomial posterior a chapter (docs/ROADMAP.md, S7) ──────────────────────────────
+
+   A chapter's accuracy over a handful of answers is a guess, and a single percentage hides how much of one.
+   Each chapter's chance of a right answer is given a Beta posterior: a prior worth PRIOR_N answers, centred
+   on the fellow's own accuracy over every chapter (so a chapter with little data leans toward how they do
+   in general rather than toward 50%), updated by that chapter's right and wrong. Its interval is the middle
+   LEVEL of that posterior. The prior is Beta(1 + (PRIOR_N - 2)m, 1 + (PRIOR_N - 2)(1 - m)), m the pooled
+   accuracy, which stays a proper Beta at m = 0 and m = 1; with nothing answered anywhere it is Beta(1, 1).
+
+   The answers counted are chStats', every graded answer in practice, as readiness has always read them; a
+   question answered again after a miss counts again. */
+const PRIOR_N = 4;
+const LEVEL = 0.8;
+
+/* ln Γ(x), Lanczos (g = 7, nine terms), for x > 0. */
+const LANCZOS = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+  12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+function lgamma(x) {
+  if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgamma(1 - x);
+  x -= 1;
+  let a = LANCZOS[0];
+  const t = x + 7.5;
+  for (let i = 1; i < 9; i++) a += LANCZOS[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+/* The continued fraction of the incomplete beta (modified Lentz). */
+function betacf(x, a, b) {
+  const TINY = 1e-300;
+  let c = 1, d = 1 - (a + b) * x / (a + 1);
+  if (Math.abs(d) < TINY) d = TINY;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= 300; m++) {
+    const m2 = 2 * m;
+    let aa = m * (b - m) * x / ((a + m2 - 1) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY;
+    c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (a + b + m) * x / ((a + m2) * (a + m2 + 1));
+    d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY;
+    c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < 1e-14) break;
+  }
+  return h;
+}
+/* The regularised incomplete beta I_x(a, b): the Beta(a, b) distribution's chance of a value at or below x. */
+function betaCdf(x, a, b) {
+  if (!(x > 0)) return 0;
+  if (!(x < 1)) return 1;
+  const front = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  return x < (a + 1) / (a + b + 2) ? front * betacf(x, a, b) / a : 1 - front * betacf(1 - x, b, a) / b;
+}
+/* The value below which Beta(a, b) falls with chance p, by halving: the cdf only rises, and sixty halvings is
+   closer than a double can tell. */
+function betaQuantile(p, a, b) {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (betaCdf(mid, a, b) < p) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+function betaOf(a, b) {
+  const mean = a / (a + b);
+  return { a, b, mean, sd: Math.sqrt(a * b / ((a + b) * (a + b) * (a + b + 1))),
+           lo: betaQuantile((1 - LEVEL) / 2, a, b), hi: betaQuantile((1 + LEVEL) / 2, a, b) };
+}
+function prior(chStats) {
+  const { rows } = chapterRows(chStats, 1);
+  let c = 0, n = 0;
+  for (const r of rows) { c += r.correct; n += r.total; }
+  const m = n ? c / n : 0.5;
+  return n ? { a: 1 + (PRIOR_N - 2) * m, b: 1 + (PRIOR_N - 2) * (1 - m) } : { a: 1, b: 1 };
+}
+/* A chapter's posterior, from its right and its total (nothing answered: the prior alone). */
+function posterior(pr, correct, total) {
+  const c = Number.isFinite(correct) && correct > 0 ? correct : 0;
+  const n = Number.isFinite(total) && total > c ? total : c;
+  return betaOf(pr.a + c, pr.b + (n - c));
+}
+
+/* The score across the exam: each chapter's posterior weighted by its share of the blueprint. The chapters
+   are taken as independent, so the weighted sum has mean Σ w·mean and variance Σ w²·sd²; its interval is
+   read from the Beta with that mean and variance. A blueprint that names a chapter the bank does not have is
+   refused, with the names, rather than scaled over the rest. */
+function examScore(pool, chStats, weights) {
+  const w = obj(weights);
+  const names = Object.keys(w).filter(k => Number.isFinite(w[k]) && w[k] > 0);
+  if (!names.length) return { state: 'none' };
+  const bank = new Set(pool.map(q => q.ch));
+  const unknown = names.filter(n => !bank.has(n)).sort();
+  if (unknown.length) return { state: 'refused', unknown };
+  const sum = names.reduce((t, n) => t + w[n], 0);
+  const pr = prior(chStats), st = obj(chStats);
+  let mean = 0, v = 0;
+  for (const n of names) {
+    const s = obj(st[n]), p = posterior(pr, s.correct, s.total), k = w[n] / sum;
+    mean += k * p.mean; v += k * k * p.sd * p.sd;
+  }
+  const kk = mean * (1 - mean) / v - 1;
+  const fit = v > 0 && kk > 0 ? betaOf(mean * kk, (1 - mean) * kk) : { mean, lo: mean, hi: mean };
+  return { state: 'ok', mean, lo: fit.lo, hi: fit.hi, level: LEVEL, chapters: names.length };
+}
+
 /* Chapters below the fellow's own pooled accuracy, weakest first. */
 function weakChapters(chStats, limit) {
   const { rows, mean } = chapterRows(chStats, 5);
   if (mean === null) return [];
   // Compare the measured ratio; pct is rounded only for display.
-  return rows.filter(r => r.correct / r.total * 100 < mean).sort((a, b) => a.correct / a.total - b.correct / b.total || (a.ch < b.ch ? -1 : 1)).slice(0, limit || 3);
+  const pr = prior(chStats);
+  return rows.filter(r => r.correct / r.total * 100 < mean).sort((a, b) => a.correct / a.total - b.correct / b.total || (a.ch < b.ch ? -1 : 1)).slice(0, limit || 3)
+    .map(r => { const p = posterior(pr, r.correct, r.total); return Object.assign(r, { lo: Math.round(p.lo * 100), hi: Math.round(p.hi * 100) }); });
 }
 
 /* One question at a time from each chapter's queue in turn. */
@@ -183,6 +291,11 @@ function readiness(o) {
   const dueNow = seenCards.filter(q => typeof srs[q.id].due === 'string' && srs[q.id].due <= today).length;
   const { rows, mean } = chapterRows(o.chStats, 1);
   const weak = weakChapters(o.chStats, 3);
+  const pr = prior(o.chStats);
+  rows.forEach(r => { const p = posterior(pr, r.correct, r.total); r.lo = Math.round(p.lo * 100); r.hi = Math.round(p.hi * 100); });
+  /* The blueprint handed in, or else the page's (src/core/blueprint.js); null leaves the score unsaid. */
+  const bp = 'blueprint' in o ? o.blueprint : (root.Blueprint ? root.Blueprint.weights : null);
+  const score = examScore(pool, o.chStats, bp);
 
   let daysLeft = null;
   if (typeof o.examDate === 'string') {
@@ -218,16 +331,19 @@ function readiness(o) {
     else if (status === 'pace-unknown') lines.push(`${daysLeft} days left. About ${needPerDay} questions a day covers the rest and your reviews.`);
     else if (status === 'behind') lines.push(`${daysLeft} days left. At ${Math.round(pace)} a day you need ${daysToFinish} days: about ${needPerDay} a day would finish in time.`);
     else lines.push(`${daysLeft} days left. At ${Math.round(pace)} a day you finish in ${daysToFinish}: ${status === 'ahead' ? 'comfortably ahead' : 'on track'}.`);
-    if (weak.length) lines.push(`Weakest: ${weak.map(w => `${w.ch} (${w.pct}%)`).join(', ')}.`);
+    if (score.state === 'ok') lines.push(`Across the exam's blueprint, a score of ${pct(score.lo)} to ${pct(score.hi)}% is likely (${Math.round(LEVEL * 100)}% interval).`);
+    else if (score.state === 'refused') lines.push(`The exam blueprint names chapters this bank does not have (${score.unknown.join(', ')}), so no exam score is given.`);
+    else lines.push('A likely exam score waits for the exam blueprint.');
+    if (weak.length) lines.push(`Weakest: ${weak.map(w => `${w.ch} (likely ${w.lo} to ${w.hi}%)`).join(', ')}.`);
   }
   return {
     status, total, seen, unseen, coverage: total ? seen / total : 0,
     retention, dueNow, accuracy: mean === null ? null : mean / 100,
     chapters: rows.sort((a, b) => a.pct - b.pct), weakChapters: weak,
-    daysLeft, needPerDay, daysToFinish, text: lines.join(' '),
+    daysLeft, needPerDay, daysToFinish, score, text: lines.join(' '),
   };
 }
 
-root.StudyPlan = { plan, readiness, weakChapters, retrievability, DEFAULT_SEC };
+root.StudyPlan = { plan, readiness, weakChapters, retrievability, examScore, betaCdf, betaQuantile, DEFAULT_SEC, PRIOR_N, LEVEL };
 
 })(typeof window !== 'undefined' ? window : this);

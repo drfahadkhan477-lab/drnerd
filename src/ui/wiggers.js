@@ -75,6 +75,10 @@ function mount(canvas, opts) {
        the diagram; now that the diagram is the only thing on the panel, it has
        to announce its own time. */
     onFrame: typeof opts.onFrame === 'function' ? opts.onFrame : null,
+    /* The beat the Wiggers view draws: null for physio.js's drawn cycle, or a Circulation.cycle() (a lesion
+       made in src/core/circulation.js, docs/ROADMAP.md S8). The other views draw physio.js until each is
+       wired to it in turn. */
+    cycle: opts.cycle || null,
     zones: [],            // hit regions, in CSS px
     hoverT: null,
   };
@@ -198,9 +202,21 @@ function mount(canvas, opts) {
     if (unit) text(unit, B.x - 6, B.y + 4, p.dim, 9, 600, 'right', true);
     ctx.restore();
   }
+  /* What the Wiggers view reads: the lesion's beat when one is set, else physio.js. */
+  const D = () => ((S.view === 'wiggers' || S.view === 'pv' || S.view === 'flow' || S.view === 'right' || S.view === 'coronary') && S.cycle) ? S.cycle : Ph;
+  /* The loop the PV view draws: the lesion's beat's, or physio.js's with the intervention chosen. */
+  function loopNow() {
+    if (S.view === 'pv' && S.cycle) return S.cycle.loop;
+    const iv = Ph.INTERVENTIONS.find(i => i.id === S.iv) || Ph.INTERVENTIONS[0];
+    const l = Ph.loopWith(iv.args);
+    l.espvrAt = v => Ph.espvr(v, l.ees, l.v0);
+    l.edpvrAt = v => Ph.edpvr(v, l.stiff, l.shift);
+    return l;
+  }
   function phaseBands(B, p) {
-    for (const ph of Ph.PHASES) {
-      const i = Ph.PHASES.indexOf(ph);
+    const PH = D().PHASES;
+    for (const ph of PH) {
+      const i = PH.indexOf(ph);
       if (i % 2) continue;
       ctx.fillStyle = p.band;
       ctx.fillRect(xAt(B, ph.from), B.y, (ph.to - ph.from) * B.w, B.h);
@@ -208,7 +224,7 @@ function mount(canvas, opts) {
   }
   function eventLines(B, p, side) {
     ctx.save(); ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
-    for (const ev of Ph.EVENTS) {
+    for (const ev of D().EVENTS) {
       if (side && ev.side !== side) continue;
       ctx.strokeStyle = p.gridB;
       const x = Math.round(xAt(B, ev.at)) + .5;
@@ -263,12 +279,19 @@ function mount(canvas, opts) {
     }
     /* R belongs just after atrial systole begins — the QRS starts the moment
        the ventricle does, which is what puts it at the foot of IVC. */
-    const ms = (Ph.wrap(t - 0.075) * rr) + rOffset + rr * 8;
+    /* A lesion's beat carries its own excitation time; its R peak is 40 ms after. */
+    const rPeak = (S.view === 'wiggers' && S.cycle) ? S.cycle.rAt + 0.04 / secs() : 0.075;
+    const ms = (Ph.wrap(t - rPeak) * rr) + rOffset + rr * 8;
     return L.sample('II', ms, 'sinus', S.hr);
   }
 
   /* ════════════════════ view: the Wiggers diagram ════════════════════════ */
   function drawWiggers(p) {
+    const Q = D();
+    /* Axes that hold the beat: physio.js's fixed 0-130 mmHg and 40-130 mL, or as far as a lesion reaches. */
+    const pHi = Q === Ph ? 130 : Math.max(130, Math.ceil(Q.max.p / 20) * 20), pStep = pHi > 160 ? 40 : 20;
+    const vLo = Q === Ph ? 40 : Math.max(0, Math.floor((Q.min.v - 10) / 10) * 10);
+    const vHi = Q === Ph ? 130 : Math.ceil((Q.max.v + 10) / 10) * 10, vStep = Math.max(10, Math.round((vHi - vLo) / 3 / 10) * 10);
     const { L, R } = MARGINS.wiggers, TOP = 18, BOT = 64;
     const w = W - L - R;
     const gap = 10;
@@ -285,43 +308,43 @@ function mount(canvas, opts) {
     for (const B of [Becg, Bp, Bv]) { phaseBands(B, p); eventLines(B, p); }
 
     /* pressures */
-    vaxis(Bp, 0, 130, 20, p, 'mmHg');
-    trace(Bp, Ph.laPressure, 0, 130, p.la, 1.9);
-    trace(Bp, Ph.aoPressure, 0, 130, p.ao, 2.4);
-    trace(Bp, Ph.lvPressure, 0, 130, p.lv, 2.4);
+    vaxis(Bp, 0, pHi, pStep, p, 'mmHg');
+    trace(Bp, Q.laPressure, 0, pHi, p.la, 1.9);
+    trace(Bp, Q.aoPressure, 0, pHi, p.ao, 2.4);
+    trace(Bp, Q.lvPressure, 0, pHi, p.lv, 2.4);
     /* Shade the gradient that drives ejection: the only interval in the cycle
        when the ventricle is pushing blood into the aorta rather than at it. */
     ctx.save();
     ctx.beginPath();
     const n = 90;
-    for (let i = 0; i <= n; i++) { const t = Ph.T.ao + (Ph.T.ac - Ph.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Ph.lvPressure(t), 0, 130)); }
-    for (let i = n; i >= 0; i--) { const t = Ph.T.ao + (Ph.T.ac - Ph.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Ph.aoPressure(t), 0, 130)); }
+    for (let i = 0; i <= n; i++) { const t = Q.T.ao + (Q.T.ac - Q.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Q.lvPressure(t), 0, pHi)); }
+    for (let i = n; i >= 0; i--) { const t = Q.T.ao + (Q.T.ac - Q.T.ao) * i / n; ctx.lineTo(xAt(Bp, t), yAt(Bp, Q.aoPressure(t), 0, pHi)); }
     ctx.closePath(); ctx.fillStyle = p.lv; ctx.globalAlpha = .10; ctx.fill();
     ctx.restore();
 
-    text('Aorta', xAt(Bp, .60), yAt(Bp, Ph.aoPressure(.60), 0, 130) - 11, p.ao, 10.5, 700);
-    text('LV', xAt(Bp, .22), yAt(Bp, Ph.lvPressure(.22), 0, 130) - 11, p.lv, 10.5, 700);
-    text('LA', xAt(Bp, .47), yAt(Bp, Ph.laPressure(.47), 0, 130) - 10, p.la, 10.5, 700);
+    text('Aorta', xAt(Bp, .60), yAt(Bp, Q.aoPressure(.60), 0, pHi) - 11, p.ao, 10.5, 700);
+    text('LV', xAt(Bp, .22), yAt(Bp, Q.lvPressure(.22), 0, pHi) - 11, p.lv, 10.5, 700);
+    text('LA', xAt(Bp, .47), yAt(Bp, Q.laPressure(.47), 0, pHi) - 10, p.la, 10.5, 700);
 
     /* volume */
-    vaxis(Bv, 40, 130, 30, p, 'mL');
-    trace(Bv, Ph.lvVolume, 40, 130, p.vol, 2.4, { fill: .10 });
-    text('LV volume', xAt(Bv, .70), yAt(Bv, Ph.lvVolume(.70), 40, 130) - 11, p.vol, 10.5, 700);
+    vaxis(Bv, vLo, vHi, vStep, p, 'mL');
+    trace(Bv, Q.lvVolume, vLo, vHi, p.vol, 2.4, { fill: .10 });
+    text('LV volume', xAt(Bv, .70), yAt(Bv, Q.lvVolume(.70), vLo, vHi) - 11, p.vol, 10.5, 700);
     /* Stroke volume, named on the axis it is measured from. */
     ctx.save();
     ctx.strokeStyle = p.vol; ctx.globalAlpha = .55; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
-    for (const v of [Ph.EDV, Ph.ESV]) {
-      const yy = Math.round(yAt(Bv, v, 40, 130)) + .5;
+    for (const v of [Q.EDV, Q.ESV]) {
+      const yy = Math.round(yAt(Bv, v, vLo, vHi)) + .5;
       ctx.beginPath(); ctx.moveTo(Bv.x, yy); ctx.lineTo(Bv.r, yy); ctx.stroke();
     }
     ctx.restore();
-    const yEdv = yAt(Bv, Ph.EDV, 40, 130), yEsv = yAt(Bv, Ph.ESV, 40, 130);
+    const yEdv = yAt(Bv, Q.EDV, vLo, vHi), yEsv = yAt(Bv, Q.ESV, vLo, vHi);
     ctx.save();
     ctx.strokeStyle = p.vol; ctx.lineWidth = 1.2;
     const ax = Bv.r - 26;
     ctx.beginPath(); ctx.moveTo(ax, yEdv); ctx.lineTo(ax, yEsv); ctx.stroke();
     ctx.restore();
-    text('SV 70', Bv.r - 22, (yEdv + yEsv) / 2, p.vol, 9.5, 700, 'left', true);
+    text('SV ' + Math.round(Q.EDV - Q.ESV), Bv.r - 22, (yEdv + yEsv) / 2, p.vol, 9.5, 700, 'left', true);
 
     /* ECG */
     vaxis(Becg, -0.6, 1.6, 100, p, '');
@@ -330,7 +353,7 @@ function mount(canvas, opts) {
 
     /* heart sounds, on the events that make them */
     let lastSx = -99;
-    for (const ev of Ph.EVENTS) {
+    for (const ev of Q.EVENTS) {
       if (!ev.sound) continue;
       const x = xAt(Becg, ev.at);
       const stack = x - lastSx < 16;
@@ -344,8 +367,8 @@ function mount(canvas, opts) {
 
     /* phases */
     S.zones = [];
-    const cur = Ph.phaseAt(S.t);
-    for (const ph of Ph.PHASES) {
+    const cur = Q.phaseAt(S.t);
+    for (const ph of Q.PHASES) {
       const x = xAt(Bph, ph.from), pw = (ph.to - ph.from) * Bph.w;
       const on = ph.id === cur.id;
       ctx.save();
@@ -364,7 +387,7 @@ function mount(canvas, opts) {
       }
     }
     /* valve events along the bottom */
-    for (const ev of Ph.EVENTS) {
+    for (const ev of Q.EVENTS) {
       if (ev.side !== 'L') continue;
       const x = xAt(Bph, ev.at);
       text(ev.id.toUpperCase(), x, Bph.b + 11, p.dim, 8.5, 700, 'center', true);
@@ -378,7 +401,7 @@ function mount(canvas, opts) {
     for (const B of [Becg, Bp, Bv]) cursor(B, p);
 
     /* the live readout — the reason this is a model and not a picture */
-    const s = Ph.sample(S.t);
+    const s = Q.sample(S.t);
     const cw = (W - L - R) / 4;
     const ry = Bph.b + 36;
     const rd = [
@@ -398,10 +421,12 @@ function mount(canvas, opts) {
   function drawPV(p) {
     const L = 44, R = 14, TOP = 14, BOT = 80;
     const B = box(L, TOP, W - L - R, H - TOP - BOT);
-    const iv = Ph.INTERVENTIONS.find(i => i.id === S.iv) || Ph.INTERVENTIONS[0];
-    const cur = Ph.loopWith(iv.args);
+    const cur = loopNow();
     const base = Ph.loopWith();
-    const vLo = 0, vHi = 220, pLo = 0, pHi = 170;
+    const lesion = cur !== null && S.cycle && cur === S.cycle.loop;
+    /* physio.js's fixed axes, or as far as a lesion's loop reaches, in steps of 40. */
+    const vLo = 0, vHi = lesion ? Math.max(220, Math.ceil((S.cycle.max.v + 20) / 40) * 40) : 220;
+    const pLo = 0, pHi = lesion ? Math.max(170, Math.ceil((S.cycle.max.p + 10) / 40) * 40) : 170;
 
     const X = v => B.x + (v - vLo) / (vHi - vLo) * B.w;
     const Y = q => B.b - (q - pLo) / (pHi - pLo) * B.h;
@@ -424,7 +449,7 @@ function mount(canvas, opts) {
     ctx.beginPath();
     let started = false;
     for (let v = cur.v0; v <= vHi; v += 4) {
-      const q = Ph.espvr(v, cur.ees, cur.v0);
+      const q = cur.espvrAt(v);
       if (q > pHi) break;
       started ? ctx.lineTo(X(v), Y(q)) : (ctx.moveTo(X(v), Y(q)), started = true);
     }
@@ -433,7 +458,7 @@ function mount(canvas, opts) {
     ctx.strokeStyle = p.vol; ctx.globalAlpha = .8;
     ctx.beginPath();
     for (let v = 20; v <= vHi; v += 3) {
-      const q = Ph.edpvr(v, cur.stiff, cur.shift);
+      const q = cur.edpvrAt(v);
       if (q > 72) break;
       ctx.lineTo(X(v), Y(q));
     }
@@ -442,17 +467,17 @@ function mount(canvas, opts) {
     ctx.strokeStyle = p.muted; ctx.globalAlpha = .5; ctx.setLineDash([2, 4]);
     ctx.beginPath(); ctx.moveTo(X(cur.edv), Y(0)); ctx.lineTo(X(cur.esv), Y(cur.esp)); ctx.stroke();
     ctx.restore();
-    let esX = vHi, esY = Ph.espvr(vHi, cur.ees, cur.v0);
-    if (esY > pHi) { esY = pHi; esX = cur.v0 + pHi / cur.ees; }
+    let esX = vHi, esY = cur.espvrAt(vHi);
+    if (esY > pHi) { esY = pHi; esX = cur.v0 + (pHi - cur.espvrAt(cur.v0)) / cur.ees; }
     text('ESPVR', clamp(X(esX) - 6, B.x + 44, B.r - 6),
          clamp(Y(esY) + (esY >= pHi ? 11 : -11), B.y + 8, B.b - 8), p.ao, 9.5, 700, 'right', true);
     let edEnd = vHi;
-    for (let v = 20; v <= vHi; v += 2) if (Ph.edpvr(v, cur.stiff, cur.shift) > 72) { edEnd = v; break; }
+    for (let v = 20; v <= vHi; v += 2) if (cur.edpvrAt(v) > 72) { edEnd = v; break; }
     text('EDPVR', clamp(X(edEnd) + 6, B.x, B.r - 44), Y(70) + 2, p.vol, 9.5, 700, 'left', true);
     text('Ea', (X(cur.edv) + X(cur.esv)) / 2 + 14, (Y(0) + Y(cur.esp)) / 2 + 8, p.muted, 9.5, 700, 'left', true);
 
-    /* the resting loop as a ghost, whenever we have moved off it */
-    if (S.iv !== 'base') {
+    /* the resting loop as a ghost, whenever we have moved off it: an intervention, or a lesion */
+    if (lesion || S.iv !== 'base') {
       ctx.save(); ctx.strokeStyle = p.ghost; ctx.lineWidth = 1.6; ctx.setLineDash([4, 4]);
       ctx.beginPath(); base.points.forEach((q, i) => i ? ctx.lineTo(X(q.v), Y(q.p)) : ctx.moveTo(X(q.v), Y(q.p)));
       ctx.closePath(); ctx.stroke(); ctx.restore();
@@ -514,29 +539,44 @@ function mount(canvas, opts) {
     const Bq = box(L, TOP, w, hh);
     const Bc = box(L, TOP + hh + gap, w, hh);
     const sec = secs();
+    /* physio.js's flows are per cycle and scaled by its length; a lesion's beat gives mL/s as it ran. */
+    const Q = D(), drawn = Q === Ph;
+    const aoF = drawn ? t => Ph.aorticFlow(t, sec) : Q.aorticFlow;
+    const mvF = drawn ? t => Ph.mitralFlow(t, sec) : Q.mitralFlow;
+    const corF = drawn ? Ph.coronaryFlow : Q.coronaryFlow;
 
     for (const B of [Bq, Bc]) { phaseBands(B, p); eventLines(B, p, 'L'); }
 
-    vaxis(Bq, 0, 650, 200, p, 'mL/s');
-    trace(Bq, t => Ph.aorticFlow(t, sec), 0, 650, p.ao, 2.2, { fill: .13 });
-    trace(Bq, t => Ph.mitralFlow(t, sec), 0, 650, p.vol, 2.2, { fill: .13 });
+    /* The flow axis: physio.js's fixed 0 to 650, or as far as a lesion's flows reach, below zero where a valve
+       leaks, since a regurgitant jet IS flow the wrong way. */
+    let fMin = 0, fMax = 650;
+    if (!drawn) {
+      let lo = 0, hi = 0;
+      for (let i = 0; i < 400; i++) { const t = i / 400; lo = Math.min(lo, aoF(t), mvF(t)); hi = Math.max(hi, aoF(t), mvF(t)); }
+      fMin = lo < -20 ? Math.floor(lo / 200) * 200 : 0; fMax = Math.max(650, Math.ceil(hi / 200) * 200);
+    }
+    vaxis(Bq, fMin, fMax, 200, p, 'mL/s');
+    if (fMin < 0) hline(Bq, yAt(Bq, 0, fMin, fMax), p.gridB, 1);
+    trace(Bq, aoF, fMin, fMax, p.ao, 2.2, { fill: .13 });
+    trace(Bq, mvF, fMin, fMax, p.vol, 2.2, { fill: .13 });
     text('Aortic', xAt(Bq, .24), Bq.y + 12, p.ao, 10.5, 700);
     text('Mitral', xAt(Bq, .60), Bq.y + 12, p.vol, 10.5, 700);
+    if (fMin < 0) text('regurgitant', Bq.x + 4, Bq.b - 8, p.dim, 9.5, 600);
     /* E and A, marked where the model puts them rather than where a figure
        would. The ratio is the number that gets used at the bedside. */
     let E = 0, Et = 0, A = 0, At = 0;
     for (let i = 0; i < 900; i++) {
-      const t = i / 900, q = Ph.mitralFlow(t, sec);
-      if (t >= Ph.T.mo && t < Ph.T.dias && q > E) { E = q; Et = t; }
-      if (t < Ph.T.mc && q > A) { A = q; At = t; }
+      const t = i / 900, q = mvF(t);
+      if (t >= Q.T.mo && t < Math.max(Q.T.dias, Q.T.mo + 0.001) && q > E) { E = q; Et = t; }
+      if (t < Q.T.mc && q > A) { A = q; At = t; }
     }
-    text('E', xAt(Bq, Et), yAt(Bq, E, 0, 650) - 10, p.vol, 11, 800, 'center', true);
-    text('A', xAt(Bq, At), yAt(Bq, A, 0, 650) - 10, p.vol, 11, 800, 'center', true);
-    text('E/A ' + (E / A).toFixed(1), Bq.r - 4, Bq.y + 12, p.muted, 10, 700, 'right', true);
+    if (E > 0) text('E', xAt(Bq, Et), yAt(Bq, E, fMin, fMax) - 10, p.vol, 11, 800, 'center', true);
+    if (A > 0) text('A', xAt(Bq, At), yAt(Bq, A, fMin, fMax) - 10, p.vol, 11, 800, 'center', true);
+    if (E > 0 && A > 0) text('E/A ' + (E / A).toFixed(1), Bq.r - 4, Bq.y + 12, p.muted, 10, 700, 'right', true);
 
     vaxis(Bc, 0, 1.4, 0.4, p, 'mL/s', 1);
-    trace(Bc, t => Ph.coronaryFlow(t, 'left'), 0, 1.4, p.cor, 2.3, { fill: .16 });
-    trace(Bc, t => Ph.coronaryFlow(t, 'right'), 0, 1.4, p.rv, 2.0, { dash: [5, 3] });
+    trace(Bc, t => corF(t, 'left'), 0, 1.4, p.cor, 2.3, { fill: .16 });
+    trace(Bc, t => corF(t, 'right'), 0, 1.4, p.rv, 2.0, { dash: [5, 3] });
     text('Left coronary', xAt(Bc, .58), Bc.y + 12, p.cor, 10.5, 700);
     text('Right coronary', xAt(Bc, .16), Bc.y + 12, p.rv, 10.5, 700);
 
@@ -544,16 +584,29 @@ function mount(canvas, opts) {
        that the left curve is almost flat inside the shading. */
     ctx.save();
     ctx.fillStyle = p.ink; ctx.globalAlpha = .05;
-    ctx.fillRect(xAt(Bc, Ph.T.mc), Bc.y, (Ph.T.ac - Ph.T.mc) * Bc.w, Bc.h);
+    ctx.fillRect(xAt(Bc, Q.T.mc), Bc.y, (Q.T.ac - Q.T.mc) * Bc.w, Bc.h);
     ctx.restore();
-    text('systole', xAt(Bc, (Ph.T.mc + Ph.T.ac) / 2), Bc.b - 10, p.dim, 9.5, 600, 'center');
+    text('systole', xAt(Bc, (Q.T.mc + Q.T.ac) / 2), Bc.b - 10, p.dim, 9.5, 600, 'center');
 
-    const d = Ph.derived(sec);
-    text((d.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole',
+    const f = flowNow();
+    text((f.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole',
          Bc.x, Bc.b + 16, p.muted, 10.5, 600);
-    text('Peak aortic flow ' + Ph.extrema(t => Ph.aorticFlow(t, sec)).max.toFixed(0) + ' mL/s',
+    text('Peak aortic flow ' + f.peakAortic.toFixed(0) + ' mL/s',
          Bc.r, Bc.b + 16, p.dim, 10, 500, 'right');
     for (const B of [Bq, Bc]) cursor(B, p);
+  }
+  /* What the Flow view says in numbers, from the beat it draws: the share of left coronary flow outside systole
+     (mitral closure to aortic closure), and the peak aortic flow. physio.js's own figures for its cycle. */
+  function flowNow() {
+    const Q = (S.cycle && S.view === 'flow') ? S.cycle : Ph;
+    if (Q === Ph) { const d = Ph.derived(secs()); return { source: 'physio', leftDiastolicFraction: d.leftDiastolicFraction, peakAortic: Ph.extrema(t => Ph.aorticFlow(t, secs())).max }; }
+    let all = 0, dia = 0, peak = 0;
+    for (let i = 0; i < 800; i++) {
+      const t = i / 800, c = Q.coronaryFlow(t, 'left');
+      all += c; if (t < Q.T.mc || t >= Q.T.ac) dia += c;
+      peak = Math.max(peak, Q.aorticFlow(t));
+    }
+    return { source: Q.preset, leftDiastolicFraction: all ? dia / all : 0, peakAortic: peak };
   }
 
   /* ════════════════════ view: the right heart ════════════════════════════ */
@@ -563,34 +616,37 @@ function mount(canvas, opts) {
     const hh = (H - TOP - BOT - gap) / 2;
     const Br = box(L, TOP, w, hh);
     const Bl = box(L, TOP + hh + gap, w, hh);
+    const Q = D(), drawn = Q === Ph, r = rightNow();
+    /* physio.js's fixed axes, or as far as a lesion's pressures reach. */
+    const rHi = drawn ? 34 : Math.max(34, Math.ceil((r.max + 4) / 10) * 10), rStep = rHi > 60 ? 20 : 10;
+    const lHi = drawn ? 130 : Math.max(130, Math.ceil(Q.max.p / 40) * 40);
 
     for (const B of [Br, Bl]) phaseBands(B, p);
 
-    vaxis(Br, 0, 34, 10, p, 'mmHg');
-    trace(Br, Ph.raPressure, 0, 34, p.ra, 1.9);
-    trace(Br, Ph.paPressure, 0, 34, p.pa, 2.3);
-    trace(Br, Ph.rvPressure, 0, 34, p.rv, 2.3);
-    text('PA', xAt(Br, .60), yAt(Br, Ph.paPressure(.60), 0, 34) - 11, p.pa, 10.5, 700);
-    text('RV', xAt(Br, .24), yAt(Br, Ph.rvPressure(.24), 0, 34) - 11, p.rv, 10.5, 700);
-    text('RA / JVP', xAt(Br, .47), yAt(Br, Ph.raPressure(.47), 0, 34) - 10, p.ra, 10.5, 700);
+    vaxis(Br, 0, rHi, rStep, p, 'mmHg');
+    trace(Br, Q.raPressure, 0, rHi, p.ra, 1.9);
+    trace(Br, Q.paPressure, 0, rHi, p.pa, 2.3);
+    trace(Br, Q.rvPressure, 0, rHi, p.rv, 2.3);
+    text('PA', xAt(Br, .60), yAt(Br, Q.paPressure(.60), 0, rHi) - 11, p.pa, 10.5, 700);
+    text('RV', xAt(Br, .24), yAt(Br, Q.rvPressure(.24), 0, rHi) - 11, p.rv, 10.5, 700);
+    text('RA / JVP', xAt(Br, .47), yAt(Br, Q.raPressure(.47), 0, rHi) - 10, p.ra, 10.5, 700);
     /* a, c and v named on the JVP — because this trace is what you are looking
-       at in the neck, and naming the waves is how it becomes readable. */
-    [['a', .058], ['c', .148], ['v', .448]].forEach(([lab, at]) =>
-      text(lab, xAt(Br, at), yAt(Br, Ph.raPressure(at), 0, 34) - 10, p.ra, 10, 800, 'center', true));
-    [['x', .205], ['y', .545]].forEach(([lab, at]) =>
-      text(lab, xAt(Br, at), yAt(Br, Ph.raPressure(at), 0, 34) + 11, p.ra, 10, 800, 'center', true));
+       at in the neck, and naming the waves is how it becomes readable. A lesion's
+       are found on its own trace (rightNow). */
+    r.waves.filter(([, , up]) => up).forEach(([lab, at]) =>
+      text(lab, xAt(Br, at), yAt(Br, Q.raPressure(at), 0, rHi) - 10, p.ra, 10, 800, 'center', true));
+    r.waves.filter(([, , up]) => !up).forEach(([lab, at]) =>
+      text(lab, xAt(Br, at), yAt(Br, Q.raPressure(at), 0, rHi) + 11, p.ra, 10, 800, 'center', true));
 
-    vaxis(Bl, 0, 130, 40, p, 'mmHg');
-    trace(Bl, Ph.aoPressure, 0, 130, p.ao, 2.1);
-    trace(Bl, Ph.lvPressure, 0, 130, p.lv, 2.1);
+    vaxis(Bl, 0, lHi, 40, p, 'mmHg');
+    trace(Bl, Q.aoPressure, 0, lHi, p.ao, 2.1);
+    trace(Bl, Q.lvPressure, 0, lHi, p.lv, 2.1);
     text('the left side, to scale', Bl.r - 4, Bl.y + 12, p.dim, 10, 600, 'right');
 
     /* The splits, measured off the crossings rather than annotated. */
-    const d = Ph.derived(secs());
-    const x = d.crossings;
     ctx.save();
     let lastX = -99;
-    for (const ev of Ph.EVENTS) {
+    for (const ev of Q.EVENTS) {
       if (!ev.sound) continue;
       const xx = xAt(Br, ev.at);
       const stack = xx - lastX < 18;
@@ -603,13 +659,41 @@ function mount(canvas, opts) {
     ctx.restore();
 
     for (const B of [Br, Bl]) cursor(B, p);
-    text('S1 split  M1→T1  ' + d.s1Split.toFixed(0) + ' ms', L, Bl.b + 18, p.muted, 10.5, 600);
-    text('S2 split  A2→P2  ' + d.s2Split.toFixed(0) + ' ms', L, Bl.b + 34, p.muted, 10.5, 600);
-    text('RV ' + d.rvSys.toFixed(0) + '/' + d.rvEdp.toFixed(0)
-       + '   PA ' + d.paSys.toFixed(0) + '/' + d.paDia.toFixed(0)
-       + '   RA mean ' + d.raMean.toFixed(0), W - 14, Bl.b + 18, p.dim, 10, 500, 'right', true);
-    text('The right ventricle opens earlier and shuts later, because it has 10 mmHg to beat, not 80.',
+    /* S1's split is said for physio.js's cycle alone. In a lesion's beat the mitral valve shuts at a pressure
+       crossing with no inertia to hold it open, so in a stiff ventricle it shuts at the end of the atrial kick
+       (HFpEF: M1 129 ms before T1), which no stethoscope hears. S2's split is robust and is said for both. */
+    if (drawn) text('S1 split  M1→T1  ' + r.s1Split.toFixed(0) + ' ms', L, Bl.b + 18, p.muted, 10.5, 600);
+    text('S2 split  A2→P2  ' + r.s2Split.toFixed(0) + ' ms' + (r.s2Split < 0 ? '  (reversed: P2 first)' : ''), L, Bl.b + 34, p.muted, 10.5, 600);
+    text('RV ' + r.rvSys.toFixed(0) + '/' + r.rvEdp.toFixed(0)
+       + '   PA ' + r.paSys.toFixed(0) + '/' + r.paDia.toFixed(0)
+       + '   RA mean ' + r.raMean.toFixed(0), W - 14, Bl.b + 18, p.dim, 10, 500, 'right', true);
+    if (drawn) text('The right ventricle opens earlier and shuts later, because it has 10 mmHg to beat, not 80.',
          W - 14, Bl.b + 34, p.dim, 10, 500, 'right');
+  }
+  /* What the right-heart view says in numbers, from the beat it draws: the S1 and S2 splits in ms off the measured
+     crossings (A2 to P2 negative where P2 comes first), RV and PA pressures, RA mean, and where the JVP's waves are.
+     physio.js's own for its cycle; for a lesion, the a wave is the RA's highest point before the tricuspid shuts,
+     the v its highest from pulmonic closure to tricuspid opening, the x descent its lowest between the two, the y
+     its lowest after the tricuspid opens. */
+  function rightNow() {
+    const Q = (S.cycle && S.view === 'right') ? S.cycle : Ph;
+    if (Q === Ph) {
+      const d = Ph.derived(secs());
+      return { source: 'physio', s1Split: d.s1Split, s2Split: d.s2Split, rvSys: d.rvSys, rvEdp: d.rvEdp, paSys: d.paSys, paDia: d.paDia, raMean: d.raMean, max: 34,
+               waves: [['a', .058, true], ['c', .148, true], ['v', .448, true], ['x', .205, false], ['y', .545, false]] };
+    }
+    const ms = 1000 * Q.beat, N = 600, ts = [];
+    for (let i = 0; i < N; i++) ts.push(i / N);
+    const ext = (fn, lo, hi, big) => { let best = null; for (const t of ts) if (t >= lo && t < hi && (best === null || (big ? fn(t) > fn(best) : fn(t) < fn(best)))) best = t; return best; };
+    const T = Q.T;
+    let rvSys = -Infinity, paSys = -Infinity, paDia = Infinity, ra = 0, max = 0;
+    for (const t of ts) {
+      rvSys = Math.max(rvSys, Q.rvPressure(t)); paSys = Math.max(paSys, Q.paPressure(t)); paDia = Math.min(paDia, Q.paPressure(t));
+      ra += Q.raPressure(t) / N; max = Math.max(max, Q.rvPressure(t), Q.paPressure(t), Q.raPressure(t));
+    }
+    const waves = [['a', ext(Q.raPressure, 0, T.tc, true), true], ['v', ext(Q.raPressure, T.pc, T.to, true), true],
+                   ['x', ext(Q.raPressure, T.tc, T.pc, false), false], ['y', ext(Q.raPressure, T.to, 1, false), false]].filter(w => w[1] !== null);
+    return { source: Q.preset, s1Split: (T.tc - T.mc) * ms, s2Split: (T.pc - T.ac) * ms, rvSys, rvEdp: Q.rvPressure(Q.rAt), paSys, paDia, raMean: ra, max, waves };
   }
 
   /* ════════════════════ view: Starling and Guyton ════════════════════════ */
@@ -826,6 +910,19 @@ function mount(canvas, opts) {
     }
     return (corPeak = m);
   }
+  /* What the Coronary view says in numbers, from the beat it draws: the share of left coronary flow in diastole,
+     the mean left coronary flow, and the peak of either; physio.js's own share for its cycle. */
+  function coronaryNow() {
+    const Q = (S.cycle && S.view === 'coronary') ? S.cycle : Ph;
+    const cor = Q === Ph ? Ph.coronaryFlow : Q.coronaryFlow;
+    let all = 0, dia = 0, peak = 0;
+    for (let i = 0; i < 800; i++) {
+      const t = i / 800, l = cor(t, 'left');
+      all += l; if (t < Q.T.mc || t >= Q.T.ac) dia += l;
+      peak = Math.max(peak, l, cor(t, 'right'));
+    }
+    return { source: Q === Ph ? 'physio' : Q.preset, leftDiastolicFraction: Q === Ph ? Ph.derived(secs()).leftDiastolicFraction : (all ? dia / all : 0), leftMean: all / 800, peak };
+  }
   function drawCoronary(p) {
     const CT = root.CoronaryTree;
     if (!CT) {
@@ -836,7 +933,9 @@ function mount(canvas, opts) {
     const TOP = 28, stripH = Math.max(70, Math.min(120, H * 0.26)), BOT = 34;
     const Bs = box(L, H - BOT - stripH, W - L - R, stripH);
     const Bt = box(L, TOP + 8, W - L - R, Bs.y - TOP - 30);
-    const peak = coronaryPeak();
+    /* A lesion's coronaries, on a scale that holds the normal heart's peak too, so a starved bed reads dimmer. */
+    const Q = D(), cor = Q === Ph ? Ph.coronaryFlow : Q.coronaryFlow, c = coronaryNow();
+    const peak = Q === Ph ? coronaryPeak() : Math.max(coronaryPeak(), c.peak);
 
     text('Coronary flow', L, TOP - 12, p.ink, 11.5, 800);
     text('brightness is the flow at this instant, on one scale for both', W - R, TOP - 12, p.dim, 9.5, 500, 'right');
@@ -846,7 +945,7 @@ function mount(canvas, opts) {
       { side: 'right', label: 'Right coronary', col: p.rv,  cx: Bt.x + Bt.w * 0.73 },
     ];
     for (const sd of sides) {
-      const I = CT.intensity(Ph.coronaryFlow(S.t, sd.side), 0, peak);
+      const I = CT.intensity(cor(S.t, sd.side), 0, peak);
       const segs = CT.tree({ x: sd.cx, y: Bt.b - 18, angle: -Math.PI / 2,
                              length: Bt.h * 0.26, maxDepth: 5, spread: 0.42 });
       ctx.save();
@@ -866,15 +965,14 @@ function mount(canvas, opts) {
     /* The same traces the Flow view draws, on the same scale as the glow. */
     ctx.save();
     ctx.fillStyle = p.ink; ctx.globalAlpha = .05;
-    ctx.fillRect(xAt(Bs, Ph.T.mc), Bs.y, (Ph.T.ac - Ph.T.mc) * Bs.w, Bs.h);
+    ctx.fillRect(xAt(Bs, Q.T.mc), Bs.y, (Q.T.ac - Q.T.mc) * Bs.w, Bs.h);
     ctx.restore();
-    text('systole', xAt(Bs, (Ph.T.mc + Ph.T.ac) / 2), Bs.b - 9, p.dim, 9.5, 600, 'center');
-    trace(Bs, t => Ph.coronaryFlow(t, 'left'), 0, peak, p.cor, 2.2, { fill: .14 });
-    trace(Bs, t => Ph.coronaryFlow(t, 'right'), 0, peak, p.rv, 1.9, { dash: [5, 3] });
+    text('systole', xAt(Bs, (Q.T.mc + Q.T.ac) / 2), Bs.b - 9, p.dim, 9.5, 600, 'center');
+    trace(Bs, t => cor(t, 'left'), 0, peak, p.cor, 2.2, { fill: .14 });
+    trace(Bs, t => cor(t, 'right'), 0, peak, p.rv, 1.9, { dash: [5, 3] });
     cursor(Bs, p);
 
-    const d = Ph.derived(secs());
-    text((d.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole. ' +
+    text((c.leftDiastolicFraction * 100).toFixed(0) + '% of left coronary flow arrives in diastole. ' +
          'A faster rate shortens diastole, and with it the left ventricle\'s perfusion time.',
          L, H - 14, p.dim, 10, 500);
   }
@@ -939,6 +1037,15 @@ function mount(canvas, opts) {
     setTime(t) { S.t = Ph.wrap(t); draw(); return api; },
     time: () => S.t,
     setIntervention(id) { S.iv = id; draw(); return api; },
+    /* The beat the Wiggers view draws (a Circulation.cycle(), or null for physio.js), and the phase that view
+       is in now, from whichever it draws. */
+    setCycle(c) { S.cycle = c || null; rOffset = null; draw(); return api; },
+    cycle: () => S.cycle,
+    phaseNow: () => D().phaseAt(S.t),
+    loopNow,
+    flowNow,
+    rightNow,
+    coronaryNow,
     intervention: () => S.iv,
     play() { S.playing = true; S.last = 0; return api; },
     pause() { S.playing = false; return api; },

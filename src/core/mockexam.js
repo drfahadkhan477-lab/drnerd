@@ -82,8 +82,19 @@ function build(opts) {
   const fresh = shuffled(cand.filter(q => !isSeen(q.id)), rng);
   const known = shuffled(cand.filter(q => isSeen(q.id)), rng);
   /* Fresh first, then the block is shuffled again so what comes first on the screen
-     does not say which questions are new. */
-  return shuffled(fresh.concat(known).slice(0, n), rng).map(q => q.id);
+     does not say which questions are new. o.arrange, where given, then orders the block (the page passes
+     Confusable.arrange, which takes chapters in turn: docs/ROADMAP.md, S6). Only an order comes back from it:
+     a question it drops or adds is not dealt, and an arrange that throws leaves the shuffle as it was. */
+  const block = shuffled(fresh.concat(known).slice(0, n), rng);
+  let order = block;
+  if (typeof o.arrange === 'function') {
+    try {
+      const got = arr(o.arrange(block.slice())), want = new Set(block.map(q => q.id));
+      const ids = got.map(q => q && q.id);
+      if (ids.length === block.length && ids.every(id => want.delete(id))) order = got;
+    } catch (_) { /* the shuffle stands */ }
+  }
+  return order.map(q => q.id);
 }
 
 /* ── the block ─────────────────────────────────────────────────────────────── */

@@ -195,5 +195,95 @@ head('readiness follows the numbers');
   ok('the verdict reads as a sentence with the real numbers', /60 of 120/.test(r0.text) && /60 days left/.test(r0.text), r0.text);
 }
 
+head('S7: each chapter, and the exam, as an interval');
+{
+  const near = (x, y, tol) => Math.abs(x - y) < (tol || 1e-9);
+  /* The beta distribution itself, against values known in closed form. */
+  ok('the Beta cdf: Beta(2,3) at 0.5 is 11/16, Beta(1,1) is the identity, Beta(5,5) is even at 0.5',
+     near(SP.betaCdf(0.5, 2, 3), 11 / 16) && [0.1, 0.37, 0.9].every(x => near(SP.betaCdf(x, 1, 1), x)) && near(SP.betaCdf(0.5, 5, 5), 0.5)
+     && SP.betaCdf(0, 2, 3) === 0 && SP.betaCdf(1, 2, 3) === 1, [SP.betaCdf(0.5, 2, 3), SP.betaCdf(0.5, 5, 5)].join(' '));
+  ok('and its quantile undoes it, at both tails and in the middle', [[0.1, 2, 8], [0.5, 30, 12], [0.9, 2, 8], [0.95, 0.7, 0.9]].every(([p, a, b]) => near(SP.betaCdf(SP.betaQuantile(p, a, b), a, b), p, 1e-9)),
+     [[0.1, 2, 8], [0.9, 2, 8]].map(([p, a, b]) => SP.betaQuantile(p, a, b).toFixed(6)).join(' '));
+  ok('Beta(2,8)\'s 90th percentile is 0.36836, as tabulated', near(SP.betaQuantile(0.9, 2, 8), 0.368362, 1e-5), SP.betaQuantile(0.9, 2, 8).toFixed(6));
+
+  const stats = { Alpha: { correct: 28, total: 30 }, Beta: { correct: 10, total: 30 }, Gamma: { correct: 24, total: 30 }, Delta: { correct: 3, total: 5 } };
+  const srs = {};
+  pool.slice(0, 60).forEach(q => { srs[q.id] = card(3, 3); srs[q.id].due = day(4); });
+  const base = { pool, srs, chStats: stats, today: TODAY, examDate: day(60), recentPerDay: 30 };
+  const r = SP.readiness(Object.assign({}, base, { blueprint: null }));
+  const row = ch => r.chapters.find(x => x.ch === ch);
+  ok('every chapter row has an interval around what was measured', r.chapters.length === 4 && r.chapters.every(x => x.lo <= x.pct && x.pct <= x.hi && x.lo < x.hi),
+     r.chapters.map(x => `${x.ch} ${x.lo}-${x.pct}-${x.hi}`).join(', '));
+  ok('five answers give a wider interval than thirty', row('Delta').hi - row('Delta').lo > row('Gamma').hi - row('Gamma').lo, `Delta ${row('Delta').hi - row('Delta').lo}, Gamma ${row('Gamma').hi - row('Gamma').lo}`);
+  /* What a flat Beta(1,1) prior would centre one right of five on: the middle of Beta(2,5)'s interval. */
+  const flat = 50 * (SP.betaQuantile(0.1, 2, 5) + SP.betaQuantile(0.9, 2, 5));
+  const thin = SP.weakChapters({ Alpha: { correct: 90, total: 100 }, Beta: { correct: 1, total: 5 } }, 3)[0];
+  ok('a chapter with few answers leans toward the fellow\'s own accuracy, not toward 50%: one of five, among ninety of a hundred, has the middle of its interval above where a flat prior puts it, and still below a half',
+     thin.ch === 'Beta' && thin.pct === 20 && (thin.lo + thin.hi) / 2 > flat && (thin.lo + thin.hi) / 2 < 50, JSON.stringify(thin) + ' · with a flat prior the middle is ' + flat.toFixed(1));
+  ok('the weakest chapters carry their interval', r.weakChapters.length && r.weakChapters.every(w => Number.isInteger(w.lo) && Number.isInteger(w.hi) && w.lo <= w.pct && w.pct <= w.hi), JSON.stringify(r.weakChapters));
+  ok('and the sentence says them as intervals, not one number', /Weakest: Beta \(likely \d+ to \d+%\)/.test(r.text) && !/Beta \(\d+%\)/.test(r.text), r.text);
+
+  ok('with no blueprint there is no exam score, and the sentence says it waits for one', r.score.state === 'none' && /A likely exam score waits for the exam blueprint\./.test(r.text) && !/Across the exam/.test(r.text), r.text);
+  const bad = SP.readiness(Object.assign({}, base, { blueprint: { Alpha: 30, Omega: 20, Zeta: 5 } }));
+  ok('a blueprint naming chapters the bank does not have is refused, by name, not scaled over the rest', bad.score.state === 'refused' && JSON.stringify(bad.score.unknown) === '["Omega","Zeta"]' && /does not have \(Omega, Zeta\)/.test(bad.text) && !/Across the exam/.test(bad.text), bad.text);
+
+  const W = { Alpha: 30, Beta: 30, Gamma: 20, Delta: 10, Epsilon: 10 };
+  const sc = SP.readiness(Object.assign({}, base, { blueprint: W })).score;
+  ok('a blueprint gives an exam score: its interval is around its mean', sc.state === 'ok' && sc.lo < sc.mean && sc.mean < sc.hi && sc.level === 0.8 && sc.chapters === 5, JSON.stringify(sc));
+  const asShares = SP.examScore(pool, stats, { Alpha: 0.3, Beta: 0.3, Gamma: 0.2, Delta: 0.1, Epsilon: 0.1 });
+  ok('weights in percent or as shares are the same blueprint', near(asShares.mean, sc.mean) && near(asShares.lo, sc.lo) && near(asShares.hi, sc.hi));
+  const pr = { a: 1 + (SP.PRIOR_N - 2) * (65 / 95), b: 1 + (SP.PRIOR_N - 2) * (30 / 95) };      // pooled: 65 right of 95
+  const mean = ch => { const s = stats[ch] || { correct: 0, total: 0 }; return (pr.a + s.correct) / (pr.a + pr.b + s.total); };
+  ok('its mean is each chapter\'s posterior mean, weighted by the blueprint (Epsilon, never answered, at the prior)',
+     near(sc.mean, 0.3 * mean('Alpha') + 0.3 * mean('Beta') + 0.2 * mean('Gamma') + 0.1 * mean('Delta') + 0.1 * mean('Epsilon')), `${sc.mean} vs ${0.3 * mean('Alpha') + 0.3 * mean('Beta') + 0.2 * mean('Gamma') + 0.1 * mean('Delta') + 0.1 * mean('Epsilon')}`);
+  const only = SP.examScore(pool, stats, { Gamma: 1 });
+  const g = SP.readiness(Object.assign({}, base, { blueprint: null })).chapters.find(x => x.ch === 'Gamma');
+  ok('a blueprint of one chapter is exactly that chapter\'s interval', Math.round(only.lo * 100) === g.lo && Math.round(only.hi * 100) === g.hi, `${only.lo} ${only.hi} vs ${g.lo} ${g.hi}`);
+  const left = SP.examScore(pool, stats, { Alpha: 50, Gamma: 50 }), zero = SP.examScore(pool, stats, { Alpha: 50, Gamma: 50, Beta: 0 });
+  ok('a chapter left out, or weighted zero, counts for nothing', near(left.mean, zero.mean) && near(left.lo, zero.lo));
+
+  /* The interval of the weighted sum, against the thing it approximates: chapters drawn independently from their
+     posteriors, many times, with a seeded generator, and the middle 80% of the weighted sums read off. */
+  let seed = 12345;
+  const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const normal = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+  const gamma = k => { if (k < 1) return gamma(k + 1) * Math.pow(rnd(), 1 / k); const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+    for (;;) { let x, v; do { x = normal(); v = 1 + c * x; } while (v <= 0); v = v * v * v; const u = rnd(); if (Math.log(u) < 0.5 * x * x + d - d * v + d * Math.log(v)) return d * v; } };
+  const draws = [];
+  for (let i = 0; i < 40000; i++) {
+    let t = 0;
+    for (const ch of Object.keys(W)) { const s = stats[ch] || { correct: 0, total: 0 }; const x = gamma(pr.a + s.correct), y = gamma(pr.b + s.total - s.correct); t += W[ch] / 100 * x / (x + y); }
+    draws.push(t);
+  }
+  draws.sort((x, y) => x - y);
+  const q10 = draws[Math.floor(0.1 * draws.length)], q90 = draws[Math.floor(0.9 * draws.length)];
+  ok('the exam interval is within a point of the one forty thousand independent draws give', Math.abs(q10 - sc.lo) < 0.01 && Math.abs(q90 - sc.hi) < 0.01,
+     `drawn ${q10.toFixed(4)} to ${q90.toFixed(4)}, said ${sc.lo.toFixed(4)} to ${sc.hi.toFixed(4)}`);
+
+  const rr = SP.readiness(Object.assign({}, base, { blueprint: W }));
+  ok('and the sentence gives it as an interval, with its level', new RegExp(`Across the exam's blueprint, a score of ${Math.round(sc.lo * 100)} to ${Math.round(sc.hi * 100)}% is likely \\(80% interval\\)\\.`).test(rr.text), rr.text);
+  const more = {}; Object.keys(stats).forEach(ch => { more[ch] = { correct: stats[ch].correct * 4, total: stats[ch].total * 4 }; });
+  const sc4 = SP.examScore(pool, more, W);
+  ok('four times the answers at the same rates narrow it', sc4.hi - sc4.lo < sc.hi - sc.lo, `${(sc4.hi - sc4.lo).toFixed(3)} < ${(sc.hi - sc.lo).toFixed(3)}`);
+  const none = SP.examScore(pool, {}, W);
+  ok('with nothing answered at all, the interval is wide and centred at a half', near(none.mean, 0.5) && none.hi - none.lo > 0.2, JSON.stringify(none));
+}
+
+head('S7: the page\'s blueprint is the owner\'s, and empty until filled in');
+{
+  const fs = require('fs'), path = require('path'), vm = require('vm');
+  const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const ctx = {}; vm.createContext(ctx);
+  vm.runInContext(read('src/core/blueprint.js'), ctx);
+  ok('src/core/blueprint.js holds no weights and no source: none are estimated', ctx.Blueprint && ctx.Blueprint.weights === null && ctx.Blueprint.source === null, JSON.stringify(ctx.Blueprint));
+  vm.runInContext(read('src/core/fsrs.js') + read('src/core/studyplan.js'), ctx);
+  ctx.Blueprint.weights = { Alpha: 1 };
+  const said = vm.runInContext('StudyPlan.readiness(' + JSON.stringify({ pool, srs: {}, chStats: { Alpha: { correct: 15, total: 20 } }, today: TODAY }) + ')', ctx);
+  ok('readiness() asked with no blueprint reads the page\'s', said.score.state === 'ok', JSON.stringify(said.score));
+  const page = read('app/systole.html');
+  const at = s2 => page.indexOf(s2);
+  ok('the page writes it in once, before studyplan.js', page.split('@@SLOT[src:src/core/blueprint.js]@@').length === 2 && at('@@SLOT[src:src/core/blueprint.js]@@') < at('@@SLOT[src:src/core/studyplan.js]@@'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

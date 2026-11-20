@@ -551,17 +551,44 @@ and the Practice Lab's drill items pass theirs.
 **S5 — Calibration as a skill.** `src/core/calib.js` measures it; make it
 trainable: a queue of answers marked Certain and wrong, and a Brier-score trend on
 Brain once the bands have enough answers. *Sonnet.*
+*Done, on Progress rather than Brain:* the standing rule in section 6 keeps new
+elements off Home, and Progress already holds the calibration panel. A question
+answered Certain and wrong joins a queue (`Calib.certainWrong`) and leaves it the
+next time it is answered right; the panel's button practises the queue as a quiz
+of its own (`startQuiz(null,'certain')`). A Brier score a week
+(`Calib.brierTrend`), over answers rated with a band, each band read as a stated
+chance (Guess 0.25, Unsure 0.5, Fairly sure 0.75, Certain 0.95, in `BANDS`), is
+drawn once two weeks each have `MIN_SAMPLES` rated answers. verify-calib-pure,
+verify-statsscreen-pure, verify-results-pure, verify-calibrate.
 
 **S6 — Interleave the look-alikes.** Topic runs are blocked practice, which helps
 first understanding; telling similar diagnoses apart improves with interleaving.
 Build "confusable pair" sets from Apex's `gap` memories (constriction against
 restriction, for example), and interleave chapters in review and mocks. *Opus.*
+*Done:* `src/core/confusable.js` reads each `gap` memory as the two things it
+names ("X as Y", "X vs Y", "X with Y", "between X and Y" …) and finds the
+bank's questions that hold every word of a side. A review session, and Home's
+review of every card due, deal a question on the other side straight after one
+on a side when the deck holds none of it (at most `PAIR_MAX`, a card already met
+first), keep every due card, and take chapters in turn; so does the mock block.
+A gap that names no two things is left out, not guessed at. Apex's `remember`
+tool now asks for a gap written as the two things. verify-confusable-pure.
 
 **S7 — Readiness with its uncertainty.** `studyplan.readiness` gives a verdict
 from point estimates. Use per-chapter beta-binomial posteriors weighted by the
 exam blueprint, and show an interval rather than one number. The owner supplies
 the official blueprint weights; do not estimate them. *Fable* for the model;
 *Sonnet* for the screen.
+*Done, all but the weights:* `StudyPlan.readiness` gives each chapter a Beta
+posterior (a prior worth `PRIOR_N` answers centred on the fellow's own pooled
+accuracy, updated by the chapter's right and wrong) and its middle 80%. With a
+blueprint it gives the exam score as the Beta matching the weighted sum's mean
+and variance, chapters taken as independent (checked against sums drawn
+at random in verify-plan-pure). The readiness line names the weakest chapters as
+intervals. `src/core/blueprint.js` ships empty: the line says a likely exam
+score waits for the blueprint, and a table naming a chapter the bank lacks is
+refused by name. Still the owner's: the weights, mapped onto the bank's
+chapter names, and their source.
 
 **S8 — One physiology engine.** `src/core/physio.js` draws the resting cycle as
 curves whose crossings are measured, and solves the PV loop from the elastances
@@ -574,6 +601,73 @@ regurgitation, HFrEF, HFpEF, and tamponade against constriction with respiratory
 variation. Validate each lesion against textbook haemodynamics with tolerance
 tables, and keep the rule that valve events are curve crossings. *Fable* (very
 high effort) for the model and its validation; *Opus* to wire the views.
+*Started, the engine:* `src/core/circulation.js` is the closed circulation
+above, with no view wired to it yet. It has four elastance chambers, Bernoulli
+valves with forward and regurgitant orifices and no inertance, so a valve moves
+only where two pressures cross. Its beds are three-element Windkessels, and a
+pericardium holds the chambers and any fluid. Breathing reaches the chambers
+only through a pericardium that passes it on. Each lesion is a change from
+normal, run to a steady state and held by `Circulation.VALIDATION` to its
+textbook ranges (verify-circulation-pure). Not yet reproduced: constriction's
+breathing signs (the mitral E wave falls a few percent where the textbook has a
+quarter or more), so constriction is held to its catheter signs alone.
+*The Wiggers view, wired:* `Circulation.cycle(preset)` gives one steady beat
+with the chest held still, its valve events measured where the pressures cross
+and its phases between them. The Wiggers view offers each lesion as a chip and
+draws its beat, with axes sized to it; Normal stays physio.js's drawn cycle
+(verify-physio, verify-rhythmlab-pure). *The PV loop, wired:* each beat
+carries its loop, its corners where the physiologist puts them (end-diastole at
+the R wave, end-systole at peak elastance) and on its own ESPVR and EDPVR; the
+PV view draws a lesion's loop over the normal one, and offers the interventions
+on Normal alone. *Flow, wired:* a lesion's valve flows, below the line where a
+leak runs back (AR in diastole, MR in systole), and its coronary flow by
+physio.js's own rule, so AR and AS starve the left coronary as the textbook
+says. *The right heart, wired:* a lesion's RA, RV and PA on axes that fit, the
+JVP's waves found on its own trace, and S2's split off the crossings: reversed
+in severe AS, wide in MR. S1's split is left unsaid for a lesion: with no
+inertia the mitral valve shuts at the end of the atrial kick in a stiff
+ventricle. *Heart sounds, wired:* the Practice Lab places AS, AR, MS and MR's
+sounds and murmurs on the engine's valve events (`HeartSounds.eventsFor`), so
+AS is heard with P2 before A2 and its murmur running to its own late A2; the
+other lesions keep physio.js's events, and the heart map still draws physio's
+spans (it only names each lesion systolic or diastolic, and on the engine's
+events every one is named the same). *Coronary, wired:* a lesion's coronary
+glow and traces, on a scale that holds the normal heart's peak, so AR's starved
+left bed reads dimmer. Curves and Conduction take no lesion.
+*The constriction gap, measured:* the mitral E wave's inspiratory fall reaches
+a quarter only with a pulmonary-vein-to-LA resistance of about 0.12 mmHg·s/mL
+and a venous compliance of 40 to 60 mL/mmHg (with the stressed volume they hold
+added back). That resistance drops 11 mmHg between the veins and the LA at a
+normal output, where the real gradient is one or two, and the normal LA mean
+falls to about zero and tamponade loses its pulsus. Within this structure the
+gap cannot be closed by its numbers. Two mechanisms were then tried on every
+preset and VALIDATION row. Inspiratory pooling in the lungs (their vessels'
+compliance rising with inspiration) raises constriction's E-wave fall to 20%,
+but the normal heart's to 12%, past its textbook ceiling of about 10%, so it
+does not tell the two apart. A slower pulmonary venous refill (compliance 40 to
+80 mL/mmHg, normal resistance, the volume added back) separates them cleanly
+(constriction 11 to 15%, normal under 1%), but falls short of a quarter and
+moves MS, HFpEF and tamponade out of their rows. An abdominal push on venous
+return raised the normal RA on inspiration, which is wrong. One mechanism not
+yet tried is a septum with its own mechanics, so that a filling RV pushes into
+the LV; that is the modelling still open here.
+*The 3D heart, wired (the owner asked for it on Home, 2026-11-19):*
+`Circulation.heartSpec(preset)` reads a lesion off the engine's beat against
+the normal one (each chamber's size, how deeply the ventricles squeeze, how far
+each valve opens or fails to shut), and `Heart3D.setLesion` shows it: chamber
+sizes in the beat's shader, the squeeze and the valves on each moment of the
+cycle. The Home heart's menu offers the lesions. *Remodelling:* the chronic
+presets now carry what they do over years: AS's concentric hypertrophy (a
+stronger, somewhat stiffer LV, and a wall 1.35 times as thick, which the 3D
+heart draws), MS's dilated atrium (LA 1.6 times the normal volume), HFpEF's
+hypertensive LV; every VALIDATION row still holds. MR is left acute (a stiff,
+small LA and its tall v wave); a chronic MR, its LA large and compliant, would
+be a preset of its own.
+Next: Normal from the engine (the PV loop's interventions act on physio.js's
+loop, so Normal and they would part); a septum with its own mechanics, for
+constriction; a chronic MR. The split build lifts
+src/ui/wiggers.js too (it was the shell's last kilobyte): the shell is at 278 KB
+of 288.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them
@@ -588,6 +682,7 @@ after two weeks of real use, and let them choose the next feature. *Sonnet.*
 - **Phase 3, chosen by what Phases 0 to 2 show.** S3, S7, S8, E2, E6, D6, A4 to A6.
 
 One standing rule until S9 has data: no new screen and no new element on Home.
+(The owner lifted it for the Home heart's lesion chooser, S8, 2026-11-19.)
 
 ## 7. Which model and effort for which work
 

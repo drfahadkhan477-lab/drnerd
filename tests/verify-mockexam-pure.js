@@ -56,6 +56,23 @@ head('which questions: the size asked for, once each, from the pool');
   ok('a chapter the bank does not have gives no block', M.build({ pool, size: 20, chapter: 'Nope' }).length === 0);
 }
 
+head('arrange orders the block, and can do nothing else (docs/ROADMAP.md, S6)');
+{
+  const plain = M.build({ pool, size: 30, rng: seeded(21) });
+  const rev = M.build({ pool, size: 30, rng: seeded(21), arrange: qs => qs.slice().reverse() });
+  ok('the block arrange hands back is the order dealt', JSON.stringify(rev) === JSON.stringify(plain.slice().reverse()), rev.slice(0, 3).join(' '));
+  const seenBy = [];
+  M.build({ pool, size: 30, rng: seeded(21), arrange: qs => { seenBy.push(qs.map(q => q.id)); return qs; } });
+  ok('it is handed the shuffled block itself, as questions', seenBy.length === 1 && JSON.stringify(seenBy[0]) === JSON.stringify(plain), String(seenBy.length));
+  const drops = M.build({ pool, size: 30, rng: seeded(21), arrange: qs => qs.slice(1) });
+  const adds = M.build({ pool, size: 30, rng: seeded(21), arrange: qs => qs.concat([pool[pool.length - 1]]) });
+  const swaps = M.build({ pool, size: 30, rng: seeded(21), arrange: qs => [pool.find(q => !plain.includes(q.id))].concat(qs.slice(1)) });
+  const twice = M.build({ pool, size: 30, rng: seeded(21), arrange: qs => [qs[0]].concat(qs.slice(0, -1)) });
+  const throws = M.build({ pool, size: 30, rng: seeded(21), arrange: () => { throw new Error('no'); } });
+  ok('one that drops, adds, swaps in, repeats or throws leaves the shuffle as it was',
+     [drops, adds, swaps, twice, throws].every(b => JSON.stringify(b) === JSON.stringify(plain)), [drops, adds, swaps, twice, throws].map(b => b.length).join(' '));
+}
+
 head('a quarantined question is never in a block, and a repeated id is one question');
 {
   const bad = pool.map((q, i) => i % 5 === 0 ? Object.assign({}, q, { bad: true }) : q);

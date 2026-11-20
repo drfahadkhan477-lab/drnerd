@@ -67,8 +67,8 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
         <div class="chp-count">${s.correct}/${s.total}</div></div></div>`;
   }).filter(Boolean).join('');
 
-  const restartLabel=(S.mode==='due'?'Continue Reviewing':S.mode==='flagged'?'Flagged Again':S.chapter?'Restart Chapter':'Restart Quiz');
-  const restartMode=S.mode==='due'?'due':S.mode==='missed'?'missed':S.mode==='flagged'?'flagged':'all';
+  const restartLabel=(S.mode==='due'?'Continue Reviewing':S.mode==='flagged'?'Flagged Again':S.mode==='certain'?'Certain and Wrong Again':S.chapter?'Restart Chapter':'Restart Quiz');
+  const restartMode=S.mode==='due'?'due':S.mode==='missed'?'missed':S.mode==='flagged'?'flagged':S.mode==='certain'?'certain':'all';
   return `<div class="results-wrap anim-fade">
     <div class="score-hero">
       <div class="score-circle">${svgCircle}
