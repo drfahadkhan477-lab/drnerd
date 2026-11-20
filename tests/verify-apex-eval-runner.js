@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {runCase} = require('../scripts/run-apex-eval');
+const {runCase, sendGemini} = require('../scripts/run-apex-eval');
 
 async function main(build) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-runner-'));
@@ -38,7 +38,21 @@ async function main(build) {
     assert.equal(calls, 1);
     assert.equal(read().cases[0].answer, null);
     assert.equal(read().exchanges.length, 1);
-    console.log('PASS: mocked Gemini tool exchange, final answer, request cap and exclusive output.');
+
+    fs.unlinkSync(output);
+    const mockFetch = async () => new Response('Mock provider error containing a credential', {
+      status: 503, headers: {'retry-after': '30'}
+    });
+    const unavailable = (model, body) => sendGemini(model, body, 'mock-key', mockFetch);
+    await assert.rejects(runCase(args, unavailable, 'synthetic'), /Gemini returned HTTP 503/);
+    const report = read();
+    const {elapsedMs, ...details} = report.exchanges[0].error;
+    assert.ok(Number.isInteger(elapsedMs) && elapsedMs >= 0);
+    assert.deepEqual(details, {kind: 'http', status: 503, retryAfterSeconds: 30});
+    assert.equal(report.exchanges.length, 1);
+    assert.equal(report.cases[0].answer, null);
+    assert.doesNotMatch(JSON.stringify(report), /mock-key|Mock provider error/);
+    console.log('PASS: mocked Gemini tool exchange, final answer, request cap, exclusive output and HTTP diagnostics.');
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }

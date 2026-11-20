@@ -9,6 +9,42 @@ const fixtures = require('../tests/fixtures/apex-grounding/cases.json');
 
 const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const usage = 'node scripts/run-apex-eval.js <synthetic-build.html> <case-id> <model-id> <max-requests:1-6> <new-review.json>';
+const requestTimeoutMs = 60000;
+
+class GeminiRequestError extends Error {
+  constructor(message, details) {
+    super(message);
+    this.details = details;
+  }
+}
+
+async function sendGemini(model, body, key, request = fetch) {
+  const signal = AbortSignal.timeout(requestTimeoutMs);
+  let response;
+  try {
+    response = await request(endpoint + model + ':generateContent', {
+      method: 'POST', redirect: 'error', signal,
+      headers: {'x-goog-api-key': key, 'content-type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (response.ok) return await response.json();
+  } catch {
+    if (signal.aborted) {
+      throw new GeminiRequestError('Gemini request timed out.', {kind: 'timeout', timeoutMs: requestTimeoutMs});
+    }
+    if (response) {
+      throw new GeminiRequestError('Could not read the Gemini response.', {kind: 'response', status: response.status});
+    }
+    throw new GeminiRequestError('Could not connect to Gemini.', {kind: 'network'});
+  }
+
+  const details = {kind: 'http', status: response.status};
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter && /^\d{1,9}$/.test(retryAfter)) details.retryAfterSeconds = Number(retryAfter);
+  // Keep error text returned by the provider or proxy out of saved reviews.
+  await response.body?.cancel().catch(() => {});
+  throw new GeminiRequestError('Gemini returned HTTP ' + response.status, details);
+}
 
 async function runCase(args, send, answerSource) {
   const [build, caseId, model, limit, output] = args;
@@ -39,7 +75,15 @@ async function runCase(args, send, answerSource) {
         if (review.exchanges.length >= Number(limit)) throw new Error('Request limit reached.');
         const exchange = {request: request.postDataJSON()};
         review.exchanges.push(exchange);
-        const response = await send(model, exchange.request);
+        const started = performance.now();
+        let response;
+        try {
+          response = await send(model, exchange.request);
+        } catch (error) {
+          exchange.error = error instanceof GeminiRequestError ? error.details : {kind: 'request'};
+          exchange.error.elapsedMs = Math.round(performance.now() - started);
+          throw error;
+        }
         exchange.response = response;
         await route.fulfill({status: 200, contentType: 'text/event-stream',
           body: 'data: ' + JSON.stringify(response) + '\n\n'});
@@ -50,7 +94,7 @@ async function runCase(args, send, answerSource) {
     });
     const page = await context.newPage();
     accepting = true;
-    await askFixture(page, build, fixture, Number(limit) * 65000 + 30000);
+    await askFixture(page, build, fixture, Number(limit) * (requestTimeoutMs + 5000) + 30000);
     accepting = false;
     if (failure) throw failure;
     const response = review.exchanges.at(-1)?.response;
@@ -83,20 +127,11 @@ async function main(args) {
   if (args[0] === '--help') return console.log(usage);
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('Set GEMINI_API_KEY for an approved run.');
-  await runCase(args, async (model, body) => {
-    // Only this Node request carries the real key. The browser gets the response as one stream event.
-    const response = await fetch(endpoint + model + ':generateContent', {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(60000),
-      headers: {'x-goog-api-key': key, 'content-type': 'application/json'},
-      body: JSON.stringify(body)
-    });
-    if (!response.ok) throw new Error('Gemini returned HTTP ' + response.status);
-    return response.json();
-  }, 'live');
+  await runCase(args, (model, body) => sendGemini(model, body, key), 'live');
 }
 
 if (require.main === module) main(process.argv.slice(2)).catch(error => {
   console.error(error.message);
   process.exitCode = 1;
 });
-module.exports = {runCase};
+module.exports = {runCase, sendGemini};

@@ -94,8 +94,10 @@ tool follow-ups. Token charges depend on the model and the exchanges.
 
 The output is a review file with all criteria initially unmeasured. Fill in the
 criteria and score it using the command below. A failed run exits nonzero and
-retains its completed exchanges for diagnosis. Use a fresh output path for
-any retry. To test the tool loop and request limit locally with invented
+keeps request diagnostics including time elapsed, HTTP status, and any
+numeric Retry-After header. Use a fresh output path for any retry. On Codex
+Cloud with Node 24, set `NODE_USE_ENV_PROXY=1` for the Node request to use the
+configured HTTP proxy. To test the tool loop and request limit with invented
 responses and no key, run
 `node tests/verify-apex-eval-runner.js build/apex-eval/systole.html`.
 
