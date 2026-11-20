@@ -2178,13 +2178,30 @@ function physioNoteHtml(){
   const lesion=physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion];
   return `<b>${e(ph.name)}.</b> ${e(ph.blurb)}`+(lesion?`<br><b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(lesion)} Computed by the circulation model.`:'');
 }
+/* The cycle's diagrams (src/ui/wiggers.js), which the split build lifts into vendor/ and names in WIG_SRC (scripts/
+   build-pwa.js, 3.748). Resolves true once Wiggers is there, loading it the first time it is asked for; false where it
+   cannot be had. Shared by the cycle panel and ambient mode, so it is loaded once. A failed load is not remembered. */
+let wigLibP=null;
+function loadWiggers(){
+  if(typeof Wiggers!=='undefined') return Promise.resolve(true);
+  if(!window.WIG_SRC) return Promise.resolve(false);
+  if(!wigLibP){
+    const s=document.createElement('script'); s.src=window.WIG_SRC;
+    wigLibP=new Promise(res=>{ s.onload=()=>res(typeof Wiggers!=='undefined'); s.onerror=()=>{ s.remove(); wigLibP=null; res(false); }; });
+    document.head.appendChild(s);
+  }
+  return wigLibP;
+}
 /* The phase the Wiggers view is in now, from the beat it draws. */
 function physioPhaseNow(){ return physio&&physio.phaseNow?physio.phaseNow():Physio.phaseAt(physio?physio.time():0); }
 function mountPhysio(){
   const cv=document.getElementById('physioCanvas');
   if(!cv||typeof Wiggers==='undefined'){
     if(physio&&physio.destroy) physio.destroy();
-    physio=null; physioCanvasEl=null; return;
+    physio=null; physioCanvasEl=null;
+    /* Drawn when the diagrams are there, if this canvas is still the panel's. */
+    if(cv) loadWiggers().then(ok=>{ if(ok&&document.getElementById('physioCanvas')===cv) mountPhysio(); });
+    return;
   }
   /* A screen change can render twice — the second render replaces the canvas
      node under the first one's deferred callback. Guarding on existence alone
@@ -3088,6 +3105,9 @@ var AMBIENT = (function(){
       }
       else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
       else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
+      /* The split build lifts the diagrams (loadWiggers): asked for the loop before they are there, ambient mode
+         starts them loading and moves on, as it does from any view it cannot draw, and draws the loop on its next turn. */
+      else if (v === 'pvloop' && typeof loadWiggers === 'function') loadWiggers();
     }
     view = v;
     el.setAttribute('data-view', v);

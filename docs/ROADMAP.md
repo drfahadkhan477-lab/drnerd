@@ -661,9 +661,9 @@ so the chronic enlargement of the LA in MS and MR, and the thick wall of AS,
 show only as far as one beat's volumes do.
 Next: Normal from the engine (the PV loop's interventions act on physio.js's
 loop, so Normal and they would part); a septum with its own mechanics, for
-constriction; remodelling, for the chronic lesions. The split build's shell is
-at 287 KB of 288: the next change that adds to app.js lifts something first
-(src/ui/wiggers.js, read only by the Rhythm Lab, is the obvious one).
+constriction; remodelling, for the chronic lesions. The split build lifts
+src/ui/wiggers.js too (it was the shell's last kilobyte): the shell is at 278 KB
+of 288.
 
 **S9 — Study the study.** Three readings from data already logged: sessions per
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them

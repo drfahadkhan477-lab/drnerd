@@ -729,9 +729,20 @@ async function heapAfterBoot(page, url) {
       const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
       return images.length === 2 && images.every(i => i.naturalWidth > 100 && /\/echo\/echo-/.test(i.src));
     }));
-    /* The circulation engine leaves app.js too (build-pwa, 3.747): nothing has loaded it yet. */
+    /* The circulation engine leaves app.js too (build-pwa, 3.747), and the cycle's diagrams (3.748): nothing has loaded either yet. */
     ok('the circulation engine is not in app.js, and nothing has loaded it before it is needed', await page.evaluate(() =>
       typeof Circulation === 'undefined' && typeof window.CIRC_SRC === 'string' && !document.querySelector('script[src="' + window.CIRC_SRC + '"]')));
+    ok('nor are the cycle\'s diagrams', await page.evaluate(() =>
+      typeof Wiggers === 'undefined' && typeof window.WIG_SRC === 'string' && !document.querySelector('script[src="' + window.WIG_SRC + '"]')));
+    /* Ambient mode's pressure-volume loop is the first diagram asked for here: asked before the diagrams are there, it
+       starts them loading, offline, and moves on; on its next turn it draws. */
+    await page.evaluate(() => { AMBIENT.enter(); for (let i = 0; i < 6 && typeof Wiggers === 'undefined'; i++) AMBIENT.next(); });
+    await settled(page, () => typeof Wiggers !== 'undefined', { timeout: 30000 }).catch(() => {});
+    await page.evaluate(() => { for (let i = 0; i < 6 && AMBIENT.view() !== 'pvloop'; i++) AMBIENT.next(); });
+    const ambientLoop = await page.evaluate(() => AMBIENT.view() === 'pvloop' && AMBIENT.live() === true);
+    ok('ambient mode\'s pressure-volume loop loads the diagrams from their own file, offline, and draws', ambientLoop === true,
+       JSON.stringify(await page.evaluate(() => ({ view: AMBIENT.view(), live: AMBIENT.live(), wig: typeof Wiggers }))));
+    await page.evaluate(() => AMBIENT.exit());
     /* The Lab's modules leave app.js for vendor/ (build-pwa, 3.746) and load when the Lab is first drawn. First drawn
        here, after the outage: the file must come from the precache, and the Lab must draw from it. */
     await page.evaluate(() => goPractice());
@@ -750,6 +761,8 @@ async function heapAfterBoot(page, url) {
     await page.evaluate(() => document.querySelector('[data-physio-lesion="as"]').click());
     const circDrawn = await settled(page, () => !!physio.cycle() && physio.cycle().preset === 'as', { timeout: 30000 }).then(() => true, () => false);
     ok('and a lesion tapped in the cycle panel then draws its beat, offline', circDrawn === true, JSON.stringify({ circDrawn }));
+    ok('and the cycle panel draws from the diagrams\' own file', await page.evaluate(() =>
+      typeof Wiggers !== 'undefined' && !!physio && !!document.querySelector('script[src="' + window.WIG_SRC + '"]')));
     transport.resume();
     await ctx.close();
     transport.close();
