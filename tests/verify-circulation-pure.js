@@ -206,5 +206,24 @@ head('the presets are changes from normal, and nothing else');
      p.valves.aortic[0] === 0.7 && p.valves.mitral[0] === C.NORMAL.valves.mitral[0] && p.lv.ees === 3.6 && p.lv.lam === 0.036 && p.lv.v0 === C.NORMAL.lv.v0 && p.la.v0 === C.NORMAL.la.v0 && p.rv.ees === C.NORMAL.rv.ees);
 }
 
+head('what the app says of a lesion is the lesion the engine runs');
+{
+  /* The Physiology panel's notes (PHYSIO_LESION_NOTE in app/systole.html) name a valve's area; the presets above set
+     it. A preset refitted without its note says one thing and draws another, as MS's did when its valve went from
+     0.7 to 0.85 cm². Read with the shell's comments blanked (tests/_source.js). */
+  const { blankComments } = require('./_source.js');
+  const shell = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const block = (shell.match(/const PHYSIO_LESION_NOTE=\{([\s\S]*?)\};/) || [])[1] || '';
+  const areas = [];
+  for (const m of block.matchAll(/(\w+):'((?:[^'\\]|\\.)*)'/g)) {
+    for (const a of m[2].matchAll(/(\d+(?:\.\d+)?) cm(?:\\u00b2|²) (aortic|mitral|tricuspid|pulmonic) valve/g))
+      areas.push({ id: m[1], said: +a[1], valve: a[2], runs: C.PRESETS[m[1]] ? C.params(m[1]).valves[a[2]][0] : null });
+  }
+  /* Not a scan of nothing: today's notes name AS's valve and MS's. */
+  ok('the notes name a valve area for AS and for MS, and each is the area its preset runs',
+     ['as', 'ms'].every(id => areas.some(x => x.id === id)) && areas.every(x => x.runs === x.said),
+     areas.map(x => `${x.id} ${x.valve}: says ${x.said}, runs ${x.runs}`).join('; ') || 'no area found');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
