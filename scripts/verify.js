@@ -231,6 +231,10 @@ const SUITES = [
   ['flagset-pure', 'a flag is an id kept once and in order, read back from storage or a backup only if it is nothing but ids; the flagged deck holds the questions the bank has; a note or a mark lists a question, newest first, found by every word typed'],
   /* Topic runs: questions about the same thing, grouped by their distinctive words. */
   ['topicrun-pure', 'questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair'],
+  /* Look-alikes side by side (docs/ROADMAP.md, S6): the two things an Apex gap memory names, paired in review. */
+  /* One physiology engine (docs/ROADMAP.md, S8): the lesions made in one circulation, held to textbook ranges. */
+  ['circulation-pure', 'one circulation of elastance chambers, Bernoulli valves and Windkessel beds makes each lesion fall in its textbook ranges, keeps its blood, settles, and moves a valve only where two pressures cross, and hands the views one beat whose events are those crossings and whose loop has its corners on its own lines and whose leaks run backward and whose second sound splits as the textbook says, and gives the 3D heart each lesion read off its beat'],
+  ['confusable-pure', 'a gap Apex noted is read as the two things it names; a review deals a question on the other side straight after one on a side, keeps every due card, and takes chapters in turn, as the mock block does'],
   /* Voice mode's logic: what is read, what is heard, what happens next. */
   ['voice-pure', 'a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary'],
   ['icons-pure', 'every icon the app names is drawn by the one sprite in the page, and no symbol is defined anywhere else'],
@@ -560,7 +564,7 @@ const SUITES = [
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
    sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast'];
+const PENDING_RECORD = ['providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

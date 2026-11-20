@@ -512,6 +512,8 @@ body.on-home .nav-title{line-height:1.1}
 #homePage0 .hero-menu .hero-tool{position:static;top:auto;right:auto;bottom:auto;left:auto;width:auto;height:auto;min-width:0;box-shadow:none;display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;margin:0;border:0;border-radius:10px;
   background:transparent;color:var(--text);font-family:inherit;font-size:var(--t-meta);font-weight:600;text-align:left;cursor:pointer}
 #homePage0 .hero-menu .hero-tool[hidden]{display:none}
+/* The lesion the heart shows (docs/ROADMAP.md, S8): a row like the tools, its select taking the room left. */
+#homePage0 .hero-menu .hero-lesion select{flex:1;min-width:0;min-height:36px;font:inherit;color:inherit;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 8px}
 #homePage0 .hero-menu .hero-tool .icon{width:18px;height:18px;color:var(--teal-ink);flex:none}
 #homePage0 .hero-menu .hero-tool.is-active,#homePage0 .hero-menu .hero-tool[aria-pressed="true"],#homePage0 .hero-menu .hero-tool[aria-expanded="true"]{background:var(--teal4);color:var(--teal-ink)}
 #homePage0 .hero-menu .hero-tool:focus-visible{outline:2.5px solid var(--teal);outline-offset:-2px}

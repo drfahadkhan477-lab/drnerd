@@ -452,7 +452,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   /* Home's session strip, with its Start, Continue and Review, is gone (the owner's choice, November 2026); what is due is
      reviewed from the Brain page, by its Review, which is the review session Chapters starts too: every card due, then
-     new questions, twenty in all, shuffled. */
+     new questions, twenty in all, dealt by reviewDeck (docs/ROADMAP.md, S6). */
   const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
     homePage=0;S.screen='home';render();return {due:dueQuestions().map(q=>q.id),queue:reviewQueue(20).map(q=>q.id)};});
   await still('two due cards');
@@ -463,7 +463,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await settled(page,()=>!window.__vtLive&&S.screen!=='home',{label:'due action'});
   const actual=await page.evaluate(()=>({screen:S.screen,ids:S.questions.map(q=>q.id),mode:S.mode}));
   const sorted=a=>JSON.stringify([...a].sort());
-  ok('Brain\'s Review opens the review session: both cards due, and new questions to twenty',wanted.due.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&actual.ids.length===20
+  ok('Brain\'s Review opens the review session: both cards due, and new questions to twenty, each once',wanted.due.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&actual.ids.length===20&&new Set(actual.ids).size===20
      &&wanted.due.every(id=>actual.ids.includes(id))&&sorted(actual.ids)===sorted(wanted.queue),JSON.stringify({count:actual.ids.length,due:wanted.due.filter(id=>actual.ids.includes(id)).length}));
 
   head('hygiene');

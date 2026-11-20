@@ -213,6 +213,7 @@ function icon(name, cls){
 @@SLOT[src:src/ui/apex.js]@@
 /* ═══════════ Cardiac physiology — see src/core/physio.js and src/ui/wiggers.js ═══════════ */
 @@SLOT[src:src/core/physio.js]@@
+@@SLOT[src:src/core/circulation.js]@@
 @@SLOT[src:src/ui/wiggers.js]@@
 
 /* ═══════════ 12-lead — see src/core/leads12.js and src/ui/ecg12.js ═══════════ */
@@ -230,7 +231,7 @@ function icon(name, cls){
 @@SLOT[src:src/ui/coronaryTree.js]@@
 
 /* the heart's surfaces, baked by scripts/heart-bake.js — build-pwa moves the base64 into content/ */
-window.HEART3D_MESH_KEY='a223435e67acb2d4';
+window.HEART3D_MESH_KEY='0246c386b520ef8e';
 window.HEART3D_MESH_B64='@@SLOT[payload:HEART_MESH]@@';
 
 /* ═══════════ cardiac waveform engine — original, offline, no external assets ═══════════
@@ -1842,8 +1843,10 @@ function refImportText(){
 @@SLOT[src:src/lab/progress.js]@@
 @@SLOT[src:src/lab/items.js]@@
 @@SLOT[src:src/lab/ui.js]@@
+@@SLOT[src:src/core/blueprint.js]@@
 @@SLOT[src:src/core/studyplan.js]@@
 @@SLOT[src:src/core/topicrun.js]@@
+@@SLOT[src:src/core/confusable.js]@@
 @@SLOT[src:src/core/voicemode.js]@@
 @@SLOT[src:src/core/mockexam.js]@@
 @@SLOT[src:src/core/flagset.js]@@
@@ -1883,6 +1886,18 @@ function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),
 function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO()); }
 function newQuestionsForReview(limit){ return ReviewQueue.fresh(POOL,S.srs,limit); }
 function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target); }
+/* docs/ROADMAP.md, S6. A review session as it is asked, from the questions it is to hold (the queue, or every card
+   due): shuffled, then, for a question on one side of a
+   confusion Apex has noted (a gap memory naming two things), a question on the other side straight after it, up to
+   PAIR_MAX of them, a card already met before one never met; then no two in a row from one chapter while another
+   has questions left (src/core/confusable.js). Every due card stays in it. */
+const PAIR_MAX=4;
+function reviewDeck(qs){
+  const base=shuf(qs);
+  const sets=Confusable.sets((typeof Memory!=='undefined')?Memory.all():[],POOL);
+  const extra=Confusable.partners(base,sets,POOL,{max:PAIR_MAX,prefer:id=>S.srs[id]?0:1});
+  return Confusable.arrange(base,{partners:extra,byId:QBYID});
+}
 
 /* ── active-recall rating (shown after the explanation, review sessions only) ── */
 const RATINGS=[['again','Again',1,'#EF4444'],['hard','Hard',2,'#F59E0B'],
@@ -2027,7 +2042,7 @@ function buildStats(){
     setTimeout(function(){ offlineSurvey(); },0);
   }
   return StatsScreen.screenHtml(S,LOG,CHAPTERS,CH_COLORS,{Calib,MockExam,TOTAL_Q,CH_SHORT,pendingBackupSave,last30,forecast7,avgRetention,
-    startedCount,dueQuestions,masteryFor,storageOK,storageLine,safariTabStorage,offlineCapable,chIcon,e,icon});
+    certainWrongQs,startedCount,dueQuestions,masteryFor,storageOK,storageLine,safariTabStorage,offlineCapable,chIcon,e,icon});
 }
 /* The text colour for a semantic fill: var(--green) fills a bar or a ring, var(--green-ink) writes its figure, a step of
    the same green that reads on the theme's ground (base.css). Anything else is its own text colour. */
@@ -2040,7 +2055,7 @@ let labMon=null, labKind='sinus';
    12-lead panel. This hands it what the three read, each as it is when the screen is drawn. What is chosen
    stays here, with setLab() and the mounts that draw into the canvases. */
 @@SLOT[src:src/app/rhythmlab.js]@@
-function buildLab(){ return RhythmLabScreen.screenHtml({RHYTHMS,RHYTHM_KEYS,labKind,PHYSIO_VIEWS,PHYSIO_SPEEDS,physioView,physioSlow,physioIv,physioIsPlaying,
+function buildLab(){ return RhythmLabScreen.screenHtml({RHYTHMS,RHYTHM_KEYS,labKind,PHYSIO_VIEWS,PHYSIO_SPEEDS,PHYSIO_LESIONS,physioView,physioSlow,physioIv,physioLesion,physioIsPlaying,
   Physio:typeof Physio!=='undefined'?Physio:undefined,LEAD12_MAP,twelveLead,leadCardHtml,e,icon}); }
 
 /* The cardiac cycle. Remembered across sessions like every other lab choice,
@@ -2052,6 +2067,45 @@ let physio=null;
 let physioView=(()=>{try{const v=localStorage.getItem('accsap12.physioview');
   return PHYSIO_VIEWS.some(x=>x[0]===v)?v:'wiggers';}catch(_){return 'wiggers';}})();
 let physioIv='base', physioCanvasEl=null;
+/* docs/ROADMAP.md, S8. The lesion the Wiggers view draws: Normal is physio.js's drawn cycle; each other is
+   one beat of src/core/circulation.js with that lesion made in it, its curves computed and its valve
+   events measured where they cross. Remembered like the view. */
+const PHYSIO_LESIONS=[['normal','Normal'],['as','AS'],['ar','AR'],['ms','MS'],['mr','MR'],['hfref','HFrEF'],
+                      ['hfpef','HFpEF'],['tamponade','Tamponade'],['constriction','Constriction']];
+const PHYSIO_LESION_NOTE={
+  as:'A 0.7 cm\u00b2 aortic valve: the LV climbs far above the aorta to push its stroke through.',
+  ar:'A leaking aortic valve: the aorta empties back into the LV in diastole, so its diastolic pressure falls and the LV dilates.',
+  ms:'A 0.7 cm\u00b2 mitral valve: the LA stays above the LV all through diastole, and there is no diastasis.',
+  mr:'A leaking mitral valve: the LV ejects into the LA too, and the LA shows it as a tall v wave.',
+  hfref:'A weak, dilated LV: a large ventricle ejecting a small fraction at a high filling pressure.',
+  hfpef:'A stiff LV: a normal ejection fraction, filled only at a high pressure.',
+  tamponade:'Fluid in the pericardium: the chambers are squeezed and fill at equal, high pressures. Breathing is held still here; the pulsus is a breath-to-breath finding.',
+  constriction:'A small, rigid pericardium: filling stops abruptly once it is full, the dip and plateau, at equal, high pressures.'};
+let physioLesion=(()=>{try{const v=localStorage.getItem('accsap12.physiolesion');
+  return PHYSIO_LESIONS.some(x=>x[0]===v)?v:'normal';}catch(_){return 'normal';}})();
+/* The beat for a lesion, or null for Normal (physio.js). Circulation keeps each beat it has run. */
+function physioCycle(id){
+  if(id==='normal'||typeof Circulation==='undefined') return null;
+  try{ return Circulation.cycle(id); }catch(_){ return null; }
+}
+/* Hands the live diagram the chosen lesion's beat. The split build lifts the engine into vendor/ and leaves CIRC_SRC
+   naming the file (scripts/build-pwa.js, 3.747): the first lesion drawn loads it, and is drawn when it is there. A
+   failed load is not remembered. */
+let circLibP=null;
+function physioApplyLesion(){
+  if(!physio) return;
+  if(physioLesion!=='normal'&&typeof Circulation==='undefined'){
+    if(window.CIRC_SRC&&!circLibP){
+      const s=document.createElement('script'); s.src=window.CIRC_SRC;
+      circLibP=new Promise(res=>{ s.onload=()=>{ res(); physioApplyLesion(); __physioNotePhase=''; paintPhysioNote(); };
+        s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
+      document.head.appendChild(s);
+    }
+    physio.setCycle(null);
+    return;
+  }
+  physio.setCycle(physioCycle(physioLesion));
+}
 /* Half real time by default. A whole cycle then takes about 1.8 seconds, which
    is long enough to follow the cursor through isovolumic contraction — 50ms in
    life — and short enough that the loop still reads as a loop. */
@@ -2085,6 +2139,8 @@ function setPhysioPlaying(on){
 }
 
 function physioNoteHtml(){
+  if(physioView==='pv'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The dashed loop is the normal heart's. Computed by the circulation model.`;
   if(physioView==='pv'){
     const iv=Physio.INTERVENTIONS.find(x=>x.id===physioIv)||Physio.INTERVENTIONS[0];
     return `<b>${e(iv.label)}</b> ${e(iv.note)}`;
@@ -2093,10 +2149,14 @@ function physioNoteHtml(){
     return `<b>Two curves, one intersection.</b> Cardiac output is not set by the heart alone —
       it is set where what the heart can pump meets what the circulation returns. That is why an
       inotrope moves it so little, and why volume moves it so much in a failing ventricle.`;
+  if(physioView==='flow'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} Flow below the line runs back through a leaking valve. Computed by the circulation model.`;
   if(physioView==='flow')
     return `<b>Flow follows the gradient.</b> The left coronary bed is squeezed shut by the muscle
       around it during systole and fills in diastole; the right is perfused throughout, because RV
       cavity pressure never rises far. Shorten diastole and you starve the left side first.`;
+  if(physioView==='right'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The splits are measured where the pressures cross. Computed by the circulation model.`;
   if(physioView==='right')
     return `<b>Same cycle, quarter the pressure, different timing.</b> The right ventricle has
       about 10 mmHg to overcome instead of 80, so it opens earlier and shuts later — which is the
@@ -2106,20 +2166,42 @@ function physioNoteHtml(){
       ventricle is not: the AV node deliberately slows conduction so the atria finish emptying
       into the ventricles before they contract, which is what the isoelectric PR segment actually
       is. Lose that delay (WPW's accessory pathway) and you lose the coordination it buys.`;
+  if(physioView==='coronary'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
+    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The glow is on a scale that holds the normal heart's peak, so a starved bed reads dimmer. Computed by the circulation model.`;
   if(physioView==='coronary')
     return `<b>The left ventricle squeezes its own arteries.</b> Intramyocardial pressure in
       systole compresses the left coronary bed, so most left coronary flow arrives in diastole — and
       the subendocardium, where that compression is greatest, is where ischaemia shows first. The
       right coronary keeps flowing through systole because RV pressure stays low. Tachycardia
       shortens diastole, and with it the left ventricle's perfusion time.`;
-  const ph=Physio.phaseAt(physio?physio.time():0);
-  return `<b>${e(ph.name)}.</b> ${e(ph.blurb)}`;
+  const ph=physioPhaseNow();
+  const lesion=physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion];
+  return `<b>${e(ph.name)}.</b> ${e(ph.blurb)}`+(lesion?`<br><b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(lesion)} Computed by the circulation model.`:'');
 }
+/* The cycle's diagrams (src/ui/wiggers.js), which the split build lifts into vendor/ and names in WIG_SRC (scripts/
+   build-pwa.js, 3.748). Resolves true once Wiggers is there, loading it the first time it is asked for; false where it
+   cannot be had. Shared by the cycle panel and ambient mode, so it is loaded once. A failed load is not remembered. */
+let wigLibP=null;
+function loadWiggers(){
+  if(typeof Wiggers!=='undefined') return Promise.resolve(true);
+  if(!window.WIG_SRC) return Promise.resolve(false);
+  if(!wigLibP){
+    const s=document.createElement('script'); s.src=window.WIG_SRC;
+    wigLibP=new Promise(res=>{ s.onload=()=>res(typeof Wiggers!=='undefined'); s.onerror=()=>{ s.remove(); wigLibP=null; res(false); }; });
+    document.head.appendChild(s);
+  }
+  return wigLibP;
+}
+/* The phase the Wiggers view is in now, from the beat it draws. */
+function physioPhaseNow(){ return physio&&physio.phaseNow?physio.phaseNow():Physio.phaseAt(physio?physio.time():0); }
 function mountPhysio(){
   const cv=document.getElementById('physioCanvas');
   if(!cv||typeof Wiggers==='undefined'){
     if(physio&&physio.destroy) physio.destroy();
-    physio=null; physioCanvasEl=null; return;
+    physio=null; physioCanvasEl=null;
+    /* Drawn when the diagrams are there, if this canvas is still the panel's. */
+    if(cv) loadWiggers().then(ok=>{ if(ok&&document.getElementById('physioCanvas')===cv) mountPhysio(); });
+    return;
   }
   /* A screen change can render twice — the second render replaces the canvas
      node under the first one's deferred callback. Guarding on existence alone
@@ -2140,6 +2222,16 @@ function mountPhysio(){
   if(!physio) return;
   physioCanvasEl=cv;
   physio.setIntervention(physioIv);
+  physioApplyLesion();
+  document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>{
+    physioLesion=b.dataset.physioLesion;
+    try{localStorage.setItem('accsap12.physiolesion',physioLesion);}catch(_){}
+    /* In the PV loop the interventions come and go with Normal, so the panel is drawn again. */
+    if(physioView==='pv'){ render(); return; }
+    physioApplyLesion();
+    document.querySelectorAll('[data-physio-lesion]').forEach(x=>x.classList.toggle('hot',x===b));
+    __physioNotePhase=''; paintPhysioNote();
+  });
   document.querySelectorAll('[data-physio-slow]').forEach(b=>
     b.onclick=()=>setPhysioSlow(+b.dataset.physioSlow));
   document.querySelectorAll('[data-physio-play]').forEach(b=>
@@ -2181,14 +2273,14 @@ function paintPhysioNote(){
   /* Repainting a paragraph sixty times a second is wasteful and makes the text
      unselectable, so only when the phase actually changes. */
   if(physioView==='wiggers'){
-    const id=Physio.phaseAt(physio?physio.time():0).id;
+    const id=physioPhaseNow().id;
     if(id===__physioNotePhase) return;
     __physioNotePhase=id;
   }
   el.innerHTML=physioNoteHtml();
   const pill=document.getElementById('physioPhase');
   if(pill) pill.textContent = physioView==='wiggers'
-    ? Physio.phaseAt(physio?physio.time():0).name : PHYSIO_VIEWS.find(x=>x[0]===physioView)[1];
+    ? physioPhaseNow().name : PHYSIO_VIEWS.find(x=>x[0]===physioView)[1];
 }
 
 /* Which of the lab's 27 rhythms have a genuinely modelled vector sequence.
@@ -2259,12 +2351,20 @@ function goLab(){ S.screen='lab'; render(); toTop(); }
 function buildPractice(){ return `<div class="home-wrap anim-fade"><div class="plab" id="plabRoot"></div></div>`; }
 /* The split build lifts the Lab's modules into vendor/ and leaves LAB_SRC naming the file (scripts/build-pwa.js);
    the first draw of this screen loads it and draws again when it is there. A failed load is not remembered. */
-let labLibP=null;
+let labLibP=null, labNoCirc=false;
 function mountPractice(){
-  if(typeof LabUI==='undefined'){
-    if(S.screen==='practice'&&window.LAB_SRC&&!labLibP){
+  /* The Lab's heart sounds for AS, AR, MS and MR are placed on the circulation engine's valve events
+     (HeartSounds.eventsFor), so the Lab waits for the engine too, which the split build also lifts (CIRC_SRC). If the
+     engine will not load, the Lab draws all the same, on physio.js's events, which is what eventsFor gives without it. */
+  if(typeof LabUI==='undefined'||(window.CIRC_SRC&&typeof Circulation==='undefined'&&!labNoCirc)){
+    if(S.screen==='practice'&&window.LAB_SRC&&!labLibP&&typeof LabUI==='undefined'){
       const s=document.createElement('script'); s.src=window.LAB_SRC;
       labLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); labLibP=null; res(); }; });
+      document.head.appendChild(s);
+    }
+    if(S.screen==='practice'&&window.CIRC_SRC&&!circLibP&&typeof Circulation==='undefined'){
+      const s=document.createElement('script'); s.src=window.CIRC_SRC;
+      circLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); circLibP=null; labNoCirc=true; res(); mountPractice(); }; });
       document.head.appendChild(s);
     }
     return;
@@ -2310,7 +2410,7 @@ const TOOLS=[
   description:"Keep one durable fact about this fellow, so you still know it in a month. Use it for things that outlive the current question: their exam date and training year, a confusion they keep repeating across topics, how they like to be taught. Do NOT use it for facts about the item in front of you — the transcript already carries those — and do not ask permission first, just keep it. If something you were told stops being true, call forget and keep the corrected version.",
   input_schema:{type:'object',properties:{
     text:{type:'string',description:'One sentence, written about them in the third person, e.g. "Sitting the boards in October 2026."'},
-    kind:{type:'string',enum:['fact','gap','preference'],description:'fact = true about them; gap = a confusion worth pressing on; preference = how they want to be taught'},
+    kind:{type:'string',enum:['fact','gap','preference'],description:'fact = true about them; gap = a confusion worth pressing on, naming the two things it mixes up as "X as Y" or "X vs Y", which review then asks side by side; preference = how they want to be taught'},
     said:{type:'boolean',description:'true only if the fellow ACTUALLY SAID this, in their own words, in this conversation. false if you concluded it from how they were answering. Leave it out when unsure — an unmarked memory is stored as your inference, which is the safe reading, and you can set it to true later if they confirm.'}},
    required:['text']}},
  {name:'forget',
@@ -3005,6 +3105,9 @@ var AMBIENT = (function(){
       }
       else if (v === 'ecg' && window.ECG12) live = ECG12.mount(cv, { kind: 'sinus', hr: 68, dark: true });
       else if (v === 'pvloop' && window.Wiggers) live = Wiggers.mount(cv, { view: 'pv', dark: true, hr: 68 });
+      /* The split build lifts the diagrams (loadWiggers): asked for the loop before they are there, ambient mode
+         starts them loading and moves on, as it does from any view it cannot draw, and draws the loop on its next turn. */
+      else if (v === 'pvloop' && typeof loadWiggers === 'function') loadWiggers();
     }
     view = v;
     el.setAttribute('data-view', v);
@@ -5107,13 +5210,17 @@ function recentPerDay(){
   for(let i=0;i<7;i++){ const v=S.daily[FSRS.localDateToISO(d)]; if(v&&v.a>0) total+=v.a; d.setDate(d.getDate()-1); }
   return total/7;
 }
+/* docs/ROADMAP.md, S5: the bank's questions answered Certain and wrong and not since answered right, newest first. */
+function certainWrongQs(){ return Calib.certainWrong(LOG).map(id=>QBYID[id]).filter(q=>q&&!q.bad); }
 function startQuiz(ch,mode='all',deck){
   let qs;
   if(mode==='missed') qs=[...S.missed].map(id=>QBYID[id]).filter(q=>q&&!q.bad);
   else if(mode==='flagged') qs=flaggedQs();
-  else if(mode==='due') qs=deck||reviewQueue(20);
+  else if(mode==='certain') qs=certainWrongQs();
+  else if(mode==='due') qs=deck||reviewDeck(reviewQueue(20));
   else qs=(ch?POOL.filter(q=>q.ch===ch):[...POOL]);
   if(!qs.length&&mode==='flagged'){toast('Nothing is flagged. Tap Flag on a question, or press F, to keep it here.');return;}
+  if(!qs.length&&mode==='certain'){toast('Nothing answered Certain is still wrong.');return;}
   if(!qs.length){alert(mode==='due'?'Nothing left to review right now — the whole bank is scheduled.':'No questions available for that selection.');return;}
   /* A deck handed in (the study plan) is asked in the order it was planned in, not shuffled below. (Only
      'all' decks are ever saved for resuming: resumeKey is null for review, so a plan has nothing to resume.) */
@@ -5135,7 +5242,8 @@ function startQuiz(ch,mode='all',deck){
     if(live) live.textContent='Resumed at question '+(back.i+1)+' of '+back.deck.length;
     return;
   }
-  if(!deck) qs=shuf(qs);
+  /* A review is dealt in its order (reviewDeck); shuffling it would take each look-alike from its pair. */
+  if(!deck&&mode!=='due') qs=shuf(qs);
   Object.assign(S,{screen:'quiz',chapter:ch,questions:qs,qIdx:0,selected:null,
     answered:false,mode,zoomed:-1,quizCorrect:0,quizTotal:0,answers:{},resumed:false});
   /* The order is kept the moment it is dealt, so leaving from the first question comes back to it (restoreDeck). */
@@ -5358,6 +5466,7 @@ const ACTIONS={
   startChapter:el=>startQuiz(el.dataset.ch),
   /* the figures card's one button, which says Stop while a download runs (offlinePaint() writes its words) */
   offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),
+  startCertainWrong:()=>startQuiz(null,'certain'),
   exportMarkup:()=>exportMarkup(),
   confirmBackupSaved:()=>confirmBackupSaved(),
   importMarkup:()=>importMarkup(),
@@ -5481,6 +5590,8 @@ Actions.install(document,INPUT_ACTIONS,'input');
 /* What a choice does when another is chosen: the change event, as its onchange was. A table of its own too, so the
    input a select also fires calls nothing here, and a change that a field fires on losing focus calls nothing above. */
 const CHANGE_ACTIONS={
+  /* the lesion the Home heart shows (src/app/home.js) */
+  heroLesion:el=>setHeroLesion(el.value),
   /* the topic search's chapter */
   searchChapter:el=>searchChapter(el.value),
   /* the mock block's chapter, on the Sessions screen */
@@ -5620,7 +5731,8 @@ function startMock(){
   if(S.mock){ resumeMock(); return; }
   try{ stopVoice(); }catch(_){}
   const ch=_mockCfg.ch&&CHAPTERS.includes(_mockCfg.ch)?_mockCfg.ch:null;
-  const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen});
+  /* docs/ROADMAP.md, S6: the block's chapters taken in turn where it has more than one. */
+  const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen,arrange:qs=>Confusable.arrange(qs)});
   if(!ids.length){ toast('There are no questions to build a block from.'); return; }
   S.mock=MockExam.start({ids,secPerQ:_mockCfg.sec,chapter:ch,now:Date.now()});
   S.mockView='q'; _mockSaid=mockSaidNow(); _mockArm=false; _mockLost=false; mockFresh();
@@ -6099,6 +6211,32 @@ function buildNav(){
 }
 
 let heroMon=null, heroHeart3d=null, heroHeart3dCanvas=null, heroRotateTimer=null, heroCurrentKind=null, heroCutaway=false;
+/* docs/ROADMAP.md, S8. The lesion the Home heart shows, from the cycle panel's list, remembered: its chambers, squeeze
+   and valves are Circulation.heartSpec()'s, read off the engine's beat. The split build lifts the engine (CIRC_SRC),
+   so the first lesion chosen loads it, sharing the cycle panel's load, and is shown when it is there. */
+let heroLesion=(()=>{try{const v=localStorage.getItem('accsap12.herolesion');
+  return PHYSIO_LESIONS.some(x=>x[0]===v)?v:'normal';}catch(_){return 'normal';}})();
+function setHeroLesion(id){
+  heroLesion=PHYSIO_LESIONS.some(x=>x[0]===id)?id:'normal';
+  try{ localStorage.setItem('accsap12.herolesion',heroLesion); }catch(_){}
+  applyHeroLesion();
+}
+function applyHeroLesion(){
+  if(!heroHeart3d||!heroHeart3d.setLesion) return;
+  if(heroLesion!=='normal'&&typeof Circulation==='undefined'){
+    heroHeart3d.setLesion(null);
+    if(window.CIRC_SRC){
+      if(!circLibP){
+        const s=document.createElement('script'); s.src=window.CIRC_SRC;
+        circLibP=new Promise(res=>{ s.onload=()=>res(); s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
+        document.head.appendChild(s);
+      }
+      circLibP.then(()=>{ if(typeof Circulation!=='undefined') applyHeroLesion(); });
+    }
+    return;
+  }
+  try{ heroHeart3d.setLesion(heroLesion==='normal'?null:Circulation.heartSpec(heroLesion)); }catch(_){ heroHeart3d.setLesion(null); }
+}
 function toggleHeroMechanics(){
   if(!heroHeart3d)return;
   heroCutaway=!heroCutaway;
@@ -6415,6 +6553,7 @@ function mountHeroHeart3d(){
     heroHeart3d.setDark(darkNow);
     heroHeart3d.setRhythm(heroCurrentKind||'sinus');
     heroHeart3d.setMode(heroCutaway?'cutaway':'whole');
+    applyHeroLesion();
     heroHeart3d.start();
     document.getElementById('heroHeart')?.classList.add('heart-3d-active');
     paintHeroScanCredit();
@@ -6480,6 +6619,7 @@ function mountHeroHeart3d(){
   const mechanics=document.getElementById('heroMechanics'); if(mechanics)mechanics.disabled=!heroHeart3d;
   cv.style.pointerEvents='none';           // decorative — never eats a home-screen scroll
   document.getElementById('heroHeart')?.classList.add('heart-3d-active');
+  applyHeroLesion();
   syncHomeMotion();
   heroLoadScan(heroHeart3d);
 }
@@ -6848,7 +6988,7 @@ function dismissHello(){
 @@SLOT[src:src/app/home.js]@@
 function buildHome(){
   atlasReading=!!pearlNow();
-  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,
+  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,heroLesion,PHYSIO_LESIONS,
     ATLAS_IMG:'<img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">',
     HERO_IMG:'<img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async">',
     dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,greet,e,icon});
@@ -6868,8 +7008,6 @@ function toggleAtlasMotion(){
   document.getElementById('homePages')?.classList.toggle('atlas-paused',atlasPaused);
   const b=document.getElementById('atlasPause');
   if(b){b.innerHTML=icon(atlasPaused?'play':'pause','icon-sm')+'<span>'+(atlasPaused?'Play motion':'Pause motion')+'</span>';b.setAttribute('aria-pressed',String(atlasPaused));}
-  const landing=document.getElementById('atlasLandingPause');
-  if(landing){landing.innerHTML=icon(atlasPaused?'play':'pause','icon-sm');landing.setAttribute('aria-label',atlasPaused?'Play animation':'Pause animation');}
 
   syncHomeMotion();
 }

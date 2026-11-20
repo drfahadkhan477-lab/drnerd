@@ -12,6 +12,9 @@
      · ERROR MIX — the distribution of miss reasons, so "you are not short of
        knowledge, you are misreading stems" can be seen rather than guessed.
 
+   And two that make calibration something to practise (docs/ROADMAP.md, S5): the questions answered
+   Certain and wrong and not since answered right, and a Brier score a week.
+
    EVERY READING DEGRADES HONESTLY. Rows written before these fields existed
    carry nulls, and so do answers where the learner skipped the prompt — which
    is the common path by design. A band with too few samples reports that it
@@ -29,11 +32,15 @@
    does not move the number by eight points. */
 const MIN_SAMPLES = 12;
 
+/* p is the chance of being right that each band is taken to state, which is what the Brier score below
+   compares each answer with. The fellow is never asked for a number, so these are this file's reading of
+   the four words, not theirs: Certain is 0.95 rather than 1, so that one Certain-and-wrong answer costs
+   0.9025 and not the whole of the scale. Change them here and nowhere else. */
 const BANDS = [
-  { id: 0, label: 'Guess' },
-  { id: 1, label: 'Unsure' },
-  { id: 2, label: 'Fairly sure' },
-  { id: 3, label: 'Certain' },
+  { id: 0, label: 'Guess',       p: 0.25 },
+  { id: 1, label: 'Unsure',      p: 0.5 },
+  { id: 2, label: 'Fairly sure', p: 0.75 },
+  { id: 3, label: 'Certain',     p: 0.95 },
 ];
 
 const REASONS = [
@@ -120,6 +127,53 @@ function reasons(log) {
   };
 }
 
-root.Calib = { calibration, speed, reasons, median, BANDS, REASONS, MIN_SAMPLES };
+/* THE CERTAIN-AND-WRONG QUEUE (docs/ROADMAP.md, S5). A question joins it when it is answered wrong with
+   "Certain", and leaves it the next time it is answered right, however sure. A wrong answer at a lower band
+   leaves it where it is: the belief that was wrong has not been shown to be put right. Mock-block answers
+   count as answers here (their right is a right), though a block never asks how sure, so a block never adds
+   one. The log is read in the order it was written, which is the order the answers were given. The newest
+   Certain-and-wrong comes first. */
+function certainWrong(log) {
+  const open = new Map();
+  (log || []).forEach((r, i) => {
+    if (!r || typeof r.q !== 'string' || !(r.m === 'practice' || r.m === 'review-answer' || r.m === 'exam')) return;
+    if (r.ok) open.delete(r.q);
+    else if (r.cf === 3 && r.m !== 'exam') { open.delete(r.q); open.set(r.q, i); }
+  });
+  return [...open.keys()].reverse();
+}
+
+/* The Monday that starts a moment's week, as YYYY-MM-DD on the reader's own calendar. It steps by setDate,
+   never by a day's milliseconds, because a local day is not always twenty-four hours (AGENTS.md). */
+function weekOf(t) {
+  const d = new Date(t);
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const p2 = n => (n < 10 ? '0' : '') + n;
+  return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+}
+
+/* A BRIER SCORE A WEEK, over the answers rated with a band: the mean of (p - right)², where p is the band's
+   stated chance and right is 1 or 0. Lower is better; 0 is a fellow who was certain of every right answer
+   and said Guess of every wrong one, which these bands cannot quite reach. A week with fewer than
+   MIN_SAMPLES rated answers is listed with a null score, not left out, so a gap reads as a gap. The trend
+   has something to say (enough) once two weeks each have MIN_SAMPLES; before that it says nothing. The last
+   `weeks` weeks that had any rated answer are kept, oldest first. */
+function brierTrend(log, weeks) {
+  const keep = weeks > 0 ? weeks : 8;
+  const by = new Map();
+  answered(log).forEach(r => {
+    if (!Number.isInteger(r.cf) || !BANDS[r.cf] || typeof r.t !== 'number' || !isFinite(r.t)) return;
+    const w = weekOf(r.t), d = BANDS[r.cf].p - (r.ok ? 1 : 0);
+    const b = by.get(w) || { week: w, n: 0, sum: 0 };
+    b.n++; b.sum += d * d;
+    by.set(w, b);
+  });
+  const all = [...by.values()].sort((a, b) => (a.week < b.week ? -1 : a.week > b.week ? 1 : 0)).slice(-keep)
+    .map(b => ({ week: b.week, n: b.n, brier: b.n >= MIN_SAMPLES ? b.sum / b.n : null }));
+  return { weeks: all, enough: all.filter(w => w.brier != null).length >= 2 };
+}
+
+root.Calib = { calibration, speed, reasons, certainWrong, brierTrend, weekOf, median, BANDS, REASONS, MIN_SAMPLES };
 
 })(typeof window !== 'undefined' ? window : this);

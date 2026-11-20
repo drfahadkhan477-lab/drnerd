@@ -82,12 +82,21 @@ const spyOnAudio = () => {
 };
 
 /* In the page: where the energy of the last buffer played sits (it holds `beats` beats), in the windows the pure suite uses. */
-const energy = beats => {
+/* Systole and diastole in the audio, as windows on the events it was placed on: the lesion's own where the circulation
+   engine makes it (HeartSounds.eventsFor, docs/ROADMAP.md S8), physio's otherwise. Each window is the same share of
+   that beat's systole (mitral to aortic closure) and diastole (aortic to the next mitral closure) as 0.22-0.38 and
+   0.50-0.80 are of physio's, so on physio's events they are exactly those. */
+const energy = ([beats, key]) => {
   const last = window.__audio.buffers[window.__audio.buffers.length - 1];
   const d = last.b.getChannelData(0), per = d.length / beats;
-  const rms = (a, b) => { let s = 0, n = 0; for (let k = 0; k < beats; k++) for (let i = Math.floor((k + a) * per); i < Math.floor((k + b) * per); i++) { s += d[i] * d[i]; n++; } return Math.sqrt(s / n); };
+  const rms = (a, b) => { let s = 0, n = 0; for (let k = 0; k < beats; k++) for (let i = Math.floor((k + a) * per); i < Math.floor((k + b) * per); i++) if (i < d.length) { s += d[i] * d[i]; n++; } return Math.sqrt(s / n); };
   let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
-  return { rate: last.rate, len: d.length, sys: rms(0.22, 0.38), dia: rms(0.50, 0.80), peak };
+  const evs = (key && HeartSounds.eventsFor(key)) || Physio.EVENTS, at = id => evs.find(e => e.id === id).at;
+  const P = id => Physio.EVENTS.find(e => e.id === id).at;
+  const pSys = P('ac') - P('mc'), pDia = 1 + P('mc') - P('ac');
+  const sys = at('ac') - at('mc'), dia = 1 + at('mc') - at('ac');
+  const sysW = [0.22, 0.38].map(f => at('mc') + (f - P('mc')) / pSys * sys), diaW = [0.50, 0.80].map(f => at('ac') + (f - P('ac')) / pDia * dia);
+  return { rate: last.rate, len: d.length, sys: rms(sysW[0], sysW[1]), dia: rms(diaW[0], diaW[1]), peak, windows: [sysW, diaW] };
 };
 
 /* In the page: how many pixels of the first canvas are the trace's ink, and how many the accent's. */
@@ -219,7 +228,7 @@ const pixels = () => {
       const info = await p.evaluate(k => { const it = window.LabItems.byId(k); return { key: it.key, name: it.name, blurb: it.blurb, phase: window.HeartMap.phaseOf(it.key) }; }, st.item);
       await p.click('[data-act="play"]');
       if (hasAudio) await p.waitForFunction(n => window.__audio.buffers.length > n, i, T);
-      const e = hasAudio ? await p.evaluate(energy, 4) : { sys: 0, dia: 0, rate: 0, len: 0, peak: 0 };
+      const e = hasAudio ? await p.evaluate(energy, [4, info.key]) : { sys: 0, dia: 0, rate: 0, len: 0, peak: 0 };
       const loud = 0.02;
       const fits = !hasAudio ? true : info.phase === 'systolic' ? e.sys >= loud && e.sys >= 2 * e.dia
         : info.phase === 'diastolic' ? e.dia >= loud && e.dia >= 2 * e.sys
@@ -437,7 +446,7 @@ const pixels = () => {
     ok('and the picker keeps focus and the page says which condition it is showing', /Mitral stenosis/.test(await text(p, '#plab-ex-title')) && (await p.evaluate(() => document.activeElement.id)) === 'plab-pick');
     const before = await p.evaluate(() => window.__audio.started);
     await p.click('[data-act="play"]');
-    const e = hasAudio ? await p.evaluate(energy, 3) : { sys: 0, dia: 0 };   // the heart map plays three beats, the drill four
+    const e = hasAudio ? await p.evaluate(energy, [3, 'ms']) : { sys: 0, dia: 0 };   // the heart map plays three beats, the drill four
     heard('Play here plays that condition\'s own sound: a diastolic rumble for mitral stenosis', (await p.evaluate(() => window.__audio.started)) === before + 1 && e.dia > 2 * e.sys, `sys ${e.sys.toFixed(3)} dia ${e.dia.toFixed(3)}`);
     await p.selectOption('#plab-pick', 'trc:ra-constriction');
     ok('a tracing shows the pericardium and its waves labelled, where a sound would not', (await p.locator('svg.plab-heart ellipse').count()) === 1 && (await p.evaluate(pixels)).accent > 20);

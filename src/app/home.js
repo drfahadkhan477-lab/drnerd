@@ -99,7 +99,7 @@
 'use strict';
 
 function homeHtml(S, CHAPTERS, kit){
-  const {POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,ATLAS_IMG,HERO_IMG,
+  const {POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,heroLesion,PHYSIO_LESIONS,ATLAS_IMG,HERO_IMG,
     dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,greet,e,icon}=kit;
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):0;
   const dueN=dueQuestions().length, seenN=startedCount();
@@ -150,6 +150,9 @@ function homeHtml(S, CHAPTERS, kit){
       <div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>
         <button class="hero-tool hero-mechanics${heroCutaway?' is-active':''}" id="heroMechanics" data-action="toggleHeroMechanics"
           aria-pressed="${heroCutaway}">${icon('layers','icon-sm')}<span>Chambers and flow</span></button>
+        ${PHYSIO_LESIONS?`<label class="hero-tool hero-lesion">${icon('heart-pulse','icon-sm')}<span>Lesion</span>
+          <select id="heroLesion" data-action="heroLesion">${PHYSIO_LESIONS.map(([k,label])=>
+            `<option value="${e(k)}"${heroLesion===k?' selected':''}>${e(label)}</option>`).join('')}</select></label>`:''}
         <button class="hero-tool atlas-pause" id="atlasPause" data-action="toggleAtlasMotion" aria-pressed="${atlasPaused}">${icon(atlasPaused?'play':'pause','icon-sm')}<span>${atlasPaused?'Play motion':'Pause motion'}</span></button>
         <button class="hero-tool hero-credit-btn" id="heroCreditBtn" data-action="toggleHeroCredit" hidden
           aria-expanded="false" aria-controls="heroScanCredit">${icon('info','icon-sm')}<span>Model credit</span></button>

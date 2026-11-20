@@ -20,6 +20,7 @@
    Usage:
      const heart = Heart3D.create(canvas, { rhythm:'sinus', mode:'whole' });
      heart.setRhythm('afib');        // irregular filling, no atrial kick
+     heart.setLesion(Circulation.heartSpec('as'));  // a lesion's chambers, squeeze and valves
      heart.setMode('cutaway');       // chambers and valves laid open
      heart.destroy();
 
@@ -714,6 +715,19 @@ function buildConduction() {
   return out;
 }
 
+/* ── a lesion on the cycle ───────────────────────────────────────────────────────
+   What Circulation.heartSpec() says of a lesion, applied to one moment of the cycle: the ventricles squeeze
+   vAmp as deeply and the atria kick aAmp as hard; a valve opens no further than open allows, and one that
+   leaks never shuts past leak. Chamber sizes are the shader's (uDil). null is the normal heart, unchanged. */
+function withLesion(c, L) {
+  if (!L) return c;
+  const out = Object.assign({}, c);
+  out.v = Math.min(1, c.v * L.vAmp); out.beat = out.v;
+  out.a = c.a * L.aAmp;
+  out.valves = c.valves.map((x, i) => Math.max(Math.min(x, L.open[i]), L.leak[i]));
+  return out;
+}
+
 /* ── the cardiac cycle ────────────────────────────────────────────────────────
    One clock for the whole model. Returns, for a moment in time: how hard each
    chamber is squeezing, how open each valve is, and where the depolarisation
@@ -812,6 +826,16 @@ function cycle(tms, kind, state) {
 const BEAT_GLSL = `  vec3 p = aPos;
   vec3 n = aNrm;
 
+  // ── a lesion's chamber sizes (setLesion): each chamber grown or shrunk about
+  //    its own apex or centre, by how much of it this vertex is.
+  p += (p - uLvApex) * ((uDil.x - 1.0) * aW.x);
+  p += (p - uRvApex) * ((uDil.y - 1.0) * aW.y);
+  p += (p - uLaC) * ((uDil.z - 1.0) * aW.z);
+  p += (p - uRaC) * ((uDil.w - 1.0) * aW.w);
+  // ── and a hypertrophied LV's wall: the outer surface out, the cavity in (uSurf
+  //    +1 and -1; 0 for the valves), by how much of the LV this vertex is.
+  p += n * (uSurf * (uWall - 1.0) * 0.55 * aW.x);
+
   // ── ventricles: the apex stays, the base descends toward it, walls thicken,
   //    and the left ventricle wrings itself out with a twist.
   float wv = aW.x + aW.y;
@@ -858,6 +882,8 @@ uniform mat4 uProj, uView;
 uniform float uA, uV;                 // atrial / ventricular contraction 0-1
 uniform float uQuiver, uTime, uHalo;
 uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
+uniform vec4 uDil;                    // chamber size against normal: LV RV LA RA
+uniform float uWall, uSurf;           // LV wall thickness against normal; which surface: +1 outer, -1 cavity
 
 out vec3 vN, vWorld, vColor, vExtra;
 out vec4 vW;
@@ -890,6 +916,8 @@ layout(location=4) in float aAct;
 uniform mat4 uProj, uView;
 uniform float uA, uV, uQuiver, uTime;
 uniform vec3 uLvApex, uLvAxis, uRvApex, uRvAxis, uLaC, uRaC;
+uniform vec4 uDil;                    // chamber size against normal: LV RV LA RA
+uniform float uWall, uSurf;           // LV wall thickness against normal; which surface: +1 outer, -1 cavity
 
 out vec3 vN, vWorld;
 out vec2 vUv;
@@ -1525,7 +1553,7 @@ function create(canvas, opts) {
   const prog = program(gl, VERT, FRAG);
   const U = n => gl.getUniformLocation(prog, n);
   const UNIFORMS = ['proj','view','eye','a','v','quiver','time','act','mode','kind','clipX','dark','style','halo',
-                    'lvApex','lvAxis','rvApex','rvAxis','laC','raC'];
+                    'lvApex','lvAxis','rvApex','rvAxis','laC','raC','dil','wall','surf'];
   const u = {};
   for (const n of UNIFORMS) u[n] = U('u' + n[0].toUpperCase() + n.slice(1));
 
@@ -1630,7 +1658,7 @@ function create(canvas, opts) {
     scanProg = program(gl, SCAN_VERT, SCAN_FRAG);
     uScan = {};
     for (const n of ['proj','view','eye','a','v','quiver','time','act','mode','clipX','dark',
-                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC','base','nrm','mr'])
+                     'lvApex','lvAxis','rvApex','rvAxis','laC','raC','dil','wall','surf','base','nrm','mr'])
       uScan[n] = gl.getUniformLocation(scanProg, 'u' + n[0].toUpperCase() + n.slice(1));
 
     const vao = gl.createVertexArray();
@@ -1759,6 +1787,7 @@ void main(){
   const STYLES = { anatomic: 0, ink: 1, crystal: 2, specimen: 3, mechanistic: 4 };
   const S = {
     rhythm: opts.rhythm || 'sinus',
+    lesion: null,                     // Circulation.heartSpec() of the lesion shown, or null (setLesion)
     mode: opts.mode || 'whole',
     yaw: opts.yaw !== undefined ? opts.yaw : 0.42,
     pitch: opts.pitch !== undefined ? opts.pitch : 0.12,
@@ -1796,7 +1825,7 @@ void main(){
   function draw(dt) {
     if (!fit()) return;
     if (S.autoRotate) S.yaw += dt * 0.00016;
-    const c = cycle(S.t, S.rhythm, S.cyc);
+    const c = withLesion(cycle(S.t, S.rhythm, S.cyc), S.lesion);
     if (S.onCycle) S.onCycle(c);
 
     const eye = [S.target[0] + Math.sin(S.yaw) * Math.cos(S.pitch) * S.dist,
@@ -1827,6 +1856,9 @@ void main(){
       gl.uniform3fv(loc.rvAxis, new Float32Array(rvAxis));
       gl.uniform3fv(loc.laC, new Float32Array(A.la.c));
       gl.uniform3fv(loc.raC, new Float32Array(A.ra.c));
+      if (loc.dil) gl.uniform4fv(loc.dil, new Float32Array(S.lesion ? S.lesion.dil : [1, 1, 1, 1]));
+      if (loc.wall) gl.uniform1f(loc.wall, S.lesion && S.lesion.wall ? S.lesion.wall : 1);
+      if (loc.surf) gl.uniform1f(loc.surf, 1);
     };
     gl.useProgram(prog);
     common(u);
@@ -1849,6 +1881,9 @@ void main(){
       gl.uniform3fv(uScan.rvAxis, new Float32Array(rvAxis));
       gl.uniform3fv(uScan.laC, new Float32Array(A.la.c));
       gl.uniform3fv(uScan.raC, new Float32Array(A.ra.c));
+      if (uScan.dil) gl.uniform4fv(uScan.dil, new Float32Array(S.lesion ? S.lesion.dil : [1, 1, 1, 1]));
+      if (uScan.wall) gl.uniform1f(uScan.wall, S.lesion && S.lesion.wall ? S.lesion.wall : 1);
+      if (uScan.surf) gl.uniform1f(uScan.surf, 1);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scan.tex.base); gl.uniform1i(uScan.base, 0);
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, scan.tex.nrm);  gl.uniform1i(uScan.nrm, 1);
       gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, scan.tex.mr);   gl.uniform1i(uScan.mr, 2);
@@ -1860,6 +1895,8 @@ void main(){
 
     const drawMesh = (m, kind) => {
       gl.uniform1i(u.kind, kind);
+      /* The cavity's surface moves inward as a hypertrophied wall thickens, every other surface outward. */
+      gl.uniform1f(u.surf, m === mCav ? -1 : 1);
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, m.type, 0);
     };
@@ -1948,6 +1985,7 @@ void main(){
       gl.useProgram(progValve);
       common(uv);
       gl.uniform1i(uv.kind, 3);
+      gl.uniform1f(uv.surf, 0);
       gl.uniform1f(uv.act, -1);
       gl.uniform1f(uv.quiver, 0);
       gl.uniform4f(uv.valve,
@@ -2028,7 +2066,10 @@ void main(){
     loadScan(src) { return loadScan(src); },
     setAutoRotate(on) { S.autoRotate = !!on; return api; },
     resetView() { S.yaw = 0.42; S.pitch = 0.12; S.dist = 27; return api; },
-    phase() { return cycle(S.t, S.rhythm, S.cyc); },
+    phase() { return withLesion(cycle(S.t, S.rhythm, S.cyc), S.lesion); },
+    /* A lesion as Circulation.heartSpec() gives it, or null for the normal heart. */
+    setLesion(spec) { S.lesion = spec && Array.isArray(spec.dil) ? spec : null; if (reduced) draw(0); return api; },
+    lesion() { return S.lesion; },
     stats: {
       buildMs: Math.round(buildMs),
       meshSource,
@@ -2118,7 +2159,7 @@ void main(){
    made to beat on this same anatomy: a scanned mesh baked into this coordinate
    frame takes its per-vertex weights from the very same fields the procedural
    heart uses, and the existing vertex shader then animates it unchanged. */
-root.Heart3D = { create, cycle, RHYTHM_HR, VALVES, anatomy: A,
+root.Heart3D = { withLesion, create, cycle, RHYTHM_HR, VALVES, anatomy: A,
                  chamberWeights, activationAt, sdOuter,
                  mesh: { RES: MESH_RES, LO: MESH_LO, HI: MESH_HI, build: buildSurfaces,
                          pack: packSurfaces, unpack: unpackSurfaces, take: bakedSurfaces } };

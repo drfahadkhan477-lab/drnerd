@@ -18,7 +18,7 @@
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, onScreen, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -275,6 +275,30 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   }); await showStats();
     return page.evaluate(() => (document.getElementById('app').textContent || '').includes('needs')); })();
   ok('an under-filled band says how many more it needs', thin === true, String(thin));
+
+  head('the questions answered Certain and wrong are practised from the Progress screen (docs/ROADMAP.md, S5)');
+  {
+    /* Three of the bank's questions answered Certain and wrong; the third since answered right, so two are left. */
+    const ids = await page.evaluate(() => {
+      LOG.length = 0;
+      const qs = POOL.filter(q => !q.bad).slice(0, 3).map(q => q.id);
+      qs.forEach(id => LOG.push({ t: Date.now(), m: 'practice', q: id, ok: 0, cf: 3, ms: 4000, why: null }));
+      LOG.push({ t: Date.now(), m: 'practice', q: qs[2], ok: 1, cf: 1, ms: 4000, why: null });
+      goStats(); render();
+      return qs;
+    });
+    await onScreen(page, 'stats', { marker: '.cb-go', label: 'the Certain-and-wrong button' });
+    const says = await page.evaluate(() => document.querySelector('.cb-go').textContent);
+    ok('the Progress screen offers the two still wrong', says === 'Practise the 2 answered Certain and wrong', says);
+    await page.click('.cb-go');
+    await onScreen(page, 'quiz', { marker: '.opt' });
+    const deck = await page.evaluate(() => ({ mode: S.mode, ids: S.questions.map(q => q.id).sort() }));
+    ok('a tap starts a quiz of exactly those two, in its own mode', deck.mode === 'certain' && JSON.stringify(deck.ids) === JSON.stringify(ids.slice(0, 2).sort()), JSON.stringify(deck));
+    const first = await page.evaluate(() => { const q = S.questions[S.qIdx]; selectOpt(q.ci); return q.id; });
+    await settled(page, () => S.answered === true, { label: 'the answer to be taken' });
+    const left = await page.evaluate(() => certainWrongQs().map(q => q.id));
+    ok('answered right, a question leaves the queue, and the other stays', left.length === 1 && left[0] !== first && ids.slice(0, 2).includes(left[0]), JSON.stringify(left));
+  }
 
   head('the days since the last review are days on the calendar, whatever the hour');
   {

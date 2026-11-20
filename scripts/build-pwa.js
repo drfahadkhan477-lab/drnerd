@@ -922,6 +922,41 @@ step('lift the Practice Lab out of the app code', () => {
   appCode = appCode.slice(0, at) + `window.LAB_SRC=${JSON.stringify(psw.lab)};` + appCode.slice(at + block.length);
 });
 
+/* ── 3.747. the circulation engine ──────────────────────────────────────
+   src/core/circulation.js (docs/ROADMAP.md, S8) is read only when a lesion is
+   drawn in the Rhythm Lab's cycle panel, and in app.js it took the shell over
+   its 288 KB budget. It leaves app.js as the Lab's modules do (3.746): its own
+   file without its comments, precached with the shell so a lesion still draws
+   offline from the first launch; what stays names the file (CIRC_SRC), and
+   physioApplyLesion() loads it the first time a lesion is drawn. */
+step('lift the circulation engine out of the app code', () => {
+  const block = fs.readFileSync(path.join(ROOT, 'src', 'core', 'circulation.js'), 'utf8');
+  const at = appCode.indexOf(block);
+  if (at < 0 || appCode.indexOf(block, at + 1) >= 0) throw new Error('the circulation engine is not in the app code exactly once');
+  psw.circ = 'vendor/circulation-' + crypto.createHash('sha256').update(block).digest('hex').slice(0, 12) + '.js';
+  const lean = require('./strip-comments.js').strip(block);
+  new (require('vm').Script)(lean, { filename: psw.circ });
+  psw.circBytes = Buffer.from(lean, 'utf8');
+  appCode = appCode.slice(0, at) + `window.CIRC_SRC=${JSON.stringify(psw.circ)};` + appCode.slice(at + block.length);
+});
+
+/* ── 3.748. the cardiac cycle's diagrams ────────────────────────────────
+   src/ui/wiggers.js draws the Rhythm Lab's cycle panel and ambient mode's PV
+   loop, and nothing else reads it; in app.js it held the shell at 287 KB of
+   its 288. It leaves app.js as 3.746 and 3.747 lift theirs: its own file
+   without its comments, precached with the shell; what stays names the file
+   (WIG_SRC), and loadWiggers() loads it the first time a diagram is drawn. */
+step('lift the cycle\'s diagrams out of the app code', () => {
+  const block = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'wiggers.js'), 'utf8');
+  const at = appCode.indexOf(block);
+  if (at < 0 || appCode.indexOf(block, at + 1) >= 0) throw new Error('the cycle\'s diagrams are not in the app code exactly once');
+  psw.wig = 'vendor/wiggers-' + crypto.createHash('sha256').update(block).digest('hex').slice(0, 12) + '.js';
+  const lean = require('./strip-comments.js').strip(block);
+  new (require('vm').Script)(lean, { filename: psw.wig });
+  psw.wigBytes = Buffer.from(lean, 'utf8');
+  appCode = appCode.slice(0, at) + `window.WIG_SRC=${JSON.stringify(psw.wig)};` + appCode.slice(at + block.length);
+});
+
 /* ── 3.75. the comments in src/'s modules ────────────────────────────────
    The shell budget below was set on the reasoning that comments are close to
    free once compressed. Measured, they are half of what src/ gzips to — 76 of
@@ -937,7 +972,9 @@ step('ship src/\'s modules without their comments', () => {
                     : /\.js$/.test(e.name) ? [path.join(dir, e.name)] : []);
   const mods = listSrc(path.join(ROOT, 'src')).sort()
     .map(f => [path.relative(ROOT, f).split(path.sep).join('/'), fs.readFileSync(f, 'utf8')])
-    .filter(([name]) => !(psw.labBytes && name.startsWith('src/lab/')));  // lifted to vendor/ (3.746), stripped there
+    .filter(([name]) => !(psw.labBytes && name.startsWith('src/lab/')))   // lifted to vendor/ (3.746), stripped there
+    .filter(([name]) => !(psw.circBytes && name === 'src/core/circulation.js'))   // and this one (3.747)
+    .filter(([name]) => !(psw.wigBytes && name === 'src/ui/wiggers.js'));  // and this one (3.748)
   strippedModules = stripEmbedded(appCode, mods);
   appCode = strippedModules.code;
   console.log(`  comments out of ${strippedModules.stripped.length} src/ modules` +
@@ -1204,6 +1241,8 @@ fs.writeFileSync(path.join(DIST, psw.css), psw.cssBytes);
 fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'photoswipe', 'LICENSE'), path.join(DIST, 'vendor', 'photoswipe-LICENSE.txt'));
 fs.writeFileSync(path.join(DIST, psw.pf), psw.pfBytes);
 fs.writeFileSync(path.join(DIST, psw.lab), psw.labBytes);
+fs.writeFileSync(path.join(DIST, psw.circ), psw.circBytes);
+fs.writeFileSync(path.join(DIST, psw.wig), psw.wigBytes);
 /* perfect-freehand's too: it carries no notice in the file, so the licence is the notice. */
 fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'perfect-freehand', 'LICENSE'), path.join(DIST, 'vendor', 'perfect-freehand-LICENSE.txt'));
 
@@ -1388,7 +1427,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(psw.lab)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(psw.lab)}, ${JSON.stringify(psw.circ)}, ${JSON.stringify(psw.wig)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.
