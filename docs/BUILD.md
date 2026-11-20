@@ -684,9 +684,11 @@ node scripts/verify.js --engine webkit     # or firefox; chromium is the default
 The target device is an iPad, so WebKit validation matters. CI runs the
 public-browser job in Chromium and WebKit, and the synthetic app job also
 has a WebKit counterpart with explicit exclusions. Both synthetic jobs run in
-four shards on one build made by `synthetic-build` (`scripts/shard.js` splits
-them by the record's times), and `browser-done` is the one check that says
-whether every browser job passed.
+four shards on one build made by `synthetic-build`, and `browser-done` reports
+whether every browser job passed. `scripts/shard.js` uses the suite record for
+Chromium and `scripts/webkit-ci-timings.json` for WebKit. The WebKit file lists the
+public GitHub Actions run IDs behind its medians of successful step durations.
+A suite without a timing gets the median weight of the timed suites in that job.
 
 **Required checks are matched by name.** The ruleset on master requires
 `syntax`, `logic`, `build-guard` and `browser-done` by the full text of each

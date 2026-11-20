@@ -33,6 +33,7 @@ const ROOT = path.join(__dirname, '..');
 /* Comments blanked, so a sentence about the wiring cannot stand in for it. */
 const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8').replace(/(^|\s)#.*$/gm, '$1');
 const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
+const webkitTimings = require('../scripts/webkit-ci-timings.json');
 const SHARDED = ['synthetic-browser', 'synthetic-webkit'];
 const PIN = /@[0-9a-f]{40}\b/;
 
@@ -108,8 +109,9 @@ for (const job of SHARDED) {
   ok(`${job}: no shard builds the app again; each downloads the one synthetic-build made`,
      !/\bnode scripts\/(synthetic-export|assemble-app)\.js/.test(body) &&
      /uses: actions\/download-artifact@[0-9a-f]{40}[ \t]*\n\s+with:\n\s+name: synthetic-build\n\s+path: build\/synthetic\n/.test(body));
-  const load = split.map(s => s.reduce((t, n) => t + (stats.seconds[n.replace(/^verify-/, '')] || 0), 0));
-  const total = load.reduce((a, b) => a + b, 0), longest = Math.max(...all.map(n => stats.seconds[n.replace(/^verify-/, '')] || 0));
+  const seconds = job === 'synthetic-webkit' ? webkitTimings.seconds : stats.seconds;
+  const load = split.map(s => s.reduce((t, n) => t + (seconds[n.replace(/^verify-/, '')] || 0), 0));
+  const total = load.reduce((a, b) => a + b, 0), longest = Math.max(...all.map(n => seconds[n.replace(/^verify-/, '')] || 0));
   ok(`${job}: no shard holds more than its share plus one suite`, Math.max(...load) <= total / load.length + longest,
      load.map(s => Math.round(s) + 's').join(', '));
 }
@@ -165,12 +167,20 @@ head('the scripts, as the workflow runs them');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'shard-'));
   try {
     const out = path.join(tmp, 'out');
-    fs.writeFileSync(out, '');
-    const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'shard.js'), 'synthetic-browser', '2', '4', '--github-output'],
-      { cwd: ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: out } });
-    const line = fs.readFileSync(out, 'utf8');
-    const want = shardOf(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'), stats, 'synthetic-browser', 2, 4);
-    ok('shard.js writes its list as one comma-fenced output', r.status === 0 && line === `suites=,${want.join(',')},\n`, line.slice(0, 120) || r.stderr);
+    const mismatches = [];
+    for (const job of SHARDED) {
+      const seconds = job === 'synthetic-webkit' ? webkitTimings.seconds : stats.seconds;
+      const expected = assign(jobSuites(yml, job), seconds, 4);
+      for (const [index, suites] of expected.entries()) {
+        fs.writeFileSync(out, '');
+        const run = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'shard.js'), job, String(index + 1), '4', '--github-output'],
+          { cwd: ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: out } });
+        if (run.status !== 0 || fs.readFileSync(out, 'utf8') !== `suites=,${suites.join(',')},\n`) {
+          mismatches.push(`${job} shard ${index + 1}`);
+        }
+      }
+    }
+    ok('shard.js exports each shard computed with its engine’s timings', mismatches.length === 0, mismatches.join(', '));
     const bad = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'shard.js'), 'no-such-job', '1', '4'], { cwd: ROOT, encoding: 'utf8' });
     ok('and fails on a job that is not in the workflow, rather than writing an empty list', bad.status === 1 && /no no-such-job job/.test(bad.stderr), bad.stderr.trim());
     const run = needs => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'browser-done.js')], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, NEEDS: needs } });

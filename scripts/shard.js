@@ -16,8 +16,8 @@
  * those steps to run, never a second copy of them.
  *
  * THE SPLIT IS COMPUTED, NOT WRITTEN DOWN. The suites are the job's own steps,
- * read from the workflow; their weights are the seconds the record
- * (tests/test-stats.json, written only by full green runs) holds for each.
+ * read from the workflow. WebKit weights come from public GitHub Actions
+ * step timings. Chromium weights come from tests/test-stats.json.
  * Longest first, each to the shard with the least time so far, ties to the
  * lower shard and then by name, so every shard of a run computes the same
  * split. A suite the record has not timed yet weighs the median of those it
@@ -29,6 +29,7 @@
 const fs = require('fs');
 const path = require('path');
 const { jobBody } = require('./test-public.js');
+const webkitTimings = require('./webkit-ci-timings.json');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -60,7 +61,8 @@ function assign(names, seconds, of) {
 /* shard is 1-based, as the workflow's matrix counts it. */
 function shardOf(yml, stats, job, shard, of) {
   if (!(Number.isInteger(shard) && shard >= 1 && shard <= of)) throw new Error(`shard ${shard} is not one of 1..${of}`);
-  return assign(jobSuites(yml, job), (stats && stats.seconds) || {}, of)[shard - 1];
+  const seconds = job === webkitTimings.job ? webkitTimings.seconds : stats?.seconds || {};
+  return assign(jobSuites(yml, job), seconds, of)[shard - 1];
 }
 
 module.exports = { jobSuites, assign, shardOf };
