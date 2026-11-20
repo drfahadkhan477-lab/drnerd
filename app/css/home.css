@@ -384,12 +384,6 @@ body.on-home{background:var(--bg)}
 .atlas-session small{color:var(--muted)}
 .atlas-session button{min-height:44px;padding:10px 22px;border:0;border-radius:999px;background:var(--teal-ink);color:var(--white);font:inherit;cursor:pointer}
 @media(min-width:700px){
-  .home-pages{position:relative;padding-left:80px}
-  .home-tabs{position:absolute;left:8px;top:18px;bottom:18px;width:64px;max-width:none;margin:0;padding:6px;box-sizing:border-box;border-radius:18px;flex-direction:column;justify-content:flex-start;align-items:stretch}
-  .home-tab{flex:0 0 76px;flex-direction:column;gap:7px;font-size:var(--t-tiny)}
-  .home-tab .icon{width:23px;height:23px}
-  .home-tab-pill{left:6px;top:6px;bottom:auto;width:50px;height:76px;border-radius:12px;transform:translateY(calc(var(--hp-f) * 100%))}
-  body.on-home .ai-fab{left:14px;right:auto;bottom:max(32px,var(--sab));width:52px;min-width:0;padding:10px 4px;flex-direction:column;gap:4px;font-size:var(--t-micro)}
   .home-page{padding:18px 24px}
   #homePage0 .home-page-in{height:100%}
   #app[data-screen="home"] #homePage0 .home-wrap{display:grid;height:100%;min-height:0;padding:0;gap:16px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;grid-template-areas:"pearl hero" "session session" "hello hello"}
@@ -453,7 +447,6 @@ body.on-home .nav .icon-btn{color:var(--text);border-color:var(--border2);backgr
 #homePage0 .hero-rhythm-label{color:var(--teal-ink)}
 #homePage0 .hero-live-status{background:var(--card);color:var(--muted);box-shadow:none}
 @media(min-width:700px){
-  .home-tabs{height:calc(100% - 36px);align-self:stretch}
   #homePage0 .pearl-main{flex:1 1 auto}
   /* 0 1, not 0 0. The figure used to claim 145px that it could not give back:
      on an 11-inch iPad in portrait (744x1133) the card is 480px, the figure
@@ -562,23 +555,6 @@ body.on-home .nav-title{line-height:1.1}
 @media(hover:hover){#homePage0 .hero-menu .hero-tool:hover{background:var(--teal4)}}
 .hero-menu .hero-scan-credit{position:static;max-width:none;margin:2px 4px 4px;padding:8px 10px;border:1px solid var(--border2);border-radius:10px;
   background:var(--card);color:var(--text);font-size:var(--t-tiny);line-height:1.45;text-align:left;box-shadow:none}
-
-/* Apex in the rail, where Echo stood: an item like the three above it, its
-   name under its face, nothing overlapping. */
-@media(min-width:700px){
-  body.on-home .ai-fab{top:calc(var(--navh) + 18px + 6px + 3 * 76px + 14px);bottom:auto;left:14px;right:auto;width:52px;height:76px;min-width:0;
-    padding:0;border-radius:12px;flex-direction:column;justify-content:center;align-items:center;gap:7px;font-size:var(--t-tiny);font-weight:700}
-  body.on-home .ai-fab .fab-av{position:static;width:28px;height:28px;margin:0;flex:none}
-  body.on-home .ai-fab::before{content:'';position:absolute;top:-8px;left:8px;right:8px;height:1px;background:var(--border2)}
-}
-
-/* Apex sits in the rail as one of its items: no badge fill, no gloss. */
-@media(min-width:700px){
-  html body.on-home .ai-fab{background:transparent;color:var(--muted);box-shadow:none;border:0}
-  html body.on-home .ai-fab::after{display:none}
-  html body.on-home .ai-fab:focus-visible{outline:2.5px solid var(--teal);outline-offset:2px}
-}
-@media(hover:hover) and (min-width:700px){html body.on-home .ai-fab:hover{color:var(--teal-ink);background:var(--teal4);transform:none}}
 
 /* A pearl the size of its card. pearlFit sets --pz, the largest text scale at
    which the steps fit the card without scrolling: a short pearl with no figure
@@ -961,3 +937,92 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
 
 /* Explicitly opened provenance stays readable at the reader's type scale. */
 #homePage0 .pearl-source{font-size:var(--t-meta);overflow-wrap:break-word}
+
+/* ═══════════ Glass Home (November 2026) ═══════════
+   The owner's marked screenshots: the hero as it was before the Quiet Atlas (a greeting, Systole, the bank in one line,
+   the rhythm, a full-width trace, the heart small at the top right), no side rail (the three pages' bar sits at the
+   foot, glass, as it does on a phone, with Apex beside it), the pearl's heading small and its reading buttons gone, and
+   the whole screen glass and alive. Loaded last, so it is what holds for Home.
+
+   Glass is a translucent ground, a light rim and a soft shadow over a slowly drifting aurora. Its tint is the theme's
+   own --teal and --hp-b, laid down by a pseudo-element's opacity rather than by color-mix(), so every palette keeps its
+   colours and the Safari floor needs no fallback. Every movement stops for prefers-reduced-motion and for the
+   heart's own pause (.atlas-paused). */
+#homePages{--gl-bg:rgba(255,255,255,.62);--gl-edge:rgba(255,255,255,.75);--gl-hi:rgba(255,255,255,.55);
+  --gl-drop:0 22px 50px -30px rgba(15,40,70,.45);position:relative;isolation:isolate;overflow:hidden}
+html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}
+@media(prefers-color-scheme:dark){html:not([data-theme="light"]) #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}}
+
+/* The aurora: three soft fields of the theme's colours, drifting behind everything. */
+#homePages::before{content:'';position:absolute;z-index:-1;top:-20%;left:-20%;width:140%;height:140%;pointer-events:none;
+  background:radial-gradient(32% 28% at 18% 22%,var(--teal) 0,transparent 70%),
+    radial-gradient(30% 26% at 82% 30%,var(--hp-b) 0,transparent 70%),
+    radial-gradient(38% 30% at 45% 88%,var(--teal2) 0,transparent 72%);
+  opacity:.2;animation:homeAurora 28s ease-in-out infinite alternate;will-change:transform}
+@keyframes homeAurora{0%{transform:translate3d(0,0,0) rotate(0deg) scale(1)}50%{transform:translate3d(4%,-3%,0) rotate(8deg) scale(1.06)}100%{transform:translate3d(-4%,3%,0) rotate(-6deg) scale(1.02)}}
+.home-pager,.home-tabs{position:relative;z-index:1}
+
+/* The cards, glass. */
+#app[data-screen="home"] #homePage0 .hero-live,#app[data-screen="home"] #homePage0 .pearl-card,#app[data-screen="home"] #homePage0 .atlas-session{
+  background:linear-gradient(155deg,var(--gl-hi),transparent 55%),var(--gl-bg);border:1px solid var(--gl-edge);
+  box-shadow:inset 0 1px 0 var(--gl-hi),var(--gl-drop);
+  backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5)}
+
+/* ── the hero, as it was: words at the left, the heart small at the top right, the trace across the foot ── */
+#app[data-screen="home"] #homePage0 .hero-live{position:relative;overflow:hidden;border-radius:28px;padding:26px 30px 0;min-height:250px;color:var(--text)}
+#app[data-screen="home"] #homePage0 .hero-live::before{content:'';display:block;position:absolute;top:0;right:0;bottom:0;left:0;z-index:0;pointer-events:none;
+  background:radial-gradient(130% 120% at 0% 0%,var(--teal) 0,transparent 62%);opacity:.2;border-radius:inherit}
+/* A sheen that crosses the glass now and then. */
+#app[data-screen="home"] #homePage0 .hero-live::after{content:'';display:block;position:absolute;top:0;bottom:0;left:-40%;width:30%;z-index:1;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.14),transparent);transform:skewX(-18deg) translateX(0);
+  animation:homeSheen 9s ease-in-out infinite;opacity:1}
+@keyframes homeSheen{0%,62%{transform:skewX(-18deg) translateX(0)}100%{transform:skewX(-18deg) translateX(560%)}}
+#app[data-screen="home"] #homePage0 .hero-orbit{display:none}
+#app[data-screen="home"] #homePage0 .hero-inner{position:relative;z-index:2;max-width:64%;margin:0;padding:0}
+#app[data-screen="home"] #homePage0 .hero-greet{display:block;margin:0 0 10px;max-width:none;font-size:var(--t-tiny);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--teal-ink)}
+#app[data-screen="home"] #homePage0 .hero-h1{display:block;margin:0 0 14px;font-family:'DM Serif Display',Georgia,serif;font-weight:400;
+  font-size:clamp(44px,3.2rem + 1.4vw,68px);line-height:1;letter-spacing:-.02em;color:var(--text)}
+#app[data-screen="home"] #homePage0 .hero-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 12px;max-width:none}
+#app[data-screen="home"] #homePage0 .hero-line .hl-item{display:inline;min-height:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;
+  font-size:var(--t-body);color:var(--muted)}
+#app[data-screen="home"] #homePage0 .hero-line .hl-item b{font-size:inherit;font-weight:750;color:var(--text);font-variant-numeric:tabular-nums}
+#app[data-screen="home"] #homePage0 .hero-line .hl-dot{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--muted);opacity:.6}
+#app[data-screen="home"] #homePage0 .hero-rhythm-label{position:static;margin:0;font-family:var(--font-mono);font-size:var(--t-meta);color:var(--teal-ink)}
+#app[data-screen="home"] #homePage0 .hero-ecg{position:absolute;left:0;right:0;bottom:10px;z-index:1;width:100%;height:clamp(84px,12vh,120px);
+  margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;opacity:.95}
+#app[data-screen="home"] #homePage0 .hero-heart-plate,#app[data-screen="home"] #homePage0 .hero-heart-3d,#app[data-screen="home"] #homePage0 .hero-heart-hit{
+  top:14px;right:22px;bottom:auto;left:auto;margin:0;width:clamp(116px,15vw,176px);height:clamp(132px,17vw,200px);max-width:none;z-index:2}
+#app[data-screen="home"] #homePage0 .hero-menu{z-index:4}
+
+/* ── the pearl: a modest heading, its chapter beside the tag, and only the way into the note ── */
+#app[data-screen="home"] #homePage0 .pearl-card{border-radius:28px;overflow:hidden}
+#app[data-screen="home"] #homePage0 .pearl-concept{margin:0 0 12px;font-family:'DM Serif Display',Georgia,serif;font-weight:400;
+  font-size:clamp(20px,1.1rem + .5vw,26px);line-height:1.2;letter-spacing:-.005em}
+#app[data-screen="home"] #homePage0 .pearl-cap{padding:0;border:0;background:none;font-size:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+#app[data-screen="home"] #homePage0 .pearl-actions{justify-content:flex-end;border-top:0;padding-top:4px;margin-top:6px}
+
+/* ── the session strip ── */
+#app[data-screen="home"] #homePage0 .atlas-session{border-radius:24px}
+
+/* ── the bar at the foot, and Apex beside it, both glass ── */
+#app[data-screen="home"] .home-tabs,body.on-home .ai-fab{backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5)}
+
+/* Arrival: the cards rise in, one after another. */
+#app[data-screen="home"] #homePage0 .hero-live,#app[data-screen="home"] #homePage0 .pearl-card,#app[data-screen="home"] #homePage0 .atlas-session{animation:homeRise .6s cubic-bezier(.2,.8,.2,1) both}
+#app[data-screen="home"] #homePage0 .pearl-card{animation-delay:.08s}
+#app[data-screen="home"] #homePage0 .atlas-session{animation-delay:.16s}
+@keyframes homeRise{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+
+.atlas-paused#homePages::before,.atlas-paused #homePage0 .hero-live::after{animation:none}
+@media(prefers-reduced-motion:reduce){
+  #homePages::before,#app[data-screen="home"] #homePage0 .hero-live::after,#app[data-screen="home"] #homePage0 .hero-live,
+  #app[data-screen="home"] #homePage0 .pearl-card,#app[data-screen="home"] #homePage0 .atlas-session{animation:none}
+}
+@media(forced-colors:active){#homePages::before,#app[data-screen="home"] #homePage0 .hero-live::before,#app[data-screen="home"] #homePage0 .hero-live::after{display:none}}
+/* On an iPad on its side the hero is a tall column beside the pearl: the heart grows into it and the trace rises. */
+@media(min-width:700px) and (orientation:landscape){
+  #app[data-screen="home"] #homePage0 .hero-heart-plate,#app[data-screen="home"] #homePage0 .hero-heart-3d,#app[data-screen="home"] #homePage0 .hero-heart-hit{
+    top:clamp(24px,5vh,48px);bottom:auto;right:4%;left:auto;margin:0;width:min(40%,300px);height:min(56%,360px)}
+  #app[data-screen="home"] #homePage0 .hero-inner{max-width:56%}
+  #app[data-screen="home"] #homePage0 .hero-ecg{height:clamp(100px,15vh,150px);bottom:16px}
+}

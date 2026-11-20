@@ -187,7 +187,7 @@ head('what the chosen neuron holds');
 /* The Home page, over a stand-in kit: the pearl and the pages beside it are the page's own functions, recorded here. */
 const hcalls = [];
 const PEARL = { concept: 'A <b>rule</b>', title: 'Title', chapter: 'Valves & "more"', source: 'Note <i>7</i>' };
-const homeKit = over => Object.assign({ POOL: BPOOL, TOTAL_Q: 5, atlas3D: true, atlasPaused: false, atlasReading: true, heroCutaway: false, pearlAsWritten: false,
+const homeKit = over => Object.assign({ POOL: BPOOL, TOTAL_Q: 5, atlas3D: true, atlasPaused: false, atlasReading: true, heroCutaway: false, greet: () => 'Good <evening>',
   ATLAS_IMG: '[ATLAS-IMG]', HERO_IMG: '[HERO-IMG]', dueQuestions: () => ['a', 'b'], startedCount: () => 4, todayISO: () => '2026-11-17', masteryFor: ch => BMAST[ch],
   pearlNow: () => (hcalls.push('pearlNow'), PEARL), pearlAll: () => [1, 2, 3], pearlFigure: () => '', pearlEmblem: () => '[EMBLEM]', pearlLadder: p => '[LADDER ' + p.title + ']', showHello: () => false,
   buildBrain: (...a) => (hcalls.push('brain ' + J(a)), '[BRAIN]'), buildLabs: (...a) => (hcalls.push('labs ' + J(a)), '[LABS]'),
@@ -213,16 +213,16 @@ head('the pearl');
   const html = homePage();
   ok('the card, shown when there is a pearl to read, hidden when not, and none without a pearl', html.includes('<div class="pearl-card" id="pearlCard">') && homePage({}, { atlasReading: false }).includes('<div class="pearl-card" id="pearlCard" hidden>') && !homePage({}, { pearlNow: () => null }).includes('pearl-card'));
   ok('marked as having a figure when the page draws one for it', homePage({}, { pearlFigure: () => '<figure>F</figure>' }).includes('<div class="pearl-card has-fig" id="pearlCard">'));
-  ok('its chapter, for a screen reader, through e(), or "From your notes"', html.includes('<span class="pearl-cap sr-only" id="pearlCap">E(Valves & &quot;more&quot;)</span>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('id="pearlCap">E(From your notes)</span>'));
+  ok('its chapter, shown beside the tag, through e(), or "From your notes"', html.includes('<span class="pearl-cap" id="pearlCap">E(Valves & &quot;more&quot;)</span>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('id="pearlCap">E(From your notes)</span>'));
   ok('another pearl, by pearlNext, only where there are two or more', /<button class="pearl-next" data-action="pearlNext"\s*title="Another pearl" aria-label="Another pearl">\[icon rotate-ccw icon-sm\]<\/button>/.test(html) && /aria-label="Another pearl" disabled>/.test(homePage({}, { pearlAll: () => [1] })));
   ok('what it is about, through e(), or its title where it has no concept', html.includes('<h1 class="pearl-concept" id="pearlConcept" tabindex="-1">E(A <b>rule</b>)</h1>') && homePage({}, { pearlNow: () => ({ title: 'T<x>' }) }).includes('tabindex="-1">E(T<x>)</h1>'));
   ok('the statement as the page\'s ladder lays it out, scrolled by its pearlScroll action', html.includes('<div class="pearl-bodywrap" id="pearlBody" role="region" aria-labelledby="pearlConcept" tabindex="0" data-action="pearlScroll">[LADDER Title]</div>'));
   ok('Show all, by pearlToggleAll, drawn hidden and collapsed: the page shows it once it has measured the statement past its box', html.includes('<button class="pearl-morecue" id="pearlMore" data-action="pearlToggleAll" aria-controls="pearlBody" aria-expanded="false" hidden>[icon chevron-down icon-sm]<span>Show all</span></button>'));
   const acts = h => [...g1(h, /<div class="pearl-actions">([\s\S]*?)<\/div>/).matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
-  ok('the ways to recall, read it as a paragraph, see the source and open the note, in that order, each its own action', J(acts(html)) === J(['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen']), J(acts(html)));
-  ok('the paragraph button pressed only when the statement is read as written', html.includes('id="pearlReading" data-action="pearlReading" aria-controls="pearlBody" aria-pressed="false"') && homePage({}, { pearlAsWritten: true }).includes('aria-pressed="true" title="Read the complete statement as a paragraph"'));
-  ok('the note it is from, through e(), as the open button\'s title and as the source; or "Your reference notes"', html.includes('title="E(Note <i>7</i>)">Read note [icon arrow-right icon-sm]</button>') && html.includes('aria-label="Pearl source" hidden>E(Note <i>7</i>)</div>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('hidden>E(Your reference notes)</div>'));
-  ok('the prompt to explain it, hidden until asked for', html.includes('<div class="pearl-prompt" id="pearlPrompt" hidden>') && html.includes('<strong>Explain it in your own words.</strong>'));
+  /* The owner's marked screenshot (November 2026): Recall, Paragraph and Source are gone, and the way into the note stays. */
+  ok('one way on: open the note, by pearlOpen', J(acts(html)) === J(['pearlOpen']), J(acts(html)));
+  ok('the note it is from, through e(), as the open button\'s title; or "Your reference notes"', html.includes('title="E(Note <i>7</i>)">Read note [icon arrow-right icon-sm]</button>') && homePage({}, { pearlNow: () => ({ concept: 'C' }) }).includes('title="E(Your reference notes)">Read note'));
+  ok('and no recall prompt, paragraph view or source panel left behind', !/pearlPrompt|pearlRecall|pearlReading|pearlSource|Explain it in your own words/.test(html), String((html.match(/pearlPrompt|pearlRecall|pearlReading|pearlSource|Explain it in your own words/) || [''])[0]));
   ok('and last, its figure, then its chapter\'s emblem', /\[EMBLEM\]\n      <\/div>/.test(homePage({}, { pearlEmblem: () => '[EMBLEM]', pearlFigure: () => '' })) && homePage({}, { pearlFigure: () => '[FIG]' }).includes('[FIG][EMBLEM]\n      </div>'));
 }
 
@@ -230,13 +230,16 @@ head('the hero');
 {
   const html = homePage();
   ok('the anatomy and the beating heart are the page\'s two images, each in its place', html.includes('<div class="hero-live atlas-3d">\n      [ATLAS-IMG]\n') && html.includes('<div class="h-beat">[HERO-IMG]</div>'));
-  ok('live in 3D: the cardiac cycle, and the way back to the illustration', html.includes('<span class="hero-live-status"><i aria-hidden="true"></i> Live cardiac cycle</span>') && /id="atlasExplore" data-action="toggleAtlas3D"\s*aria-label="Show heart illustration" aria-pressed="true" title="Show heart illustration">\[icon layers icon-sm\] Illustration<\/button>/.test(html));
-  const flat = homePage({}, { atlas3D: false });
-  ok('as an illustration: says so, and offers 3D', flat.includes('<div class="hero-live">') && flat.includes('Illustrative anatomy</span>') && /aria-label="Explore heart in 3D" aria-pressed="false" title="Explore heart in 3D">\[icon layers icon-sm\] Explore in 3D<\/button>/.test(flat));
-  ok('pause or play, by toggleAtlasMotion, as the heart is', html.includes('id="atlasLandingPause" data-action="toggleAtlasMotion" aria-label="Pause animation">[icon pause icon-sm]</button>') && homePage({}, { atlasPaused: true }).includes('aria-label="Play animation">[icon play icon-sm]</button>')
-     && homePage({}, { atlasPaused: true }).includes('id="atlasPause" data-action="toggleAtlasMotion" aria-pressed="true">[icon play icon-sm]<span>Play motion</span>'));
+  /* As it was before the Quiet Atlas (the owner's screenshot, November 2026): a greeting, Systole, the bank in one line
+     (its size, the share started, today's answers) and the rhythm; no badge, no illustration switch, no pause beside it. */
+  ok('the greeting the page hands over, through e(), then Systole', html.includes('<div class="hero-greet">E(Good <evening>)</div>\n        <div class="hero-h1">Systole</div>'));
+  const line = String(g1(html, /<div class="hero-line">([\s\S]*?)<\/div>/) || '').replace(/\s+/g, ' ').trim();
+  ok('the bank in one line: 5 questions, 80% started, 6 today, the dots between them hidden from a screen reader', line === '<span class="hl-item"><b>5</b> questions</span><span class="hl-dot" aria-hidden="true"></span> <span class="hl-item"><b>80%</b> started</span><span class="hl-dot" aria-hidden="true"></span> <span class="hl-item"><b>6</b> today</span>', line);
+  ok('and the rhythm, written in by the page', html.includes('<div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>'));
+  ok('no badge, no switch to the illustration, and no pause beside the heart: its menu has motion', !/hero-live-status|atlasExplore|atlasLandingPause|toggleAtlas3D|The living heart/.test(html) && homePage({}, { atlas3D: false }).includes('<div class="hero-live">'));
+  ok('pause or play, by toggleAtlasMotion in the heart\'s menu, as the heart is', homePage({}, { atlasPaused: true }).includes('id="atlasPause" data-action="toggleAtlasMotion" aria-pressed="true">[icon play icon-sm]<span>Play motion</span>') && html.includes('id="atlasPause" data-action="toggleAtlasMotion" aria-pressed="false">[icon pause icon-sm]<span>Pause motion</span>'));
   ok('the heart\'s menu, hidden, opened by toggleHeroMenu: chambers and flow, motion, and the model\'s credit', html.includes('<div class="hero-menu" id="heroMenu" role="group" aria-label="Heart model" hidden>') && /id="heroHeartBtn" data-action="toggleHeroMenu"/.test(html) && J(actionsOf(String(g1(html, /(<div class="hero-menu"[\s\S]*?<\/div>)/)))) === J(['toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit']));
-  ok('chambers and flow pressed, and the explore button marked, only with the cutaway on', homePage({}, { heroCutaway: true }).includes('id="heroMechanics" data-action="toggleHeroMechanics"\n          aria-pressed="true"') && homePage({}, { heroCutaway: true }).includes('<button class="hero-mechanics is-active" id="atlasExplore"') && html.includes('aria-pressed="false">[icon layers icon-sm]<span>Chambers and flow</span>'));
+  ok('chambers and flow pressed only with the cutaway on', homePage({}, { heroCutaway: true }).includes('id="heroMechanics" data-action="toggleHeroMechanics"\n          aria-pressed="true"') && html.includes('aria-pressed="false">[icon layers icon-sm]<span>Chambers and flow</span>'));
 }
 
 head('the session strip and the greeting');
@@ -288,7 +291,7 @@ const HK_READS = new Set(), HS_READS = new Set();
     watched(BCH.slice(), none(), 'CHAPTERS'), watched(homeKit({ showHello: () => hello, pearlNow: () => watched(Object.assign({}, PEARL), none(), 'pearl'), POOL: watched(BPOOL.slice(), none(), 'POOL') }), HK_READS, 'kit'))));
   const names = s => [...s].sort().join(' ');
   ok('the Home page reads, of the state, the session\'s score, the days and the layout, and nothing else', !outs.some(o => o.startsWith('THREW')) && names(HS_READS) === 'daily homeLayout sessionCorrect sessionTotal', names(HS_READS));
-  ok('of its kit, twenty-three names', names(HK_READS) === 'ATLAS_IMG HERO_IMG POOL TOTAL_Q atlas3D atlasPaused atlasReading buildBrain buildLabs dueQuestions e heroCutaway icon masteryFor pearlAll pearlAsWritten pearlEmblem pearlFigure pearlLadder pearlNow showHello startedCount todayISO', names(HK_READS));
+  ok('of its kit, twenty-three names', names(HK_READS) === 'ATLAS_IMG HERO_IMG POOL TOTAL_Q atlas3D atlasPaused atlasReading buildBrain buildLabs dueQuestions e greet heroCutaway icon masteryFor pearlAll pearlEmblem pearlFigure pearlLadder pearlNow showHello startedCount todayISO', names(HK_READS));
   ok('it sets, deletes and defines nothing on the state, the days, the chapters, the pool, the pearl or the kit', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object') { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   ok('given everything frozen, it draws the same', run(() => M.homeHtml(deep(JSON.parse(J(HS))), deep(BCH.slice()), deep(homeKit({ pearlNow: () => deep(Object.assign({}, PEARL)) })))) === homePage());
@@ -343,7 +346,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const ART = "function buildBrainArt(){ return HomeScreen.brainArtHtml(CH_COLORS,{BrainMap:typeof BrainMap!=='undefined'?BrainMap:undefined,brainLayoutNow,brainSel,BRAIN_TUNE,BRAIN_STATE_LABEL,e}); }";
   const INFO = "function brainInfoHtml(){ return HomeScreen.brainInfoHtml({brainArtL,brainSel,BRAIN_STATE_LABEL,e,icon}); }";
   ok('buildBrain(), buildBrainArt() and brainInfoHtml() are each one line over the module, the art asking for BrainMap before it reads it', [BRAIN, ART, INFO].every(l => count(l) === 1) && ['function buildBrain(', 'function buildBrainArt(', 'function brainInfoHtml('].every(f => count(f) === 1) && page.indexOf(BRAIN) > page.indexOf(SLOT));
-  const HOME = "function buildHome(){\n  atlasReading=!!pearlNow();\n  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,pearlAsWritten,\n    ATLAS_IMG:'<img class=\"atlas-anatomy\" data-atlas-heart=\"img\" src=\"data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@\" alt=\"Illustrative anterior view of the heart\" decoding=\"async\">',\n    HERO_IMG:'<img data-hero-heart=\"img\" src=\"data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@\" alt=\"\" loading=\"eager\" decoding=\"async\">',\n    dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,e,icon});\n}";
+  const HOME = "function buildHome(){\n  atlasReading=!!pearlNow();\n  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,\n    ATLAS_IMG:'<img class=\"atlas-anatomy\" data-atlas-heart=\"img\" src=\"data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@\" alt=\"Illustrative anterior view of the heart\" decoding=\"async\">',\n    HERO_IMG:'<img data-hero-heart=\"img\" src=\"data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@\" alt=\"\" loading=\"eager\" decoding=\"async\">',\n    dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,greet,e,icon});\n}";
   ok('buildHome() decides whether there is a pearl to read, then is the module\'s home screen, the slot above it', count(HOME) === 1 && count('function buildHome(') === 1 && page.indexOf(HOME) > page.indexOf(SLOT) && page.indexOf(SLOT) > page.lastIndexOf('\n', page.indexOf(SLOT) - 2) - 1 && page.indexOf('function buildHome(') < page.indexOf('function buildBrain('));
   const homeKitNames = String(g1(page, /HomeScreen\.homeHtml\(S,CHAPTERS,\{([\s\S]*?)\}\);\n\}/)).replace(/'[^']*'/g, '').replace(/\s+/g, '').split(',').map(x => x.split(':')[0]).sort().join(' ');
   ok('it hands the twenty-three names the Home page was seen to ask for', homeKitNames === [...HK_READS].sort().join(' '), homeKitNames);
@@ -356,11 +359,12 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('the split build\'s patterns for the two heart images are the ones held here, and each finds its image in the page\'s line as built', pwa.includes('const heroRe = ' + HERO_RE + ';') && pwa.includes('const atlasRe = ' + ATLAS_RE + ';') && re(HERO_RE).test(built) && re(ATLAS_RE).test(built) && built.length > 60000,
      pwa.includes('const heroRe = ' + HERO_RE + ';') + ' ' + pwa.includes('const atlasRe = ' + ATLAS_RE + ';') + ' ' + built.length);
   ok('each image is filled from the asset the splash shares, once each in the page\'s line, and in no module', (count('@@SLOT[asset:assets/hero-heart/heart.webp]@@') >= 2) && (HOME.split('@@SLOT[asset:').length - 1) === 2 && !fs.readdirSync(path.join(__dirname, '..', 'src', 'app')).some(f => fs.readFileSync(path.join(__dirname, '..', 'src', 'app', f), 'utf8').includes('@@SLOT[')), String(count('@@SLOT[asset:assets/hero-heart/heart.webp]@@')));
-  const HWORDS = ['Make one <br>idea stick.', 'The living heart', 'Explain it in your own words.', 'Answers today', 'New here?', 'Chambers and flow'];
+  const HWORDS = ['Make one <br>idea stick.', 'questions</span>', 'Answers today', 'New here?', 'Chambers and flow'];
   ok('and the Home page\'s own words are no longer in the page', HWORDS.every(t => count(t) === 0), HWORDS.map(t => count(t)).join(' '));
   const hall = homePage({}, { showHello: () => true }) + homePage({}, { dueQuestions: () => [], startedCount: () => 0 }) + homePage({}, { dueQuestions: () => [] });
   const ha = [...new Set(actionsOf(hall))].sort();
-  ok('the Home page names nineteen actions', J(ha) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'homePagerScroll', 'pearlNext', 'pearlOpen', 'pearlReading', 'pearlRecall', 'pearlScroll', 'pearlSourceToggle', 'pearlToggleAll', 'reviewAllDue', 'startPlan', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
+  ok('the Home page names fifteen actions', J(ha) === J(['dismissHello', 'goRefs', 'goStudy', 'homeGo', 'homePagerScroll', 'pearlNext', 'pearlOpen', 'pearlScroll', 'pearlToggleAll', 'reviewAllDue', 'startPlan', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu']), ha.join(' '));
+  ok('and the four the old hero and pearl named are gone from the page with their functions', ['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'toggleAtlas3D'].every(n => count('function ' + n + '(') === 0 && !new RegExp('[^.\\w$]' + n + '[:(]').test(page)), ['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'toggleAtlas3D'].map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and carries no inline handler', inlineOf(hall).length === 0, inlineOf(hall).join(' ') || 'no on* attribute');
   const kitNames = re => String(g1(page, re)).replace(/\s+/g, '').split(',').map(x => x.split(':')[0]).sort().join(' ');
   ok('each hands the names its member was seen to ask for', kitNames(/HomeScreen\.brainHtml\([^{]*\{([^}]*)\}\); \}/) === [...BK_READS].sort().join(' ') && kitNames(/HomeScreen\.brainArtHtml\(CH_COLORS,\{([^}]*)\}\); \}/) === [...ART_READS].sort().join(' ') && kitNames(/HomeScreen\.brainInfoHtml\(\{([^}]*)\}\); \}/) === [...INFO_READS].sort().join(' '),
@@ -381,9 +385,9 @@ head('the page hands the module what it has, and keeps what the markup names');
   const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS', 'KEY_ACTIONS', 'SCROLL_ACTIONS'];
   const ENTRY = { goAnnotations: 'goAnnotations:()=>goAnnotations(),', goEcho: 'goEcho:()=>goEcho(),', goLab: 'goLab:()=>goLab(),', goMemory: 'goMemory:()=>goMemory(),', goPractice: 'goPractice:()=>goPractice(),',
     goRefs: 'goRefs:()=>goRefs(),', goSessions: 'goSessions:()=>goSessions(),', goStats: 'goStats:()=>goStats(),', goStudy: 'goStudy:()=>goStudy(),', openSearch: 'openSearch:()=>openSearch(),',
-    dismissHello: 'dismissHello:()=>dismissHello(),', homeGo: 'homeGo:el=>homeGo(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),', pearlReading: 'pearlReading:()=>pearlReading(),',
-    pearlRecall: 'pearlRecall:()=>pearlRecall(),', pearlSourceToggle: 'pearlSourceToggle:()=>pearlSourceToggle(),', pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', reviewAllDue: "reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),",
-    startPlan: 'startPlan:el=>startPlan(Number(el.dataset.plan)),', toggleAtlas3D: 'toggleAtlas3D:()=>toggleAtlas3D(),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
+    dismissHello: 'dismissHello:()=>dismissHello(),', homeGo: 'homeGo:el=>homeGo(Number(el.dataset.page)),', pearlNext: 'pearlNext:()=>pearlNext(),', pearlOpen: 'pearlOpen:()=>pearlOpen(),',
+    pearlToggleAll: 'pearlToggleAll:()=>pearlToggleAll(),', reviewAllDue: "reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),",
+    startPlan: 'startPlan:el=>startPlan(Number(el.dataset.plan)),', toggleAtlasMotion: 'toggleAtlasMotion:()=>toggleAtlasMotion(),', toggleHeroCredit: 'toggleHeroCredit:()=>toggleHeroCredit(),',
     toggleHeroMechanics: 'toggleHeroMechanics:()=>toggleHeroMechanics(),', toggleHeroMenu: 'toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),', brainTap: 'brainTap:(el,ev)=>brainTap(ev),',
     startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', startDue: "startDue:()=>startQuiz(null,'due'),"};
   /* Where an action is in a table besides ACTIONS, or only there: the table and the entry. */
@@ -393,12 +397,12 @@ head('the page hands the module what it has, and keeps what the markup names');
   const entries = n => (SCROLL_ONLY.has(n) ? [] : [['ACTIONS', ENTRY[n]]]).concat(ELSEWHERE[n] || []);
   const held = n => (SCROLL_ONLY.has(n) || ENTRY[n]) && TABLES.every(t => keyed(t, n) === (entries(n).some(e => e[0] === t) ? 1 : 0)) && entries(n).every(([t, e]) => tableOf(t).split(e).length === 2);
   const named = [...new Set(la.concat(ha, ba))].sort();
-  ok('the thirty actions of the three pages: each in the tables for what it answers once, as written, and in no other; a tab and the brain in ACTIONS and KEY_ACTIONS, the two scrolls in SCROLL_ACTIONS alone',
-     named.length === 30 && named.every(held),
+  ok('the twenty-six actions of the three pages: each in the tables for what it answers once, as written, and in no other; a tab and the brain in ACTIONS and KEY_ACTIONS, the two scrolls in SCROLL_ACTIONS alone',
+     named.length === 26 && named.every(held),
      named.length + ' · ' + named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (held(n) ? '' : ' (not as held)')).join(' '));
-  const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen', 'pearlReading',
-    'pearlRecall', 'pearlSourceToggle', 'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu', 'homeTabKey', 'brainKey', 'homePagerScroll', 'pearlScroll'];
-  ok('they call thirty-one functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
+  const CALLS = ['brainTap', 'dismissHello', 'dueQuestions', 'goAnnotations', 'goEcho', 'goLab', 'goMemory', 'goPractice', 'goRefs', 'goSessions', 'goStats', 'goStudy', 'homeGo', 'openSearch', 'pearlNext', 'pearlOpen',
+    'pearlToggleAll', 'startPlan', 'startQuiz', 'toggleAtlasMotion', 'toggleHeroCredit', 'toggleHeroMechanics', 'toggleHeroMenu', 'homeTabKey', 'brainKey', 'homePagerScroll', 'pearlScroll'];
+  ok('they call twenty-seven functions the page declares, once each, and the page listens on the document for taps, for keys, and for scrolls as they go down, acting only for the element scrolled',
      CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1 && count("Actions.install(document,KEY_ACTIONS,'keydown');") === 1 && count("Actions.install(document,SCROLL_ACTIONS,'scroll',{capture:true,own:true});") === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('and the ids the page looks for are drawn: the brain, its tilt, its net and the info', ['brain3d', 'brainTilt', 'brainInfo'].every(id => times(brainPage(), 'id="' + id + '"') === 1) && ['brainArt', 'brainNet'].every(id => times(art(), 'id="' + id + '"') === 1)
      && ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')"].every(t => count(t) >= 1) && count("'#brainArt") >= 1, ["getElementById('brainInfo')", "getElementById('brainTilt')", "getElementById('brainNet')", "'#brainArt"].map(t => count(t)).join(' '));
@@ -451,7 +455,7 @@ head('the page hands the module what it has, and keeps what the markup names');
      icon() and e(); the Brain and Labs pages are recorded stand-ins here, held above. First with a note's pearl, then with
      none, then for someone new. */
   const hparts = [read('src/core/pearl.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
-    whole('let pearlCache=null,', '\n'), whole('let pearlAsWritten=false;', '\n'), whole('function pearlAll(){', '\n}'), whole('function pearlNow(){', '\n}'), whole('let pearlPicked=null,', '\n'), whole('function pearlFigure(p){', '\n}'),
+    whole('let pearlCache=null,', '\n'), whole('function greet(){', '\n}'), whole('function pearlAll(){', '\n}'), whole('function pearlNow(){', '\n}'), whole('let pearlPicked=null,', '\n'), whole('function pearlFigure(p){', '\n}'),
     whole('function pearlChapter(p){', '\n}'), whole('function pearlEmblem(p){', '\n}'), whole('const PEARL_NUM=', '\n'), whole('function pearlMark(escaped){', '\n}'), whole('const PEARL_KINDS=', '};'), whole('function pearlLadder(p){', '\n}'),
     whole('function helloSeen(){', '\n}'), whole('function showHello(){', '\n}'), read('src/app/home.js'), whole('function buildHome(){', '\n}')].join('\n');
   const store = {};
@@ -509,9 +513,9 @@ head('the page hands the module what it has, and keeps what the markup names');
   hask('pearlCache=[{concept:"One",title:"A",text:"First.",chapter:"Rhythm notes",source:"N1"},{concept:"Two",title:"B",text:"Second.",chapter:"Rhythm notes",source:"N2"}]; pearlCurrent=null; dueQuestions=()=>[1];');
   const greeted = String(hask('buildHome()'));
   const homeTaps = fire('click', greeted);
-  ok('tapped, the Home page: the notes, the heart\'s explore, pause and menu (handed the click), its chambers, motion and credit, the pearl\'s six, the review of every card due, Got it, and each tab with its page',
-     greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleAtlas3D', 'toggleAtlasMotion', 'toggleHeroMenu ["undefined","the event"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
-       'pearlNext', 'pearlToggleAll', 'pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlOpen', 'dueQuestions', 'startQuiz [null,"due","DUE"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
+  ok('tapped, the Home page: the notes, the heart\'s menu (handed the click), its chambers, motion and credit, the pearl\'s three, the review of every card due, Got it, and each tab with its page',
+     greeted.includes('homeHello') && greeted.includes('pearl-card') && J(homeTaps) === J(['goRefs', 'toggleHeroMenu ["undefined","the event"]', 'toggleHeroMechanics', 'toggleAtlasMotion', 'toggleHeroCredit',
+       'pearlNext', 'pearlToggleAll', 'pearlOpen', 'dueQuestions', 'startQuiz [null,"due","DUE"]', 'dismissHello', 'homeGo [0]', 'homeGo [1]', 'homeGo [2]']), J(homeTaps));
   const keys = fire('keydown', full + bpage + greeted), scrolls = fire('scroll', full + bpage + greeted);
   ok('a key: on the brain, brainKey() handed the key; on each tab, homeTabKey() handed it; on anything else, nothing',
      J(keys) === J(['brainKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]', 'homeTabKey ["the event"]']), J(keys));

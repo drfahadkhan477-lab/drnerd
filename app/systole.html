@@ -5415,16 +5415,12 @@ const ACTIONS={
      above, its strip startPlan with data-plan, and the Brain page's chapters and Review startChapter and startDue.
      The heart's button hands toggleHeroMenu() the click, which reads whether a pointer made it; the brain hands
      brainTap() the click, which finds the neuron under it. A tab carries its page in data-page. */
-  toggleAtlas3D:()=>toggleAtlas3D(),
   toggleAtlasMotion:()=>toggleAtlasMotion(),
   toggleHeroMenu:(el,ev)=>toggleHeroMenu(undefined,ev),
   toggleHeroMechanics:()=>toggleHeroMechanics(),
   toggleHeroCredit:()=>toggleHeroCredit(),
   pearlNext:()=>pearlNext(),
   pearlToggleAll:()=>pearlToggleAll(),
-  pearlRecall:()=>pearlRecall(),
-  pearlReading:()=>pearlReading(),
-  pearlSourceToggle:()=>pearlSourceToggle(),
   pearlOpen:()=>pearlOpen(),
   reviewAllDue:()=>startQuiz(null,'due',dueQuestions()),
   dismissHello:()=>dismissHello(),
@@ -5992,7 +5988,6 @@ function renderNow(){
   app.innerHTML=withScreenTitle(buildScreen());
   app.classList.toggle('again',again);
   applyDisplaySettings();
-  if(S.screen==='home'&&pearlRecalling)pearlApplyRecall();
   /* The Apex button is outside #app; on Home it shares the foot of the screen with the pages' tab bar (home.css). */
   document.body.classList.toggle('on-home',S.screen==='home');
   document.body.classList.toggle('rating-active',
@@ -6307,8 +6302,8 @@ function pearlFit(){
   }
   const cut=!all&&over&&!wrap.hidden;
   if(!cut) pearlSkips=0;
-  else if(!pearlRecalling&&pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
-    pearlSkips++; requestAnimationFrame(()=>{ if(!pearlRecalling&&pearlCurrent===pearlPicked) pearlNext(true); });
+  else if(pearlCurrent&&pearlCurrent===pearlPicked&&pearlSkips<12&&matchMedia('(min-width:700px)').matches){
+    pearlSkips++; requestAnimationFrame(()=>{ if(pearlCurrent===pearlPicked) pearlNext(true); });
   }
 }
 /* The largest text scale at which the pearl fits its card, so a short pearl fills the card and a long one still needs
@@ -6650,9 +6645,7 @@ function pearlMark(escaped){
 const PEARL_KINDS={'Key point':icon('target','icon-sm'),'Finding':icon('stethoscope','icon-sm'),'Key number':icon('bar-chart','icon-sm'),'Key fact':icon('check-circle','icon-sm'),
   'Typical':icon('repeat','icon-sm'),'Mechanism':icon('settings','icon-sm'),'Cause':icon('zap','icon-sm'),'Result':icon('arrow-right','icon-sm'),'Condition':icon('flag','icon-sm'),'Treatment':icon('heart-pulse','icon-sm'),
   'Contrast':icon('layers','icon-sm'),'Risk':icon('trending-up','icon-sm'),'Caveat':icon('alert','icon-sm'),'Avoid':icon('x-circle','icon-sm')};
-let pearlAsWritten=false;
 function pearlLadder(p){
-  if(pearlAsWritten) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
   let steps=[];
   try{ steps=(typeof Pearl!=='undefined')?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
   if(steps.length<2) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
@@ -6662,46 +6655,7 @@ function pearlLadder(p){
       <span class="pearl-txt"><span class="pearl-role">${PEARL_KINDS[label]}${e(label)}</span>
       ${s.lead?`<em class="pearl-lead">${e(s.lead)}</em> `:''}${pearlMark(e(s.text))}</span></li>`; }).join('')}</ol>`;
 }
-/* The paragraph retains the full statement and punctuation. Switching views
-   only replaces this card's body, leaving the heart and the rest of Home alone. */
-function pearlReading(){
-  const body=document.getElementById('pearlBody'), button=document.getElementById('pearlReading');
-  if(!body||!button||!pearlCurrent)return;
-  pearlAsWritten=!pearlAsWritten;
-  body.innerHTML=pearlLadder(pearlCurrent);
-  body.scrollTop=0;
-  button.setAttribute('aria-pressed',String(pearlAsWritten));
-  pearlFit();
-}
-/* Recall is state, not just markup: Home is redrawn by a theme switch, the system's dark mode or a return trip, and the
-   card it draws must still hide the answer the fellow has not recalled yet. */
-let pearlRecalling=false;
-function pearlApplyRecall(){
-  const card=document.getElementById('pearlCard'); if(!card)return;
-  const hide=pearlRecalling;
-  card.classList.toggle('is-recalling',hide);
-  document.getElementById('pearlBody').hidden=hide;
-  const fig=document.getElementById('pearlFig'); if(fig)fig.hidden=hide;
-  document.getElementById('pearlPrompt').hidden=!hide;
-  const button=document.getElementById('pearlRecall');
-  button.textContent=hide?'Reveal':'Recall';
-  button.setAttribute('aria-expanded',String(!hide));
-}
-function pearlRecall(){
-  if(!document.getElementById('pearlCard'))return;
-  pearlRecalling=!pearlRecalling; pearlApplyRecall();
-  pearlFit();
-}
 function pearlOpen(){ if(pearlCurrent)goRefs(pearlCurrent.id); }
-function pearlSourceToggle(){
-  const source=document.getElementById('pearlSource'), button=document.getElementById('pearlSourceToggle');
-  if(!source||!button)return;
-  // A reader opening provenance has chosen this pearl; stop automatic fit retries.
-  pearlPicked=null;
-  source.hidden=!source.hidden;
-  button.setAttribute('aria-expanded',String(!source.hidden));
-  pearlFit();
-}
 function pearlNext(auto){
   const all=pearlAll();
   if(all.length<2) return;
@@ -6720,13 +6674,7 @@ function pearlNext(auto){
   const announcement=document.getElementById('pearlAnnounce'); if(announcement&&auto!==true)announcement.textContent='New pearl: '+(pearlCurrent.concept||pearlCurrent.title);
   el.hidden=false;
   document.getElementById('pearlConcept').textContent=pearlCurrent.concept||pearlCurrent.title;
-  document.getElementById('pearlSource').textContent=pearlCurrent.source||'Your reference notes';
-  document.getElementById('pearlSource').hidden=true;
-  document.getElementById('pearlSourceToggle').setAttribute('aria-expanded','false');
   const sourceButton=document.querySelector('.pearl-open'); if(sourceButton)sourceButton.title=pearlCurrent.source||'Your reference notes';
-  document.getElementById('pearlPrompt').hidden=true;
-  const recall=document.getElementById('pearlRecall');
-  recall.textContent='Recall'; recall.setAttribute('aria-expanded','true');
   const cap=document.getElementById('pearlCap');
   if(cap) cap.textContent=pearlCurrent.chapter||'From your notes';
   /* The figure belongs to the note, so it has to move with the sentence —
@@ -6738,8 +6686,7 @@ function pearlNext(auto){
   if(card&&html) card.insertAdjacentHTML('beforeend',html);
   else if(card) card.insertAdjacentHTML('beforeend',pearlEmblem(pearlCurrent));
   if(card) card.classList.toggle('has-fig',!!html);
-  pearlRecalling=false;
-  if(card){ card.classList.remove('is-recalling','pearl-all'); const home=card.closest('.home-wrap'); if(home) home.classList.remove('pearl-all-open'); }
+  if(card){ card.classList.remove('pearl-all'); const home=card.closest('.home-wrap'); if(home) home.classList.remove('pearl-all-open'); }
   el.scrollTop=0;
   pearlFit();
 }
@@ -6903,10 +6850,10 @@ function dismissHello(){
 @@SLOT[src:src/app/home.js]@@
 function buildHome(){
   atlasReading=!!pearlNow();
-  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,pearlAsWritten,
+  return HomeScreen.homeHtml(S,CHAPTERS,{POOL,TOTAL_Q,atlas3D,atlasPaused,atlasReading,heroCutaway,
     ATLAS_IMG:'<img class="atlas-anatomy" data-atlas-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/atlas-heart/heart.webp]@@" alt="Illustrative anterior view of the heart" decoding="async">',
     HERO_IMG:'<img data-hero-heart="img" src="data:image/webp;base64,@@SLOT[asset:assets/hero-heart/heart.webp]@@" alt="" loading="eager" decoding="async">',
-    dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,e,icon});
+    dueQuestions,startedCount,todayISO,masteryFor,pearlNow,pearlAll,pearlFigure,pearlEmblem,pearlLadder,showHello,buildBrain,buildLabs,greet,e,icon});
 }
 
 /* ═══════════ The home screen's three pages ═══════════
@@ -6918,20 +6865,6 @@ function buildHome(){
 // Home opens on the study material and live model. Only an empty note library
 // needs the invitation; an illustration remains an optional model view.
 let atlasPaused=false, atlasReading=true, atlas3D=true;
-function toggleAtlas3D(){
-  atlas3D=!atlas3D;
-  const hero=document.querySelector('#homePage0 .hero-live');
-  if(hero)hero.classList.toggle('atlas-3d',atlas3D);
-  const button=document.getElementById('atlasExplore');
-  if(button){button.setAttribute('aria-pressed',String(atlas3D));button.setAttribute('aria-label',atlas3D?'Show heart illustration':'Explore heart in 3D');button.title=button.getAttribute('aria-label');button.innerHTML=icon('layers','icon-sm')+' '+(atlas3D?'Illustration':'Explore in 3D');}
-  const label=document.querySelector('.hero-live-status');
-  if(label)label.textContent=atlas3D?'Live cardiac cycle':'Illustrative anatomy';
-  const cutaway=document.getElementById('heroMechanics');if(cutaway)cutaway.hidden=!atlas3D;
-  if(!atlas3D)toggleHeroMenu(false);
-  syncHomeMotion();
-}
-
-
 function toggleAtlasMotion(){
   atlasPaused=!atlasPaused;
   document.getElementById('homePages')?.classList.toggle('atlas-paused',atlasPaused);
