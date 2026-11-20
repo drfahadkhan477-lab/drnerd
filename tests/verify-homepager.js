@@ -403,11 +403,15 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('long captions remain keyboard readable');
   await page.evaluate(()=>{homePage=0;S.screen='home';pearlCurrent=pearlAll().find(p=>p.figKey&&refImgSrc(p.figKey));render();});
   await still('caption reading');
-  const compactHidden=await page.evaluate(()=>{const f=document.getElementById('pearlFig');f.querySelector('figcaption').textContent='Long caption for keyboard scrolling. '.repeat(60);pearlFit();return getComputedStyle(f).display!=='none'&&document.getElementById('pearlCard').classList.contains('pearl-figthumb');});
+  /* Compact: the strip at the card's foot with its caption clamped to its lines, or, in a card too short for the strip, the
+     corner thumbnail. Either way nothing of the figure runs on past its box. */
+  const compactHidden=await page.evaluate(()=>{const f=document.getElementById('pearlFig'),c=f.querySelector('figcaption');c.textContent='Long caption for keyboard scrolling. '.repeat(60);pearlFit();
+    const thumb=document.getElementById('pearlCard').classList.contains('pearl-figthumb');
+    return getComputedStyle(f).display!=='none'&&(thumb||(c.scrollHeight>c.clientHeight+1&&f.scrollHeight<=f.clientHeight+1));});
   await page.evaluate(()=>pearlToggleAll());
   await still('expanded caption reading');
   const expandedFigure=await page.evaluate(()=>getComputedStyle(document.getElementById('pearlFig')).display!=='none');
-  ok('Show all expands a figure kept as a compact thumbnail',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
+  ok('Show all expands a figure kept compact, its caption clamped in the strip or folded to a thumbnail',compactHidden&&expandedFigure,JSON.stringify({compactHidden,expandedFigure}));
   /* The figure's own keys (pearlFigureKey(), KEY_ACTIONS.openPearlFigure): End scrolls it and goes no further, so nothing
      past the document hears it. A listener on window hears a key only if the figure let it go; a browser scrolling the
      figure by itself would pass the scroll check below and fail this one. */
@@ -472,6 +476,53 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.locator('#heroHeartBtn').click();
   await page.mouse.click(5,5);
   ok('and a tap anywhere else closes it',await page.evaluate(()=>document.getElementById('heroMenu').hidden===true));
+
+  head('Home on an iPad: a heart the hero\'s height, a figure strip never cut, the doors beside Apex, nothing moving under the glass');
+  /* The owner's iPad (November 2026): the heart was a thumbnail in the hero's corner, the pearl's figure a band that cut its
+     caption at the card's edge, an empty band was kept under the doors for Apex, the pearl's heading stood at 48px, and
+     the aurora drifting under every glass surface had them blurred again each frame. Each is measured here, at an iPad
+     upright and on its side, with a pearl that has a figure and a caption as long as the owner's. */
+  const ipad=async(w,h)=>{
+    await page.setViewportSize({width:w,height:h});
+    /* The everyday Home: the first-day welcome card takes a row of its own until it is dismissed (verify-pearl does the same). */
+    /* Motion playing: paused, Home stops everything that moves (.atlas-paused), so an aurora drifting under the glass would
+       read as still. Played here, and said with the measurement. */
+    await page.evaluate(()=>{ if(atlasPaused) toggleAtlasMotion(); try{ dismissHello(); }catch(_){} const f=pearlAll().find(p=>pearlFigure(p)); if(f){ pearlCurrent=f; pearlPicked=null; } homePage=0; S.screen='home'; render(); });
+    await still(`Home at ${w}x${h}`);
+    await page.evaluate(()=>{ const c=document.querySelector('#pearlFig figcaption');
+      if(c) c.textContent='Table of antithrombotic therapy by valve and position: the vitamin K antagonist target, and whether aspirin or clopidogrel is added, for mechanical, bioprosthetic and transcatheter valves, with the class and level of each recommendation.';
+      pearlFit(); });
+    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+    return page.evaluate(()=>{
+      const R=s=>{const e=document.querySelector(s); if(!e) return null; const b=e.getBoundingClientRect(); return {top:b.top,bottom:b.bottom,left:b.left,right:b.right,width:b.width,height:b.height};};
+      const card=document.getElementById('pearlCard'), fig=document.getElementById('pearlFig'), cap=fig&&fig.querySelector('figcaption');
+      const hero=R('#homePage0 .hero-live'), heart=R('#homePage0 .hero-heart-3d'), f=R('#pearlFig'), c=R('#pearlCard'), img=R('#pearlFig img'), cp=cap?cap.getBoundingClientRect():null;
+      const fab=R('#aiFab'), doors=R('#homePage0 .home-doors');
+      const pager=document.getElementById('homePages'), aur=getComputedStyle(pager,'::before');
+      const under=document.getAnimations().filter(a=>a.playState==='running'&&a.effect&&a.effect.target===pager).map(a=>a.animationName||'?');
+      return {hero:hero&&Math.round(hero.height), heart:heart&&Math.round(heart.height),
+        strip:!!fig&&!card.classList.contains('pearl-figthumb')&&!card.classList.contains('pearl-all'),
+        figH:f&&Math.round(f.height), inCard:!!f&&!!c&&f.bottom<=c.bottom+1&&f.top>=c.top-1, cut:fig?fig.scrollHeight-fig.clientHeight:null,
+        img:img&&Math.round(img.width), cap:cp?Math.round(cp.height):0, capIn:!!cp&&!!f&&cp.bottom<=f.bottom+1&&cp.height>=14,
+        doorsRow:!!fab&&!!doors&&fab.top<doors.bottom&&fab.bottom>doors.top, doorsClear:!!fab&&!!doors&&fab.left>=doors.right,
+        aurora:aur.animationName, under, moving:!atlasPaused&&!matchMedia('(prefers-reduced-motion: reduce)').matches, heading:parseFloat(getComputedStyle(document.getElementById('pearlConcept')).fontSize)};
+    });
+  };
+  /* The reduced-motion section above leaves it on for the rest of the suite; motion is measured here without it, and it is
+     put back after. */
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  for (const [w,h,upright] of [[820,1180,true],[1180,820,false]]) {
+    const m=await ipad(w,h), at=`${w}x${h}`;
+    if (upright) ok(`${at}: the heart stands the hero's height, not a thumbnail in its corner`,m.heart>=0.8*m.hero,JSON.stringify({hero:m.hero,heart:m.heart}));
+    ok(`${at}: the pearl's figure is a strip at the card's foot, a picture large enough to see and a caption beside it`,m.strip&&m.figH<=130&&m.img>=120&&m.capIn,JSON.stringify(m));
+    ok(`${at}: and nothing of it is cut, by the card or inside the strip, however long its caption`,m.strip&&m.inCard&&m.cut!==null&&m.cut<=1,JSON.stringify({inCard:m.inCard,cut:m.cut,cap:m.cap}));
+    ok(`${at}: the doors share Apex's row and end short of it`,m.doorsRow&&m.doorsClear,JSON.stringify({row:m.doorsRow,clear:m.doorsClear}));
+    ok(`${at}: with Home's motion playing (precondition)`,m.moving,JSON.stringify({moving:m.moving}));
+    ok(`${at}: nothing animates under the glass: the aurora stands still`,m.moving&&m.aurora==='none'&&m.under.length===0,JSON.stringify({aurora:m.aurora,under:m.under}));
+    ok(`${at}: the pearl's heading is a card's heading, 32px at most`,m.heading>0&&m.heading<=32,String(m.heading));
+  }
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({width:1180,height:820}); await page.evaluate(()=>homeGo(0)); await still('Home back at 1180x820');
 
   head('the review on Brain');
 
