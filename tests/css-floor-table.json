@@ -119,6 +119,7 @@
       "flex-direction",
       "flex-shrink",
       "flex-wrap",
+      "float",
       "font",
       "font-family",
       "font-size",
@@ -153,6 +154,7 @@
       "min-width",
       "object-fit",
       "opacity",
+      "order",
       "outline",
       "outline-offset",
       "overflow",
@@ -592,6 +594,10 @@
     },
     "flex-wrap": {
       "balance": null
+    },
+    "float": {
+      "inline-end": "15",
+      "inline-start": "15"
     },
     "font-family": {
       "math": "26.2"

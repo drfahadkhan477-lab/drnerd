@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /*
- * The home screen as three pages: Home, Brain and Labs, side by side, a swipe apart.
+ * The home screen as three pages: Home, Brain and Labs, side by side; one page to the reader, its doors the way between.
  *
  *   node tests/verify-homepager.js build/synthetic/systole.html
  *
- * The claims: Home holds the hero and the pearl, and nothing else (the progress bar is gone, and the doors); Brain holds
- * the gauge, a row per chapter and the brain, which is live while it shows, turns, and runs at Systole's own rates; Labs
- * holds the Rhythm Lab, Echo and the Practice Lab, and under them the study doors. A horizontal swipe
- * lands on the next page; the tab bar's pill follows the finger (it is placed from the scroll position, so half a swipe
- * puts it half way); a tab, or an arrow key on the tab bar, glides to its page and lands on it; the pages that are off
- * the screen are inert, so Tab never walks into them; the page that was showing is the one that shows on the way back
+ * The claims: Home holds the hero and the pearl, and ends with a door to Brain and one to Labs (the owner's choice,
+ * November 2026: no tab bar, no sideways swipe); Brain holds the gauge, a row per chapter and the brain, which is live
+ * while it shows, turns, and runs at Systole's own rates; Labs holds the Rhythm Lab, Echo and the Practice Lab, and under
+ * them the study doors; each of the two begins with the way Home. A sideways swipe leaves Home where it is; a door glides
+ * to its page, lands on it and takes the keyboard to the way Home, which goes back to the door it came by; the pages that
+ * are off the screen are inert, so Tab never walks into them; the page that was showing is the one that shows on the way back
  * from a lab; the screen is one screen tall, in landscape and in portrait; the chapter bars fill when Brain is first
- * seen; and turning the iPad keeps the page.
+ * seen; turning the iPad keeps the page; and Home has no session strip, what is due being reviewed from Brain.
  */
 'use strict';
 const path = require('path');
@@ -61,16 +61,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   };
   const state = () => page.evaluate(() => {
     const p = document.getElementById('homePager'), w = p.clientWidth;
-    const sel = [0, 1, 2].filter(i => document.getElementById('homeTab' + i).getAttribute('aria-selected') === 'true');
+    /* No tab is selected any more (no tab bar): the page in use is the one that is not inert. */
+    const sel = [0, 1, 2].filter(i => !document.getElementById('homePage' + i).inert);
     return { f: p.scrollLeft / w, sel, homePage, inert: [0, 1, 2].map(i => !!document.getElementById('homePage' + i).inert),
       hidden: [0, 1, 2].map(i => document.getElementById('homePage' + i).getAttribute('aria-hidden') === 'true') };
   });
-  const pillAt = () => page.evaluate(() => {
-    const pill = document.querySelector('.home-tab-pill').getBoundingClientRect();
-    return [0, 1, 2].map(i => document.getElementById('homeTab' + i).getBoundingClientRect())
-      .map(t => ({ left: innerWidth>=700?t.top:t.left, width: innerWidth>=700?t.height:t.width })).concat([{ pill: innerWidth>=700?pill.top:pill.left, w: innerWidth>=700?pill.height:pill.width }]);
-  });
-
   await page.evaluate(() => { homePage = 0; S.screen = 'home'; render(); });
   await still('first render');
   head('Home opens on the pearl and live heart');
@@ -82,7 +77,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const p = i => document.getElementById('homePage' + i);
     return {
       pages: document.querySelectorAll('#homePager > .home-page').length,
-      tabs: [...document.querySelectorAll('.home-tabs [role="tab"]')].map(t => t.textContent.trim()),
+      tabs: document.querySelectorAll('.home-tabs, [role="tab"]').length,
+      homeDoors: [...p(0).querySelectorAll('.home-door b')].map(b => b.textContent), backs: [1, 2].map(i => !!p(i).querySelector('.home-back')),
       home: { hero: !!p(0).querySelector('.hero-live'), pearl: !!p(0).querySelector('#pearlCard'), prog: !!document.getElementById('homeProgress'),
         doors: p(0).querySelectorAll('.door').length },
       brain: { gauge: !!p(1).querySelector('.brain-gauge'), rows: p(1).querySelectorAll('.brain-ch').length, chapters: CHAPTERS.length,
@@ -92,8 +88,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       after: (() => { const c = p(2).querySelectorAll('.lab-card'), d = p(2).querySelector('.door'); return !!(c.length && d && (c[c.length - 1].compareDocumentPosition(d) & 4)); })(),
     };
   });
-  ok('there are three pages and three tabs: Home, Brain, Labs', parts.pages === 3 && parts.tabs.join('|') === 'Home|Brain|Labs', parts.pages + ' pages; ' + parts.tabs.join(' · '));
-  ok('Home holds the hero and the pearl, no progress bar and no doors', parts.home.hero && parts.home.pearl && !parts.home.prog && parts.home.doors === 0, JSON.stringify(parts.home));
+  ok('there are three pages and no tab bar: Home ends with a door to Brain and one to Labs, and each of those begins with the way Home',
+     parts.pages === 3 && parts.tabs === 0 && parts.homeDoors.join('|') === 'Brain|Labs' && parts.backs.join() === 'true,true', JSON.stringify({ pages: parts.pages, tabs: parts.tabs, doors: parts.homeDoors, backs: parts.backs }));
+  ok('Home holds the hero and the pearl, no progress bar and none of the study doors', parts.home.hero && parts.home.pearl && !parts.home.prog && parts.home.doors === 0, JSON.stringify(parts.home));
   ok('Brain holds the gauge and a row for every chapter, and no doors', parts.brain.gauge && parts.brain.rows === parts.brain.chapters && parts.brain.rows > 0 && parts.brain.doors === 0,
      `${parts.brain.rows} rows for ${parts.brain.chapters} chapters, ${parts.brain.doors} doors`);
   ok('Labs holds the Rhythm Lab, Echo, the Practice Lab and Sessions', parts.labs.join('|') === 'goLab|goEcho|goPractice|goSessions', parts.labs.join(' · '));
@@ -104,38 +101,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
   head('one screen tall');
-  /* Tablet navigation follows the selected left-rail design; phones retain bottom tabs. */
+  /* One page (the owner's choice, November 2026): no rail and no bar, at any width. The screen does not scroll, the pages
+     do; Apex keeps its corner, clear of Home's doors. Either side of 700px, where the rail used to begin, too. */
   const fits = async (label) => {
-    const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect();
-      const tabs = r(document.querySelector('.home-tabs')), pager = r(document.getElementById('homePager')), fab = r(document.getElementById('aiFab'));
-      const buttons=[...document.querySelectorAll('.home-tab')].map(r);
-      /* WHICH WAY THE RAIL SITS IS READ OFF THE SCREEN, not from the 700px the script uses. Asking
-         innerWidth>=700 for the answer asks the implementation to mark its own paper: homeMark() and
-         homeTabKey() both carry that literal, the stylesheet carries it in seven media queries, and
-         nothing binds the two. Move the stylesheet's breakpoint alone and the rail would sit under the
-         pages while aria-orientation still said vertical and the arrow keys still ran up and down.
-         Beside the pages is a rail; under them is a bar. */
-      const besidePages = tabs.right <= pager.left + 1;
-      return { doc: document.documentElement.scrollHeight, vh: innerHeight, besidePages,
-        placement: besidePages ? tabs.left>=0 && tabs.top>=0 && tabs.bottom<=innerHeight
-          : pager.bottom<=tabs.top && Math.abs(innerHeight-12-tabs.bottom)<=1,
-        orientation: document.querySelector('.home-tabs').getAttribute('aria-orientation'),
-        wanted: besidePages?'vertical':'horizontal',
-
-        fabClear:buttons.every(t=>fab.right<=t.left||fab.left>=t.right||fab.bottom<=t.top||fab.top>=t.bottom) };
+    const g = await page.evaluate(() => { const r = e => e.getBoundingClientRect(), fab = r(document.getElementById('aiFab'));
+      const doors = [...document.querySelectorAll('#homePage0 .home-door')].map(r);
+      return { doc: document.documentElement.scrollHeight, vh: innerHeight, bar: document.querySelectorAll('.home-tabs').length,
+        corner: Math.round(innerWidth - fab.right) < 40 && Math.round(innerHeight - fab.bottom) < 60,
+        fabClear: doors.length === 2 && doors.every(t => fab.right <= t.left || fab.left >= t.right || fab.bottom <= t.top || fab.top >= t.bottom) };
     });
     ok(`${label}: the screen does not scroll, the pages do`,g.doc<=g.vh+1,JSON.stringify(g));
-    ok(`${label}: navigation fits its viewport and declares its direction`,g.placement&&g.orientation===g.wanted,JSON.stringify(g));
-    ok(`${label}: and the Apex button is clear of every tab`,g.fabClear,JSON.stringify(g));
+    ok(`${label}: no rail and no tab bar, and Apex in its corner`,g.bar===0&&g.corner,JSON.stringify(g));
+    ok(`${label}: and the Apex button is clear of Home's doors`,g.fabClear,JSON.stringify(g));
   };
   await fits('landscape');
-  /* ON THE BREAKPOINT ITSELF. Every other width here is hundreds of pixels clear of 700, so a
-     stylesheet that moved its breakpoint and left the script behind would lay out and announce
-     consistently at all of them and say nothing. These two sit either side of the line. */
   for (const w of [699, 701]) {
     await page.setViewportSize({ width: w, height: 900 });
-    await page.evaluate(()=>homeGo(0,false)); await still('Home at the breakpoint');
-    await fits(`${w}px, across the 700px breakpoint`);
+    await page.evaluate(()=>homeGo(0,false)); await still('Home at the old breakpoint');
+    await fits(`${w}px, either side of where the rail began`);
   }
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after the breakpoint pair');
@@ -157,40 +140,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 
 
-  head('a swipe');
+  head('no swipe: the doors');
   const s0 = await state();
-  ok('it opens on Home, the one tab selected, the other pages inert and hidden', s0.sel.join() === '0' && s0.inert.join() === 'false,true,true' && s0.hidden.join() === 'false,true,true', JSON.stringify(s0));
-  /* A horizontal wheel on the pager is the trackpad's swipe; the snap carries it to a page. */
+  ok('it opens on Home, the other pages inert and hidden', s0.sel.join() === '0' && s0.inert.join() === 'false,true,true' && s0.hidden.join() === 'false,true,true', JSON.stringify(s0));
+  /* A horizontal wheel on the pager is the trackpad's swipe. Home is one page now: it stays where it is. */
   const box = await page.locator('#homePager').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + 200);
   await page.mouse.wheel(Math.round(box.width * 0.6), 0);
   await still('after a swipe');
   const s1 = await state();
-  ok('a swipe to the left lands on Brain', Math.abs(s1.f - 1) < 0.01 && s1.sel.join() === '1' && s1.homePage === 1, JSON.stringify(s1));
-  ok('and Brain is now the live page, Home inert', s1.inert.join() === 'true,false,true' && s1.hidden.join() === 'true,false,true', s1.inert.join());
-  const p1 = await pillAt();
-  ok('the pill sits on the Brain tab', p1[1].left > p1[0].left && Math.abs(p1[3].pill - p1[1].left) <= 2, `pill at ${p1[3].pill.toFixed(1)}, Brain tab at ${p1[1].left.toFixed(1)}`);
+  ok('a sideways swipe leaves Home where it is', Math.abs(s1.f) < 0.01 && s1.homePage === 0 && s1.sel.join() === '0', JSON.stringify(s1));
 
-  head('the pill follows the finger');
-  /* Half a page, held there (the snap lifted so it stays): the pill is half way between the two tabs. */
-  const half = await page.evaluate(() => new Promise(r => {
-    const p = document.getElementById('homePager'); p.style.scrollSnapType = 'none'; p.scrollLeft = p.clientWidth * 1.5;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const pill = document.querySelector('.home-tab-pill').getBoundingClientRect().top;
-      const a = document.getElementById('homeTab1').getBoundingClientRect().top, b = document.getElementById('homeTab2').getBoundingClientRect().top;
-      p.style.scrollSnapType = ''; r({ pill, a, b });
-    }));
-  }));
-  ok('half a swipe from Brain to Labs puts the pill half way', half.b > half.a && Math.abs(half.pill - (half.a + half.b) / 2) <= 3, `pill ${half.pill.toFixed(1)}, half way ${((half.a + half.b) / 2).toFixed(1)}`);
-  await page.evaluate(() => homeGo(1));
-  await still('back on Brain');
-
-  head('the tabs, by touch and by key');
-  await page.locator('#homeTab2').click();
+  await page.locator('#homePage0 .home-door[data-page="2"]').click();
   /* Read from what homeGo chose, not from whether the glide is still running: a 420ms glide can be over by the time a
-     loaded runner reads it, and the check then failed on the fixed build. */
+     loaded runner reads it. */
   const glide = await page.evaluate(() => ({ moving: !!(homeLastGo && homeLastGo.to === 2 && homeLastGo.glide) }));
-  await still('after the Labs tab');
+  await still('after the Labs door');
   const hiddenHero = await page.evaluate(async () => {
     const cv=document.getElementById('pearlCurrent'), ctx=cv.getContext('2d'), clear=ctx.clearRect;
     let paints=0; ctx.clearRect=function(...a){paints++;return clear.apply(this,a);};
@@ -200,26 +165,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return {paints,advance:heroMon.t-before};
   });
   ok('offscreen Home does not repaint its pearl or advance its ECG', hiddenHero.paints===0 && hiddenHero.advance===0, JSON.stringify(hiddenHero));
-  await page.evaluate(() => homeGo(0));
-  await still('back on Home');
-  // The trace clock wraps at the canvas edge; actual paints cannot look like
-  // backwards progress when a sample crosses that wrap.
-  const ecg = await require('./_home-ecg')(page);
-  /* Left in the 3D view: the overlay checks below count the ECG and the heart, which are drawn only there. */
-  ok('the ECG strip hidden under the illustration is not drawn, and draws in the 3D view', ecg.shown==='hidden' && ecg.flat===0 && ecg.live>0, JSON.stringify(ecg));
-  await page.evaluate(() => homeGo(2));
-  await still('back on Labs');
   const s2 = await state();
-  ok('the Labs tab glides there rather than jumping', glide.moving, JSON.stringify(glide));
-  ok('and lands on Labs', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2', JSON.stringify(s2));
-  await page.locator('#homeTab2').focus();
-  await page.keyboard.press('ArrowUp');
-  await still('after ArrowUp');
-  const k = await page.evaluate(() => ({ f: document.getElementById('homePager').scrollLeft / document.getElementById('homePager').clientWidth,
-    focus: document.activeElement && document.activeElement.id }));
-  ok('ArrowUp on the vertical tab bar goes to Brain and takes the focus with it', Math.abs(k.f - 1) < 0.01 && k.focus === 'homeTab1', JSON.stringify(k));
-  const tabStop = await page.evaluate(() => [0, 1, 2].map(i => document.getElementById('homeTab' + i).tabIndex).join());
-  ok('only the selected tab is a tab stop', tabStop === '-1,0,-1', tabStop);
+  ok('the Labs door glides there rather than jumping', glide.moving, JSON.stringify(glide));
+  ok('and lands on Labs, the only page in use, with the keyboard on its way Home', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2'
+     && await page.evaluate(() => document.activeElement === document.querySelector('#homePage2 .home-back')), JSON.stringify(s2));
+  await page.keyboard.press('Enter');
+  await still('after Home from Labs');
+  const homeAgain = await page.evaluate(() => ({ f: document.getElementById('homePager').scrollLeft / document.getElementById('homePager').clientWidth,
+    focus: document.activeElement && document.activeElement.className + ' ' + (document.activeElement.dataset.page || '') }));
+  ok('Enter on the way Home goes Home and puts the keyboard back on the door it came by', Math.abs(homeAgain.f) < 0.01 && homeAgain.focus === 'home-door 2', JSON.stringify(homeAgain));
+  // The trace clock wraps at the canvas edge; actual paints cannot look like backwards progress when a sample crosses that wrap.
+  const ecg = await require('./_home-ecg')(page);
+  ok('back on Home the trace is shown across the hero and drawn', ecg.shown !== 'hidden' && ecg.width > 200 && ecg.live > 0, JSON.stringify(ecg));
 
   head('Brain fills when it is seen');
   /* Some cards reviewed today, so the chapter they are in has a mastery to show. */
@@ -417,7 +374,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('turning the iPad');
   await page.evaluate(() => homeGo(1)); await still('Brain before turning');
   await page.setViewportSize({ width: 820, height: 1180 });
-  await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth - 80 && innerWidth === 820, { label: 'the pager to take the portrait width' });
+  await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth && innerWidth === 820, { label: 'the pager to take the portrait width' });
   await still('after turning');
   const turned = await state();
   ok('turned to portrait, Brain is still the page', Math.abs(turned.f - 1) < 0.01 && turned.sel.join() === '1', JSON.stringify(turned));
@@ -427,7 +384,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await still('on a phone');
   await fits('a phone');
   await page.setViewportSize({ width: 820, height: 1180 });
-  await settled(page, () => document.getElementById('homePager').clientWidth === 740, { label: 'the pager back at the portrait width' });
+  await settled(page, () => document.getElementById('homePager').clientWidth === 820, { label: 'the pager back at the portrait width' });
   await still('back in portrait');
 
   head('reduced motion');
@@ -463,21 +420,20 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const captionScroll=await page.evaluate(()=>{const f=document.getElementById('pearlFig');return {overflow:f.scrollHeight-f.clientHeight,scroll:f.scrollTop};});
   ok('a long figure caption can be scrolled with the keyboard',captionScroll.overflow>0&&captionScroll.scroll>0,JSON.stringify(captionScroll));
 
-  head('the hero: numbers where the action was, and the heart is the control');
-  /* Round five (the owner's marked screenshot): the Explore button went and the numbers took its place, under the
-     rhythm; the three round tools beside the heart went, and a tap on the heart opens them as a menu. */
+  head('the hero: the bank in one line, the rhythm under it, and the heart is the control');
+  /* The hero as it was before the Quiet Atlas (the owner's screenshot, November 2026): the greeting, Systole, the bank in
+     one line and the rhythm under it, inside the hero; no 3D switch beside the heart, whose tap opens its menu. */
   await page.evaluate(()=>{S.srs={};homePage=0;S.screen='home';render();});
   await still('hero, nothing due');
   const hero=await page.evaluate(()=>{
     const r=s=>{const e=document.querySelector(s);return e?e.getBoundingClientRect():null;};
-    const rhythm=r('#homePage0 .hero-rhythm-label'), stats=r('#homePage0 .hero-stats-row'), live=r('#homePage0 .hero-live');
+    const rhythm=r('#homePage0 .hero-rhythm-label'), stats=r('#homePage0 .hero-line'), live=r('#homePage0 .hero-live');
     const loose=[...document.querySelectorAll('#homePage0 .hero-tool')].filter(b=>!b.closest('#heroMenu')&&b.offsetWidth>0).length;
-    const entry=r('#atlasExplore');
-    return {entry:!!entry&&entry.width>=44&&entry.height>=44,
-      below:!!(rhythm&&stats)&&stats.top>=rhythm.bottom-1, inside:!!(stats&&live)&&stats.bottom<=live.bottom+1&&stats.top>=live.top,
+    return {entry:!!document.getElementById('atlasExplore'),
+      above:!!(rhythm&&stats)&&rhythm.top>=stats.bottom-1, inside:!!(stats&&live&&rhythm)&&rhythm.bottom<=live.bottom+1&&stats.top>=live.top,
       loose, menuHidden:document.getElementById('heroMenu')?.hidden};
   });
-  ok('the selected design keeps a touch-sized explicit 3D entry',hero.entry,JSON.stringify(hero));
+  ok('the bank\'s line, then the rhythm under it, both inside the hero, and no 3D switch',hero.above&&hero.inside&&!hero.entry,JSON.stringify(hero));
   ok('no round tool stands beside the heart; they are in its menu, closed',hero.loose===0&&hero.menuHidden===true,JSON.stringify(hero));
   await page.locator('#heroHeartBtn').click();
   const opened=await page.evaluate(()=>{const m=document.getElementById('heroMenu'),b=document.getElementById('heroHeartBtn');
@@ -492,38 +448,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.mouse.click(5,5);
   ok('and a tap anywhere else closes it',await page.evaluate(()=>document.getElementById('heroMenu').hidden===true));
 
-  head('next session uses the actual due deck');
+  head('the review on Brain');
 
-  /* A first visit has nothing answered and nothing due, and a menu is a decision to make before any study: the button
-     says Start and begins the 20-minute plan Study offers. Once there is history and nothing is due, it opens Chapters. */
-  const first=await page.evaluate(()=>{S.srs={};S.practice={};homePage=0;S.screen='home';render();
-    return {seen:startedCount(),plan:planNow(20).items.map(it=>it.id)};});
-  await still('a first visit');
-  const startBtn=await page.evaluate(()=>{const b=document.querySelector('.atlas-session button');
-    return b?{text:b.textContent.trim(),name:b.getAttribute('aria-label')||b.textContent.trim()}:null;});
-  await page.locator('.atlas-session button').click();
-  await settled(page,()=>!window.__vtLive&&S.screen!=='home',{label:'the first-visit action to leave Home'});
-  const began=await page.evaluate(()=>({screen:S.screen,mode:S.mode,ids:S.questions.map(q=>q.id)}));
-  ok('on a first visit the button says Start and names what it starts',first.seen===0&&!!startBtn&&startBtn.text==='Start'&&/^Start a 20-minute study session$/.test(startBtn.name),JSON.stringify(startBtn));
-  ok('and starts the 20-minute plan, not a menu',began.screen==='quiz'&&began.mode==='due'&&began.ids.length>0&&JSON.stringify(began.ids)===JSON.stringify(first.plan),JSON.stringify({screen:began.screen,mode:began.mode,n:began.ids.length,plan:first.plan.length}));
-
-  await page.evaluate(()=>{S.srs={};S.practice={};S.practice[POOL[0].id]={n:1,c:1,t:Date.now()};homePage=0;S.screen='home';render();});
-  await still('history, and an empty due deck');
-  const contBtn=await page.evaluate(()=>(document.querySelector('.atlas-session button')||{}).textContent.trim());
-  await page.locator('.atlas-session button').click();
-
-  await settled(page,()=>!window.__vtLive,{label:'chapter action'});
-  ok('with history and no due cards the next-session action says Continue and opens Chapters',contBtn==='Continue'&&await page.evaluate(()=>S.screen==='study'),contBtn);
-
+  /* Home's session strip, with its Start, Continue and Review, is gone (the owner's choice, November 2026); what is due is
+     reviewed from the Brain page, by its Review, which is the review session Chapters starts too: every card due, then
+     new questions, twenty in all, dealt by reviewDeck (docs/ROADMAP.md, S6). */
   const wanted=await page.evaluate(()=>{S.srs={};for(const q of POOL.slice(0,2)) S.srs[q.id]={due:todayISO(),stability:1,reps:1,last:todayISO()};
-    homePage=0;S.screen='home';render();return dueQuestions().map(q=>q.id);});
+    homePage=0;S.screen='home';render();return {due:dueQuestions().map(q=>q.id),queue:reviewQueue(20).map(q=>q.id)};});
   await still('two due cards');
-  await page.locator('.atlas-session button').click();
+  ok('Home has no session strip',await page.evaluate(()=>!document.querySelector('.atlas-session')));
+  await page.evaluate(()=>homeGo(1,false)); await still('Brain with two due cards');
+  await page.locator('#homePage1 [data-action="startDue"]').click();
 
-  await settled(page,()=>!window.__vtLive,{label:'due action'});
+  await settled(page,()=>!window.__vtLive&&S.screen!=='home',{label:'due action'});
   const actual=await page.evaluate(()=>({screen:S.screen,ids:S.questions.map(q=>q.id),mode:S.mode}));
-  /* Which cards, not in what order: a review is dealt shuffled, with chapters in turn (docs/ROADMAP.md, S6). */
-  ok('the next-session review opens only the cards actually due, each once',wanted.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&actual.ids.length===new Set(actual.ids).size&&JSON.stringify(actual.ids.slice().sort())===JSON.stringify(wanted.slice().sort()),JSON.stringify({count:actual.ids.length}));
+  const sorted=a=>JSON.stringify([...a].sort());
+  ok('Brain\'s Review opens the review session: both cards due, and new questions to twenty, each once',wanted.due.length===2&&actual.screen==='quiz'&&actual.mode==='due'&&actual.ids.length===20&&new Set(actual.ids).size===20
+     &&wanted.due.every(id=>actual.ids.includes(id))&&sorted(actual.ids)===sorted(wanted.queue),JSON.stringify({count:actual.ids.length,due:wanted.due.filter(id=>actual.ids.includes(id)).length}));
 
   head('hygiene');
   ok('the page threw nothing', errors.length === 0, errors.slice(0, 3).join(' | '));
