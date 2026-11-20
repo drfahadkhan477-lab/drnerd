@@ -52,7 +52,32 @@ async function main(build) {
     assert.equal(report.exchanges.length, 1);
     assert.equal(report.cases[0].answer, null);
     assert.doesNotMatch(JSON.stringify(report), /mock-key|Mock provider error/);
-    console.log('PASS: mocked Gemini tool exchange, final answer, request cap, exclusive output and HTTP diagnostics.');
+    fs.unlinkSync(output);
+    args[3] = '2';
+    let attempts = 0;
+    const transient = async () => {
+      attempts++;
+      if (attempts === 1) return new Response(null, {status: 503, headers: {'retry-after': '0'}});
+      return Response.json({candidates: [{content: {parts: [{text: answer}]}, finishReason: 'STOP'}]});
+    };
+    const recover = (model, body) => sendGemini(model, body, 'mock-key', transient);
+    await runCase(args, recover, 'synthetic');
+    assert.equal(attempts, 2);
+    assert.equal(read().cases[0].answer, answer);
+    assert.equal(read().exchanges[0].error.status, 503);
+    assert.equal(read().exchanges.length, 2);
+    fs.unlinkSync(output);
+    args[3] = '1';
+    attempts = 0;
+    await assert.rejects(runCase(args, recover, 'synthetic'), /Gemini returned HTTP 503/);
+    assert.equal(attempts, 1);
+    assert.equal(read().cases[0].answer, null);
+
+    fs.unlinkSync(output);
+    args[3] = '2';
+    await assert.rejects(runCase(args, unavailable, 'synthetic'), /Gemini returned HTTP 503/);
+    assert.equal(read().exchanges.length, 1, 'Apex respects a Retry-After beyond its retry window');
+    console.log('PASS: Gemini tool exchange, 503 recovery, Retry-After, request cap and HTTP diagnostics.');
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }

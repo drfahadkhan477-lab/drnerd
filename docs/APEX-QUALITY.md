@@ -90,7 +90,10 @@ endpoint and supplies the response to Apex. The output records the requested
 model, UTC date, request and response bodies (including any returned model
 version and tool exchanges), final answer and finish reason. A MAX_TOKENS
 answer may be partial. A request limit of 1–6 counts provider calls, including
-tool follow-ups. Token charges depend on the model and the exchanges.
+tool follow-ups and retries. When Gemini returns HTTP 503 and a request remains,
+Apex applies its usual backoff and honors Retry-After. A network timeout ends
+the run because the provider may already have processed the request. Token
+charges depend on the model and the exchanges.
 
 The output is a review file with all criteria initially unmeasured. Fill in the
 criteria and score it using the command below. A failed run exits nonzero and

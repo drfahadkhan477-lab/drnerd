@@ -43,7 +43,9 @@ async function sendGemini(model, body, key, request = fetch) {
   if (retryAfter && /^\d{1,9}$/.test(retryAfter)) details.retryAfterSeconds = Number(retryAfter);
   // Keep error text returned by the provider or proxy out of saved reviews.
   await response.body?.cancel().catch(() => {});
-  throw new GeminiRequestError('Gemini returned HTTP ' + response.status, details);
+  const error = new GeminiRequestError('Gemini returned HTTP ' + response.status, details);
+  error.retryAfter = retryAfter;
+  throw error;
 }
 
 async function runCase(args, send, answerSource) {
@@ -71,7 +73,6 @@ async function runCase(args, send, answerSource) {
       if (!accepting || request.method() !== 'POST' ||
         url.href !== endpoint + 'evaluation-model:streamGenerateContent?alt=sse') return route.abort();
       try {
-        if (failure) throw failure;
         if (review.exchanges.length >= Number(limit)) throw new Error('Request limit reached.');
         const exchange = {request: request.postDataJSON()};
         review.exchanges.push(exchange);
@@ -85,10 +86,22 @@ async function runCase(args, send, answerSource) {
           throw error;
         }
         exchange.response = response;
+        failure = null;
         await route.fulfill({status: 200, contentType: 'text/event-stream',
           body: 'data: ' + JSON.stringify(response) + '\n\n'});
       } catch (error) {
         failure = error;
+        if (error instanceof GeminiRequestError && error.details.status === 503 &&
+            error.details.kind === 'http' && review.exchanges.length < Number(limit)) {
+          // Let the app apply its usual backoff. Every retry enters this route and consumes a slot.
+          const headers = {};
+          if (error.retryAfter !== null) {
+            headers['retry-after'] = error.retryAfter;
+            headers['access-control-expose-headers'] = 'Retry-After';
+          }
+          await route.fulfill({status: 503, headers, body: 'Gemini service unavailable.'});
+          return;
+        }
         await route.fulfill({status: 400, body: 'Evaluation request stopped.'});
       }
     });
