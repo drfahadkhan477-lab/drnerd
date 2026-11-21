@@ -890,13 +890,15 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
 html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}
 @media(prefers-color-scheme:dark){html:not([data-theme="light"]) #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}}
 
-/* The aurora: three soft fields of the theme's colours, drifting behind everything. */
+/* The aurora: three soft fields of the theme's colours, behind everything, and still. It drifted once, and every frame of
+   the drift was a new backdrop for each glass surface over it to blur again (the hero, the pearl, the doors, Apex): on an
+   iPad that was the Home screen's frame budget. Still, the blur is drawn once; what moves now moves on top of the glass,
+   not under it (verify-homepager). */
 #homePages::before{content:'';position:absolute;z-index:-1;top:-20%;left:-20%;width:140%;height:140%;pointer-events:none;
   background:radial-gradient(32% 28% at 18% 22%,var(--teal) 0,transparent 70%),
     radial-gradient(30% 26% at 82% 30%,var(--hp-b) 0,transparent 70%),
     radial-gradient(38% 30% at 45% 88%,var(--teal2) 0,transparent 72%);
-  opacity:.2;animation:homeAurora 28s ease-in-out infinite alternate;will-change:transform}
-@keyframes homeAurora{0%{transform:translate3d(0,0,0) rotate(0deg) scale(1)}50%{transform:translate3d(4%,-3%,0) rotate(8deg) scale(1.06)}100%{transform:translate3d(-4%,3%,0) rotate(-6deg) scale(1.02)}}
+  opacity:.2}
 .home-pager{position:relative;z-index:1}
 
 /* The cards, glass. */
@@ -945,8 +947,30 @@ html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(
 #app[data-screen="home"] #homePage0 .pearl-card{border-radius:28px;overflow:hidden}
 #app[data-screen="home"] #homePage0 .pearl-concept{margin:0 0 12px;font-family:'DM Serif Display',Georgia,serif;font-weight:400;
   font-size:clamp(20px,1.1rem + .5vw,26px);line-height:1.2;letter-spacing:-.005em}
+/* The owner asked for a small pearl heading: the text scale (--pz, pearlScale) sized it from 28-48px up to 1.3 times, and
+   on an iPad upright it stood at 48px over the steps. Here it is the heading of a card, which the scale only nudges. */
+#app[data-screen="home"] #homePage0 .pearl-card .pearl-concept{font-size:calc(clamp(22px,1.2rem + .5vw,28px) * min(var(--pz,1),1.12))}
 #app[data-screen="home"] #homePage0 .pearl-cap{padding:0;border:0;background:none;font-size:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 #app[data-screen="home"] #homePage0 .pearl-actions{justify-content:flex-end;border-top:0;padding-top:4px;margin-top:6px}
+/* The note's figure, on an iPad: a strip at the card's foot, its picture on a white mat at the left, its label and two
+   lines of its caption beside it, the whole strip the way to the figure full size. The band it replaces took up to two
+   fifths of the card for a picture too small to read and cut its caption at the card's edge; the strip is the height of
+   its own lines, so it is never cut and the steps keep the rest. Show all, or a card too short even for the strip (the
+   corner thumbnail), keep their own figure (verify-pearl). */
+@media(min-width:700px){
+  #app[data-screen="home"] #homePage0 .pearl-card.has-fig:not(.pearl-nofig):not(.pearl-all):not(.pearl-figthumb) .pearl-fig{
+    flex:0 0 auto;display:grid;grid-template-columns:136px minmax(0,1fr);grid-template-rows:auto auto;
+    grid-template-areas:"img label" "img cap";column-gap:16px;row-gap:4px;align-content:center;
+    width:auto;max-width:none;height:auto;max-height:none;min-height:0;margin:0;padding:12px 22px 14px;overflow:hidden;
+    border:0;border-top:1px solid var(--gl-edge,var(--border2));background:transparent}
+  #app[data-screen="home"] #homePage0 .pearl-card.has-fig:not(.pearl-nofig):not(.pearl-all):not(.pearl-figthumb) .pearl-fig img{
+    grid-area:img;align-self:center;width:136px;height:84px;max-width:none;max-height:none;margin:0;padding:4px;box-sizing:border-box;
+    object-fit:contain;border-radius:10px;background:#fff;box-shadow:0 6px 16px -10px rgba(3,12,24,.55);animation:none}
+  #app[data-screen="home"] #homePage0 .pearl-card.has-fig:not(.pearl-nofig):not(.pearl-all):not(.pearl-figthumb) .pearl-fig-label{
+    grid-area:label;align-self:flex-end;margin:0}
+  #app[data-screen="home"] #homePage0 .pearl-card.has-fig:not(.pearl-nofig):not(.pearl-all):not(.pearl-figthumb) .pearl-fig figcaption{
+    grid-area:cap;align-self:flex-start;padding:0;font-size:var(--t-meta);line-height:1.45;max-height:2.9em;overflow:hidden;color:var(--muted);text-align:left}
+}
 
 /* ── Apex, glass ── */
 body.on-home .ai-fab{backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5)}
@@ -957,9 +981,9 @@ body.on-home .ai-fab{backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-f
 #app[data-screen="home"] #homePage0 .home-doors{animation-delay:.16s}
 @keyframes homeRise{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
 
-.atlas-paused#homePages::before,.atlas-paused #homePage0 .hero-live::after{animation:none}
+.atlas-paused #homePage0 .hero-live::after{animation:none}
 @media(prefers-reduced-motion:reduce){
-  #homePages::before,#app[data-screen="home"] #homePage0 .hero-live::after,#app[data-screen="home"] #homePage0 .hero-live,
+  #app[data-screen="home"] #homePage0 .hero-live::after,#app[data-screen="home"] #homePage0 .hero-live,
   #app[data-screen="home"] #homePage0 .pearl-card,#app[data-screen="home"] #homePage0 .home-doors{animation:none}
 }
 @media(forced-colors:active){#homePages::before,#app[data-screen="home"] #homePage0 .hero-live::before,#app[data-screen="home"] #homePage0 .hero-live::after{display:none}}
@@ -973,10 +997,13 @@ body.on-home .ai-fab{backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-f
 
 /* ── One page (the owner's choice, November 2026) ──
    No tab bar and no sideways swipe: the pager still holds the three pages, side by side, but only a door moves it
-   (homeOpen), so Home scrolls up and down and nothing else. The Apex button keeps its corner, and Home keeps its doors
-   clear of it by the room at its foot (verify-homepager). */
+   (homeOpen), so Home scrolls up and down and nothing else. On an iPad the doors share the bottom row with the Apex button,
+   ending short of it, so no band is kept empty under them for it and the pearl has that height (verify-homepager). */
 #app[data-screen="home"] .home-pager{overflow-x:hidden;scroll-snap-type:none}
-#app[data-screen="home"] #homePage0{padding-bottom:calc(84px + var(--sab))}
+@media(min-width:700px){
+  #app[data-screen="home"] #homePage0{padding-bottom:max(10px,var(--sab))}
+  #app[data-screen="home"] #homePage0 .home-doors{margin-right:104px}
+}
 /* On a phone the Apex orb has a band of its own under the pages, where the tab bar stood, so on arrival it covers no line
    of them, the pearl's statement included (verify-home); Home then needs no room at its foot for it. */
 @media(max-width:699px){
@@ -1006,9 +1033,12 @@ body.on-home .ai-fab{backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-f
 /* An iPad upright: the hero a band of its own height, the pearl the rest, and the doors a compact row at the foot, so the
    pearl keeps its lines on a mini as well as on a 13-inch screen (verify-pearl measures it at 744x1133 and 744x1000). */
 @media(min-width:700px) and (orientation:portrait){
-  #app[data-screen="home"] #homePage0 div.home-wrap[data-home]{grid-template-rows:clamp(196px,21vh,260px) minmax(0,1fr) auto auto;
+  #app[data-screen="home"] #homePage0 div.home-wrap[data-home]{grid-template-rows:clamp(208px,23vh,290px) minmax(0,1fr) auto auto;
     grid-template-areas:"hero" "pearl" "hello" "doors"}
-  #app[data-screen="home"] #homePage0 div.home-wrap[data-home].pearl-all-open{grid-template-rows:clamp(196px,21vh,260px) auto auto auto}
+  #app[data-screen="home"] #homePage0 div.home-wrap[data-home].pearl-all-open{grid-template-rows:clamp(208px,23vh,290px) auto auto auto}
+  /* The heart as tall as the hero, at its right, the trace running behind it: a thumbnail in the corner read as an icon. */
+  #app[data-screen="home"] #homePage0 .hero-heart-plate,#app[data-screen="home"] #homePage0 .hero-heart-3d,#app[data-screen="home"] #homePage0 .hero-heart-hit{
+    top:8px;right:3%;bottom:auto;left:auto;width:min(32%,280px);height:calc(100% - 16px)}
   #app[data-screen="home"] #homePage0 .home-doors{grid-area:doors}
   #app[data-screen="home"] #homePage0 .hero-live{min-height:0;padding:20px 26px 0}
   #app[data-screen="home"] #homePage0 .hero-h1{font-size:clamp(38px,2.4rem + 1vw,58px);margin-bottom:10px}
