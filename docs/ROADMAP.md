@@ -302,6 +302,12 @@ is `ProviderError.network`, each held by its module's suite. The fetch, the
 pages and the errors of `geminiModels()` stay the page's; `ProviderError`'s
 slot moved up beside `ApexWire`'s, above its first caller. `toOpenAITools()`
 is called by nothing, and is left for a change of its own.
+Then the notes search's tokenizer (`src/core/terms.js`, `Terms`, held by
+`verify-terms-pure`): the stopwords, the clinical short words, the stemmer and
+`tok()`, which were `STOP`, `KEEP`, `STEMMED`, `stem()`, `stemWord()`,
+`SHORTOK` and `tok()`. The index, `stubTerms()` and `search()`, which read the
+page's index, stay the page's; the four suites that cut the ranker out of the
+shell start at the module's slot.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
