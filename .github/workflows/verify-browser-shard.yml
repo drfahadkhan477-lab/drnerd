@@ -101,7 +101,7 @@ jobs:
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)
         run: node tests/verify-ink.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-contrast,') }}
-        name: every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast (29 checks)
+        name: every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast (30 checks)
         run: node tests/verify-contrast.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-a11y,') }}
         name: every screen passes axe-core's WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through (19 checks)
@@ -200,7 +200,7 @@ jobs:
         name: a restored backup appears now, not only after the next launch (142 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backupcrypto,') }}
-        name: encrypted export, authenticated restore and rejection of damaged backups (12 checks)
+        name: encrypted export, authenticated restore, legacy dialog and rejection of damaged backups (14 checks)
         run: node tests/verify-backupcrypto.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)

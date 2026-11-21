@@ -133,9 +133,9 @@ head('the page\'s four functions are the calls into this');
      comments blanked: the shell explains itself, and quotes what is looked for. */
   const page = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
   const once = text => page.split(text).length - 1 === 1;
-  ok('dueQuestions() hands over POOL, S.srs and today', once('function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO()); }') && once('function dueQuestions('));
+  ok('dueQuestions() hands over POOL, S.srs and today', once('function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO(),S.examDate); }') && once('function dueQuestions('));
   ok('newQuestionsForReview() hands over POOL, S.srs and the size', once('function newQuestionsForReview(limit){ return ReviewQueue.fresh(POOL,S.srs,limit); }') && once('function newQuestionsForReview('));
-  ok('reviewQueue() hands over POOL, S.srs, today and the size', once('function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target); }') && once('function reviewQueue('));
+  ok('reviewQueue() hands over POOL, S.srs, today and the size', once('function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target,S.examDate); }') && once('function reviewQueue('));
   ok('fmtInterval() hands over the days', once('function fmtInterval(days){ return ReviewQueue.fmtInterval(days); }') && once('function fmtInterval('));
   const slot = page.indexOf('@@SLOT[src:src/core/reviewqueue.js]@@');
   ok('and the module is written into the page once, above all four', slot >= 0 && page.indexOf('@@SLOT[src:src/core/reviewqueue.js]@@', slot + 1) < 0

@@ -133,6 +133,7 @@ function screenHtml(S, CHAPTERS, CH_COLORS, kit){
         <div class="exam-ctl"><input type="date" id="examDate" value="${S.examDate||''}" data-action="setExamDate">
           ${S.examDate?`<button class="exam-x" id="examClear" data-action="clearExamDate" aria-label="Clear the exam date" title="Clear">${icon('x')}</button>`:''}</div>
         <span class="exam-left" id="examLeft">${e(examLeftText())}</span>
+        ${daysLeft>0?'<small>Reviews are scheduled by exam eve. In the last 14 days, review starts with the due cards most at risk.</small>':''}
       </div>
       ${daysLeft!=null&&daysLeft>0?`<div class="exam-count" aria-hidden="true"><b id="examDays">${daysLeft}</b><span>${daysLeft===1?'day':'days'}</span></div>`:''}
     </div>

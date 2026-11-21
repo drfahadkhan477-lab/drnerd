@@ -285,6 +285,15 @@ Ramer–Douglas–Peucker simplification, a stroke simplified before it is store
 and an outline filled as one curved path, which were `roundPt()`, `rdp()`,
 `simplifyStroke()` and `fillOutline()`. `penOutline()`, which reads the page's
 pen and PencilFX's width curve, stays the page's.
+Then the map's second group, the readers, a screen's numbers at a time: what
+the Progress, Study and Brain screens lead with (`src/core/progressstats.js`,
+`ProgressStats`, held by `verify-progressstats-pure`): a chapter's mastery, the
+mean recall, the week's due cards, the questions started and the last thirty
+days, which were `masteryFor()`, `avgRetention()`, `forecast7()`,
+`startedCount()` and `last30()` reading `POOL`, `S` and the clock, and are now
+handed them. The three screen suites that run the page's own lines
+(`verify-statsscreen-pure`, `verify-homescreen-pure`, `verify-study-pure`)
+load the module beside them.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
@@ -439,10 +448,25 @@ contracts and together cost about 0.5% of measured runner time. Focus the
 next measurement on WebKit shard balance and the browser suites that drove
 reruns. The earlier `verify-homepager` Brain-turn failure was addressed by
 [#357](https://github.com/drfahadkhan477-lab/drnerd/pull/357).
-[#397](https://github.com/drfahadkhan477-lab/drnerd/pull/397) estimates a
-shorter longest WebKit shard. Compare elapsed time and summed runner-minutes
-after it lands, since moving work between shards can reduce the former
-while leaving the latter similar.
+*WebKit follow-up after #397 merged:* two completed master push runs on each
+side of the change ran the shared browser workflow and passed all WebKit shards
+on attempt 1. The median slowest shard went from 15.25 to 11.72 minutes. The
+median elapsed time from the first WebKit shard's start to the last one's
+completion went from 15.80 to 11.72 minutes. The median sum of shard
+runner-minutes went from 39.52 to 40.37. The push at the merge commit was
+cancelled before its WebKit shards ran. One later workflow failed in Chromium
+and is included because its WebKit jobs all completed successfully.
+[Before](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44857423826),
+[before](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44861112392),
+[after](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44861285980),
+[after](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44864440401).
+
+Two later PR runs with four green first-attempt WebKit shards took 13.73 and
+16.50 elapsed minutes, with 40.68 and 45.32 runner-minutes. The small master
+sample supports keeping the weights. The PR timings show that the slowest
+shard still varies across runs, so collect more data before retuning.
+[#406 run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44862935819),
+[#408 run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44866313083).
 
 **E5 — Measure battery on the iPad, then set a frame budget.** The discovery doc
 showed the container cannot measure it. Add a hidden diagnostics line that counts
@@ -603,6 +627,15 @@ equates interval with stability only at 90%; and the final fortnight orders by
 lowest retrievability weighted by chapter. Bump `SCHEDULER_VERSION`, and compare
 with ts-fsrs at the same requested retention in the oracle suite. *Opus*, with
 *Fable* reviewing the mathematics.
+
+The S2 policy keeps 90% retention until 60 days out, then raises it
+linearly to 95% on the eve. Leave room for a review on the eve; a card rated
+that day may come due on exam day. From exam day onward, a new rating starts
+an ordinary interval. Bring existing cards into the pre-exam queue without
+rewriting their saved dates when the fellow changes or clears the exam date.
+Quiz, review and Practice Lab ratings use the same deadline.
+In the last 14 days rank due bank cards by estimated chance of forgetting times
+chapter share, with equal shares until a matching owner blueprint is supplied.
 
 **S3 — Weights fitted to the fellow.** `fsrs.js` runs FSRS-5's population weights
 and is already built for a change (`SCHEDULER_VERSION`, the parameter

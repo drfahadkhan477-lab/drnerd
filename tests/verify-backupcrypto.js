@@ -188,6 +188,28 @@ async function missingData(page, key) {
     ok('restored data survives a reload', !missingAfterReload.length, missingAfterReload.join(', '));
 
     await progress(targetPage);
+    section = 'legacy passphrase dialog';
+    await targetPage.evaluate(() => { HTMLDialogElement.prototype.showModal = undefined; });
+    await exportButton(targetPage).click();
+    const legacy = dialog(targetPage);
+    const legacyVisible = await legacy.isVisible();
+    let focused = false, wrapped = false, dismissed = false, restoredInFallback = false;
+    if (legacyVisible) {
+      focused = await legacy.locator('[name="passphrase"][type="password"]').evaluate(input => input === document.activeElement);
+      await targetPage.keyboard.press('Shift+Tab');
+      wrapped = await legacy.getByRole('button', { name: 'Cancel' }).evaluate(button => button === document.activeElement);
+      await targetPage.keyboard.press('Escape');
+      dismissed = !await legacy.isVisible() && await exportButton(targetPage).evaluate(button => button === document.activeElement);
+      if (await legacy.isVisible()) await legacy.getByRole('button', { name: 'Cancel' }).click();
+      await targetPage.waitForFunction(() => !backupBusy);
+      await targetPage.evaluate(() => { CHATS._general = []; saveJSON('accsap12.chat', CHATS); });
+      await selectFile(targetPage, first.text);
+      restoredInFallback = await unlock(targetPage, passphrase) === 'Annotations restored.'
+        && await targetPage.evaluate(() => CHATS._general[0]?.content === 'Invented conversation');
+    }
+    ok('the legacy passphrase dialog keeps focus and Escape returns it to the trigger', legacyVisible && focused && wrapped && dismissed);
+    ok('the legacy passphrase dialog can authenticate and restore a backup', restoredInFallback);
+
     await targetPage.evaluate(() => { BackupCrypto.available = () => false; });
     await exportButton(targetPage).click();
     ok('a browser without Web Crypto leaves the plain export available',

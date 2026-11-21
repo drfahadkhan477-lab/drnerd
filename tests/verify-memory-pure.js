@@ -183,7 +183,8 @@ head('grounded mode keeps who is taught, and withholds the key');
   /* The world the answer-aware parts read: no block open, one question answered, the review log, and the module that turns them into
      lines. The page's own helpers run over it; nothing here is a copy of what they do. */
   const ctx = { ALL_Q: [q], REF: [{ id: 'r1', title: 'Amyloidosis note', tags: '', body: 'Apical sparing on strain is the amyloidosis pattern.' }],
-    Memory: M, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false,
+    Memory: M, Profile: { build: () => '\n\nINVENTED LEARNING PROFILE' },
+    Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' }, AI_GROUNDED: false,
     BANK_INFO: require('../scripts/which-bank.js').ACCSAP,
     document: { documentElement: { hasAttribute: () => false } },
     ApexSignals: require('../src/core/apexsignals.js').ApexSignals, LOG: [], QBYID: { ZZ_7: q },
@@ -216,7 +217,15 @@ head('grounded mode keeps who is taught, and withholds the key');
   ctx.AI_GROUNDED = true;
   const g = ctx.aiCtx(q), gTool = tool();
   ok('grounded mode is genuinely on', /commentary for this item is withheld/.test(g));
-  ok('the memory is still there', /WHAT YOU ALREADY KNOW ABOUT THIS FELLOW/.test(g) && /boards in October 2026/.test(g));
+  const beforeItem = /^INVENTED LEARNING PROFILE\n\n<<<MEMORY-([A-Z0-9]{12})>>>[\s\S]*?WHAT YOU ALREADY KNOW ABOUT THIS FELLOW[\s\S]*?boards in October 2026\.[\s\S]*?<<<\/MEMORY-\1>>>\n\n/;
+  const oldFence = ctx.refFence();
+  ctx.refFenceRoll();
+  const browsing = ctx.aiCtx(null);
+  ok('the profile and fenced memory precede the item or browsing context, and the fence rotates',
+     [open, g, browsing].every(c => beforeItem.test(c))
+       && browsing.replace(beforeItem, '').startsWith('The fellow is browsing')
+       && [open, g].every(c => c.replace(beforeItem, '').startsWith('CURRENT QUESTION'))
+       && browsing.match(beforeItem)?.[1] !== oldFence);
   ok('every option is there as its letter and text alone: none marked as the key, none with how many candidates chose it',
      [...'ABCDE'].every(L => BARE_GROUNDED.test(line(g, L))) && !/← CORRECT|of candidates chose/.test(g), line(g, 'C').trim());
   ok('and the commentary is not in it', !/kz9/.test(g) && !/OFFICIAL ACC COMMENTARY/.test(g));

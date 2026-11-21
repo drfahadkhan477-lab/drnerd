@@ -243,7 +243,7 @@ head('the page works the runs out, hands the module what it has, and keeps what 
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const parts = [['function icon(name, cls){', '\n}'], ['const ESC={', '\n'], ['const e=s=>', '\n'], ['function chInk(hex){', '\n}'], ['function chIcon(ch,cls){', '\n'], ['function isoLocal(d){', '\n'], ['function todayISO(){', '\n'],
-    ['function dueQuestions(){', '\n'], ['function masteryFor(ch){', '\n}'], ['function startedCount(){', '\n}'], ['function planNow(minutes){', '\n}'], ["let _runsKey='',_runs=[],_runsShown=[];", '\n'], ['function topicRunsNow(){', '\n}'],
+    ['function dueQuestions(){', '\n'], ['function masteryFor(ch){', '\n'], ['function startedCount(){', '\n'], ['function planNow(minutes){', '\n}'], ["let _runsKey='',_runs=[],_runsShown=[];", '\n'], ['function topicRunsNow(){', '\n}'],
     ['function examDaysLeft(){', '\n'], ['function recentPerDay(){', '\n}'], ['const flaggedQs=()=>', '\n']].map(([a, b]) => whole(a, b)).join('\n');
   const NOW = new Date(2026, 10, 15, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
@@ -258,7 +258,7 @@ head('the page works the runs out, hands the module what it has, and keeps what 
   const ask = code => { try { return vm.runInContext(code, ctx); } catch (err) { return 'THREW ' + err.message; } };
   /* The page's own buildStudy(), as it stands in the page, not this file's copy of it. */
   const own = whole('function buildStudy(){', '\n}');
-  const loaded = ask(['fsrs', 'reviewqueue', 'studyplan', 'topicrun', 'flagset'].map(m => read('src/core/' + m + '.js')).join('\n') + '\n' + parts + '\n' + read('src/app/study.js') + '\n' + own + '\n"loaded"');
+  const loaded = ask(['fsrs', 'studyplan', 'reviewqueue', 'topicrun', 'flagset', 'progressstats'].map(m => read('src/core/' + m + '.js')).join('\n') + '\n' + parts + '\n' + read('src/app/study.js') + '\n' + own + '\n"loaded"');
   const html = String(ask('buildStudy()'));
   ok('the page\'s own lines draw the screen over the real modules', loaded === 'loaded' && !html.startsWith('THREW') && html.includes('study-wrap'), String(loaded).slice(0, 80) + ' · ' + html.slice(0, 60));
   ok('one card is due (a1, due yesterday), one missed, one flagged and one written on', card(html, 'review-card').includes('1 card ready') && card(html, 'miss-card').includes('1 to reclaim') && g1(html, /id="flagCount">([^<]*)</) === '1 question flagged' && card(html, 'anno-card').includes('1 question you wrote on'), [g1(html, /<div class="fc-title">([^<]*)</), g1(html, /id="flagCount">([^<]*)</)].join(' · '));

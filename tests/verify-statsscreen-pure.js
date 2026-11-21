@@ -284,8 +284,8 @@ head('the page hands the module what it has, and keeps what the markup names');
   const actions = [...new Set(actionsOf(all))].sort();
   ok('its markup, with every button it can show, names eight actions and carries no inline handler',
      J(actions) === J(['confirmBackupSaved', 'exportMarkup', 'goHome', 'importMarkup', 'offlineButton', 'resetProgress', 'startCertainWrong', 'startChapter']) && inlineOf(all).length === 0, actions.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
-  const TABLE = { goHome: 'goHome:()=>goHome(),', startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', offlineButton: 'offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),', startCertainWrong: 'startCertainWrong:()=>startQuiz(null,\'certain\'),', exportMarkup: "exportMarkup:el=>el.dataset.encrypted==='true'?exportMarkup(true):exportMarkup(),",
-    confirmBackupSaved: 'confirmBackupSaved:()=>confirmBackupSaved(),', importMarkup: 'importMarkup:()=>importMarkup(),', resetProgress: 'resetProgress:()=>resetProgress(),' };
+  const TABLE = { goHome: 'goHome:()=>goHome(),', startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', offlineButton: 'offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),', startCertainWrong: 'startCertainWrong:()=>startQuiz(null,\'certain\'),', exportMarkup: "exportMarkup:el=>el.dataset.encrypted==='true'?exportMarkup(true,el):exportMarkup(),",
+    confirmBackupSaved: 'confirmBackupSaved:()=>confirmBackupSaved(),', importMarkup: 'importMarkup:el=>importMarkup(el),', resetProgress: 'resetProgress:()=>resetProgress(),' };
   const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
   const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
   const CALLS = ['goHome', 'startQuiz', 'certainWrongQs', 'offlineStop', 'offlineDownload', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress'];
@@ -306,10 +306,10 @@ head('the page hands the module what it has, and keeps what the markup names');
      scheduler and reviewed once, one question practised. */
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  const parts = ['calib', 'fsrs', 'reviewqueue', 'mockexam'].map(m => read('src/core/' + m + '.js')).concat([whole('function icon(name, cls){', '\n}'), whole('function certainWrongQs(){', '\n'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
+  const parts = ['calib', 'fsrs', 'reviewqueue', 'mockexam', 'progressstats'].map(m => read('src/core/' + m + '.js')).concat([whole('function icon(name, cls){', '\n}'), whole('function certainWrongQs(){', '\n'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
     whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function addDays(iso,n){', '\n'), whole('function dueQuestions(){', '\n'), whole('let pendingBackupSave=null;', '\n'),
-    whole('function safariTabStorage(){', '\n}'), whole('function storageLine(){', '\n}'), whole('function storageOK(){', '\n}'), whole('function masteryFor(ch){', '\n}'), whole('function avgRetention(){', '\n}'),
-    whole('function forecast7(){', '\n}'), whole('function startedCount(){', '\n}'), whole('function last30(){', '\n}'), whole('function offlineCapable(){', '\n}'), read('src/app/stats.js'), whole('function buildStats(){', '\n}')]).join('\n');
+    whole('function safariTabStorage(){', '\n}'), whole('function storageLine(){', '\n}'), whole('function storageOK(){', '\n}'), whole('function masteryFor(ch){', '\n'), whole('function avgRetention(){', '\n'),
+    whole('function forecast7(){', '\n'), whole('function startedCount(){', '\n'), whole('function last30(){', '\n'), whole('function offlineCapable(){', '\n}'), read('src/app/stats.js'), whole('function buildStats(){', '\n}')]).join('\n');
   const NOW = new Date(2026, 10, 16, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
   const timers = [], flags = { installed: false }; let surveys = 0;
@@ -371,8 +371,11 @@ head('the page hands the module what it has, and keeps what the markup names');
     const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
     return el; });
   tctx.listeners.filter(l => l[0] === 'click').forEach(l => buttons.forEach(el => l[1]({ type: 'click', target: el })));
-  ok('the real actions dispatch navigation, practice, both export options, confirmation, import and reset with their arguments',
-     J(tcalls) === J(['goHome', 'offlineDownload', 'startQuiz [null,"certain"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz [' + J(HOSTILE) + ']', 'exportMarkup', 'exportMarkup [true]', 'confirmBackupSaved', 'importMarkup', 'resetProgress']), J(tcalls));
+  const exportTrigger = { nodeType: 1, dataset: { action: 'exportMarkup', encrypted: 'true' } };
+  const importTrigger = { nodeType: 1, dataset: { action: 'importMarkup' } };
+  ok('the real actions dispatch their arguments, including the focus targets for encrypted export and import',
+     J(tcalls) === J(['goHome', 'offlineDownload', 'startQuiz [null,"certain"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz [' + J(HOSTILE) + ']', 'exportMarkup',
+       'exportMarkup ' + J([true, exportTrigger]), 'confirmBackupSaved', 'importMarkup ' + J([importTrigger]), 'resetProgress']), J(tcalls));
   tcalls.length = 0; vm.runInContext('offlineJob.busy=true', tctx);
   const off = buttons.filter(el => el.getAttribute('data-action') === 'offlineButton');
   tctx.listeners.filter(l => l[0] === 'click').forEach(l => off.forEach(el => l[1]({ type: 'click', target: el })));

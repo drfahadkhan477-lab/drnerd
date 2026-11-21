@@ -305,6 +305,9 @@ const SUITES = [
   /* What a saved progress record may hold (docs/ROADMAP.md, E1): the rules a restore, an export and a record from
      another window go through, moved to src/core/progressdata.js. */
   /* A pen stroke made small enough to keep, and its outline drawn (docs/ROADMAP.md, E1): moved to src/core/stroke.js. */
+  /* The numbers the Progress, Study and Brain screens lead with (docs/ROADMAP.md, E1, the readers): moved to
+     src/core/progressstats.js. */
+  ['progressstats-pure', 'a chapter\'s mastery, the mean recall of the scheduled cards, the next seven days\' due cards, the questions started in this bank and the last thirty days are worked out as the screens read them, by the calendar across the day the clocks change, changing nothing'],
   ['stroke-pure', 'a pen point keeps what a screen can show, points a line already describes are dropped and a corner kept, a stroke is simplified in place from three points, and an outline is filled as one curved path'],
   ['progressdata-pure', 'a progress record the app wrote restores to the state it keeps; one it never wrote (a day off the calendar, more correct than answered, a negative count, a resume past its deck, a list for a map) is refused whole; an absent flag list leaves the flags alone; an export keeps the good entries and leaves out the bad'],
   ['refimport-pure', 'an imported file becomes notes: its front matter read and never a note, one note per heading outside a fenced block, titled and tagged from what the file says, and an image link finds its figure only where the match is unique'],
@@ -572,8 +575,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure. And since roadmap D2: contrast. */
-const PENDING_RECORD = ['backupcrypto', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
