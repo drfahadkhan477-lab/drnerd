@@ -70,11 +70,37 @@ function webp(b){
   if (ascii(b, 12, 'VP8X')) return size(u24le(b, 24) + 1, u24le(b, 27) + 1);   /* extended: 24 bits each, less one */
   return null;
 }
+/* JPEG display dimensions follow the orientation of the primary EXIF image.
+   TIFF offsets in APP1 are relative to the byte-order marker and must stay
+   inside the segment. Orientations 5–8 exchange the two axes. */
+function exifOrientation(b, start, end){
+  if (start + 14 > end || !ascii(b, start, 'Exif\0\0')) return 0;
+  const tiff = start + 6;
+  const little = ascii(b, tiff, 'II');
+  if (!little && !ascii(b, tiff, 'MM')) return 0;
+  const u16 = little ? u16le : u16be;
+  if (u16(b, tiff + 2) !== 42) return 0;
+  const offset = little ? u16le(b, tiff + 4) + u16le(b, tiff + 6) * 65536 : u32be(b, tiff + 4);
+  const ifd = tiff + offset;
+  if (offset < 8 || ifd + 2 > end) return 0;
+  const count = u16(b, ifd);
+  if (ifd + 2 + 12 * count > end) return 0;
+  for (let k = 0; k < count; k++) {
+    const entry = ifd + 2 + 12 * k;
+    if (u16(b, entry) !== 0x0112 || u16(b, entry + 2) !== 3 ||
+        u16(b, entry + (little ? 4 : 6)) !== 1 ||
+        u16(b, entry + (little ? 6 : 4)) !== 0) continue;
+    const value = u16(b, entry + 8);
+    if (value >= 1 && value <= 8) return value;
+  }
+  return 0;
+}
+
 /* undefined, rather than null, where the bytes ran out before a frame header: more may find it. */
 function jpeg(b){
   if (b.length < 4) return undefined;
   if (b[0] !== 0xff || b[1] !== 0xd8) return null;
-  let i = 2;
+  let i = 2, orientation = 0;
   while (i + 3 < b.length) {
     if (b[i] !== 0xff) return null;                 /* lost the segments: say nothing rather than guess */
     const m = b[i + 1];
@@ -86,9 +112,13 @@ function jpeg(b){
     /* A frame header: every SOFn but DHT (C4), JPG (C8) and DAC (CC). Height, then width. */
     if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
       if (i + 8 >= b.length) return undefined;
-      return size(u16be(b, i + 7), u16be(b, i + 5));
+      const w = u16be(b, i + 7), h = u16be(b, i + 5);
+      return orientation >= 5 ? size(h, w) : size(w, h);
     }
-    i += 2 + len;
+    const end = i + 2 + len;
+    if (end > b.length) return undefined;
+    if (m === 0xe1 && !orientation) orientation = exifOrientation(b, i + 4, end);
+    i = end;
   }
   return undefined;
 }

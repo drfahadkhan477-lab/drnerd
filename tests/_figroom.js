@@ -29,34 +29,43 @@ let n = 0;
 
 async function heldRoom(page, selector) {
   const url = 'http://fig.invalid/held-' + (++n);
-  const fig = await page.evaluate(sel => {
-    const im = [...document.querySelectorAll(sel)].find(x => x.complete && x.naturalWidth);
-    if (!im) return null;
-    const r = im.getBoundingClientRect();
-    im.setAttribute('data-held', '1');
-    return { src: im.getAttribute('src'), attrs: [im.getAttribute('width') || '', im.getAttribute('height') || '', im.naturalWidth, im.naturalHeight],
-      drawn: Math.round(r.width) + 'x' + Math.round(r.height) };
-  }, selector);
-  if (!fig) return { found: false };
-  let release = null;
-  const comma = fig.src.indexOf(','), type = fig.src.slice(5, fig.src.indexOf(';'));
-  await page.route(url, route => { release = () => route.fulfill({ status: 200, contentType: type, body: Buffer.from(fig.src.slice(comma + 1), 'base64') }); });
+  let release = null, fig = null;
+  await page.route(url, route => new Promise(resolve => {
+    release = async () => {
+      try {
+        const comma = fig.src.indexOf(','), type = fig.src.slice(5, fig.src.indexOf(';'));
+        await route.fulfill({ status: 200, contentType: type, body: Buffer.from(fig.src.slice(comma + 1), 'base64') });
+      } finally { resolve(); }
+    };
+  }));
   try {
-    const held = await page.evaluate(url => {
-      const old = document.querySelector('img[data-held]'), im = old.cloneNode(false);
-      im.removeAttribute('loading'); im.src = url;
+    fig = await page.evaluate(({ selector, url }) => {
+      const old = [...document.querySelectorAll(selector)].find(x => x.complete && x.naturalWidth);
+      if (!old) return null;
+      const area = im => {
+        const r = im.getBoundingClientRect();
+        return Math.round(r.width) + 'x' + Math.round(r.height);
+      };
+      /* Measure and replace in the same frame. A panel changing width
+         while Playwright installs its route is unrelated to image loading. */
+      const src = old.getAttribute('src'), drawn = area(old);
+      const attrs = [old.getAttribute('width') || '', old.getAttribute('height') || '', old.naturalWidth, old.naturalHeight];
+      const im = old.cloneNode(false);
+      im.setAttribute('data-held', '1');
+      im.removeAttribute('loading');
+      im.src = url;
       old.replaceWith(im);
-      return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => {
-        const b = im.getBoundingClientRect();
-        r({ pending: !im.complete, loading: Math.round(b.width) + 'x' + Math.round(b.height) });
-      })));
-    }, url);
+      return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() =>
+        resolve({ src, attrs, drawn, pending: !im.complete, loading: area(im) })
+      )));
+    }, { selector, url });
+    if (!fig) return { found: false };
     /* The request reaches the route a moment after the src is set: it is let through once it has. */
     for (let i = 0; !release && i < 50; i++) await new Promise(r => setTimeout(r, 100));
-    if (release) release();
+    if (release) await release();
     const loaded = !release ? null : await page.waitForFunction(() => { const im = document.querySelector('img[data-held]'); return !!im && im.complete && im.naturalWidth > 0; }, null, { timeout: 10000 })
       .then(() => page.evaluate(() => { const b = document.querySelector('img[data-held]').getBoundingClientRect(); return Math.round(b.width) + 'x' + Math.round(b.height); }), () => null);
-    return { found: true, attrs: fig.attrs, drawn: fig.drawn, pending: held.pending, loading: held.loading, loaded };
+    return { found: true, attrs: fig.attrs, drawn: fig.drawn, pending: fig.pending, loading: fig.loading, loaded };
   } finally {
     await page.unroute(url);
   }

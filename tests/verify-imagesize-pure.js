@@ -74,6 +74,18 @@ head('each format\'s size, from where the format puts it');
   ok('past fill bytes and markers that carry no length', J(size('image/jpeg', JPEG([0xff, 0xff, 0xff], APP0, [0xff, 0x01], SOF(0xc2, 33, 44)))) === J({ w: 33, h: 44 }));
   const exif = seg(0xe1, [...asc('Exif\0\0'), ...Array(40000).fill(0x2a)]);
   ok('past an EXIF block of 40 KB', J(size('image/jpeg', JPEG(exif, SOF(0xc0, 4032, 3024)))) === J({ w: 4032, h: 3024 }), J(size('image/jpeg', JPEG(exif, SOF(0xc0, 4032, 3024)))));
+  const exifShort = (orientation, little, offset = 8) => {
+    const u16 = little ? le16 : be16;
+    const u32 = n => little ? [...le16(n), 0, 0] : be32(n);
+    return seg(0xe1, [...asc('Exif\0\0' + (little ? 'II' : 'MM')), ...u16(42), ...u32(offset),
+      ...u16(1), ...u16(0x0112), ...u16(3), ...u32(1), ...u16(orientation), 0, 0, ...u32(0)]);
+  };
+  const oriented = (n, little, offset) => size('image/jpeg', JPEG(exifShort(n, little, offset), SOF(0xc0, 213, 107)));
+  ok('EXIF orientations 5–8 swap axes in either byte order', [false, true].every(little =>
+    [5, 6, 7, 8].every(n => J(oriented(n, little)) === J({ w: 107, h: 213 }))));
+  ok('unrotated axes and a TIFF offset outside APP1 keep the frame dimensions', [false, true].every(little =>
+    [1, 2, 3, 4].every(n => J(oriented(n, little)) === J({ w: 213, h: 107 })) &&
+    J(oriented(6, little, 300)) === J({ w: 213, h: 107 })));
   ok('the type is read whatever its case', J(safely(() => I.of(url('IMAGE/PNG', PNG(2, 3))))) === J({ w: 2, h: 3 }) && J(size('image/jpg', JPEG(SOF(0xc0, 2, 3)))) === J({ w: 2, h: 3 }));
 }
 
