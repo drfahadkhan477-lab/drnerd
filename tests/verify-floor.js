@@ -258,6 +258,9 @@ const palettes = css => {
     await page.addInitScript(SEED);
     await page.goto('file://' + path.resolve(file), { waitUntil: 'load', timeout: 200000 });
     await booted(page);
+    // The pages run in sequence. Pause Home before comparing its label widths
+    // so each render starts at the initial rhythm and stays there.
+    await page.evaluate(() => { if (!atlasPaused) toggleAtlasMotion(); });
     await page.addStyleTag({ content: FREEZE });
     await quiet(page);
     return { ctx, page };

@@ -29,7 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 const { systemText, turns, toolResults } = require('./_wire');
 
@@ -147,7 +147,9 @@ Recovery is usually complete within weeks.
     page.evaluate(() => refImportText()),
   ]);
   await chooser.setFiles([path.join(DIR, 'takotsubo.md')]);
-  await page.waitForTimeout(1000);
+  // The final import notification also appears for zero notes or a failed read.
+  // It tells us the file handler finished without assuming what reached the library.
+  await settled(page, () => /^Added /.test(document.getElementById('toast')?.textContent || ''));
   const lib = await page.evaluate(() => ({ n: REF.length, title: REF[0] && REF[0].title, body: REF[0] && REF[0].body }));
   ok('it imported, fences and all — nothing is refused at the door', lib.n === 1, `${lib.n} notes`);
   ok('the note is stored exactly as written, forged fences included',
