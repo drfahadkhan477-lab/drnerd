@@ -10,8 +10,7 @@
  * every hairline soft. So the test is simply: does each canvas's backing store
  * actually scale with the display?  The 2D line-art canvases (the ECG strips,
  * the 12-lead, the physiology diagram) should reach 3×; the one 3D surface, the
- * heart, should reach 2.5× on this pointer:fine browser — high enough to be
- * crisp, capped low enough not to triple a phone's shading budget.
+ * heart, should reach 3× on this pointer:fine browser within its pixel budget.
  *
  * The ceilings are ceilings, so this also confirms none of these canvases is
  * still stuck at the old 2× cap the pass was meant to lift.
@@ -19,7 +18,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted } = require('./_render.js');
+const { booted, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -75,7 +74,27 @@ const ratioOf = (page, sel) => page.evaluate(s => {
   head('the home ECG strip');
   await page.waitForFunction(() => { const c = document.getElementById('heroECG'); return c && c.width > 0; }, null, { timeout: 30000 });
   const hero = await ratioOf(page, '#heroECG');
-  ok('the hero ECG strip backs itself at ~3×, not the old 2×', hero >= 2.8, `${hero ? hero.toFixed(2) : hero}×`);
+  const heartSelector = '#heroHeart3dSlot canvas';
+  await settled(page, selector => document.querySelector(selector)?.width > 1,
+    { arg: heartSelector, timeout: 30000, label: 'the Home heart to draw' });
+  const heart = await ratioOf(page, heartSelector);
+  const before = await page.locator(heartSelector).evaluate(canvas => {
+    const width = canvas.width;
+    canvas.style.width = '1400px';
+    canvas.style.height = '1000px';
+    return width;
+  });
+  await settled(page, ({ selector, before }) => document.querySelector(selector)?.width !== before,
+    { arg: { selector: heartSelector, before }, timeout: 30000, label: 'the resized heart to draw' });
+  const pixels = await page.locator(heartSelector).evaluate(canvas => {
+    const area = canvas.width * canvas.height;
+    canvas.style.width = '';
+    canvas.style.height = '';
+    return area;
+  });
+  ok('the hero ECG and fine-pointer heart draw at about 3× and the large heart stays within its pixel budget',
+     env.fine && hero >= 2.8 && heart >= 2.8 && pixels > 0 && pixels <= 4000000,
+     JSON.stringify({ hero, heart, pixels }));
 
   head('Rhythm Lab canvases');
   await page.evaluate(() => { goLab(); render(); });
