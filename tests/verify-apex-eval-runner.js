@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {runCase, sendGemini} = require('../scripts/run-apex-eval');
+const {isSyntheticBuild} = require('../scripts/synthetic-export');
 
 async function main(build) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apex-runner-'));
@@ -12,6 +13,18 @@ async function main(build) {
     const answer = 'Lumen memo A and Lumen memo B disagree about the blue path.';
     const output = path.join(dir, 'review.json');
     const args = [build, 'conflicting-notes', 'mock-model', '2', output];
+    const unmarked = path.join(dir, 'unmarked.html');
+    fs.writeFileSync(unmarked, fs.readFileSync(build, 'utf8').replaceAll('"_synthetic":true', '"_synthetic":false'));
+    assert.equal(isSyntheticBuild(build), true, 'the source fixture has its synthetic marker');
+    assert.equal(isSyntheticBuild(unmarked), false, 'only the copy loses its synthetic marker');
+    let unmarkedCalls = 0;
+    await assert.rejects(runCase([unmarked, ...args.slice(1)], async () => {
+      unmarkedCalls++;
+      return {candidates: [{content: {parts: [{text: answer}]}, finishReason: 'STOP'}]};
+    }, 'synthetic'), /marked synthetic build/, 'an unmarked build must be refused');
+    assert.equal(unmarkedCalls, 0, 'an unmarked build must never call the provider');
+    assert.equal(fs.existsSync(output), false, 'an unmarked build must never create a review');
+
     let calls = 0;
     const send = async (model, body) => {
       assert.equal(model, 'mock-model');
@@ -77,11 +90,11 @@ async function main(build) {
     args[3] = '2';
     await assert.rejects(runCase(args, unavailable, 'synthetic'), /Gemini returned HTTP 503/);
     assert.equal(read().exchanges.length, 1, 'Apex respects a Retry-After beyond its retry window');
-    console.log('PASS: Gemini tool exchange, 503 recovery, Retry-After, request cap and HTTP diagnostics.');
+    console.log('PASS: synthetic-only boundary, Gemini tool exchange, 503 recovery, Retry-After, request cap and HTTP diagnostics.');
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }
 }
 
 const build = process.argv[2];
-main(build).catch(error => { console.error(error); process.exitCode = 1; });
+main(build).catch(error => { console.error('FAIL  ' + error.message); process.exitCode = 1; });

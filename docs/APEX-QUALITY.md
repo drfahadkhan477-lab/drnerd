@@ -75,6 +75,16 @@ character cap. Other tools retain that cap.
 
 ## Collect one answer through Gemini
 
+For an offline check of the evaluation tooling, run these against the invented
+build above. The runner test uses a mocked provider and verifies that removing
+the synthetic marker causes the run to stop before making a request or writing
+a review.
+
+```sh
+node tests/verify-apex-eval-offline.js
+node tests/verify-apex-eval-runner.js build/apex-eval/systole.html
+```
+
 Build the synthetic app as above. Choose a case ID from the fixtures and a model
 ID available on your Gemini account. After approving spend, configure
 `GEMINI_API_KEY` in the runner's environment. For example, with the chosen ID
