@@ -40,15 +40,9 @@ const FSRS=root.FSRS || (typeof require==='function' && require('./fsrs.js').FSR
 const StudyPlan=root.StudyPlan || (typeof require==='function' && require('./studyplan.js').StudyPlan);
 
 function due(pool, srs, today, examDate){
-  if(examDate){
-    const exam=FSRS.examWindow(today,examDate);
-    if(exam && exam.finalFortnight) return StudyPlan.rankedDue(pool,srs,today,exam,root.Blueprint && root.Blueprint.weights);
-    if(exam) return pool.filter(q=>{
-      const day=FSRS.scheduledDue(srs[q.id],exam);
-      return day!==null && day<=today;
-    });
-  }
-  return pool.filter(q=>{ const c=srs[q.id]; return c && c.due<=today; });
+  const exam=FSRS.examWindow(today,examDate);
+  if(exam && exam.finalFortnight) return StudyPlan.rankedDue(pool,srs,today,exam,root.Blueprint && root.Blueprint.weights);
+  return pool.filter(q=>FSRS.isDue(srs[q.id],today,exam));
 }
 function fresh(pool, srs, limit){
   if(limit<=0) return [];

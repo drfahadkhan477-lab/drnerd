@@ -147,7 +147,7 @@ head('the page: a review keeps every due card, and the mock block is arranged');
   };
   ctx.QBYID = Object.fromEntries(ctx.POOL.map(q => [q.id, q]));
   vm.createContext(ctx);
-  const code = [read('src/core/reviewqueue.js'), read('src/core/confusable.js'), 'function shuf(a){ return a.slice(); }',
+  const code = [read('src/core/fsrs.js'), read('src/core/studyplan.js'), read('src/core/reviewqueue.js'), read('src/core/confusable.js'), 'function shuf(a){ return a.slice(); }',
     cut('function reviewQueue(target){', '\n'), cut('const PAIR_MAX=', '\n'), cut('function reviewDeck(qs){', '\n}')].join('\n');
   let err = '';
   try { vm.runInContext(code + '\nvar dealt = reviewDeck(reviewQueue(4)).map(q => q.id); var all = reviewDeck(ReviewQueue.due(POOL,S.srs,todayISO())).map(q => q.id);', ctx); } catch (e) { err = e.message; }

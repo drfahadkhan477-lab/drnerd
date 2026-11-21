@@ -2241,7 +2241,7 @@ function mountPractice(){
     }
     return;
   }
-  if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'));
+  if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'),S.examDate);
   else LabUI.unmount();
 }
 function goPractice(){ S.screen='practice'; render(); toTop(); }

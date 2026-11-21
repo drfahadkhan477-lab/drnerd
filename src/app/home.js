@@ -271,11 +271,11 @@ function brainDendrites(n){
 
 function brainHtml(S, CHAPTERS, CH_COLORS, dueN, seenN, covered, masteryPct, today, kit){
   const {POOL,TOTAL_Q,avgRetention,masteryFor,todayISO,chInk,chIcon,buildBrainArt,brainInfoHtml,e,icon}=kit;
-  const day=todayISO(), exam=S.examDate && FSRS.examWindow(day,S.examDate);
+  const day=todayISO(), exam=FSRS.examWindow(day,S.examDate);
   const ret=avgRetention();
   const rows=CHAPTERS.map(ch=>{
     const qs=POOL.filter(q=>q.ch===ch), m=Math.round(masteryFor(ch)*100), col=CH_COLORS[ch]||'var(--teal)';
-    const seen=qs.filter(q=>S.srs[q.id]||S.practice[q.id]).length, due=qs.filter(q=>{ const c=S.srs[q.id]; const due=c && (exam?FSRS.scheduledDue(c,exam):c.due); return due && due<=day; }).length;
+    const seen=qs.filter(q=>S.srs[q.id]||S.practice[q.id]).length, due=qs.filter(q=>FSRS.isDue(S.srs[q.id],day,exam)).length;
     return `<button class="brain-ch" style="--c:${col};--ci:${chInk(col)}" data-action="startChapter" data-ch="${e(ch)}"
         aria-label="${e(ch)}: ${m} percent mastered, ${seen} of ${qs.length} seen${due?`, ${due} due`:''}">
       <span class="brain-ch-ic" aria-hidden="true">${chIcon(ch)}</span>

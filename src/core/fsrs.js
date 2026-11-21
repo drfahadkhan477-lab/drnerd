@@ -253,6 +253,11 @@ function scheduledDue(card, exam) {
   return card.due < deadline ? card.due : deadline;
 }
 
+function isDue(card, today, exam) {
+  const day = scheduledDue(card, exam);
+  return day !== null && day <= today;
+}
+
 /* Seed a "previous state" for a card FSRS has never scheduled before —
    either genuinely new, or a legacy SM-2 card ({ivl,reps,due,lapses,last},
    no stability/difficulty fields) carried over from before this module
@@ -386,7 +391,7 @@ function fsrsFirstRating(ok, cf) {
 root.FSRS = {
   update: fsrsUpdate, firstRating: fsrsFirstRating, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
-  examWindow, scheduledDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO,
+  examWindow, scheduledDue, isDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO,
   W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };

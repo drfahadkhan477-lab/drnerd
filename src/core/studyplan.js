@@ -202,10 +202,7 @@ function roundRobin(byChapter, order, limit) {
    normalization to rank. Use equal shares if this bank has no matching
    blueprint. Every due card remains eligible, including unweighted chapters. */
 function rankedDue(pool, srs, today, exam, weights) {
-  const due = pool.filter(q => {
-    const day = FSRS.scheduledDue(srs[q.id], exam);
-    return day !== null && day <= today;
-  });
+  const due = pool.filter(q => FSRS.isDue(srs[q.id], today, exam));
   const shares = exam && exam.finalFortnight && weights;
   const names = Object.keys(shares || {});
   const chapters = names.length ? new Set(pool.map(q => q.ch)) : null;
@@ -310,10 +307,7 @@ function readiness(o) {
 
   const retention = seen ? seenCards.reduce((s, q) => s + retrievability(srs[q.id], today), 0) / seen : null;
   const exam = FSRS.examWindow(today, o.examDate);
-  const dueNow = seenCards.filter(q => {
-    const day = FSRS.scheduledDue(srs[q.id], exam);
-    return day !== null && day <= today;
-  }).length;
+  const dueNow = seenCards.filter(q => FSRS.isDue(srs[q.id], today, exam)).length;
   const { rows, mean } = chapterRows(o.chStats, 1);
   const weak = weakChapters(o.chStats, 3);
   const pr = prior(o.chStats);

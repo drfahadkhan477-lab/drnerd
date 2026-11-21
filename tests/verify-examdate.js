@@ -152,7 +152,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     JSON.stringify(deck.due)===JSON.stringify(ids) && JSON.stringify(deck.plan)===JSON.stringify(ids) &&
     deck.today===2 && deck.raw.every(d=>d===later), JSON.stringify(deck));
   await page.evaluate(() => startQuiz(null,'due'));
-  await onScreen(page,'quiz');
+  await onScreen(page,'quiz',{marker:'.q-card'});
   ok('starting the actual review preserves weighted risk order ahead of new cards',
     JSON.stringify(await page.evaluate(()=>S.questions.slice(0,2).map(q=>q.id)))===JSON.stringify(ids));
   await page.evaluate(()=>selectOpt(S.questions[S.qIdx].ci));
@@ -170,6 +170,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return S.srs[q.id];
   });
   ok('a first correct quiz answer also schedules by the exam', practice && practice.ivl===1 && practice.due===tomorrow);
+  await page.evaluate(()=>goPractice());
+  await onScreen(page,'practice',{marker:'#plabRoot [data-kind="tracings"]'});
+  await page.click('#plabRoot [data-kind="tracings"]');
+  const labId = await page.evaluate(()=>window.__lab.state().item);
+  await page.click(`.plab-option[data-id="${labId}"]`);
+  const labCard = await page.evaluate(id=>JSON.parse(localStorage.getItem(LabProgress.KEY)).cards[id],labId);
+  ok('a correct Practice Lab answer saves its card for exam day', labCard.ivl===1 && labCard.due===tomorrow);
   await page.evaluate(()=>setExamDate(''));
   ok('clearing the exam restores the old due date for the card still to review',
     await page.evaluate(({id,later})=>S.srs[id].due===later && !dueQuestions().some(q=>q.id===id), {id:ids[1],later}));

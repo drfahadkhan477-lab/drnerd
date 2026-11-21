@@ -628,12 +628,13 @@ lowest retrievability weighted by chapter. Bump `SCHEDULER_VERSION`, and compare
 with ts-fsrs at the same requested retention in the oracle suite. *Opus*, with
 *Fable* reviewing the mathematics.
 
-S2 scheduling policy: keep 90% retention until 60 days out, then raise it
+The S2 policy keeps 90% retention until 60 days out, then raises it
 linearly to 95% on the eve. Leave room for a review on the eve; a card rated
 that day may come due on exam day. From exam day onward, a new rating starts
 an ordinary interval. Bring existing cards into the pre-exam queue without
 rewriting their saved dates when the fellow changes or clears the exam date.
-In the last 14 days rank due cards by estimated chance of forgetting times
+Quiz, review and Practice Lab ratings use the same deadline.
+In the last 14 days rank due bank cards by estimated chance of forgetting times
 chapter share, with equal shares until a matching owner blueprint is supplied.
 
 **S3 — Weights fitted to the fellow.** `fsrs.js` runs FSRS-5's population weights
