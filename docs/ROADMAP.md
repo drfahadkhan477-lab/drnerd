@@ -279,6 +279,12 @@ which were `STAT_ENTRY`, `statDay()`, `statRecord()`, `statEntryOk()`,
 `usableStats()`, `progressFromBackup()` and `validExamDate()`. The page keeps
 the five it calls by name as one line each; `load()`, `save()` and
 `adoptProgress()`, which touch storage and the page's state, stay the page's.
+Then the pen's stroke geometry (`src/core/stroke.js`, `Stroke`, held by
+`verify-stroke-pure`): a point rounded to what a screen shows, the
+Ramer–Douglas–Peucker simplification, a stroke simplified before it is stored,
+and an outline filled as one curved path, which were `roundPt()`, `rdp()`,
+`simplifyStroke()` and `fillOutline()`. `penOutline()`, which reads the page's
+pen and PencilFX's width curve, stays the page's.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
