@@ -29,12 +29,14 @@ const ok = (label, cond, detail = '') => {
 const head = t => console.log('\n── ' + t + ' ──');
 
 const APP = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
-const FROM = 'const STOP=new Set((', TO = '  return top.filter(r=>r.score>=cut);\n}';
+/* From the tokenizer's slot (src/core/terms.js, whose text is put where the build puts it) to the end of search(). */
+const FROM = '@@SLOT[src:src/core/terms.js]@@', TO = '  return top.filter(r=>r.score>=cut);\n}';
 for (const a of [FROM, TO]) {
   const n = APP.split(a).length - 1;
   if (n !== 1) throw new Error(`app/systole.html: expected the anchor once, found ${n}: ${a.slice(0, 50)}`);
 }
-const RANKER = APP.slice(APP.indexOf(FROM), APP.indexOf(TO) + TO.length);
+const RANKER = APP.slice(APP.indexOf(FROM), APP.indexOf(TO) + TO.length)
+  .replace(FROM, () => fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'terms.js'), 'utf8'));
 const OPEN_SEARCH = APP.slice(APP.indexOf('function openSearch(){'), APP.indexOf('function quizFromSearch(){'));
 
 /* ── invented documents ──────────────────────────────────────────────────────── */
