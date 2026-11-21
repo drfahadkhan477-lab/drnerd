@@ -42,7 +42,7 @@ const code = [
      groundedTurnLeft from a `let` that happened to stand inside the next cut, and pendingNav from a plain property
      below; neither was the page's. `window` is this world itself (world() below), as in the page. */
   cut(APP, '@@SLOT[src:src/core/apexturn.js]@@', "pendingNav:apexTurnView('nav')});", { inclusive: true }),
-  cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
+  cut(APP, '@@SLOT[src:src/core/terms.js]@@', 'function refAdd(title,body,tags,source){'),
   cut(APP, 'const TOOLS=[', '\n/* pendingNav and toolTrace are views of the turn\'s state'),
   cut(APP, 'function apexAway(){', '\nfunction runTool(name,input){'),
   cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),

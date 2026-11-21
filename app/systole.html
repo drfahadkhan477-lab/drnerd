@@ -1349,66 +1349,12 @@ let REF_IMGS = /*REF_IMGS_START*/@@SLOT[payload:REF_IMGS]@@/*REF_IMGS_END*/;
    and the chat layer so the two agree on what counts as "this note has a figure". */
 function extractRefImages(body){ return RefImport.images(body); }
 
-const STOP=new Set(('a an the and or but if then than that this these those of in on at to for with '+
- 'from by as is are was were be been being it its he she they them his her their you your we our '+
- 'which who whom what when where why how all any both each few more most other some such no nor not '+
- 'only own same so too very can will just should now also may might one two patient patients year '+
- 'years old man woman male female presents present presented history following one-of which-one '+
- 'answer choice correct incorrect because therefore however although while during after before '+
- 'likely most-likely appropriate next best initial').split(/\s+/));
-
-/* conservative stemmer — medical morphology is unforgiving */
-const KEEP=/^(stenosis|sclerosis|thrombosis|fibrosis|necrosis|diagnosis|prognosis|anastomosis|apoptosis|stasis|crisis|axis|basis)$/;
-/* The index stems every token of every document, and a few thousand words make up nearly all of them: each is stemmed
-   once. The answer is a function of the word alone, so what is kept can never be stale. */
-const STEMMED=new Map();
-function stem(w){
-  let s=STEMMED.get(w);
-  if(s===undefined){
-    if(STEMMED.size>60000) STEMMED.clear();
-    s=stemWord(w); STEMMED.set(w,s);
-  }
-  return s;
-}
-function stemWord(w){
-  if(w.length<=4) return w;
-  if(KEEP.test(w)) return w;
-  // fold clinical morphology: amyloidosis/amyloid, ischemia/ischemic, stenotic/stenosis
-  // 'otic' only folds when a real stem survives (stenotic->stenosis is handled below)
-  let x=w.replace(/(osis|osed)$/,'').replace(/otic$/, m=>'')
-         .replace(/(aemia|emia|aemic|emic)$/,'em')
-         .replace(/(pathy|pathic)$/,'path')
-         .replace(/(itis|itic)$/,'it')
-         .replace(/(ically|ical|ically)$/,'ic')
-         .replace(/(fication|fied|fying)$/,'fi')
-         .replace(/(tion|sion)$/,'t')
-         .replace(/(ance|ence)$/,'an')
-         .replace(/(ing|ed)$/,'');
-  if(x.length<5) x=w;                       // refuse aggressive truncation
-  if(/^sten/.test(w)) x='stenosis';         // stenosis / stenotic / stenoses
-  if(/ies$/.test(x)) return x.slice(0,-3)+'y';
-  if(/(ches|shes|xes|ses)$/.test(x)) return x.slice(0,-2);
-  if(/(us|ss|is|as)$/.test(x)) return x;
-  if(/s$/.test(x)) return x.slice(0,-1);
-  return x;
-}
-// short clinical abbreviations that a length>=3 filter would otherwise erase
-const SHORTOK=new Set(['qt','av','mi','pe','lv','rv','la','ra','pa','bp','hr','ef','cad','chd',
-  'afib','vt','vf','svt','avb','mr','ar','ts','tr','pr','ps','as','mv','tv','pv','ivc','svc',
-  'lad','lcx','rca','pci','cabg','icd','ppm','crt','hf','cvd','dvt','copd','osa']);
-function tok(s){
-  const out=[];
-  for(let t of String(s||'').toLowerCase().split(/[^a-z0-9₀-₉+/-]+/)){
-    /* Only a token with a - + or / at an end has anything to trim; most have none. */
-    const a=t.charCodeAt(0), z=t.charCodeAt(t.length-1);
-    if(a===45||a===43||a===47||z===45||z===43||z===47) t=t.replace(/^[-+/]+|[-+/]+$/g,'');
-    if(!t||STOP.has(t)||/^\d+$/.test(t)) continue;
-    if(t.length<3 && !SHORTOK.has(t)) continue;
-    out.push(t.length<=4&&SHORTOK.has(t)?t:stem(t));
-    if(t.includes('-')) for(const p of t.split('-')) if((p.length>=3||SHORTOK.has(p))&&!STOP.has(p)) out.push(SHORTOK.has(p)?p:stem(p));
-  }
-  return out;
-}
+/* How a text becomes the terms the search scores — the stopwords, the clinical short words, the stemmer and the
+   tokenizer — is src/core/terms.js. */
+@@SLOT[src:src/core/terms.js]@@
+function stem(w){ return Terms.stem(w); }
+function stemWord(w){ return Terms.stemWord(w); }
+function tok(s){ return Terms.tok(s); }
 
 let IDX=null;      // {df, docs:[{key,len,tf}], avg, N}
 let VOCAB=null;    // IDX.df's keys, sorted — rebuilt with IDX, never apart

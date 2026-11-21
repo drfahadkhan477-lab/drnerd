@@ -200,18 +200,22 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   {
     const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'reduced motion', errors);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
-    await page.waitForSelector('#splash', { timeout: 30000 });
-    await page.waitForFunction(() => {
-      const el = document.querySelector('.sp-trace');
-      return el && /^0(?:px)?$/.test(getComputedStyle(el).strokeDashoffset);
-    }, null, { timeout: 30000 });
-    const trace = await page.evaluate(() => {
-      const el = document.querySelector('.sp-trace');
-      return el ? getComputedStyle(el).animationName : null;
+    /* WebKit can remove the reduced-motion splash before a second browser round trip. */
+    await page.addInitScript(() => {
+      const observer = new MutationObserver(() => {
+        const trace = document.querySelector('.sp-trace');
+        if (!trace) return;
+        const style = getComputedStyle(trace);
+        window.__splashReduced = { animation: style.animationName, dash: style.strokeDashoffset };
+        observer.disconnect();
+      });
+      observer.observe(document, { childList: true, subtree: true });
     });
+    page.goto(URL, { waitUntil: 'commit' }).catch(() => {});
+    await page.waitForFunction(() => !!window.__splashReduced, null, { timeout: 30000 });
+    const trace = await page.evaluate(() => window.__splashReduced);
     ok('the rhythm trace still fully disables its animation under prefers-reduced-motion',
-       trace === 'none', trace);
+       trace.animation === 'none' && /^0(?:px)?$/.test(trace.dash), JSON.stringify(trace));
     await page.close();
   }
 
@@ -235,9 +239,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await page.close();
   }
 
-  head('the beating hero layer');
+  head('the Home heart and ECG after startup');
   {
     const page = watch(await browser.newPage({ viewport: { width: 834, height: 1112 } }), events, 'beating hero');
+    /* Exercise the visible fallback on devices without a WebGL context. */
+    await page.addInitScript(() => {
+      const context = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (kind, ...args) {
+        return kind.startsWith('webgl') ? null : context.call(this, kind, ...args);
+      };
+    });
     /* Its own array, because this section asserts on it and must not see the
        five that ran before it. Both are fed: the assertion reads `seen`, the
        note reads the suite's. */
@@ -246,20 +257,30 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     page.on('pageerror', e => note(e.message));
     page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) note(m.text()); });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
-  /* The Stage 1 build injects app.js only after its content fetch resolves,
-     so 'load' no longer implies the app has booted. Wait for it explicitly —
-     a no-op on the single-file build, where this is already true. */
-  await booted(page);
+    /* The PWA loads the bank after 'load', before it can mount Home. */
+    await booted(page);
     await page.waitForTimeout(2200);
     const hero = await page.evaluate(() => {
-      const el = document.querySelector('.hero-live');
-      if (!el) return { found: false };
-      const cs = getComputedStyle(el, '::after');
-      return { found: true, anim: cs.animationName, dur: cs.animationDuration, z: cs.zIndex };
+      const beat = document.querySelector('#heroHeart .h-beat');
+      const trace = document.getElementById('heroECG');
+      const rhythm = document.getElementById('heroRhythmLabel');
+      if (!beat || !trace || !rhythm) return {};
+      const plateStyle = getComputedStyle(beat.parentElement);
+      const beatStyle = getComputedStyle(beat);
+      const traceStyle = getComputedStyle(trace);
+      return {
+        anim: beatStyle.animationName, play: beatStyle.animationPlayState, plateOpacity: +plateStyle.opacity,
+        period: parseFloat(beatStyle.animationDuration), bpm: +(rhythm.textContent.match(/(\d+) bpm$/) || [])[1],
+        heartZ: parseFloat(plateStyle.zIndex), traceZ: parseFloat(traceStyle.zIndex),
+        traceVisible: trace.getBoundingClientRect().height > 0 && +traceStyle.opacity > 0
+      };
     });
-    ok('hero carries the heartbeat layer', hero.found && hero.anim === 'heroBeat', JSON.stringify(hero));
-    ok('it beats at roughly 68 bpm', hero.dur === '1.76s', hero.dur);
-    ok('it sits behind the trace, not over it', hero.z === '-1', hero.z);
+    ok('Home shows an animated heart fallback', hero.anim === 'heroBeat' && hero.play === 'running' && hero.plateOpacity > 0,
+       JSON.stringify(hero));
+    ok('the fallback heartbeat follows the displayed bpm', Math.abs(hero.period * hero.bpm - 60) < 0.1,
+       `${hero.period}s at ${hero.bpm} bpm`);
+    ok('the ECG is visible in a separate layer below the heart', hero.traceVisible && hero.traceZ < hero.heartZ,
+       `ECG layer ${hero.traceZ}, heart layer ${hero.heartZ}`);
 
     /* The rule that keeps this a study tool: no ambient animation behind
        reading. If a future change puts one there, this should fail. */

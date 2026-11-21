@@ -167,7 +167,7 @@ head('grounded mode keeps who is taught, and withholds the key');
        from a `let` that happened to stand inside the next cut; with it gone, the search threw inside runTool and
        came back as "Tool error", citing nothing. `window` is this world itself, as in the page. */
     cut(APP, '@@SLOT[src:src/core/apexturn.js]@@', "pendingNav:apexTurnView('nav')});", { inclusive: true }),
-    cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
+    cut(APP, '@@SLOT[src:src/core/terms.js]@@', 'function refAdd(title,body,tags,source){'),
     cut(APP, 'function apexAway(){', '\nfunction runTool(name,input){'),
     cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),
     /* What aiCtx() reads about the answer just given and how the fellow answers: apexStandingLines() to apexDid(). */
