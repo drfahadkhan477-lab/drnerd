@@ -40,12 +40,14 @@ const ROOT = path.join(__dirname, '..');
    search(). Both anchors must occur exactly once, or the cut is not the one
    this suite means. */
 const APP = fs.readFileSync(path.join(ROOT, 'app', 'systole.html'), 'utf8');
-const FROM = 'const STOP=new Set((', TO = '  return top.filter(r=>r.score>=cut);\n}';
+/* From the tokenizer's slot (src/core/terms.js, whose text is put where the build puts it) to the end of search(). */
+const FROM = '@@SLOT[src:src/core/terms.js]@@', TO = '  return top.filter(r=>r.score>=cut);\n}';
 for (const a of [FROM, TO]) {
   const n = APP.split(a).length - 1;
   if (n !== 1) throw new Error(`app/systole.html: expected the anchor once, found ${n}: ${a.slice(0, 50)}`);
 }
-const RANKER = APP.slice(APP.indexOf(FROM), APP.indexOf(TO) + TO.length);
+const RANKER = APP.slice(APP.indexOf(FROM), APP.indexOf(TO) + TO.length)
+  .replace(FROM, () => fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'terms.js'), 'utf8'));
 const W_RE = /const PHRASE_W=(\d+(?:\.\d+)?);/g;
 const W_HITS = [...RANKER.matchAll(W_RE)];
 if (W_HITS.length !== 1) throw new Error(`the ranker should set PHRASE_W once, found ${W_HITS.length}`);
@@ -141,10 +143,10 @@ head('the stemmer keeps its answers and the tokenizer skips a trim it does not n
   /* Building the index stems every token of every document, which on a library the size of the real one was a third of the
      time the first search waited. Each word is stemmed once now, and the tokenizer trims a - + or / from the ends of a token
      only when the token has one. Both are claims about speed that must not move a token, so the tokenizer is held to the one
-     it was, written out here from the page's own stemWord(), stopwords and short list: on invented text, and on every kind
+     it was, written out here from the page's own stemWord(), stopwords and short list (src/core/terms.js): on invented text, and on every kind
      of end a token can have. */
   const k = { ALL_Q: [], REF: [], console };
-  vm.runInNewContext(RANKER + '\n;this.tok=tok;this.stem=stem;this.stemWord=stemWord;this.STOP=STOP;this.SHORTOK=SHORTOK;', k);
+  vm.runInNewContext(RANKER + '\n;this.tok=tok;this.stem=stem;this.stemWord=stemWord;this.STOP=Terms.STOP;this.SHORTOK=Terms.SHORTOK;', k);
   const slowTok = text => {
     const out = [];
     for (let t of String(text || '').toLowerCase().split(/[^a-z0-9₀-₉+/-]+/)) {
