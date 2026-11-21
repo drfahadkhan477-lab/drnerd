@@ -123,22 +123,26 @@ try {
   pieces = {
     glue: cut('app/systole.html', '/* ═════════ Echo Studio — see src/core/echo.js, src/ui/echo.js ═════════ */',
       '/* ══════════ Search your notes — see src/core/notesearch.js').replace(/@@SLOT\[asset:(assets\/echo\/[^\]]+)\]@@/g, (_, file) => fs.readFileSync(path.join(ROOT, file)).toString('base64')),
-    /* The way in is the Labs card (the bar lost its Echo button); here it is put in the scaffold's bar. */
-    door: cut('app/systole.html', '      <button class="lab-card lab-echo" onclick="goEcho()">',
-      '      <button class="lab-card lab-practice" onclick="goPractice()">'),
+    /* The way in is the Labs card (the bar lost its Echo button); here it is put in the scaffold's bar. The Labs page's
+       markup left the shell for src/app/home.js (roadmap E1 step 3), so the card is cut from there. */
+    door: cut('src/app/home.js', '      <button class="lab-card lab-echo" data-action="goEcho">',
+      '      <button class="lab-card lab-practice" data-action="goPractice">'),
+    /* The card names an action (docs/ROADMAP.md, E2), so the page's listener and its table come with it: the real
+       src/core/actions.js, filled into its slot, and ACTIONS as the page writes it, installed on the document. */
+    actions: cut('app/systole.html', '@@SLOT[src:src/core/actions.js]@@', 'Actions.install(document,ACTIONS);', { inclusive: true }),
     css: cutStylesheet('.echo-studio{', '.ns-screen{'),
   };
 } catch (e) { cutError = e.message; }
 
 head('Echo is read from the app that ships');
-ok('its glue, its way in and its css were each found once', !!pieces, cutError || 'three pieces');
-ok('and each is whole: both modules filled in, the button, the tabs',
+ok('its glue, its way in, the page\'s listener and its css were each found once', !!pieces, cutError || 'four pieces');
+ok('and each is whole: both modules filled in, the button, its action in the page\'s table, the tabs',
    !!pieces && /var EchoUI\b|EchoUI\s*=/.test(pieces.glue) && /function buildEchoScreen\(\)/.test(pieces.glue) &&
-   /goEcho\(\)/.test(pieces.door) && /\.echo-tabs\{/.test(pieces.css),
+   /data-action="goEcho"/.test(pieces.door) && /goEcho:\(\)=>goEcho\(\),/.test(pieces.actions) && /\.echo-tabs\{/.test(pieces.css),
    pieces ? `glue ${pieces.glue.length}, door ${pieces.door.length}, css ${pieces.css.length}` : 'nothing cut');
 if (!pieces) { console.log(`\n${passed} passed, ${failed} failed`); process.exit(1); }
 fs.writeFileSync(OUT, SCAFFOLD
-  .replace('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */', m => pieces.glue + '\n' + m)
+  .replace('/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */', m => pieces.glue + '\n' + pieces.actions + '\n' + m)
   .replace('      <div class="theme-wrap">', m => pieces.door + m)
   .replace('.nav{color:#fff;height:var(--navh);display:flex;align-items:center;', m => pieces.css + m), 'utf8');
 
@@ -174,14 +178,14 @@ const MARK = 'echomark';
 
   head('the way in');
   ok('the Labs card that leads to Echo is there',
-     await page.evaluate(() => !!document.querySelector('.nav [onclick="goEcho()"]')),
+     await page.evaluate(() => !!document.querySelector('.nav [data-action="goEcho"]')),
      await page.evaluate(() => {
-       const b = document.querySelector('.nav [onclick="goEcho()"]');
+       const b = document.querySelector('.nav [data-action="goEcho"]');
        return b ? b.textContent.trim().replace(/\s+/g, ' ') : 'absent';
      }));
   ok('and its glyph was interpolated rather than printed',
      await page.evaluate(() => {
-       const b = document.querySelector('.nav [onclick="goEcho()"]');
+       const b = document.querySelector('.nav [data-action="goEcho"]');
        return !!b && !!b.querySelector('svg') && !/\$\{/.test(b.innerHTML);
      }));
   /* Leave the screen, come back through the button: this is the router edit
@@ -189,7 +193,7 @@ const MARK = 'echomark';
   await page.evaluate(() => { S.screen = 'memory'; render(); });
   ok('leaving the screen really leaves it', await $('section.echo-studio').count() === 0,
      `${await $('section.echo-studio').count()} .echo-studio`);
-  await page.click('.nav [onclick="goEcho()"]');
+  await page.click('.nav [data-action="goEcho"]');
   ok('and the button brings it back', await $('section.echo-studio').count() === 1,
      await page.evaluate(() => S.screen));
 

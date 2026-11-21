@@ -104,10 +104,19 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('a live diagram is mounted', mounted.live);
   ok('and the 3D heart is not in the lab at all', mounted.noHeart);
 
-  /* It has to keep its own time now that nothing else drives it. */
-  await page.waitForTimeout(700);
-  const advanced = await page.evaluate(t0 => ({ t1: physio.time(), moved: physio.time() !== t0 }), mounted.t);
-  ok('the diagram runs its own clock', advanced.moved, `${mounted.t?.toFixed(3)} → ${advanced.t1.toFixed(3)}`);
+  /* It has to keep its own time now that nothing else drives it. The clock moves on frames (its first frame only sets the
+     reference time), so the reading is taken across frames the engine has drawn, not across a stretch of wall time: a
+     fixed 700 ms saw no frame at all in a headless WebKit run (0.000 → 0.000) and failed a clock that was fine. The frame
+     count is the precondition; whether the time moved across those frames is the check. */
+  await page.evaluate(() => { if (window.__apexFrames == null) { window.__apexFrames = 0;
+    const f = () => { window.__apexFrames++; requestAnimationFrame(f); }; requestAnimationFrame(f); } });
+  const framesPast = async n => { const from = await page.evaluate(() => window.__apexFrames);
+    await settled(page, k => window.__apexFrames >= k, { arg: from + n, timeout: 30000, label: `the engine to draw ${n} more frames` }); };
+  await framesPast(3);
+  const t0 = await page.evaluate(() => physio.time());
+  await framesPast(6);
+  const advanced = await page.evaluate(t0 => ({ t1: physio.time(), moved: physio.time() !== t0 }), t0);
+  ok('the diagram runs its own clock', advanced.moved, `${t0.toFixed(3)} → ${advanced.t1.toFixed(3)} across six frames`);
 
   let phase = '';
   for (let i = 0; i < 30; i++) {

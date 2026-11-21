@@ -67,7 +67,7 @@ function record(state, o) {
   const s = sanitise(state);
   if (typeof o.id !== 'string' || !o.id) return s;
   const today = isDay(o.today) ? o.today : FSRS.todayISO();
-  s.cards[o.id] = Drill.grade({ card: s.cards[o.id] || null, correct: !!o.correct, today });
+  s.cards[o.id] = Drill.grade({ card: s.cards[o.id] || null, correct: !!o.correct, today, id: o.id, examDate: o.examDate });
   s.recent = s.recent.concat(o.id).slice(-KEEP_RECENT);
   const d = s.days[today] || { n: 0, c: 0 };
   s.days[today] = { n: d.n + 1, c: d.c + (o.correct ? 1 : 0) };
@@ -89,12 +89,13 @@ function streak(state, today) {
 }
 
 /* summary(state, items, today) → what the home screen shows. */
-function summary(state, items, today) {
+function summary(state, items, today, examDate) {
   const s = sanitise(state);
   today = isDay(today) ? today : FSRS.todayISO();
   const list = Array.isArray(items) ? items.filter(i => i && typeof i.id === 'string') : [];
   const seen = list.filter(i => s.cards[i.id]).length;
-  const due = list.filter(i => s.cards[i.id] && s.cards[i.id].due <= today).length;
+  const exam = FSRS.examWindow(today, examDate);
+  const due = list.filter(i => FSRS.isDue(s.cards[i.id], today, exam)).length;
   let n = 0, c = 0;
   for (const d of Object.values(s.days)) { n += d.n; c += d.c; }
   const t = s.days[today] || { n: 0, c: 0 };

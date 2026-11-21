@@ -21,7 +21,7 @@
  * script the whole time regardless of whether the function ever runs. Any
  * text search against the page as a whole will find its own source code.
  * The fix is to assert on something only the CRASH SCREEN'S OWN DOM
- * produces — a `button[onclick="location.reload()"]` inside `#app` — never
+ * produces — a `button#crashReload` inside `#app` — never
  * on rendered text that a `<script>` tag's source could also contain.
  */
 'use strict';
@@ -49,7 +49,7 @@ const sabotaged = (label, transform) => {
   return 'file://' + p;
 };
 const crashButton = () => !!(document.getElementById('app') &&
-  document.getElementById('app').querySelector('button[onclick="location.reload()"]'));
+  document.getElementById('app').querySelector('button#crashReload'));
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -99,12 +99,21 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const r = await page.evaluate(() => {
       const app = document.getElementById('app');
       return {
-        crash: !!(app && app.querySelector('button[onclick="location.reload()"]')),
+        crash: !!(app && app.querySelector('button#crashReload')),
         appHasContent: !!(app && app.firstElementChild),
       };
     });
     ok('the crash screen is shown', r.crash);
     ok('#app is not left empty', r.appHasContent);
+    /* Its Reload has a listener of its own, added when the screen is drawn, and no inline handler (docs/ROADMAP.md, E2):
+       tapped, the page loads again. A marker on window is gone only if the document was loaded anew. */
+    const inline = await page.evaluate(() => [...document.querySelectorAll('#app *')].filter(el => [...el.attributes].some(a => /^on/i.test(a.name))).map(el => el.tagName));
+    await page.evaluate(() => { window.__beforeReload = true; });
+    const reloaded = page.waitForEvent('load', { timeout: 30000 }).then(() => true, () => false);
+    await page.click('#app button#crashReload', { timeout: 5000 }).catch(() => {});
+    const loadedAgain = await reloaded;
+    const fresh = loadedAgain && await page.evaluate(() => window.__beforeReload !== true).catch(() => false);
+    ok('and its Reload, tapped, loads the page again; the crash screen carries no inline handler', r.crash && inline.length === 0 && loadedAgain && fresh, `inline ${inline.join(' ') || 'none'}, load ${loadedAgain}, fresh ${fresh}`);
     await page.close();
   }
 
@@ -144,7 +153,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const r = await page.evaluate(() => {
       const app = document.getElementById('app');
       return {
-        crash: !!(app && app.querySelector('button[onclick="location.reload()"]')),
+        crash: !!(app && app.querySelector('button#crashReload')),
         heroStillThere: !!document.querySelector('.hero-h1'),
       };
     });

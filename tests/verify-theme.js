@@ -25,7 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted, settled } = require('./_render.js');
+const { booted, settled, onScreen } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -156,7 +156,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('the active theme is marked', /midnight/i.test(menu.checked || ''), menu.checked);
 
   const picked = await page.evaluate(async () => {
-    document.querySelector('[onclick="setTheme(\'nocturne\')"]').click();
+    document.querySelector('#generalSettings .theme-opt[data-theme-id="nocturne"]').click();
     await new Promise(r => setTimeout(r, 60));
     return { theme: S.theme, attr: document.documentElement.getAttribute('data-palette'),
              menuOpen: !!document.getElementById('generalSettings')?.open };
@@ -178,6 +178,28 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.waitForFunction(() => !window.__vtLive, null, { timeout: 15000 }).catch(() => {});
   const homeBtn = await page.evaluate(() => { const b = [...document.querySelectorAll('.nav [aria-label]')].find(x => /Switch to (light|dark) theme/.test(x.getAttribute('aria-label'))); return b ? b.getAttribute('aria-label') : null; });
   ok('a theme chosen in Settings redraws the page, so the Home theme button names the theme now in use', homeBtn === 'Switch to light theme', String(homeBtn));
+
+  /* docs/ROADMAP.md, E2: the bar (buildNav()) names actions and carries no inline handler, so its buttons are tapped here
+     through the page's one listener on the document: the light and dark button, the brand and the search. Focus mode,
+     the notes search and Settings are tapped by verify-focus, verify-notesearch and verify-settings. */
+  head('the bar names actions');
+  const inlineIn = sel => page.evaluate(s => { const n = document.querySelector(s); return n ? [n, ...n.querySelectorAll('*')].flatMap(el => [...el.attributes].filter(a => /^on/i.test(a.name)).map(a => el.tagName + ' ' + a.name)) : ['no ' + s]; }, sel);
+  const homeBar = await inlineIn('#navbar .nav');
+  await page.click('#navbar [aria-label="Switch to light theme"]');
+  await page.waitForFunction(() => !window.__vtLive, null, { timeout: 15000 }).catch(() => {});
+  const flipped = await page.evaluate(() => ({ theme: S.theme, dark: themeIsDark(),
+    label: (document.querySelector('#navbar [aria-label^="Switch to"]') || {}).getAttribute?.('aria-label') }));
+  ok('the Home bar\'s light and dark button, tapped, turns the page light and then offers dark', flipped.theme === 'daylight' && !flipped.dark && flipped.label === 'Switch to dark theme', JSON.stringify(flipped));
+  await page.evaluate(() => { startAdhocQuiz([POOL.find(q => !q.bad)], null); });
+  await onScreen(page, 'quiz', { marker: '.q-card' });
+  const quizBar = await inlineIn('#navbar .nav');
+  ok('the bar carries no inline handler, on Home and on a question', homeBar.length === 0 && quizBar.length === 0, [...homeBar, ...quizBar].join(', ') || 'none');
+  await page.click('#navbar .nav-brand');
+  await onScreen(page, 'home', { marker: '.hero-h1' }).catch(() => {});
+  ok('its brand, tapped on a question, goes Home', await page.evaluate(() => S.screen === 'home'), await page.evaluate(() => S.screen));
+  await page.click('#navbar [aria-label="Search by topic"]');
+  await onScreen(page, 'search', { marker: '#sQ' }).catch(() => {});
+  ok('and its search, tapped, opens the topic search', await page.evaluate(() => S.screen === 'search' && !!document.getElementById('sQ')), await page.evaluate(() => S.screen));
 
   head('it persists, and old preferences still resolve');
   const persisted = await page.evaluate(() => {

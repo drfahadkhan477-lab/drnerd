@@ -175,7 +175,10 @@ async function heapAfterBoot(page, url) {
        simply not the thing a download budget should be denominated in. */
     const gzip = buf => require('zlib').gzipSync(buf, { level: 6 }).length;
     const wireBytes = gzip(Buffer.from(shellHtml)) + gzip(Buffer.from(appJs));
-    ok('the shell transfers under 280 KB', wireBytes < 280 * 1024,
+    // Owner-approved Observatory allowance: 288 KiB, up 2.86% from 280 KiB.
+    // Measured before redundant markup removal: 287,785 bytes. This budget
+    // concerns transfer only; rendering and accessibility checks stay separate.
+    ok('the shell transfers under 288 KB', wireBytes < 288 * 1024,
        `${kb(wireBytes)} gzipped, from ${kb(shellBytes)} on disk`);
 
   }
@@ -498,6 +501,56 @@ async function heapAfterBoot(page, url) {
        !!heartDigest && heartRef.indexOf('heart-' + heartDigest + '.webp') > 0, `${heartRef} / ${heartDigest}`);
   }
 
+  head('the shipped page runs only the scripts it brought');
+  {
+    /* docs/ROADMAP.md, E2; scripts/csp.js, scriptMeta. The shell's <meta> policy now carries a script-src: 'self' and
+       the hash of each inline script in index.html as served. So the app has to boot and work with no violation, and an
+       injected onclick, an injected inline script and a javascript: link each have to be refused, and said to be. */
+    const idx = await (await fetch(ORIGIN + '/index.html')).text();
+    const meta = (idx.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)">/) || [])[1] || '';
+    const listed = [...(meta.match(/script-src ([^;]*)/) || ['', ''])[1].matchAll(/'sha256-([^']+)'/g)].map(m => m[1]).sort();
+    const inline = [...idx.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map(m => require('crypto').createHash('sha256').update(m[1], 'utf8').digest('base64')).sort();
+    ok('index.html\'s policy has a script-src of \'self\' and the hash of each of its inline scripts, and of nothing else',
+       /script-src 'self' 'sha256-/.test(meta) && inline.length > 0 && JSON.stringify(listed) === JSON.stringify(inline) && idx.indexOf('Content-Security-Policy') < idx.search(/<script\b/i),
+       `${listed.length} listed, ${inline.length} inline`);
+
+    const transport = await originTransport(target);
+    const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 } });
+    /* A listener before anything on the page runs, so a violation during the boot is heard too. */
+    await ctx.addInitScript(() => { window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.effectiveDirective + ' ' + String(e.blockedURI || e.sample || '').slice(0, 40))); });
+    const page = watch(await ctx.newPage(), events, 'script-src', errors);
+    await page.goto(transport.url, { waitUntil: 'load', timeout: 200000 });
+    await booted(page);
+    /* Screens opened as a reader opens them, by taps the page's one listener hears: Settings, Study, a question, Labs. */
+    const tap = async sel => { await page.click(sel, { timeout: 8000 }).catch(() => {}); await page.waitForTimeout(400); };
+    await tap('#settingsBtn');
+    await tap('#generalSettings [data-action="closeSettings"]');
+    await page.evaluate(() => goStudy()); await page.waitForTimeout(600);
+    await tap('[data-action="startAll"]');
+    const onQuiz = await page.evaluate(() => S.screen);
+    await tap('#navbar .nav-brand');
+    const after = await page.evaluate(() => ({ screen: S.screen, csp: window.__csp.slice(), app: typeof ACTIONS === 'object' }));
+    ok('it boots and works under that policy: Settings, Study, a question and Home, tapped, raise no violation',
+       after.app && onQuiz === 'quiz' && after.screen === 'home' && after.csp.length === 0, JSON.stringify({ onQuiz, ...after }));
+
+    const refused = await page.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      window.__csp = [];
+      const box = document.createElement('div'); document.body.appendChild(box);
+      box.innerHTML = '<button id="cspPlanted" onclick="window.__plantedRan=true">x</button>';
+      document.getElementById('cspPlanted').click();
+      const s = document.createElement('script'); s.textContent = 'window.__scriptRan=true'; document.body.appendChild(s);
+      box.innerHTML += '<a id="cspLink" href="javascript:window.__linkRan=true">y</a>';
+      document.getElementById('cspLink').click();
+      await wait(300);
+      box.remove();
+      return { handler: window.__plantedRan === true, script: window.__scriptRan === true, link: window.__linkRan === true, csp: window.__csp.slice() };
+    });
+    ok('an injected onclick, an injected inline script and a javascript: link do not run, and each is reported',
+       !refused.handler && !refused.script && !refused.link && refused.csp.length >= 3 && refused.csp.every(v => /^script-src/.test(v)), JSON.stringify(refused));
+    await ctx.close();
+  }
+
   head('content is served intact');
   {
     const qs = await (await fetch(ORIGIN + '/content/questions.json')).json();
@@ -676,6 +729,20 @@ async function heapAfterBoot(page, url) {
       const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
       return images.length === 2 && images.every(i => i.naturalWidth > 100 && /\/echo\/echo-/.test(i.src));
     }));
+    /* The circulation engine leaves app.js too (build-pwa, 3.747), and the cycle's diagrams (3.748): nothing has loaded either yet. */
+    ok('the circulation engine is not in app.js, and nothing has loaded it before it is needed', await page.evaluate(() =>
+      typeof Circulation === 'undefined' && typeof window.CIRC_SRC === 'string' && !document.querySelector('script[src="' + window.CIRC_SRC + '"]')));
+    ok('nor are the cycle\'s diagrams', await page.evaluate(() =>
+      typeof Wiggers === 'undefined' && typeof window.WIG_SRC === 'string' && !document.querySelector('script[src="' + window.WIG_SRC + '"]')));
+    /* Ambient mode's pressure-volume loop is the first diagram asked for here: asked before the diagrams are there, it
+       starts them loading, offline, and moves on; on its next turn it draws. */
+    await page.evaluate(() => { AMBIENT.enter(); for (let i = 0; i < 6 && typeof Wiggers === 'undefined'; i++) AMBIENT.next(); });
+    await settled(page, () => typeof Wiggers !== 'undefined', { timeout: 30000 }).catch(() => {});
+    await page.evaluate(() => { for (let i = 0; i < 6 && AMBIENT.view() !== 'pvloop'; i++) AMBIENT.next(); });
+    const ambientLoop = await page.evaluate(() => AMBIENT.view() === 'pvloop' && AMBIENT.live() === true);
+    ok('ambient mode\'s pressure-volume loop loads the diagrams from their own file, offline, and draws', ambientLoop === true,
+       JSON.stringify(await page.evaluate(() => ({ view: AMBIENT.view(), live: AMBIENT.live(), wig: typeof Wiggers }))));
+    await page.evaluate(() => AMBIENT.exit());
     /* The Lab's modules leave app.js for vendor/ (build-pwa, 3.746) and load when the Lab is first drawn. First drawn
        here, after the outage: the file must come from the precache, and the Lab must draw from it. */
     await page.evaluate(() => goPractice());
@@ -683,6 +750,23 @@ async function heapAfterBoot(page, url) {
       { timeout: 30000 }).then(() => true, () => false);
     ok('the Lab, out of app.js, draws on its first visit offline', labDrawn === true && await page.evaluate(() =>
       typeof window.LAB_SRC === 'string' && !!document.querySelector('script[src="' + window.LAB_SRC + '"]')));
+    /* Its heart sounds for AS, AR, MS and MR are placed on the engine's valve events (HeartSounds.eventsFor), so the
+       Lab loads the engine too before it draws, here from the precache, offline. */
+    ok('and the Lab loads the engine with it, so its heart sounds for aortic stenosis are placed on the engine\'s own beat', await page.evaluate(() => {
+      const e = typeof HeartSounds !== 'undefined' && typeof Circulation !== 'undefined' && HeartSounds.eventsFor('as');
+      return !!e && e.find(x => x.id === 'ac').at === Circulation.cycle('as').T.ac && !!document.querySelector('script[src="' + window.CIRC_SRC + '"]'); }));
+    /* Then a lesion in the Rhythm Lab's cycle panel draws from the engine the Lab loaded. */
+    await page.evaluate(() => { goLab(); });
+    await settled(page, () => !!document.querySelector('[data-physio-lesion="as"]') && typeof physio !== 'undefined' && !!physio, { timeout: 30000 });
+    /* Normal, too, is the engine's beat once the engine is there (physio.js draws only until then). */
+    await page.evaluate(() => document.querySelector('[data-physio-lesion="normal"]').click());
+    const normalDrawn = await settled(page, () => typeof Circulation !== 'undefined' && physio.cycle() === Circulation.cycle('normal'), { timeout: 30000 }).then(() => true, () => false);
+    ok('the cycle panel\'s Normal is the engine\'s normal beat, offline', normalDrawn === true, JSON.stringify({ normalDrawn }));
+    await page.evaluate(() => document.querySelector('[data-physio-lesion="as"]').click());
+    const circDrawn = await settled(page, () => !!physio.cycle() && physio.cycle().preset === 'as', { timeout: 30000 }).then(() => true, () => false);
+    ok('and a lesion tapped in the cycle panel then draws its beat, offline', circDrawn === true, JSON.stringify({ circDrawn }));
+    ok('and the cycle panel draws from the diagrams\' own file', await page.evaluate(() =>
+      typeof Wiggers !== 'undefined' && !!physio && !!document.querySelector('script[src="' + window.WIG_SRC + '"]')));
     transport.resume();
     await ctx.close();
     transport.close();

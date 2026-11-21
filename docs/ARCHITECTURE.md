@@ -29,10 +29,65 @@ it to stay under: PhotoSwipe, perfect-freehand, and the Practice Lab.
 
 | Layer | Holds | Rule |
 |---|---|---|
-| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals | Must run under Node for the pure suites |
+| `src/core/` | Models with no DOM: physio, FSRS, pearl, brain, store, flagset, apexsignals, and what has left the shell (markdown, providererror, reviewqueue, apexwire, apexturn, and actions, the one delegated listener E2 puts in place of inline handlers) | Must run under Node for the pure suites |
 | `src/ui/` | Presenters that draw: wiggers, ecg12, echo, heroRhythm, pencil, livingDiagram | DOM allowed, no business rules |
 | `src/lab/` | The Practice Lab: sounds, tracings, strips, heartmap, drill, progress, items, ui | Only `mountPractice()` reaches it |
+| `src/app/` | Screens that have left the shell, one file each: results, memory, rhythmlab, annotations, mockreport, search, study, refs, quiz, mock, sessions, stats, home, and apexpanel, the Apex panel's markup | A function of what the page hands it; changes nothing it is given; must run under Node |
 | `app/` | The shell, its CSS, vendored libraries | Slot tokens live here |
+
+## The shell's script
+
+Most of the app's logic is still one inline script in `app/systole.html`, where
+every function can reach every script-level name. `docs/SHELL-MAP.md` says what
+each one reads, writes and calls, and in what order they can leave;
+`tools/shell-map.js` writes it, and `--check` says whether it is current.
+
+A function leaves by one pattern (roadmap E1). Its body goes to a `src/` module,
+slotted where the function stood, taking as arguments what it used to reach
+for. The shell keeps a one-line function of the same name, so no caller, inline
+handler or suite changes. A pure suite holds the module, and holds the shell's
+line to handing over the right things. Before moving one, read its entry in the
+map for what runs as the script loads: a function declaration is hoisted and a
+module is not.
+
+A screen leaves the same way, into `src/app/` (roadmap E1 step 3). Its builder
+becomes `screenHtml(S, …, kit)`: the page's state, the bank's names it reads,
+and a kit of the page's helpers its markup uses (`e`, `icon` and the like). The
+parameters keep the page's names for the same things, so the body moves as it
+stood. The handlers its buttons name stay in the shell: an inline handler is
+read where it is tapped, in the page. The map follows the state into the
+module, so the screen is still listed under each field it reads.
+
+A handler that asks with `confirm()` stays in the shell as it is, even when
+only its screen calls it. `tests/verify-ui-pure.js` lists every native dialog by
+the file that calls it, and reads only a call written out with its message; one
+reached through a part handed to a module would be a dialog that rule could no
+longer see.
+
+A screen with state of its own keeps it in the shell for now, with the handler
+that writes it and the mounts that draw into its canvases: the Rhythm Lab's
+`labKind`, `setLab()` and `mountLab()`. The module is handed the values as they
+are when the screen is drawn. A function that decides something the first time
+it is asked (`physioIsPlaying()`, from Reduce Motion) is handed over as the
+function, never as its answer. The markup and the mounts meet at element ids
+and data attributes, and the screen's pure suite holds that each one the page
+looks up is in the markup under that name.
+
+A screen that repaints part of itself gives each part as a function of its own.
+Typing in "Your annotations" repaints the list, the count and the Practise
+button and leaves the box alone, so `src/app/annotations.js` has `listHtml()`,
+`countText()` and `practiseHtml()` beside `screenHtml()`, and the screen is
+built from those three. The page's `annoInput()` asks for each through a
+one-line function of the old name, and `annoPage()` makes what they are handed
+each time it is asked, so the module reads the state as it is then. It hands
+over the fields of `S` the module reads (`S.flagged`, `S.missed`) and not `S`,
+so the map still lists the screen under those two fields. The suite holds that
+what typing writes is what the screen draws for the same words.
+
+A builder that writes the page's state as it draws keeps the write in the
+shell. `buildStudy()` worked out the topic runs into `_runsShown`, which
+`startRun()` reads when a run is tapped; the shell's `buildStudy()` now does that
+first and hands the result to `src/app/study.js`, which writes nothing.
 
 ## The clock
 

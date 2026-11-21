@@ -251,11 +251,13 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     (S.resume = {}, startQuiz)('Pericardial Disease');
     const q = S.questions[0];
     selectOpt(q.ci);
-    return { srs: Object.keys(S.srs).length, practiced: Object.keys(S.practice).length,
+    return { srs: Object.keys(S.srs).length, card: !!S.srs[q.id], practiced: Object.keys(S.practice).length,
              logged: LOG.length, entry: LOG[LOG.length - 1],
              mastery: masteryFor('Pericardial Disease'), started: startedCount() };
   });
-  ok('practice writes no SRS card', practice.srs === 0);
+  /* A practice answer to a question with no card makes its card (the first answer only; verify-stage2 holds the
+     rest of that rule). Practice still never moves a card that exists. */
+  ok('a practice answer to a question with no card makes exactly that card', practice.srs === 1 && practice.card === true, JSON.stringify(practice.srs));
   ok('practice attempt recorded', practice.practiced === 1);
   ok('answer written to the review log',
     practice.logged === 1 && practice.entry.m === 'practice' && practice.entry.g === null);
@@ -287,6 +289,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('export carries the log');
   const exported = await page.evaluate(async () => {
+    S.sinceBackup=150;
     let blob = null;
     const create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
     URL.createObjectURL = b => { blob = b; return 'blob:stub'; };
@@ -300,7 +303,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('export includes the review log', exported && exported.hasLog && exported.n > 0,
     'v' + (exported && exported.v) + ', ' + (exported && exported.n) + ' entries');
-  ok('backup counter resets on export', exported && exported.since === 0);
+  ok('requesting an export retains the reminder until the file is confirmed saved', exported && exported.since === 150);
 
   head('regression: the rest of the app still works');
   await page.evaluate(() => { openSearch(); runSearch('amyloidosis'); render(); });

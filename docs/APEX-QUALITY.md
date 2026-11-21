@@ -72,3 +72,105 @@ a real mocked tool exchange. It verifies complete fences and the final opposing
 statement on the outgoing request. Grounded search has already budgeted complete
 note blocks, so the send loop must not cut it again with the generic tool-result
 character cap. Other tools retain that cap.
+
+## Collect one answer through Gemini
+
+For an offline check of the evaluation tooling, run these against the invented
+build above. The runner test uses a mocked provider and verifies that removing
+the synthetic marker causes the run to stop before making a request or writing
+a review.
+
+```sh
+node tests/verify-apex-eval-offline.js
+node tests/verify-apex-eval-runner.js build/apex-eval/systole.html
+```
+
+Build the synthetic app as above. Choose a case ID from the fixtures and a model
+ID available on your Gemini account. After approving spend, configure
+`GEMINI_API_KEY` in the runner's environment. For example, with the chosen ID
+in `GEMINI_MODEL`, this allows up to two requests for one case:
+
+```sh
+node scripts/run-apex-eval.js build/apex-eval/systole.html conflicting-notes "$GEMINI_MODEL" 2 build/apex-eval/conflict-review.json
+```
+
+The runner uses a fresh browser context and the app's grounded prompts, note
+search, and tool loop. Node sends each request to Gemini's generateContent
+endpoint and supplies the response to Apex. The output records the requested
+model, UTC date, request and response bodies (including any returned model
+version and tool exchanges), final answer and finish reason. A MAX_TOKENS
+answer may be partial. A request limit of 1–6 counts provider calls, including
+tool follow-ups and retries. When Gemini returns HTTP 503 and a request remains,
+Apex applies its usual backoff and honors Retry-After. A network timeout ends
+the run because the provider may already have processed the request. Token
+charges depend on the model and the exchanges.
+
+The output is a review file with all criteria initially unmeasured. Fill in the
+criteria and score it using the command below. A failed run exits nonzero and
+keeps request diagnostics including time elapsed, HTTP status, and any
+numeric Retry-After header. Use a fresh output path for any retry. On Codex
+Cloud with Node 24, set `NODE_USE_ENV_PROXY=1` for the Node request to use the
+configured HTTP proxy. To test the tool loop and request limit with invented
+responses and no key, run
+`node tests/verify-apex-eval-runner.js build/apex-eval/systole.html`.
+
+## Score saved answers offline
+
+Review each answer against the invented passages and the rubric in
+`tests/fixtures/apex-grounding/cases.json`. For a positive criterion, check the
+specific claim and its citation against the supplied passage. For a prohibition,
+mark it supported when the answer respects it. Record why, pointing to the
+answer and the relevant passage where applicable. Omit criteria you could not
+assess and omit cases without an answer.
+
+Generate an editable review from the captured requests. This checks the questions,
+notes and rubrics against the current fixtures and fills in each criterion.
+
+```sh
+node scripts/score-apex-eval.js --template build/apex-eval/requests.json build/apex-eval/review.json
+```
+
+Fill in the run metadata and paste each saved answer into its case. Leave a
+missing answer `null` and a pending criterion `unmeasured` with a `null` reason.
+Keep the request capture alongside the review to see exactly what Apex sent.
+
+Save one review JSON per model, date, and answer source. Use the exact model
+identifier for a live run and label hand-written examples `synthetic`. Copy the
+criterion text verbatim so an edited rubric cannot silently inherit a verdict.
+
+```json
+{
+  "fixtureVersion": 1,
+  "answerSource": "synthetic",
+  "model": "hand-written-example",
+  "date": "2026-11-20",
+  "cases": [
+    {
+      "id": "empty-library",
+      "answer": "Your reference library does not cover the fictional Lumen protocol.",
+      "criteria": [
+        {
+          "criterion": "Clearly state that the notes do not cover the question.",
+          "verdict": "supported",
+          "reason": "The library is empty and the answer explicitly says it has no coverage."
+        }
+      ]
+    }
+  ]
+}
+```
+
+```sh
+node scripts/score-apex-eval.js build/apex-eval/review.json build/apex-eval/results.json
+```
+
+The scorer validates and aggregates reviewer decisions locally. It records the
+full saved answers and every fixture criterion. A case fails on any unsupported
+criterion and passes when all criteria are supported. Everything else remains
+unmeasured, including the partially reviewed example above. The command
+refuses to overwrite a result. Preserve the capture and any live tool exchanges
+with the review so the evidence can be audited. Keep these reports under
+`build/` and outside Git.
+
+Run the standalone synthetic regression with
+`node tests/verify-apex-eval-offline.js`.

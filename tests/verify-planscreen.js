@@ -84,7 +84,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   {
     const r = await page.evaluate(() => ({ ready: (document.getElementById('planReady') || {}).textContent || '', n: Object.keys(S.srs).length, total: POOL.length }));
     ok('the readiness line says how many of the bank have been seen, and the numbers are the app\'s own', new RegExp(`seen ${r.n} of ${r.total} questions`).test(r.ready) && /remember about \d+%/.test(r.ready), r.ready);
-    ok('and names the chapter the fellow is weakest in', /Weakest: .+ \(\d+%\)/.test(r.ready));
+    ok('and names the chapter the fellow is weakest in, with the interval its accuracy is likely in (docs/ROADMAP.md, S7)', /Weakest: .+ \(likely \d+ to \d+%\)/.test(r.ready), r.ready);
+    /* The page ships src/core/blueprint.js empty, so the line says the exam score waits for it. */
+    ok('and, with the blueprint not yet given, says a likely exam score waits for it, and quotes none', /A likely exam score waits for the exam blueprint\./.test(r.ready) && !/Across the exam/.test(r.ready), r.ready);
   }
   {
     await page.click('#planCard [data-plan="20"]');

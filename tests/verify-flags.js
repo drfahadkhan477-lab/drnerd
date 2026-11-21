@@ -812,9 +812,9 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
       ok('the search has hits to look at', hits.length >= 2, String(hits.length));
       await page.evaluate(id => { S.flagged = new Set([id]); searchGo('systoleflagfixture'); }, hits[0]);
       await drawn('.hit-flag.flagged'); await settle();
-      const r = await page.evaluate(() => ({ badges: [...document.querySelectorAll('.hit')].map(h => [h.getAttribute('onclick'), !!h.querySelector('.hit-flag.flagged')]) }));
+      const r = await page.evaluate(() => ({ badges: [...document.querySelectorAll('.hit')].map(h => [h.dataset.qid, !!h.querySelector('.hit-flag.flagged')]) }));
       const flaggedRows = r.badges.filter(b => b[1]);
-      ok('exactly the flagged hit carries the badge', flaggedRows.length === 1 && flaggedRows[0][0].indexOf(hits[0]) >= 0, JSON.stringify(flaggedRows));
+      ok('exactly the flagged hit carries the badge', flaggedRows.length === 1 && flaggedRows[0][0] === hits[0], JSON.stringify(flaggedRows));
       ok('and it says "flagged"', await page.evaluate(() => document.querySelector('.hit-flag.flagged')?.textContent.trim()) === 'flagged');
       const amber = await tokenColor('amber-ink'), red = await tokenColor('red-ink');
       const hc = await page.evaluate(() => { const badge = document.querySelector('.hit-flag.flagged'); return badge ? getComputedStyle(badge).color : null; });

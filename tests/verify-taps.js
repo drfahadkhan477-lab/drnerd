@@ -77,7 +77,7 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
   head('the bar every screen carries');
   {
     /* Measured on Study, where the bar carries search, notes and the Display panel: Echo is on the Labs page, never in the bar,
-       and Apex is in the rail, measured there below. */
+       and Apex floats in its corner, measured on Home below. */
     await page.evaluate(() => { goStudy(); render(); });
     await onScreen(page, 'study', { marker: '.ch-tile' });
     await settled(page, () => !window.__vtLive, { label: 'the view transition to Study to finish' });
@@ -97,16 +97,23 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     await quiet(page);
     const homeButtons=await under('.nav .icon-btn',21,21);
     ok('Home search and theme controls retain full touch targets',homeButtons.length===3&&homeButtons[0].w>=200&&homeButtons.every(b=>b.h===36&&b.wrong===0)&&homeButtons.slice(1).every(b=>b.w===36),JSON.stringify(homeButtons));
-    /* Round five: Echo left the rail (it is on the Labs page) and Apex took its place, a rail item like the tabs. */
-    const rail = await under('#aiFab', 21, 21);
-    const place = await page.evaluate(() => { const f = document.getElementById('aiFab').getBoundingClientRect(), t = [...document.querySelectorAll('.home-tab')].pop().getBoundingClientRect();
-      return { fabLeft: Math.round(f.left), fabTop: Math.round(f.top), tabLeft: Math.round(t.left), tabBottom: Math.round(t.bottom) }; });
-    ok('on Home, Apex is in the rail under the three tabs, and takes a press anywhere within 21 px of its centre',
-       rail.length === 1 && rail[0].w >= 44 && rail[0].h >= 44 && rail[0].wrong === 0 &&
-       Math.abs(place.fabLeft - place.tabLeft) < 40 && place.fabTop > place.tabBottom && place.fabTop < place.tabBottom + 60, JSON.stringify({ rail, place }));
-    const home = await page.evaluate(() => ({ bar: [...document.querySelectorAll('.nav .icon-btn')].map(b => b.getAttribute('onclick') || b.id),
-      rail: !!document.getElementById('homeEchoLink'), labs: !!document.querySelector('#homePage2 [onclick*="goEcho"]') }));
-    ok('and Echo is neither in the rail nor in the bar there, only on the Labs page', !home.rail && !home.bar.some(c => /goEcho/.test(c)) && home.labs, JSON.stringify(home));
+    /* One page (the owner's choice, November 2026): no rail and no tab bar. Apex floats in the corner, and Home ends with a
+       door to Brain and one to Labs; each takes a press anywhere within 21 px of its centre, and neither is under Apex. */
+    const fab = await under('#aiFab', 21, 21);
+    const corner = await page.evaluate(() => { const f = document.getElementById('aiFab').getBoundingClientRect();
+      return { right: Math.round(innerWidth - f.right), bottom: Math.round(innerHeight - f.bottom), rail: !!document.querySelector('.home-tabs,.home-tab') }; });
+    ok('on Home, Apex floats in the bottom right corner, no rail or tab bar beside it, and takes a press anywhere within 21 px of its centre',
+       fab.length === 1 && fab[0].w >= 44 && fab[0].h >= 44 && fab[0].wrong === 0 && corner.right >= 0 && corner.right < 40 && corner.bottom >= 0 && corner.bottom < 60 && !corner.rail, JSON.stringify({ fab, corner }));
+    await page.evaluate(() => document.querySelector('#homePage0 .home-doors').scrollIntoView({ block: 'center' }));
+    await quiet(page);
+    const doors = await under('.home-door', 21, 21);
+    const clear = await page.evaluate(() => { const f = document.getElementById('aiFab').getBoundingClientRect();
+      return [...document.querySelectorAll('.home-door')].every(d => { const r = d.getBoundingClientRect(); return r.right <= f.left || r.left >= f.right || r.bottom <= f.top || r.top >= f.bottom; }); });
+    ok('and its two doors, to Brain and to Labs, each take a press anywhere within 21 px of their centre, clear of Apex',
+       doors.length === 2 && doors.every(d => d.h >= 44 && d.wrong === 0) && clear, JSON.stringify({ doors, clear }));
+    const home = await page.evaluate(() => ({ bar: [...document.querySelectorAll('.nav .icon-btn')].map(b => b.getAttribute('data-action') || b.getAttribute('onclick') || b.id),
+      rail: !!document.getElementById('homeEchoLink'), labs: !!document.querySelector('#homePage2 [data-action="goEcho"]') }));
+    ok('and Echo is not in the bar there, only on the Labs page', !home.rail && !home.bar.some(c => /goEcho/.test(c)) && home.labs, JSON.stringify(home));
   }
 
   /* The welcome card is for someone who has answered nothing: the first question answered takes it away for good. Its fit on a

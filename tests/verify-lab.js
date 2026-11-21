@@ -24,12 +24,16 @@
  *     chest are what src/lab/heartmap.js says, read back off the DOM.
  *   · NOTHING LEAVES THE DEVICE, nothing throws, nothing scrolls sideways on a phone, and the
  *     screen reads in the dark.
+ *
+ * The way in is tapped only once frames come at a reader's pace (tests/_render.js, framesSteady): in headless WebKit the
+ * first stretch after a load can starve a tap of the frames it waits on. A way in that fails says which step it stopped
+ * at, and the checks after it, which are about the Lab, still measure it, opened by goPractice() as a reload opens it.
  */
 'use strict';
 const path = require('path');
 const { launch, engineName, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, quiet, settled } = require('./_render.js');
+const { booted, quiet, settled, framesSteady } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-lab.js <build.html>'); process.exit(1); }
@@ -78,12 +82,21 @@ const spyOnAudio = () => {
 };
 
 /* In the page: where the energy of the last buffer played sits (it holds `beats` beats), in the windows the pure suite uses. */
-const energy = beats => {
+/* Systole and diastole in the audio, as windows on the events it was placed on: the lesion's own where the circulation
+   engine makes it (HeartSounds.eventsFor, docs/ROADMAP.md S8), physio's otherwise. Each window is the same share of
+   that beat's systole (mitral to aortic closure) and diastole (aortic to the next mitral closure) as 0.22-0.38 and
+   0.50-0.80 are of physio's, so on physio's events they are exactly those. */
+const energy = ([beats, key]) => {
   const last = window.__audio.buffers[window.__audio.buffers.length - 1];
   const d = last.b.getChannelData(0), per = d.length / beats;
-  const rms = (a, b) => { let s = 0, n = 0; for (let k = 0; k < beats; k++) for (let i = Math.floor((k + a) * per); i < Math.floor((k + b) * per); i++) { s += d[i] * d[i]; n++; } return Math.sqrt(s / n); };
+  const rms = (a, b) => { let s = 0, n = 0; for (let k = 0; k < beats; k++) for (let i = Math.floor((k + a) * per); i < Math.floor((k + b) * per); i++) if (i < d.length) { s += d[i] * d[i]; n++; } return Math.sqrt(s / n); };
   let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
-  return { rate: last.rate, len: d.length, sys: rms(0.22, 0.38), dia: rms(0.50, 0.80), peak };
+  const evs = (key && HeartSounds.eventsFor(key)) || Physio.EVENTS, at = id => evs.find(e => e.id === id).at;
+  const P = id => Physio.EVENTS.find(e => e.id === id).at;
+  const pSys = P('ac') - P('mc'), pDia = 1 + P('mc') - P('ac');
+  const sys = at('ac') - at('mc'), dia = 1 + at('mc') - at('ac');
+  const sysW = [0.22, 0.38].map(f => at('mc') + (f - P('mc')) / pSys * sys), diaW = [0.50, 0.80].map(f => at('ac') + (f - P('ac')) / pDia * dia);
+  return { rate: last.rate, len: d.length, sys: rms(sysW[0], sysW[1]), dia: rms(diaW[0], diaW[1]), peak, windows: [sysW, diaW] };
 };
 
 /* In the page: how many pixels of the first canvas are the trace's ink, and how many the accent's. */
@@ -113,30 +126,59 @@ const pixels = () => {
     if (init) await p.addInitScript(init);
     await p.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(p);
+    /* The way in is tapped, and in headless WebKit a tap made in the first slow stretch after a load can run out of time
+       with the page doing nothing wrong (tests/_render.js, framesSteady). It failed so on CI twice, in WebKit shard 3, and
+       passed on the re-run. So the taps wait for frames at a reader's pace first. That is a precondition: the taps keep
+       their own limits, and if the frames never come up to pace the suite says so and taps all the same. */
+    if (!direct) {
+      const pace = await framesSteady(p);
+      console.log(pace.steady ? `  note: ${tag}: frames came at a reader's pace after ${pace.waited} ms; the way in is tapped now`
+        : `  note: ${tag}: frames were still slower than 400 ms apart after ${pace.waited} ms (last gaps ${pace.gaps.join(', ')} ms); the way in is tapped all the same`);
+    }
     // Navigation is measured by the main and phone cases. Appearance-only
     // cases enter directly, avoiding another frame-sensitive pager traversal.
     p.__opened = await (direct ? reopenLab(p) : toLab(p));
+    /* A way in that did not open the Lab is the first check's FAIL, with the step it stopped at. The checks after it are
+       about the Lab, not the way in, so the Lab is then opened the way a reload opens it, and they still measure. */
+    if (!p.__opened) {
+      const fell = await reopenLab(p);
+      console.log(`  note: ${tag}: the way in did not open the Lab (${(p.__missed || []).join('; ') || 'no step said why'}); opened by goPractice() ${fell ? 'for the checks after it' : 'neither'}`);
+    }
     return p;
   };
-  /* Into the Lab the way a fellow goes: the Labs page of Systole's home screen (its tab), and the Practice Lab card. */
+  /* Into the Lab the way a fellow goes: the Labs page of Systole's home screen (Home's Labs door), and the Practice Lab card. */
   /* After a reload the proposition is what the Lab shows, not the way in, which the home section clicks through. Clicking
      again there failed in headless WebKit (CI, and here on master before Sessions too): for 30-60 s after a load it draws a
-     frame only every 0.7-1.6 s, and the tab's and card's clicks wait on frames. So a reopen goes through goPractice(). */
+     frame only every 0.7-1.6 s, and the door's and card's clicks wait on frames. So a reopen goes through goPractice(). */
   const reopenLab = async p => {
     await p.evaluate(() => goPractice());
     const opened = await p.locator('#plabRoot .plab-tiles').waitFor({ timeout: 30000 }).then(() => true, () => false);
     await quiet(p);
     return opened;
   };
+  /* Each step's failure is kept, the first one in p.__missed, so a way in that does not open the Lab says where it
+     stopped: the door, the page, the card, or the Lab drawn after it. The steps still run as before after one fails. */
   const toLab = async p => {
+    const missed = [];
     await p.evaluate(() => { if (S.screen !== 'home') goHome(); });
     await quiet(p);
-    await p.locator('#homeTab2').click({ timeout: 8000 }).catch(() => {});
-    await settled(p, () => typeof homePage !== 'undefined' && homePage === 2 && !homeTween, { timeout: 8000, label: 'the Labs page' }).catch(() => {});
-    const opened = await p.locator('#homePage2 button.lab-card', { hasText: 'Practice Lab' }).click({ timeout: 8000 })
-      .then(() => p.locator('#plabRoot .plab-tiles').waitFor({ timeout: 8000 })).then(() => true, () => false);
+    await p.locator('#homePage0 .home-door[data-page="2"]').click({ timeout: 8000 }).catch(() => missed.push('the Labs door could not be tapped'));
+    await settled(p, () => typeof homePage !== 'undefined' && homePage === 2 && !homeTween, { timeout: 8000, label: 'the Labs page' }).catch(() => missed.push('the Labs page did not come up'));
+    const tapped = await p.locator('#homePage2 button.lab-card', { hasText: 'Practice Lab' }).click({ timeout: 8000 }).then(() => true, () => false);
+    if (!tapped) missed.push('the Practice Lab card could not be tapped');
+    const opened = tapped && await p.locator('#plabRoot .plab-tiles').waitFor({ timeout: 8000 }).then(() => true, () => false);
+    if (tapped && !opened) missed.push('the Lab was not drawn after the card was tapped');
     await quiet(p);
+    p.__missed = missed;
     return opened;
+  };
+  /* In again, where the way in is not the proposition but the start of one (the keys below): the tap, and if it does not
+     open the Lab, goPractice(), said aloud. The way in itself is held by the first check and the phone's. */
+  const enterLab = async (p, why) => {
+    if (await toLab(p)) return true;
+    const fell = await reopenLab(p);
+    console.log(`  note: ${why}: the way in did not open the Lab (${(p.__missed || []).join('; ') || 'no step said why'}); opened by goPractice() ${fell ? 'instead' : 'neither'}`);
+    return fell;
   };
   const state = p => p.evaluate(() => window.__lab.state());
   const text = (p, sel) => p.locator(sel).innerText();
@@ -146,7 +188,7 @@ const pixels = () => {
   head('it is part of Systole');
   {
     const st0 = await state(p);
-    ok('the Practice Lab card on the Labs page of Systole\'s home screen opens it: Systole\'s practice screen, with the Lab drawn in it, on its home', p.__opened && (await p.evaluate(() => S.screen)) === 'practice' && st0.mounted && st0.screen === 'home' && /Practice Lab/.test(await p.evaluate(() => (document.querySelector('#plabRoot h1') || {}).textContent || '')), JSON.stringify(st0));
+    ok('the Practice Lab card on the Labs page of Systole\'s home screen opens it: Systole\'s practice screen, with the Lab drawn in it, on its home', p.__opened && (await p.evaluate(() => S.screen)) === 'practice' && st0.mounted && st0.screen === 'home' && /Practice Lab/.test(await p.evaluate(() => (document.querySelector('#plabRoot h1') || {}).textContent || '')), ((p.__missed || []).length ? p.__missed.join('; ') + ' · ' : '') + JSON.stringify(st0));
     ok('its modules are in Systole\'s page, beside the ones they read', await p.evaluate(() => ['HeartSounds', 'Tracings', 'Strips', 'HeartMap', 'Drill', 'LabProgress', 'LabItems', 'LabUI', 'Physio', 'RhythmsExtra', 'FSRS'].every(n => !!window[n]) && typeof buildPractice === 'function'));
     const cls = await p.evaluate(() => { const all = Array.from(document.querySelectorAll('#plabRoot [class]')).flatMap(el => Array.from(el.classList)); return { n: all.length, foreign: all.filter(c => !/^plab-/.test(c)) }; });
     ok('every class in it is its own, plab-: none of Systole\'s (.btn, .chip, .card) is on it', cls.n >= 20 && cls.foreign.length === 0, cls.foreign.slice(0, 6).join(', ') || cls.n + ' classes, all plab-');
@@ -154,7 +196,9 @@ const pixels = () => {
     for (const th of ['daylight', 'midnight', 'cathlab']) {
       await p.evaluate(t => setTheme(t), th); await quiet(p);
       looks.push(await p.evaluate(th => { const pr = document.createElement('div'); pr.style.background = 'var(--card)'; document.body.appendChild(pr); const want = getComputedStyle(pr).backgroundColor; pr.remove();
-        return { th, card: getComputedStyle(document.querySelector('#plabRoot .plab-card')).backgroundColor, want }; }, th));
+        /* With no Lab drawn there is no card: the check below says so, where reading a card that is not there ended the suite. */
+        const card = document.querySelector('#plabRoot .plab-card');
+        return { th, card: card ? getComputedStyle(card).backgroundColor : null, want }; }, th));
     }
     await p.evaluate(() => setTheme('auto')); await quiet(p);
     ok('its cards are the theme\'s cards, in a light theme and two dark ones', looks.every(l => l.card === l.want) && new Set(looks.map(l => l.card)).size === 3, JSON.stringify(looks));
@@ -184,7 +228,7 @@ const pixels = () => {
       const info = await p.evaluate(k => { const it = window.LabItems.byId(k); return { key: it.key, name: it.name, blurb: it.blurb, phase: window.HeartMap.phaseOf(it.key) }; }, st.item);
       await p.click('[data-act="play"]');
       if (hasAudio) await p.waitForFunction(n => window.__audio.buffers.length > n, i, T);
-      const e = hasAudio ? await p.evaluate(energy, 4) : { sys: 0, dia: 0, rate: 0, len: 0, peak: 0 };
+      const e = hasAudio ? await p.evaluate(energy, [4, info.key]) : { sys: 0, dia: 0, rate: 0, len: 0, peak: 0 };
       const loud = 0.02;
       const fits = !hasAudio ? true : info.phase === 'systolic' ? e.sys >= loud && e.sys >= 2 * e.dia
         : info.phase === 'diastolic' ? e.dia >= loud && e.dia >= 2 * e.sys
@@ -252,7 +296,7 @@ const pixels = () => {
     heard('and stops the heart sound', (await p.evaluate(() => window.__audio.stopped)) > stopped0);
     /* A quiz, then the Lab with a fresh quiz left open behind it: a key meant for one screen must not answer the other. */
     const startQuiz1 = async () => { await p.evaluate(() => { goHome(); startAdhocQuiz([POOL.find(x => !x.bad)], null); }); await p.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.opt') && !S.answered, null, T).catch(() => {}); await quiet(p); };
-    await toLab(p); await p.click('[data-kind="tracings"]');
+    await enterLab(p, 'before a quiz'); await p.click('[data-kind="tracings"]');
     const n0 = (await state(p)).session.n;
     await startQuiz1();
     await p.keyboard.press('2');
@@ -261,11 +305,11 @@ const pixels = () => {
     const quizA = await p.evaluate(() => S.answered);
     ok('on a quiz a Lab key (2) answers nothing, while the quiz\'s own (a) still answers it', quiz2 === false && quizA === true && (await state(p)).session.n === n0, JSON.stringify([quiz2, quizA]));
     await startQuiz1();
-    await toLab(p); await p.click('[data-kind="tracings"]');
+    await enterLab(p, 'with a quiz left open'); await p.click('[data-kind="tracings"]');
     await p.keyboard.press('a');
     const behind = await p.evaluate(() => ({ answered: S.answered, held: S.questions.length }));
     ok('and on the Lab a quiz key (a) answers nothing: not the drill, and not the quiz left open behind it', (await state(p)).picked === null && behind.held === 1 && behind.answered === false && (await p.evaluate(() => S.screen)) === 'practice', JSON.stringify(behind));
-    await toLab(p);
+    await enterLab(p, 'for the drills below');
     await p.click('[data-kind="sounds"]');   // the sections below start from inside a drill
   }
 
@@ -402,7 +446,7 @@ const pixels = () => {
     ok('and the picker keeps focus and the page says which condition it is showing', /Mitral stenosis/.test(await text(p, '#plab-ex-title')) && (await p.evaluate(() => document.activeElement.id)) === 'plab-pick');
     const before = await p.evaluate(() => window.__audio.started);
     await p.click('[data-act="play"]');
-    const e = hasAudio ? await p.evaluate(energy, 3) : { sys: 0, dia: 0 };   // the heart map plays three beats, the drill four
+    const e = hasAudio ? await p.evaluate(energy, [3, 'ms']) : { sys: 0, dia: 0 };   // the heart map plays three beats, the drill four
     heard('Play here plays that condition\'s own sound: a diastolic rumble for mitral stenosis', (await p.evaluate(() => window.__audio.started)) === before + 1 && e.dia > 2 * e.sys, `sys ${e.sys.toFixed(3)} dia ${e.dia.toFixed(3)}`);
     await p.selectOption('#plab-pick', 'trc:ra-constriction');
     ok('a tracing shows the pericardium and its waves labelled, where a sound would not', (await p.locator('svg.plab-heart ellipse').count()) === 1 && (await p.evaluate(pixels)).accent > 20);
@@ -430,7 +474,7 @@ const pixels = () => {
     await ph.locator('.plab-option').first().tap(); if (await wide() > 1) over.push('sound answer');
     await ph.click('[data-act="home"]'); await ph.click('[data-kind="strips"]'); if (await wide() > 1) over.push('strip');
     await ph.click('[data-act="home"]'); await ph.click('[data-act="explore"]'); if (await wide() > 1) over.push('explore');
-    ok('nothing scrolls sideways at 390 px: home, a question, an answer, a strip, the heart map', ph.__opened && over.length === 0, over.join(', ') || '5 screens');
+    ok('nothing scrolls sideways at 390 px: home, a question, an answer, a strip, the heart map', ph.__opened && over.length === 0, ph.__opened ? over.join(', ') || '5 screens' : 'the way in did not open the Lab: ' + ((ph.__missed || []).join('; ') || 'no step said why'));
     const small = await ph.evaluate(() => { const all = Array.from(document.querySelectorAll('#plabRoot button, #plabRoot select')).filter(b => b.offsetParent); return { n: all.length, small: all.filter(b => b.getBoundingClientRect().height < 40).map(b => b.innerText || b.id) }; });
     ok('every button and the picker is at least 40 px tall, for a thumb', small.n >= 3 && small.small.length === 0, small.small.join(', ') || small.n + ' controls');
     await ph.context().close();

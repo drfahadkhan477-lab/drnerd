@@ -24,6 +24,8 @@
  *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, a chapter
  *     tile's percentage (in its own chapter's ink, not the accent's), and the Echo screen's selected tab (text on the ink
  *     rather than in it, with no glass sheen under it); a chapter with no colour of its own takes the accent ink;
+ *   · the top bar's name and the line under it, on Study (a navy bar) and on Home (a paper one), clear 4.5:1 in every
+ *     state;
  *   · every <select> on those screens has a name a screen reader can say (two had none);
  *   · nothing throws.
  */
@@ -92,18 +94,25 @@ const TOOLS = () => {
     }
     ok('the stylesheets were read', files.length >= 10, files.length + ' files');
     ok('no stylesheet sets color: to --green, --red, --amber or their semantic names; text takes the -ink', hits.length === 0, hits.join('; ') || 'none');
-    const shell = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
-    const inline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(green|red|amber|success|danger|warning)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
-    ok('nor does any inline style the shell writes', inline.length === 0, inline.length ? 'lines ' + inline.join(', ') : 'none');
+    /* The shell's inline styles, and the screens' markup that has left it for src/app/ (roadmap E1 step 3): each screen
+       there is the markup the shell used to write, and writes the same inline styles. */
+    const appDir = path.join(__dirname, '..', 'src', 'app');
+    const markup = [['systole.html', path.join(__dirname, '..', 'app', 'systole.html')]].concat(fs.readdirSync(appDir).filter(f => f.endsWith('.js')).map(f => ['src/app/' + f, path.join(appDir, f)]))
+      .map(([name, file]) => [name, blankComments(fs.readFileSync(file, 'utf8'))]);
+    const inlineOf = re => markup.flatMap(([name, src]) => [...src.matchAll(re)].map(m => name + ':' + src.slice(0, m.index).split('\n').length));
+    const inline = inlineOf(/(?<![-\w])color\s*:\s*var\(--(green|red|amber|success|danger|warning)\)/g);
+    ok('the shell and the screens that have left it were read', markup.length >= 10 && markup.some(([n]) => n === 'src/app/stats.js'), markup.length + ' files');
+    ok('nor does any inline style the shell or a screen writes', inline.length === 0, inline.length ? inline.join(', ') : 'none');
     /* The accent the same way: as text it read at 3.6-4.1:1 in Daylight and 3.7-4.4:1 in Midnight. */
     const accent = [];
     for (const f of files) {
       const src = blankComments(fs.readFileSync(path.join(dir, f), 'utf8'));
-      for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
+      /* --acc is the option letters' local name for the accent; reaching the accent through it is still the accent. */
+      for (const m of src.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2|acc)\)/g)) accent.push(f + ':' + (src.slice(0, m.index).split('\n').length) + ' ' + m[0]);
     }
-    const accentInline = [...shell.matchAll(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g)].map(m => shell.slice(0, m.index).split('\n').length);
+    const accentInline = inlineOf(/(?<![-\w])color\s*:\s*var\(--(teal|teal2|accent|accent-2)\)/g);
     ok('no stylesheet or inline style is written color:var(--teal), var(--teal2) or var(--accent); accent text takes --teal-ink', accent.length === 0 && accentInline.length === 0,
-      accent.concat(accentInline.map(l => 'systole.html:' + l)).slice(0, 6).join('; ') || 'none');
+      accent.concat(accentInline).slice(0, 6).join('; ') || 'none');
   }
 
   const browser = await launch();
@@ -152,7 +161,10 @@ const TOOLS = () => {
       return { name, ratio: Math.round(T.contrast(c, g) * 100) / 100, inked: T.same(c, T.token('--' + k + '-ink')) }; }); }, probes);
   const sweep = async (probes, where) => {
     const per = {};
-    for (const [id, scheme, label] of STATES) { await theme(id, scheme); for (const r of await measure(probes)) (per[r.name] = per[r.name] || []).push([label, r]); }
+    /* Read at rest: a theme change starts colour transitions, and text read mid-way is the last theme's colour on this
+       theme's ground (an option's letter read 1.05:1 so). Each finite animation is put at its end first, as below. */
+    const settle = () => page.evaluate(() => { for (let k = 0; k < 4; k++) { const a = document.getAnimations().filter(x => x.playState === 'running' && x.effect && x.effect.getComputedTiming().iterations !== Infinity); if (!a.length) break; a.forEach(x => { try { x.finish(); } catch (_) {} }); } });
+    for (const [id, scheme, label] of STATES) { await theme(id, scheme); await settle(); for (const r of await measure(probes)) (per[r.name] = per[r.name] || []).push([label, r]); }
     for (const [name] of probes) {
       const rows = per[name], bad = rows.filter(([, r]) => r.missing || !(r.ratio >= 4.5));
       ok(`${where}: ${name} clears 4.5:1 in every theme`, bad.length === 0,
@@ -171,7 +183,7 @@ const TOOLS = () => {
   await quiet(page);
   ok('the quiz is up, answered wrong, and flagged (precondition)', up && await page.evaluate(() => S.answered === true && !!document.querySelector('.btn-flag.on')));
   await sweep([['the wrong option\'s peer figure', '.opt.wrong .opt-pct', 'red'], ['the right option\'s peer figure', '.opt.correct .opt-pct', 'green'],
-    ['the Flag button, on', '.btn-flag.on', 'amber']], 'quiz');
+    ['the Flag button, on', '.btn-flag.on', 'amber'], ['an option\'s letter, not chosen', '.opt:not(.correct):not(.wrong) .opt-letter', 'teal']], 'quiz');
   await theme('midnight', 'light');
   const badge = await page.evaluate(() => { const T = window.__ink, el = document.querySelector('.opt.correct .opt-letter'); if (!el) return null;
     const cs = getComputedStyle(el); return { bg: T.same(T.parse(cs.backgroundColor), T.token('--success')), white: T.same(T.parse(cs.color), [255, 255, 255]) }; });
@@ -182,7 +194,7 @@ const TOOLS = () => {
   const res = await page.waitForFunction(() => S.screen === 'results' && !!document.querySelector('.score-pct'), null, { timeout: 8000 }).then(() => true, () => false);
   await quiet(page);
   ok('the results are up (precondition)', res);
-  await sweep([['the score', '.score-pct', 'red'], ['a chapter\'s figure', '.chp-pct', 'red'], ['Retry Missed', 'button[onclick*="\'missed\'"]', 'red']], 'results');
+  await sweep([['the score', '.score-pct', 'red'], ['a chapter\'s figure', '.chp-pct', 'red'], ['Retry Missed', 'button[data-action="retryMissed"]', 'red']], 'results');
 
   head('real accent and chapter text');
   {
@@ -212,6 +224,11 @@ const TOOLS = () => {
       ['the rhythm lab', () => { goLab(); }, null, [['the phase chip', '#physioPhase']]],
       ['the Echo screen', () => { goEcho(); }, null, [['the selected tab', '.echo-tab.on']]],
       ['Study', () => { goStudy(); }, null, [['a chapter tile\'s percentage', '.ch-tile .ct-foot b']]],
+      /* The top bar is navy on every screen but Home, and paper on Home, and one rule once gave the name the page's text
+         colour on both: 1.3:1 on the navy in a light theme. axe left it alone (contrast over a translucent, blurred bar is
+         "incomplete", not a violation), so it is read here, on a screen of each kind. */
+      ['the top bar on Study', () => { goStudy(); }, null, [['the app\'s name', '#navbar .nav-title'], ['the bank under it', '#navbar .nav-sub']]],
+      ['the top bar on Home', () => { goHome(); }, null, [['the app\'s name', '#navbar .nav-title'], ['the bank under it', '#navbar .nav-sub']]],
     ];
     const per = {}, names = [];
     for (const [id, scheme, label] of STATES) {

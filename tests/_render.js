@@ -156,6 +156,44 @@ async function afterRender(page, pred, opts = {}) {
   await quiet(page, opts);
 }
 
+/* ── frames at a reader's pace, before a tap that waits on them ─────────────────
+
+   After a load, headless WebKit on a busy machine draws a frame only every 0.7-1.6 s
+   for a while: 30-60 s on CI's runners (tests/verify-lab.js, above reopenLab), and
+   1.0-1.7 s apart for 12 s and more here with the processor loaded. Playwright's
+   click waits on frames before it taps, and a page that pages by a tween needs them
+   too, so a tap made in that stretch can run out of time without anything being
+   wrong with the page. A suite whose proposition is the tap waits for this first:
+   it is a precondition, like booted(), never the thing under test.
+
+   Resolves, never throws: { steady, waited, gaps }. steady is true once `need`
+   gaps in a row between animation frames are each shorter than `gap` ms; false if
+   `timeout` ms went by first, or no frame came at all. waited is how long it took
+   and gaps the last few gaps in ms, so a caller can say what it found. A caller
+   that gets steady false says so and goes on: the tap is still the measurement. */
+async function framesSteady(page, opts = {}) {
+  const gap = opts.gap || 400, need = opts.need || 5, timeout = opts.timeout || 90000;
+  return page.evaluate(({ gap, need, timeout }) => new Promise(resolve => {
+    const t0 = performance.now(), recent = [];
+    let last = null, run = 0, done = false;
+    const stop = steady => { if (done) return; done = true; resolve({ steady, waited: Math.round(performance.now() - t0), gaps: recent.slice() }); };
+    /* rAF may not run at all (a page in the background); the clock ends the wait then. */
+    setTimeout(() => stop(false), timeout);
+    const tick = t => {
+      if (done) return;
+      if (last !== null) {
+        const g = t - last;
+        recent.push(Math.round(g)); if (recent.length > need) recent.shift();
+        run = g < gap ? run + 1 : 0;
+      }
+      last = t;
+      if (run >= need) return stop(true);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }), { gap, need, timeout });
+}
+
 /* ── resizing, which is not safe at any moment ───────────────────────────────
 
    WHAT HAPPENS IF YOU JUST CALL setViewportSize. On WebKit, shrinking the
@@ -206,16 +244,24 @@ async function watchTransitions(page) {
   });
 }
 
+/* The view transition render() started, if one is live, finished. With watchTransitions() installed it resolves when
+   the transition does (true), or at once when none is live; without it, it says so (false) and waits for nothing. A
+   live transition takes the page's hit-testing: a point on a button is the transition's, not the button's, until it
+   ends, so a tap waits for this first. A precondition, never the proposition. */
+async function transitionDone(page) {
+  return page.evaluate(() => {
+    if (typeof window.__vtLive === 'undefined') return false;
+    return window.__vtLive && window.__vtLive.finished ? window.__vtLive.finished.then(() => true, () => true) : true;
+  });
+}
+
 /* Resize, but never into a live transition. Falls back to a bounded settle
    when the watch is not installed, so a suite that forgets watchTransitions()
    is slower rather than broken — and says so, rather than crashing on WebKit
    with nothing in the log. */
 async function resized(page, width, height, opts = {}) {
-  const watched = await page.evaluate(() => typeof window.__vtLive !== 'undefined');
-  if (watched) {
-    await page.evaluate(() => (window.__vtLive && window.__vtLive.finished
-      ? window.__vtLive.finished.catch(() => {}) : null));
-  } else if (!opts.quiet) {
+  const watched = await transitionDone(page);
+  if (!watched && !opts.quiet) {
     await page.waitForTimeout(2000);   /* measured above: 300ms is not enough */
   }
   await page.setViewportSize({ width, height });
@@ -256,5 +302,5 @@ async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {})
 }
 
 module.exports = { booted, settled, onScreen, quiet, afterRender, resolved,
-                   watchTransitions, resized,
+                   watchTransitions, transitionDone, resized, framesSteady,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };

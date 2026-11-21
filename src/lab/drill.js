@@ -66,7 +66,8 @@ function next(o) {
   const pool = items.length > 1 ? items.filter(i => !recent.has(i.id)) : items;
   const usable = pool.length ? pool : items.filter(i => i.id !== arr(o.recent).slice(-1)[0]).concat(items).slice(0, 1);
 
-  const due = usable.filter(i => cards[i.id] && typeof cards[i.id].due === 'string' && cards[i.id].due <= today)
+  const exam = FSRS.examWindow(today, o.examDate);
+  const due = usable.filter(i => FSRS.isDue(cards[i.id], today, exam))
     .map(i => ({ i, r: recall(cards[i.id], today) }))
     .sort((a, b) => a.r - b.r || (a.i.id < b.i.id ? -1 : 1));
   if (due.length) return { item: due[0].i, reason: 'due' };
@@ -96,11 +97,12 @@ function options(o) {
   return shuffle(chosen, rand);
 }
 
-/* grade({ card, correct, today }) → the next card: "good" if right, "again" if wrong. */
+/* grade({ card, correct, today, id }) → the next card: "good" if right, "again" if wrong. With the item's id the day is
+   spread within FSRS's fuzz range (roadmap S4), so items learned together do not all come back together. */
 function grade(o) {
   o = obj(o);
   const today = typeof o.today === 'string' ? o.today : FSRS.todayISO();
-  return FSRS.update(o.card || null, o.correct ? 3 : 1, today);
+  return FSRS.update(o.card || null, o.correct ? 3 : 1, today, typeof o.id === 'string' && o.id ? o.id : undefined, o.examDate);
 }
 
 root.Drill = { next, options, grade, recall };

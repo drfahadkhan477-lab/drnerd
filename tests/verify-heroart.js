@@ -296,6 +296,20 @@ let section = '';
     ok('and the turning heart takes a rhythm change without throwing', beat.took === true);
   }
 
+  await head('a lesion chosen in the heart\'s menu reaches the turning heart (docs/ROADMAP.md, S8)');
+  {
+    /* Chosen as a reader chooses it: the <select>'s value set and its change sent, which the page's CHANGE_ACTIONS hears. */
+    const choose = id => page.evaluate(id => { const sel = document.getElementById('heroLesion'); if (!sel) return 'no select';
+      sel.value = id; sel.dispatchEvent(new Event('change', { bubbles: true })); return 'chosen'; }, id);
+    const said = await choose('hfref');
+    const hf = await page.evaluate(() => { const l = heroHeart3d.lesion(), w = Circulation.heartSpec('hfref');
+      return { said: !!l, same: !!l && JSON.stringify(l) === JSON.stringify(w), kept: localStorage.getItem('accsap12.herolesion'), lv: l && l.dil[0], squeeze: l && l.vAmp }; });
+    ok('choosing HFrEF hands the turning heart HFrEF\'s spec from the engine, and keeps the choice', said === 'chosen' && hf.same && hf.kept === 'hfref' && hf.lv > 1.2 && hf.squeeze < 0.5, JSON.stringify(Object.assign({ said }, hf)));
+    await choose('normal');
+    const back = await page.evaluate(() => ({ lesion: heroHeart3d.lesion(), kept: localStorage.getItem('accsap12.herolesion') }));
+    ok('and Normal takes it off again', back.lesion === null && back.kept === 'normal', JSON.stringify(back));
+  }
+
   await head('a lost context hands the medallion back to the photograph');
   const lost = await page.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));

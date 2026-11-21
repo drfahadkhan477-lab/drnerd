@@ -83,10 +83,10 @@ var S = {};
   const APP_HTML = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
   const NAV = '.nav{color:#fff;height:var(--navh);display:flex;align-items:center;';
   const MEMORY = '/* ══════════════ Durable memory — see src/core/memory.js ══════════════ */';
-  const BANNER = '/* ── glass — see scripts/glass-patch.js ── */';
+  const BANNER = '/* ── glass — why, in app/systole.html "Glass" ── */';
   const cssFrom = once(APP_CSS, BANNER, 'the stylesheet') + BANNER.length;
   const css = APP_CSS.slice(cssFrom, once(APP_CSS, NAV, 'the stylesheet'));
-  const jsFrom = once(APP_HTML, '/* ══════════════ Glass — see scripts/glass-patch.js', 'app/systole.html');
+  const jsFrom = once(APP_HTML, '/* ══════════════ Glass ══════════════', 'app/systole.html');
   const js = APP_HTML.slice(jsFrom, APP_HTML.indexOf(MEMORY, jsFrom));
   ok('the rules and the script were both found, and are whole', css.length > 2000 && /backdrop-filter/.test(css) &&
      js.length > 500 && /--card-glass/.test(js) && /\}\)\(\);\s*$/.test(js), `css ${css.length}, script ${js.length} characters`);

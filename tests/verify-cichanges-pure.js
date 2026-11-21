@@ -72,6 +72,8 @@ head('only a pull request is filtered');
 /* The workflow with its comments removed, so a sentence describing the wiring
    cannot stand in for the wiring. */
 const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8').replace(/(^|\s)#.*$/gm, '$1');
+const { browserShardBody, readShardWorkflow } = require('../scripts/test-public.js');
+const shardYml = readShardWorkflow(ROOT).replace(/(^|\s)#.*$/gm, '$1');
 function jobBody(job) {
   const start = yml.indexOf(`\n  ${job}:\n`);
   if (start < 0) return '';
@@ -87,7 +89,7 @@ head('each list is held against the files the job it skips really runs');
      here. */
   const runs = body => [...body.matchAll(/\bnode\s+((?:tests|scripts)\/[a-z0-9_-]+\.js)/g)].map(m => m[1]);
   const pubFiles = runs(jobBody('public-browser'));
-  const synFiles = runs(jobBody('synthetic-browser'));
+  const synFiles = runs(browserShardBody(yml, 'synthetic-browser', shardYml));
   ok('the public-browser job’s files are found', pubFiles.length >= 2, pubFiles.join(', ') || 'none');
   ok('and the synthetic job’s', synFiles.length >= 30, synFiles.length + '');
   const pubSkipped = pubFiles.filter(f => !classify([f]).public);
@@ -96,7 +98,7 @@ head('each list is held against the files the job it skips really runs');
   ok('every file the synthetic job runs, changed alone, runs it', synSkipped.length === 0, synSkipped.join(', ') || 'none');
   /* synthetic-webkit is skipped on the same answer, so the same must hold
      for every file it runs. */
-  const wkFiles = runs(jobBody('synthetic-webkit'));
+  const wkFiles = runs(browserShardBody(yml, 'synthetic-webkit', shardYml));
   const wkSkipped = wkFiles.filter(f => !classify([f]).synthetic);
   ok('and every file the WebKit job runs, changed alone, runs it', wkFiles.length >= 5 && wkSkipped.length === 0,
      wkSkipped.join(', ') || `${wkFiles.length} files`);

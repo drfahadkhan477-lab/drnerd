@@ -426,42 +426,25 @@ let section = '';
   ok('the figure follows the sentence it belongs to', next.figMatchesNote);
   ok('and the hero is not re-rendered underneath it', next.heroIntact);
 
-  await head('a named concept, recall, and the selected source note');
-  const readingProse = await page.evaluate(() => {
-    const b = document.getElementById('pearlReading');
-    if (!b) return null;
-    b.click();
-    return { pressed:b.getAttribute('aria-pressed'), text:document.getElementById('pearlBody').textContent,
-      expected:pearlCurrent.text, steps:document.querySelectorAll('#pearlBody .pearl-step').length };
-  });
-  ok('paragraph mode reads the complete statement with its original punctuation', !!readingProse && readingProse.pressed === 'true' && readingProse.text === readingProse.expected && readingProse.steps === 0);
-  const proseNext = await page.evaluate(() => {
-    const b = document.getElementById('pearlReading');
-    if (!b) return null;
-    const next = pearlAll().find(p => p.id !== pearlCurrent.id && Pearl.lesson(p.text).length > 1);
-    if (!next) return null;
-    const pick = Pearl.pick;
-    try { Pearl.pick = () => next; pearlNext(); } finally { Pearl.pick = pick; }
-    const kept = b.getAttribute('aria-pressed') === 'true' && document.getElementById('pearlBody').textContent === pearlCurrent.text;
-    b.click();
-    return {kept, restored:b.getAttribute('aria-pressed') === 'false' && !!document.querySelector('#pearlBody .pearl-step')};
-  });
-  ok('another pearl keeps paragraph mode, and switching back restores the steps', !!proseNext && proseNext.kept && proseNext.restored);
-  const current = await page.evaluate(() => ({id:pearlCurrent.id,title:pearlCurrent.title,concept:pearlCurrent.concept,source:pearlCurrent.source,heading:document.getElementById('pearlConcept').textContent}));
-  ok('the heading names the selected concept', current.heading === current.concept);
-  await page.locator('#pearlRecall').click();
-  const hidden = await page.evaluate(() => ({body:document.getElementById('pearlBody').hidden,
-    prompt:!document.getElementById('pearlPrompt').hidden,expanded:document.getElementById('pearlRecall').getAttribute('aria-expanded'),
-    figure:!document.getElementById('pearlFig')||document.getElementById('pearlFig').hidden}));
-  ok('recall hides text and image, and shows a recall prompt', hidden.body && hidden.figure && hidden.prompt && hidden.expanded === 'false');
-  ok('the recall prompt tells the reader what to retrieve', /explain/i.test(await page.locator('#pearlPrompt').textContent()) && /exception/i.test(await page.locator('#pearlPrompt').textContent()));
-  await page.locator('#pearlRecall').click();
-  ok('reveal restores the pearl', await page.locator('#pearlBody').isVisible() && await page.locator('#pearlRecall').getAttribute('aria-expanded') === 'true');
-  await page.locator('#pearlRecall').click();
+  /* The owner's marked screenshot (November 2026): Recall, Paragraph and Source are gone; the pearl is its concept, its
+     chapter, its statement and the way into the note it came from. */
+  await head('a named concept, its chapter, and the note it came from');
+  const named = () => page.evaluate(() => ({ id: pearlCurrent.id, concept: pearlCurrent.concept, heading: document.getElementById('pearlConcept').textContent,
+    chapter: pearlCurrent.chapter || 'From your notes', cap: (document.getElementById('pearlCap') || {}).textContent,
+    capShown: !!document.getElementById('pearlCap') && getComputedStyle(document.getElementById('pearlCap')).display !== 'none' && document.getElementById('pearlCap').getBoundingClientRect().width > 0 && !document.getElementById('pearlCap').classList.contains('sr-only'),
+    source: pearlCurrent.source || 'Your reference notes', openTitle: (document.querySelector('.pearl-open') || {}).title, bodyShown: !document.getElementById('pearlBody').hidden }));
+  const current = await named();
+  ok('the heading names the selected concept, its chapter is shown beside the tag, and Read note carries the note it came from',
+     current.heading === current.concept && current.cap === current.chapter && current.capShown && current.openTitle === current.source, JSON.stringify(current));
+  const gone = await page.evaluate(() => ({ ids: ['pearlRecall', 'pearlReading', 'pearlSourceToggle', 'pearlPrompt', 'pearlSource'].filter(id => document.getElementById(id)),
+    fns: ['pearlRecall', 'pearlReading', 'pearlSourceToggle'].filter(n => typeof window[n] === 'function'),
+    actions: [...document.querySelectorAll('#pearlCard .pearl-actions [data-action]')].map(b => b.dataset.action) }));
+  ok('and nothing else: no recall, no paragraph view and no source panel, in the page or as functions; Read note is its one action',
+     gone.ids.length === 0 && gone.fns.length === 0 && JSON.stringify(gone.actions) === '["pearlOpen"]', JSON.stringify(gone));
   await page.locator('.pearl-next').click();
-  const moved=await page.evaluate(()=>({id:pearlCurrent.id,concept:pearlCurrent.concept,shown:document.getElementById('pearlConcept').textContent,
-    source:pearlCurrent.source,shownSource:document.getElementById('pearlSource').textContent,hidden:document.getElementById('pearlBody').hidden}));
-  ok('another pearl updates its concept and source and exits recall', moved.id !== current.id && moved.concept === moved.shown && moved.source === moved.shownSource && !moved.hidden);
+  const moved = await named();
+  ok('another pearl updates its concept, its chapter and the note Read note opens, and shows its statement',
+     moved.id !== current.id && moved.heading === moved.concept && moved.cap === moved.chapter && moved.openTitle === moved.source && moved.bodyShown, JSON.stringify(moved));
   // The new figure is inserted without a full render; keyboard zoom must work there too.
   // A randomly drawn pearl may legitimately have no relevant image. Choose
   // a different, resolvable figured pearl for this interaction, through the

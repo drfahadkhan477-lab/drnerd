@@ -118,6 +118,34 @@ head('S1 and S2 sit on the valve events');
   ok('moving aortic closure in physio moves S2 with it', late > 2 * early, `new place ${late.toFixed(3)} vs old ${early.toFixed(3)}`);
 }
 
+head('a lesion the circulation engine makes sounds on its own beat (docs/ROADMAP.md, S8)');
+{
+  const vm = require('vm');
+  const cx = {}; vm.createContext(cx);
+  vm.runInContext(require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'core', 'circulation.js'), 'utf8'), cx);
+  const C = cx.Circulation;
+  ok('eventsFor gives the engine\'s events for AS, AR, MS and MR, and nothing for any other lesion or without the engine',
+     ['as', 'ar', 'ms', 'mr'].every(id => { const e = H.eventsFor(id, C); return Array.isArray(e) && e.length === 8 && e.find(x => x.id === 'ac').at === C.cycle(id).T.ac; })
+     && ['normal', 's3', 'hocm'].every(id => H.eventsFor(id, C) === null) && H.eventsFor('as') === null && H.eventsFor('as', {}) === null);
+  const asEv = H.eventsFor('as', C), at = id => asEv.find(e => e.id === id).at;
+  /* The normal spec on aortic stenosis's beat: its S2 must be where AS's aortic valve shuts, not where physio's does. */
+  const moved = H.render('normal', { beats: BEATS, bpm: BPM, seed: 1, events: asEv });
+  const there = rms(moved, at('ac') - 0.005, at('ac') + 0.05), here = rms(moved, ev('ac') - 0.005, ev('ac') + 0.04);
+  ok('handed a lesion\'s events, a sound moves with them: S2 at AS\'s aortic closure, and nothing at physio\'s',
+     there > 0.05 && here < there / 20 && moved.source === 'lesion', `at AS's A2 ${there.toFixed(3)}, at physio's ${here.toFixed(4)}`);
+  ok('and the events it reports are the ones it used, with P2 before A2 in aortic stenosis: paradoxical splitting',
+     JSON.stringify(moved.events) === JSON.stringify(asEv) && at('pc') < at('ac'), `P2 ${at('pc').toFixed(3)}, A2 ${at('ac').toFixed(3)}`);
+  const asOwn = H.render('as', { beats: BEATS, bpm: BPM, seed: 1, events: asEv });
+  /* Straight after a render that was handed events: the heart map reads frac() between renders. */
+  ok('outside a render, frac() reads physio\'s events again: a render does not leave the ones it was handed behind', H.frac({ ev: 'ac' }) === ev('ac'), `${H.frac({ ev: 'ac' })} against ${ev('ac')}`);
+  /* After physio's P2 has died away and before AS's own A2: the murmur on AS's beat, silence on physio's. */
+  const lo = ev('pc') + 0.1, hi = at('ac') - 0.04;
+  ok('aortic stenosis\'s murmur runs on to its own late aortic closure, long past where physio\'s valve shuts',
+     hi > lo && rms(asOwn, lo, hi) > 0.05 && rms(R('as'), lo, hi) < rms(asOwn, lo, hi) / 20, `${rms(asOwn, lo, hi).toFixed(3)} against ${rms(R('as'), lo, hi).toFixed(4)} over ${lo.toFixed(2)}-${hi.toFixed(2)}`);
+  const after = H.render('normal', { beats: BEATS, bpm: BPM, seed: 1 });
+  ok('a render handed nothing is physio\'s, as before, and a render handed events leaves none behind', after.source === 'physio' && JSON.stringify(after.samples.slice(0, 4000)) === JSON.stringify(R('normal').samples.slice(0, 4000)));
+}
+
 head('each murmur is loud where the lesion says, and quiet where it does not');
 {
   const q = rms(R('normal'), ...SYS);               // the quiet that systole is in a normal heart

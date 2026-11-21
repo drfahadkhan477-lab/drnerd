@@ -8,12 +8,13 @@
    "the sotalol note" had no way to get to it. The owner found this on an iPad,
    typing "sotalol" into the question search and getting "0 matches".
 
-   The question search could not simply learn to show notes: its code lives in
-   the licensed export, which this repository does not read (AGENTS.md), and no
-   earlier step had ever anchored into it. So the notes get a search of their
-   own — a screen built entirely from what the chain already provides: the
-   app's own search() index, which already holds every note as kind 'r', and
-   md(), which already renders a note's figures.
+   When this was written, the question search could not simply learn to show
+   notes: its code came with the licensed export, which the patch chain of the
+   day did not read, and no step had anchored into it. So the notes got a search
+   of their own, built from what the app already provided: its search() index,
+   which holds every note as kind 'r', and md(), which renders a note's figures.
+   The chain is gone and search() now lives in app/systole.html; the split
+   still holds, because this module decides and the shell only draws.
 
    WHAT THIS MODULE DOES. Everything that decides something, as plain
    functions of their inputs: which notes answer a query and in what order,

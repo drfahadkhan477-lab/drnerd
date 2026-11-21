@@ -625,6 +625,46 @@ const anonPost = (path, b) => new Request('https://systole.pages.dev' + path,
     ok('and the ones under it went through', codes.filter(c => c === 200).length === 3, codes.join(','));
   }
 
+  head('with a D1 database bound, every isolate counts against one table');
+  {
+    /* A stand-in for D1: one table in memory, the three statements the Worker sends, and a switch that makes every
+       statement fail. Rows are keyed who|minute, as the table's primary key is. */
+    const d1 = (opts = {}) => {
+      const rows = new Map(), log = [];
+      return { rows, log, prepare(sql) {
+        const st = { args: [], bind(...a) { st.args = a; return st; },
+          async run() { log.push(sql.split(' ')[0]); if (opts.fail) throw new Error('D1 is down');
+            if (/^DELETE/.test(sql)) for (const k of [...rows.keys()]) if (+k.split('|')[1] < st.args[0]) rows.delete(k);
+            return { success: true }; },
+          async first() { log.push(sql.split(' ')[0]); if (opts.fail) throw new Error('D1 is down');
+            const k = st.args[0] + '|' + st.args[1], n = (rows.get(k) || 0) + 1; rows.set(k, n); return { n }; } };
+        return st; } };
+    };
+    const f = stub();
+    const mk = async (who, env) => handleApex(new Request('https://systole.pages.dev/api/apex/gemini/stream?model=gemini-3-flash-preview',
+      { method: 'POST', body: body(), headers: { 'cf-access-jwt-assertion': await sign(claims({ email: who })) } }), env, f);
+
+    /* Another isolate has already spent this caller's minute: the table says 2 of 2. This isolate has never seen them. */
+    const shared = d1(), now = Math.floor(Date.now() / 60000);
+    for (const m of [now, now + 1]) shared.rows.set('elsewhere@example.org|' + m, 2);
+    shared.rows.set('elsewhere@example.org|' + (now - 5), 9);
+    const r1 = await mk('elsewhere@example.org', { ...ENV, APEX_RPM: '2', APEX_DB: shared });
+    ok('a caller another isolate has already counted to the limit is refused here, on their first request here', r1.status === 429, String(r1.status));
+    ok('the count is one upsert in the table, made on first use, and old minutes are swept',
+       shared.log.includes('CREATE') && shared.log.includes('INSERT') && shared.log.includes('DELETE') && !shared.rows.has('elsewhere@example.org|' + (now - 5)),
+       shared.log.join(','));
+    const fresh = d1(), codes = [];
+    for (let i = 0; i < 3; i++) codes.push((await mk('fresh-d1@example.org', { ...ENV, APEX_RPM: '2', APEX_DB: fresh })).status);
+    ok('a caller the table has not seen gets the limit and no more', codes.join() === '200,200,429', codes.join());
+
+    /* The database fails: the isolate's own limiter answers, so the key is neither left open nor the tutor taken down. */
+    const down = d1({ fail: true }), dcodes = [];
+    for (let i = 0; i < 2; i++) dcodes.push((await mk('d1-down@example.org', { ...ENV, APEX_RPM: '1', APEX_DB: down })).status);
+    ok('if the database fails, the isolate\'s own limiter still answers: the first goes through, the next is refused',
+       dcodes.join() === '200,429', dcodes.join());
+    ok('and an APEX_DB that is not a database is ignored, not trusted', (await mk('not-a-db@example.org', { ...ENV, APEX_RPM: '1', APEX_DB: 'yes' })).status === 200);
+  }
+
   head('the model name is a model name, whatever APEX_MODELS says');
   /* The model is interpolated into a URL path. The DEFAULT regex is anchored
      and refuses anything structural, but APEX_MODELS exists precisely so an

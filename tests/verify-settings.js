@@ -47,7 +47,7 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await page.goto(URL);await booted(page);await quiet(page);
  await page.evaluate(()=>{startAdhocQuiz([POOL.find(q=>!q.bad)],null);});await quiet(page);
  await page.click('#settingsBtn');
- await check('Settings opens with reading, appearance and Apex sections',async()=>await page.evaluate(()=>{const d=document.querySelector('#generalSettings');return d.open&&d.querySelectorAll('section').length===3;}),async()=>{await page.evaluate(()=>{document.querySelector('#generalSettings section').remove()});},1);
+ await check('Settings opens with reading, appearance and Apex sections',async()=>await page.evaluate(()=>{const d=document.querySelector('#generalSettings');return !!d&&d.open&&d.querySelectorAll('section').length===3;}),async()=>{await page.evaluate(()=>{document.querySelector('#generalSettings section').remove()});},1);
  await page.selectOption('[name="layout"]','split');
  await check('layout preference does not reveal an unanswered explanation',async()=>await page.evaluate(()=>!S.answered&&!document.querySelector('.reveal-card')&&!document.querySelector('.reading-split')),async()=>{await page.evaluate(()=>{document.querySelector('.reading-question').insertAdjacentHTML('beforeend','<div class="reveal-card">Premature answer</div>')});},2);
  await page.evaluate(()=>closeSettings());await page.evaluate(()=>selectOpt(S.questions[S.qIdx].ci));await quiet(page);
@@ -73,7 +73,7 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await page.locator('#generalSettings #aiKey').fill('AIza-synthetic-replacement');await page.locator('#generalSettings #aiSave').click({noWaitAfter:true});
  await page.waitForFunction(()=>AI.gemini.key==='AIza-synthetic-replacement');
  await check('successful mocked connection saves the chosen credential',async()=>await page.evaluate(()=>AI.provider==='gemini'&&AI.gemini.key==='AIza-synthetic-replacement'),async()=>{await page.evaluate(()=>{AI.gemini.key=''});},11);
- await page.evaluate(()=>resetDisplaySettings());
+ await page.locator('#generalSettings [data-action="resetDisplaySettings"]').click({noWaitAfter:true});
  await check('display reset preserves Apex credentials',async()=>await page.evaluate(()=>readSize()===0&&displaySettings().brightness===100&&displaySettings().layout==='focused'&&AI.gemini.key==='AIza-synthetic-replacement'&&document.documentElement.style.filter===''),async()=>{await page.evaluate(()=>{AI.gemini.key=''});},12);
  await page.keyboard.press('Escape');
  await check('Escape closes Settings and restores focus',async()=>await page.evaluate(()=>!document.querySelector('#generalSettings')&&document.activeElement.id==='settingsBtn'),async()=>{await page.evaluate(()=>{document.activeElement.blur()});},13);
@@ -121,5 +121,28 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await page.evaluate(()=>{openSettings();window.settingsQuizBefore={index:S.qIdx,flagged:S.flagged.has(S.questions[S.qIdx].id)};});
  await page.keyboard.press('f');await page.keyboard.press('ArrowRight');await page.keyboard.press('Space');await quiet(page);
  await check('Settings owns keyboard shortcuts without changing the quiz',async()=>await page.evaluate(()=>S.qIdx===window.settingsQuizBefore.index&&S.answered&&S.flagged.has(S.questions[S.qIdx].id)===window.settingsQuizBefore.flagged),async()=>{await page.evaluate(()=>S.qIdx++);},23);
+ // docs/ROADMAP.md, E2: Settings names actions (data-action) and carries no inline handler, so each control is tapped
+ // here through the page's one listener on the document; the text size, width, layout and brightness above are too.
+ await page.evaluate(()=>{closeSettings();openSettings();});
+ await check('Settings carries no inline handler, and its controls name actions',async()=>await page.evaluate(()=>{const box=document.querySelector('#generalSettings');const all=[box,...box.querySelectorAll('*')];return all.every(el=>![...el.attributes].some(a=>/^on/i.test(a.name)))&&box.querySelectorAll('[data-action]').length>=20;}),async()=>{await page.evaluate(()=>document.querySelector('#tuneReset').setAttribute('onclick','resetTune()'));},26);
+ await page.locator('#tune-c').evaluate(e=>{e.value='120';e.dispatchEvent(new Event('input',{bubbles:true}));});
+ await check('the contrast slider sets contrast as it moves',async()=>await page.evaluate(()=>readTune().c===120&&/contrast\(1\.2\)/.test(document.documentElement.style.filter)&&document.querySelector('#tune-c-v').textContent==='120%'),async()=>{await page.evaluate(()=>setTune('c',100));},27);
+ await page.locator('#tuneReset').click({noWaitAfter:true});
+ await check('Reset to 100% puts brightness and contrast back and leaves Settings open',async()=>await page.evaluate(()=>readTune().b===100&&readTune().c===100&&document.documentElement.style.filter===''&&document.querySelector('#tuneReset').disabled&&!!document.querySelector('#generalSettings')?.open),async()=>{await page.evaluate(()=>setTune('c',120));},28);
+ await page.locator('#generalSettings .theme-opt[data-theme-id="cathlab"]').click({noWaitAfter:true});
+ await check('a theme tapped in Settings applies that theme',async()=>await page.evaluate(()=>S.theme==='cathlab'&&document.documentElement.getAttribute('data-palette')==='cathlab'&&document.querySelector('#generalSettings .theme-opt[data-theme-id="cathlab"]').getAttribute('aria-checked')==='true'),async()=>{await page.evaluate(()=>setTheme('midnight'));},29);
+ await page.locator('#generalSettings [aria-label="Close settings"]').click({noWaitAfter:true});
+ await check('the close button closes Settings',async()=>await page.evaluate(()=>!document.querySelector('#generalSettings')),async()=>{await page.evaluate(()=>openSettings());},30);
+ await page.evaluate(()=>openSettings('apex'));
+ await page.locator('#generalSettings [data-action="settingsMemory"]').click({noWaitAfter:true});await quiet(page);
+ await check('Apex memory closes Settings and opens the Memory screen',async()=>await page.evaluate(()=>!document.querySelector('#generalSettings')&&S.screen==='memory'),async()=>{await page.evaluate(()=>{S.screen='home';});},31);
+ await page.evaluate(()=>{closeSettings();AI.provider='gemini';AI.gemini={key:'AIza-synthetic-health',model:'gemini-test'};openSettings('apex');});
+ const health=await page.evaluate(async()=>{
+   const button=document.querySelector('#aiTestGeneration');if(!button)return {present:false};
+   const saved=window.fetch;let calls=0,request;
+   window.fetch=async(url,init)=>{calls++;request={url,body:JSON.parse(init.body)};return new Response(JSON.stringify({candidates:[{content:{parts:[{text:'OK'}]}}]}),{headers:{'content-type':'application/json'}});};
+   try{await button.onclick();return {present:true,calls,request,message:document.querySelector('#aiTestResult').textContent,key:AI.gemini.key};}finally{window.fetch=saved;}
+ });
+ ok('saved connection test sends one isolated prompt and confirms generated text',health.present&&health.calls===1&&health.request.body.contents[0].parts[0].text==='Reply with OK.'&&/Generation succeeded/.test(health.message)&&health.key==='AIza-synthetic-health');
  console.log(`${passed} passed, ${failed} failed`);await browser.close();process.exitCode=failed?1:0;
 })().finally(async()=>{if(browser)await browser.close();}).catch(die);

@@ -92,7 +92,7 @@ const close = (a, b) => Math.abs(a - b) <= TOL;
 const worst = xs => xs.reduce((m, x) => Math.max(m, x), 0);
 
 const day = n => { const d = new Date('2026-01-01T00:00:00'); d.setDate(d.getDate() + n);
-                   return d.toISOString().slice(0, 10); };
+                   return F.localDateToISO(d); };
 
 head('a card seen for the first time');
 {
@@ -163,6 +163,23 @@ head('and the interval that comes out the far side');
     return u.ivl !== Math.min(F.MAX_IVL, Math.max(1, Math.ceil(u.stability)));
   });
   ok('is the stability, rounded up, and never below one day', bad.length === 0, String(bad.length));
+}
+
+head('the requested retention against ts-fsrs at that same retention');
+{
+  const rows = fx.intervals || [];
+  const targets = rows.map(x => x.retention);
+  ok('the reference covers baseline, intermediate and eve retention', [0.9, 0.91, 0.925, 0.94, 0.95].every(r => targets.includes(r)));
+  ok('the unrounded interval multiplier agrees with ts-fsrs at each target', rows.length > 0 &&
+    rows.every(x => close(F.intervalModifier(x.retention), x.modifier)));
+  ok('each whole-day interval differs from the reference only by our rounding up', rows.length > 0 && rows.every(x =>
+    x.days.length > 0 && x.days.every(([s, ref]) => {
+      const ours = F.ivl(s, x.retention);
+      /* ts-fsrs rounds its internal factor as well as the modifier. At 90%
+         it reports 1.00000001; the definition gives exactly one. */
+      const factor = x.retention === 0.9 ? 1 : x.modifier;
+      return ours === Math.max(1, Math.ceil(s * factor)) && (ours === ref || ours === ref + 1);
+    })));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

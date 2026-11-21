@@ -152,7 +152,8 @@ head('every registered suite is in the record');
    runs, in a second engine; they are the same checks, as public-browser's
    three engines are, and summing every line that names one counted them
    twice (6737 against 6499 the day that job was added). */
-const yml = read('.github/workflows/verify.yml');
+const { readShardWorkflow } = require('../scripts/test-public.js');
+const yml = read('.github/workflows/verify.yml') + '\n' + readShardWorkflow(ROOT);
 const ciSteps = [...yml.matchAll(/node\s+tests\/verify-([a-z0-9-]+)\.js/g)].map(m => m[1]);
 const ciSuites = [...new Set(ciSteps)];
 const ciTotal = ciSuites.reduce((n, s) => n + (stats.suites[s] || 0), 0);
@@ -297,17 +298,11 @@ head('the prose agrees with the record');
     ['docs/BUILD.md', 'the suites paragraph',
      /(\d+) suites, (\d+) checks, plus (\d+) more on the split build/,
      r => [+r[1] === activeSuiteCount, +r[2] === activeTotal, +r[3] === stats.pwa]],
-    ['.github/workflows/verify.yml', 'the "read this before trusting a green checkmark" header',
+    ['docs/BUILD.md', 'the public CI totals',
      /Of the (\d+) checks in[\s\S]{0,120}?plus (\d+) more under `--pwa`, this workflow runs (\d+)\./,
      r => [+r[1] === activeTotal, +r[2] === stats.pwa, +r[3] === ciTotal]],
-    ['.github/workflows/verify.yml', 'the count of what CI cannot run',
+    ['docs/BUILD.md', 'the count of what CI cannot run',
      /The other (\d+) all drive/, r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
-    ['.github/workflows/verify.yml', 'the same figure, second mention',
-     /there is no way to run those (\d+) checks here/, r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
-    ['.github/workflows/verify.yml', 'the same figure, third mention',
-     /Adding the other (\d+) checks to this file/, r => [+r[1] === activeTotal + stats.pwa - ciTotal]],
-    ['.github/workflows/verify.yml', 'the honest subset total',
-     /(\d+) real checks/, r => [+r[1] === ciTotal]],
     /* THE SAME HOLE AGAIN, in the README this time, and it had been open long
        enough to go three ways stale: "the two suites that are pure logic",
        naming verify-fsrs at 38 checks and verify-worker at 51 when they are 89
@@ -332,7 +327,7 @@ head('the prose agrees with the record');
        This one is a fact about the workflow rather than about the record, so
        it is compared against the suites the file actually invokes — which
        means it is true today rather than after the next full run. */
-    ['.github/workflows/verify.yml', 'the size of the logic job',
+    ['docs/BUILD.md', 'the size of the logic job',
      /the (\d+) suites that are pure Node/, r => [+r[1] === pureCI.length]],
     /* FIVE MORE IN docs/BUILD.md, ALL OF THEM STALE WHEN THIS WAS WRITTEN, and
        every one the same shape AGENTS.md names: an
@@ -384,15 +379,14 @@ head('the prose agrees with the record');
   }
 }
 
-head('the arithmetic in the header is self-consistent');
+head('the arithmetic in the docs is self-consistent');
 {
-  /* This is the check that would have caught the drift that prompted the whole
-     exercise: two different numbers in one file for one quantity. */
-  const nums = [...yml.matchAll(/The other (\d+) all drive|those (\d+) checks here|Adding the other (\d+) checks/g)]
-    .map(m => +(m[1] || m[2] || m[3]));
+  const nums = [...(read('docs/BUILD.md') + '\n' + read('README.md'))
+    .matchAll(/The other (\d+) all drive|why the other (\d+) checks can't run here/g)]
+    .map(m => +(m[1] || m[2]));
   ok('every mention of "what CI cannot run" is the same number',
-     new Set(nums).size <= 1, nums.join(' vs ') || 'none found');
-  ok('and it is exactly what is left over', nums.every(n => n === activeTotal + stats.pwa - ciTotal),
+     nums.length >= 2 && new Set(nums).size === 1, nums.join(' vs ') || 'none found');
+  ok('and it is exactly what is left over', nums.length >= 2 && nums.every(n => n === activeTotal + stats.pwa - ciTotal),
      `${activeTotal} + ${stats.pwa} − ${ciTotal} = ${activeTotal + stats.pwa - ciTotal}`);
 }
 

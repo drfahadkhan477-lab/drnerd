@@ -8,17 +8,19 @@
  *
  * ── WHAT THIS POLICY IS FOR, AND WHAT IT IS NOT ──────────────────────────
  *
- * It does NOT stop script injection, and pretending otherwise would be worse
- * than having no policy at all. The app carries over a hundred inline event
- * handlers — onclick="openFigureFrom(this)" and its relatives, 119 of them in
- * the patch scripts alone and more in the ACCSAP code underneath. Inline
- * handlers cannot be covered by a hash or a nonce; only 'unsafe-inline' allows
- * them, and 'unsafe-inline' is precisely the thing script-src exists to
- * withhold. A script-src here would be decoration. Removing every handler
- * first is a whole-app refactor, and until somebody does it, this file should
- * not imply protection it does not provide.
+ * Two layers, since November 2026 (docs/ROADMAP.md, E2).
  *
- * What it does is CONTAIN. This origin holds the fellow's API key, every
+ * The split build's page REFUSES INJECTED SCRIPT. Its <meta> (scriptMeta,
+ * below) carries a script-src of 'self' and the hash of each inline script the
+ * shell keeps, so an injected <script>, an onclick written into markup and a
+ * javascript: link do not run, and the browser reports each. This became
+ * possible only when the app's inline handlers were gone: every control names
+ * an action (data-action) heard by one delegated listener (src/core/actions.js),
+ * and tests/verify-actions-pure.js fails on an on* attribute put back.
+ * tests/verify-pwa.js holds it on the served build: the hashes match, the app
+ * boots and works with no violation, and each injection is refused.
+ *
+ * What the directives below do is CONTAIN, for whatever runs anyway. This origin holds the fellow's API key, every
  * answer they have ever given, their notes and their chats. The question a
  * policy can still answer is: if something does execute here, where can it
  * send that? The app's entire network surface is two things —
@@ -110,4 +112,18 @@ const HEADERS_FILE = `/*
   X-Content-Type-Options: nosniff
 `;
 
-module.exports = { CONNECT, IMG, DIRECTIVES, POLICY, HEADER_POLICY, META, HEADERS_FILE };
+/* ── THE SCRIPT-SRC (docs/ROADMAP.md, E2) ──────────────────────────────────
+ *
+ * 'self' for app.js and the vendor files the loader and the app add by src,
+ * and the hash of each inline script the shell keeps. tests/verify-csp.js shows
+ * on a page of its own what it refuses and what it keeps working; scriptMeta
+ * is what the split build ships. */
+const scriptSrc = hashes => `script-src 'self'${hashes.map(h => ` 'sha256-${h}'`).join('')}`;
+const scriptPolicy = hashes => `${POLICY}; ${scriptSrc(hashes)}`;
+/* SHIPPED. scripts/build-pwa.js puts this <meta> in the split build's index.html in place of META, as the last thing it
+   does to the shell, with the hash of each of its inline scripts as they are written out. The Worker's header stays
+   HEADER_POLICY: it is shipped verbatim and cannot know a build's hashes, and a browser enforces every policy it is
+   given, so the page's script-src applies on the deployed site under the header's other directives. */
+const scriptMeta = hashes => `<meta http-equiv="Content-Security-Policy" content="${scriptPolicy(hashes)}">`;
+
+module.exports = { CONNECT, IMG, DIRECTIVES, POLICY, HEADER_POLICY, META, HEADERS_FILE, scriptSrc, scriptPolicy, scriptMeta };

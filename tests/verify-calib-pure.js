@@ -132,5 +132,68 @@ head('a mock exam block: its misses join the error mix, and its answers join not
   ok('and so does the speed reading: a block\'s time is not a practice answer\'s', es.n === 0 && es.correctMs === null, JSON.stringify(es));
 }
 
+head('the Certain-and-wrong queue: joined by a certain miss, left by the next right answer');
+{
+  const a = (q, o) => row({ q, ...o });
+  const ids = C.certainWrong([
+    a('A', { cf: 3, ok: 0 }),                         // certain and wrong
+    a('B', { cf: 3, ok: 0 }),
+    a('B', { cf: 1, ok: 0 }),                         // wrong again, unsure: still in
+    a('C', { cf: 2, ok: 0 }),                         // wrong, but only fairly sure: never in
+    a('D', { cf: 3, ok: 0 }),
+    a('D', { cf: 0, ok: 1 }),                         // then right, even as a guess: out
+    a('E', { cf: 3, ok: 0, m: 'something-else' }),    // not an answer
+    a('F', { cf: 3, ok: 0 }),
+    a('F', { ok: 1, m: 'exam' }),                     // right in a mock block: out
+    a('G', { cf: 3, ok: 0, m: 'exam' }),              // a block never asks how sure
+    a('H', { cf: 3, ok: 0, m: 'review-answer' }),
+    a('A', { cf: 3, ok: 0 }),                         // A again: now the newest
+  ]);
+  ok('the queue holds exactly A, H and B, newest first', JSON.stringify(ids) === '["A","H","B"]', JSON.stringify(ids));
+  ok('an empty log has an empty queue', C.certainWrong([]).length === 0 && C.certainWrong(null).length === 0);
+}
+
+head('a Brier score a week, from the bands\' stated chances');
+{
+  /* Local noon on a day of the reader's own calendar, stepped by setDate (AGENTS.md: step days by the calendar). */
+  const day = (y, m, d) => new Date(y, m - 1, d, 12).getTime();
+  ok('a week starts on its Monday, on the local calendar',
+     C.weekOf(day(2026, 11, 18)) === '2026-11-16' && C.weekOf(day(2026, 11, 16)) === '2026-11-16' && C.weekOf(day(2026, 11, 22)) === '2026-11-16'
+     && C.weekOf(day(2026, 11, 23)) === '2026-11-23',
+     [18, 16, 22, 23].map(d => C.weekOf(day(2026, 11, d))).join(' '));
+  ok('and across the day the clocks change in autumn (America/New_York, Europe)',
+     C.weekOf(day(2026, 11, 1)) === '2026-10-26' && C.weekOf(day(2026, 10, 25)) === '2026-10-19' && C.weekOf(day(2026, 11, 2)) === '2026-11-02',
+     [C.weekOf(day(2026, 11, 1)), C.weekOf(day(2026, 10, 25)), C.weekOf(day(2026, 11, 2))].join(' '));
+  /* Every clock in the zones CI runs in changes early on a Sunday, the last day of a Monday's week, so a week counted back
+     by twenty-four-hour steps comes out right there by luck. Jerusalem's spring change is on a Friday (27 March 2026):
+     counted back in hours from that Saturday, the Monday is missed by one. Asked in a child process in that zone, so
+     this holds wherever the suite runs. */
+  const there = require('child_process').spawnSync(process.execPath, ['-e',
+    fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'calib.js'), 'utf8')
+    + ';process.stdout.write([new Date(2026,2,28,0,30), new Date(2026,2,29,12), new Date(2026,9,24,23,30)].map(d => this.Calib.weekOf(d.getTime())).join(" "))'],
+    { env: Object.assign({}, process.env, { TZ: 'Asia/Jerusalem' }), encoding: 'utf8' });
+  ok('and where the clocks change midweek (Asia/Jerusalem, whose spring change is on a Friday)', there.stdout === '2026-03-23 2026-03-23 2026-10-19', there.stdout || there.stderr.slice(0, 120));
+  const w1 = day(2026, 11, 3), w2 = day(2026, 11, 11), w3 = day(2026, 11, 17);
+  const t = C.brierTrend([
+    ...many(N, { t: w1, cf: 3, ok: 0 }),               // all certain and wrong: (0.95 - 0)² each
+    ...many(N / 2, { t: w2, cf: 3, ok: 1 }),           // (0.95 - 1)²
+    ...many(N / 2, { t: w2, cf: 0, ok: 0 }),           // (0.25 - 0)²
+    ...many(N - 1, { t: w3, cf: 2, ok: 1 }),           // one short of a score
+    ...many(N, { t: w3, cf: null, ok: 1 }),            // not rated: no part of it
+    ...many(N, { t: w3, cf: 3, ok: 0, m: 'exam' }),    // a block: no part of it
+  ]);
+  const close = (x, y) => x != null && Math.abs(x - y) < 1e-9;
+  ok('three weeks, oldest first', t.weeks.map(w => w.week).join(' ') === '2026-11-02 2026-11-09 2026-11-16', t.weeks.map(w => w.week).join(' '));
+  ok('a week of Certain-and-wrong scores 0.9025', close(t.weeks[0].brier, 0.9025), String(t.weeks[0].brier));
+  ok('a week half certain-and-right, half guessed-and-wrong scores the mean of the two', close(t.weeks[1].brier, (0.0025 + 0.0625) / 2), String(t.weeks[1].brier));
+  ok('a week short of MIN_SAMPLES rated answers is listed, with no score', t.weeks[2].n === N - 1 && t.weeks[2].brier === null, JSON.stringify(t.weeks[2]));
+  ok('two scored weeks are enough for a trend', t.enough === true);
+  const one = C.brierTrend(many(N, { t: w1, cf: 3, ok: 1 }));
+  ok('one scored week is not', one.enough === false && one.weeks.length === 1 && close(one.weeks[0].brier, 0.0025), JSON.stringify(one));
+  ok('an empty log has no weeks and no trend', C.brierTrend([]).weeks.length === 0 && C.brierTrend([]).enough === false);
+  const long = C.brierTrend(Array.from({ length: 10 }, (_, i) => row({ t: day(2026, 9, 1 + 7 * i), cf: 1, ok: 1 })), 8);
+  ok('only the last eight weeks are kept', long.weeks.length === 8 && long.weeks[7].week === C.weekOf(day(2026, 9, 64)), long.weeks.map(w => w.week).join(' '));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

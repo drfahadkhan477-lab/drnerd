@@ -268,6 +268,25 @@ head('what the Lab remembers');
   ok('a wrong answer is due sooner than a right one, and counts as an attempt but not a success', wrong.cards.as.due < s.cards.as.due && wrong.days[T0].n === 1 && wrong.days[T0].c === 0);
   const before = JSON.stringify(s); P.record(s, { id: 'mr', correct: true, today: T0 });
   ok('recording leaves the state it was given alone', JSON.stringify(s) === before);
+  /* Roadmap S4: items learned together are spread, by the same deterministic fuzz as the bank's cards. Twenty items
+     answered right on one day, then right again on the day each comes due. */
+  {
+    const ids = Array.from({ length: 20 }, (_, i) => 'item' + i);
+    let st = P.empty(); for (const id of ids) st = P.record(st, { id, correct: true, today: T0 });
+    for (const id of ids) st = P.record(st, { id, correct: true, today: st.cards[id].due });
+    const days = new Set(ids.map(id => st.cards[id].due));
+    let again = P.empty(); for (const id of ids) again = P.record(again, { id, correct: true, today: T0 });
+    for (const id of ids) again = P.record(again, { id, correct: true, today: again.cards[id].due });
+    ok('twenty items learned on one day come back over several days, not all on one (S4)', days.size >= 4, `${days.size} days`);
+    ok('and the same answers on the same days give the same days again', ids.every(id => again.cards[id].due === st.cards[id].due));
+  }
+  const examDate = day(2), eve = day(1);
+  const old = P.record(P.empty(), {id:'exam-item',correct:true,today:T0});
+  const examItems = [{id:'unseen'},{id:'exam-item'}];
+  const pick = D.next({items:examItems,cards:old.cards,today:eve,examDate});
+  ok('the Lab counts and deals a stored card by exam eve', old.cards['exam-item'].due > eve &&
+    P.summary(old,examItems,eve,examDate).due === 1 && pick.item.id === 'exam-item' && pick.reason === 'due');
+  ok('a Lab grade on the eve writes an exam-day card', P.record(old,{id:'exam-item',correct:true,today:eve,examDate}).cards['exam-item'].due === examDate);
   ok('a second answer to the same item reviews its card rather than starting over', P.record(s, { id: 'as', correct: true, today: day(3) }).cards.as.reps === s.cards.as.reps + 1);
   ok('an answer with no id, or none that makes sense, changes nothing', JSON.stringify(P.record(s, { correct: true, today: T0 })) === before && JSON.stringify(P.record(s, null)) === before && JSON.stringify(P.record(s, { id: 5 })) === before);
   ok('and an unreadable date falls back to today instead of writing garbage', Object.keys(P.record(P.empty(), { id: 'x', correct: true, today: 'soon' }).days).every(d => /^\d{4}-\d{2}-\d{2}$/.test(d)));

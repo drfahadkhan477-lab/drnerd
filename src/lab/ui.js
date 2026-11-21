@@ -18,6 +18,7 @@ const $ = sel => root ? root.querySelector(sel) : null;
 const cssVar = n => (root && getComputedStyle(root).getPropertyValue(n).trim()) || '#888';
 
 /* ── storage: the Lab opens either way ───────────────────────────────── */
+let examDate = null;
 let store = null;
 try { store = window.localStorage; store.getItem(LP.KEY); } catch (_) { store = null; }
 let progress = LP.load(store);
@@ -207,9 +208,9 @@ function topbar(title, right) {
 }
 
 function home() {
-  const sum = LP.summary(progress, LI.ALL, today());
+  const sum = LP.summary(progress, LI.ALL, today(), examDate);
   const tiles = LI.KINDS.map(k => {
-    const s = LP.summary(progress, LI.ITEMS[k.id], today());
+    const s = LP.summary(progress, LI.ITEMS[k.id], today(), examDate);
     return `<button class="plab-tile" data-act="open" data-kind="${k.id}"><h2>${esc(k.title)}</h2><span class="plab-muted">${esc(k.blurb)}</span>` +
       `<span class="plab-count">${s.seen} of ${s.total} seen${s.due ? ` · <span class="plab-due">${s.due} due</span>` : ''}</span></button>`;
   }).join('') +
@@ -291,7 +292,7 @@ function paint() {
     else drawStrip(c, L.stim.t);
   } else if (L.screen === 'explore') {
     const it = LI.byId(L.ex);
-    if (it.kind === 'sounds') { L.stim = { r: HS.render(it.key, { beats: 3, bpm: 72, seed: 7, rate: 8000 }) }; drawSound(c, L.stim.r, true); }
+    if (it.kind === 'sounds') { L.stim = { r: HS.render(it.key, { beats: 3, bpm: 72, seed: 7, rate: 8000, events: HS.eventsFor(it.key) }) }; drawSound(c, L.stim.r, true); }
     else drawTracing(c, TR.byId(it.key), true);
   }
 }
@@ -311,12 +312,12 @@ function show(screen, keepSound, keepScroll) {
 function nextQuestion() {
   stop();
   const items = LI.ITEMS[L.kind], seed = (Math.random() * 1e9) | 0;
-  const pick = Drill.next({ items, cards: progress.cards, today: today(), seed, recent: progress.recent });
+  const pick = Drill.next({ items, cards: progress.cards, today: today(), examDate, seed, recent: progress.recent });
   L.item = pick.item;
   L.reason = pick.reason === 'due' ? 'Due for review.' : pick.reason === 'new' ? 'New to you.' : 'Nothing due: reviewing what you are closest to forgetting.';
   L.options = Drill.options({ item: L.item, items, n: 4, seed: seed + 1 });
   L.picked = null;
-  if (L.kind === 'sounds') L.stim = { r: HS.render(L.item.key, { beats: 4, bpm: [64, 72, 80][seed % 3], seed, rate: 8000 }) };
+  if (L.kind === 'sounds') L.stim = { r: HS.render(L.item.key, { beats: 4, bpm: [64, 72, 80][seed % 3], seed, rate: 8000, events: HS.eventsFor(L.item.key) }) };
   else if (L.kind === 'tracings') L.stim = { t: TR.byId(L.item.key) };
   else L.stim = { t: ST.trace(L.item.key, 6) };
   show('drill');
@@ -327,7 +328,7 @@ function answer(id) {
   L.picked = id;
   const right = id === L.item.id;
   L.session.n++; if (right) L.session.c++;
-  progress = LP.record(progress, { id: L.item.id, correct: right, today: today() });
+  progress = LP.record(progress, { id: L.item.id, correct: right, today: today(), examDate });
   persist();
   show('drill', true);
   say((right ? 'Correct. ' : 'Not quite. ') + 'This is ' + L.item.name + '.');
@@ -371,8 +372,9 @@ window.addEventListener('resize', () => { clearTimeout(resizing); resizing = set
 /* Systole's side. mount() is called after every draw of the Practice Lab screen, with the element it drew: a first visit
    opens on the Lab's home, a redraw of the same screen (the theme changed, Apex opened) puts back where the Lab was and
    leaves a heart sound playing. unmount() is called when any other screen is drawn, and stops the sound. */
-function mount(el) {
+function mount(el, scheduledExam) {
   if (!el) return;
+  examDate = scheduledExam;
   const again = !!root;
   if (root !== el) {
     root = el;

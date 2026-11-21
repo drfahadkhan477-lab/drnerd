@@ -25,26 +25,26 @@ async function checkHomeDefault(page,ok){
     }finally{context.drawElements=draw;}
   });
   ok('Home immediately displays and draws the live 3D heart without an Explore tap',!!live&&live.mode&&live.visibility!=='hidden'&&live.width>=100&&live.height>=100&&live.paints>0,JSON.stringify(live));
-  const controls=await page.evaluate(()=>['atlasExplore','atlasLandingPause'].map(id=>{
-    const button=document.getElementById(id),box=button.getBoundingClientRect();
+  /* The hero as it was before the Quiet Atlas (the owner's screenshot, November 2026): its words, and the heart as its one
+     control; the switch to the illustration, the pause beside it and the badge are gone. */
+  const hero=await page.evaluate(()=>{
+    const shown=sel=>{const el=document.querySelector(sel);return !!el&&getComputedStyle(el).display!=='none'&&el.getBoundingClientRect().width>0&&el.textContent.trim();};
+    const heart=document.getElementById('heroHeartBtn'),box=heart.getBoundingClientRect();
     const hit=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);
-    return {id,clear:hit===button||button.contains(hit),hit:hit?.id||hit?.tagName,top:box.top,left:box.left,width:box.width,height:box.height};
-  }));
-  ok('heart view and Pause controls receive taps above the heart hit target',controls.every(x=>x.clear),JSON.stringify(controls));
+    return {greet:shown('#homePage0 .hero-greet'),title:shown('#homePage0 .hero-h1'),line:shown('#homePage0 .hero-line'),rhythm:shown('#heroRhythmLabel'),
+      heart:hit===heart||heart.contains(hit),others:[...document.querySelectorAll('#homePage0 .hero-live > button')].map(b=>b.id)};
+  });
+  ok('the hero greets, names Systole, gives the bank in one line and the rhythm, and its one control is the heart, which takes a tap',
+     !!hero.greet&&hero.title==='Systole'&&/questions/.test(hero.line||'')&&/bpm|\w/.test(hero.rhythm||'')&&hero.heart&&JSON.stringify(hero.others)==='["heroHeartBtn"]',JSON.stringify(hero));
 }
 // Home keeps the existing study controls; there is no invitation to enter first.
 module.exports = async function homeLanding(page,ok,settled){
   await checkHomeDefault(page,ok);
-  await page.locator('#pearlRecall').click();
-  ok('Recall conceals the answer on the visible Home pearl',await page.evaluate(()=>!document.getElementById('pearlCard').hidden&&document.getElementById('pearlBody').hidden&&!document.getElementById('pearlPrompt').hidden));
+  /* Recall, Paragraph and Source are gone (the owner's screenshot, November 2026): a theme's redraw keeps the pearl as it
+     was, and the heart and the hero as they were. */
   await page.evaluate(()=>setTheme(themeIsDark()?'daylight':'midnight'));
   await settled(page,()=>!window.__vtLive&&!!document.getElementById('pearlCard'),{label:'Home theme redraw'});
-  ok('theme redraw preserves active recall',await page.evaluate(()=>document.getElementById('pearlCard').classList.contains('is-recalling')&&document.getElementById('pearlBody').hidden));
-  await page.locator('#pearlRecall').click();
-  ok('Reveal restores the note-derived answer',await page.evaluate(()=>!document.getElementById('pearlBody').hidden&&document.getElementById('pearlBody').textContent.trim().length>0));
-  await page.getByRole('button',{name:'Show heart illustration',exact:true}).click();
-  ok('the illustration is optional and leaves the pearl visible',await page.evaluate(()=>!atlas3D&&!document.getElementById('pearlCard').hidden&&getComputedStyle(document.querySelector('.atlas-anatomy')).display!=='none'));
-  await page.getByRole('button',{name:'Explore heart in 3D',exact:true}).click();
+  ok('a theme\'s redraw keeps the pearl and its statement shown',await page.evaluate(()=>!document.getElementById('pearlCard').hidden&&!document.getElementById('pearlBody').hidden&&document.getElementById('pearlBody').textContent.trim().length>0));
   await checkHomeDefault(page,ok);
   const labSurfaces=await page.evaluate(()=>[...document.querySelectorAll('.lab-card')].map(e=>getComputedStyle(e).backgroundImage));
   ok('every Labs card has a painted surface behind its labels',labSurfaces.length>0&&labSurfaces.every(x=>x!=='none'));

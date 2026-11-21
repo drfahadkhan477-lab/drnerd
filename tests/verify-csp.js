@@ -67,7 +67,7 @@ head('one policy, not three copies of one');
   ok('and the <meta> form does not pretend to', !/frame-ancestors/.test(CSP.META));
 
   const buildPwa = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'build-pwa.js'), 'utf8');
-  ok('the shell is stamped with the meta policy', buildPwa.includes('CSP.META'));
+  ok('the shell is stamped with the meta policy, then given its script-src', buildPwa.includes('CSP.META') && buildPwa.includes('CSP.scriptMeta(hashes)'));
   ok('and the build refuses to ship a Worker that has drifted',
      buildPwa.includes('CSP.HEADER_POLICY'));
 }
@@ -216,6 +216,28 @@ const PAGE = `<!doctype html><html><head>${CSP.META}
   }); };
 </script></body></html>`;
 
+/* The page E2 works towards (docs/ROADMAP.md, E2; scripts/csp.js, scriptPolicy): no inline handler, one delegated
+   listener reading data-action, and the policy with a script-src of 'self' and the hash of the one inline script it
+   keeps, its boot. The hash is worked out here from the script's text, as the build that ships it will have to. */
+const BOOT = `
+  window.__boot = true; window.__actions = []; window.__violations = [];
+  document.addEventListener('securitypolicyviolation', function(e){
+    window.__violations.push({ directive: e.effectiveDirective, violated: e.violatedDirective, sample: String(e.sample || '').slice(0, 40) });
+  });
+  document.addEventListener('click', function(e){
+    var t = e.target.closest('[data-action]'); if (t) window.__actions.push(t.getAttribute('data-action'));
+  });
+`;
+const BOOT_HASH = require('crypto').createHash('sha256').update(BOOT, 'utf8').digest('base64');
+const E2_POLICY = CSP.scriptPolicy([BOOT_HASH]);
+const E2_PAGE = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${E2_POLICY}">
+<script>${BOOT}</script></head><body>
+<button id="act" data-action="open-figure">delegated</button>
+<button id="old" onclick="window.__inlineHandler=true">written in</button>
+<div id="slot"></div>
+<script src="/e2.js"></script>
+</body></html>`;
+
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
 (async () => {
@@ -235,6 +257,14 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
     if (req.url === '/pixel.gif') {
       res.writeHead(200, { 'content-type': 'image/gif' });
       return res.end(GIF);
+    }
+    if (req.url === '/e2') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(E2_PAGE);
+    }
+    if (req.url === '/e2.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      return res.end('window.__selfScript = true;');
     }
     if (req.url === '/allowed.json') {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -349,6 +379,60 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
   }, undefined, 'form-action');
   ok('a planted form cannot submit — pure exfiltration, and the app has none',
      form.some(v => v.directive === 'form-action'), JSON.stringify(form) || 'no violation');
+
+  /* ── E2: what a script-src would refuse, and what it would keep ───────── */
+  head('E2: under the header alone an injected handler runs; with the page\'s script-src it is refused');
+  /* The Worker's header (HEADER_POLICY, the same directives as META) has no script-src, since it is shipped verbatim
+     and cannot know a build's hashes: under it alone, markup an attacker gets into the page carries a handler that
+     runs. The split build's page adds the script-src (scriptMeta), and a browser enforces both. Measured here, so the
+     day the header grows a script-src of its own, this check fails and the header of scripts/csp.js is read again. */
+  /* A page of its own: the planted form above leaves the first page's navigation pending in Chromium. */
+  const today = watch(await (await browser.newContext()).newPage(), events);
+  today.on('pageerror', e => errors.push('today: ' + e.message));
+  await today.goto(origin + '/', { waitUntil: 'load' });
+  await today.evaluate(() => {
+    const d = document.createElement('div');
+    d.innerHTML = '<button id="planted" onclick="window.__planted=true">x</button>';
+    document.body.appendChild(d);
+  });
+  await today.click('#planted');
+  ok('under the header\'s directives alone, an injected onclick runs: they have no script-src to refuse it',
+     await today.evaluate(() => window.__planted === true));
+
+  const e2 = watch(await (await browser.newContext()).newPage(), events);
+  e2.on('pageerror', e => errors.push('e2: ' + e.message));
+  await e2.goto(origin + '/e2', { waitUntil: 'load' });
+  const v2 = () => e2.evaluate(() => (window.__violations || []).slice());
+  /* A refused handler is reported by an event the browser queues; wait for the report a check expects, as above. */
+  const refusedBy = async (n, re) => {
+    await e2.waitForFunction(([k, src]) => (window.__violations || []).slice(k).some(v => new RegExp(src).test(v.directive)),
+      [n, re.source], { timeout: 5000 }).catch(() => {});
+    return (await v2()).slice(n);
+  };
+  ok('the policy the page ships has a script-src of \'self\' and the boot\'s hash, and is the header\'s directives otherwise',
+     E2_POLICY === CSP.POLICY + "; script-src 'self' 'sha256-" + BOOT_HASH + "'" && !/script-src/.test(CSP.POLICY), E2_POLICY.slice(-80));
+  ok('under it, the boot script runs, by its hash, and a script file from this origin runs',
+     await e2.evaluate(() => window.__boot === true && window.__selfScript === true));
+  await e2.click('#act');
+  ok('a button with data-action is heard by the one delegated listener',
+     JSON.stringify(await e2.evaluate(() => window.__actions || null)) === '["open-figure"]', JSON.stringify(await e2.evaluate(() => window.__actions || null)));
+  ok('and loading the page raised no violation', (await v2()).length === 0, JSON.stringify(await v2()));
+  let n = (await v2()).length;
+  await e2.click('#old');
+  const old = await refusedBy(n, /^script-src/);
+  ok('an onclick written into the page is refused, and the report names script-src',
+     !(await e2.evaluate(() => window.__inlineHandler)) && old.some(v => /^script-src/.test(v.directive)), JSON.stringify(old) || 'no violation');
+  n = (await v2()).length;
+  await e2.evaluate(() => { document.getElementById('slot').innerHTML = '<button id="planted" onclick="window.__planted=true">x</button>'; });
+  await e2.click('#planted');
+  const planted = await refusedBy(n, /^script-src/);
+  ok('an onclick injected into the page is refused: the click lands, the handler does not run',
+     !(await e2.evaluate(() => window.__planted)) && planted.some(v => /^script-src/.test(v.directive)), JSON.stringify(planted) || 'no violation');
+  n = (await v2()).length;
+  await e2.evaluate(() => { const sc = document.createElement('script'); sc.textContent = 'window.__plantedScript = true;'; document.body.appendChild(sc); });
+  const script = await refusedBy(n, /^script-src/);
+  ok('and an injected inline script without the hash is refused',
+     !(await e2.evaluate(() => window.__plantedScript)) && script.some(v => /^script-src/.test(v.directive)), JSON.stringify(script) || 'no violation');
 
   await browser.close();
   server.close();

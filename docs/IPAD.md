@@ -214,9 +214,16 @@ It does not trust a header that only names you, because anyone can type that
 header. With no Access in front, it refuses rather than serves. Beyond that,
 the Worker clamps `maxOutputTokens` to 2000 whatever the browser asks
 for, caps the request body at 6 MB, and refuses any model that is not a Gemini
-one. The per-minute limiter is **best-effort** — a Worker isolate has no shared
-counter, so it is a speed bump against a runaway loop rather than a quota. If
-you ever share this URL with someone else, put a KV-backed limiter in first.
+one. The per-minute limiter is **best-effort** unless you give it a database: a
+Worker isolate has no shared counter, so on its own it is a speed bump against a
+runaway loop rather than a quota. To make it one count everywhere, bind a D1
+database to the Pages project as `APEX_DB` (Settings → Bindings → Add → D1
+database; create an empty database first, under Storage & Databases → D1). The
+Worker makes its one table on first use and keeps one row per caller per
+minute; `APEX_RPM` (default 20) is still the limit. If the database ever fails,
+the per-isolate limiter answers instead. Do this before you share the URL with
+anyone. (Workers' own rate-limiting binding is not offered to Pages projects,
+and KV is eventually consistent and write-limited, which is why it is D1.)
 
 The platform limit that binds is Cloudflare Pages' per-file ceiling — labelled
 "25 MiB" but enforced at **25,000,000 bytes**. The note figures are the files
@@ -332,9 +339,12 @@ has to parse before it can draw anything.
   watched it boot on an actual iPad.
 - **`backdrop-filter`** carries `-webkit-` prefixes throughout, which is what
   Safari wants.
-- **Storage is evictable.** iOS may clear a site's data after roughly seven days
-  with no visit. Installing to the Home Screen makes this much less likely; your
-  progress also rides in the export bundle, so take one before a long break.
+- **Storage is evictable in a Safari tab.** After seven days of Safari use with
+  no visit to the site, Safari deletes all of its saved data (localStorage,
+  IndexedDB and the service worker's cache together). A Home Screen web app is
+  exempt (webkit.org/tracking-prevention), so install it; your progress also
+  rides in the export bundle, so take one before a long break. In a tab, the
+  Progress screen's data panel says this too.
 
 ## Memorizer on the iPad
 

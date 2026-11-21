@@ -622,7 +622,11 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     return {button:p.button,first:p.requests[0],count:p.requests.length,actions:p.actions,notice:CHATS._general.some(m=>m.err&&/cannot run study tools/.test(m.content))};
   });
   ok('Explain draft is explicit and omits tool declarations',explanation.button&&!!explanation.first&&!explanation.first.tools);
-  ok('explanation retains retrieved note evidence and grounding instruction',JSON.stringify(explanation.first).includes('Omega protocol uses an amber marker.')&&JSON.stringify(explanation.first).includes('supplied evidence is insufficient'));
+  const explainPrompt=(explanation.first?.systemInstruction?.parts || []).map(part=>part.text).join('');
+  const instructionAt=explainPrompt.indexOf('If the supplied evidence is insufficient, say so.');
+  const evidenceAt=explainPrompt.indexOf('Omega protocol uses an amber marker.');
+  ok('explanation puts its grounding instruction before the final retrieved note',
+     instructionAt>=0&&evidenceAt>instructionAt&&/<<<\/NOTE-[A-Z0-9]{12}>>>\s*$/.test(explainPrompt));
   ok('unexpected tool calls cannot act or cause follow-up requests in explanation mode',explanation.count===2&&explanation.actions===0&&explanation.notice);
 
   head('session explanation reuse is exact and complete');
@@ -648,13 +652,11 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
       return results;
     }finally{window.fetch=saved;REF=savedRefs;invalidateIndex();aiAbort=null;if(typeof apexExplanationCache!=='undefined')apexExplanationCache.clear();}
   });
-  ok('identical explanations reuse despite fresh evidence fences',reuse.hit);
+  ok('complete explanations reuse despite fresh evidence fences',reuse.hit&&reuse.completeMarked);
   ok('source changes invalidate explanation reuse',reuse.hit&&reuse.source);
   ok('model changes invalidate explanation reuse',reuse.hit&&reuse.model);
   ok('normal Send bypasses explanation reuse',reuse.hit&&reuse.normal);
-  ok('incomplete answers are never reused',reuse.hit&&reuse.incomplete);
-  ok('output-limited answers retain text and are marked incomplete',reuse.limitMarked);
-  ok('complete answers are not marked incomplete',reuse.completeMarked);
+  ok('output-limited explanations retain their text, stay marked, and are never reused',reuse.hit&&reuse.incomplete&&reuse.limitMarked);
   ok('expired explanations require a new provider request',reuse.expired);
 
   head('explanation authentication stays with its cache identity');
@@ -683,6 +685,36 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
   });
   ok('a key removed during hashing cannot switch the in-flight explanation to another route',
      !!connection&&connection.key==='synthetic-original-credential'&&connection.url.includes('generativelanguage.googleapis.com'));
+
+  head('large reference libraries retain exact cache identity');
+  const largeLibrary=await page.evaluate(async()=>{
+    const saved=REF;
+    try{
+      REF=[{id:'large-fictional',title:'Invented reference',body:'Fictional background. '.repeat(110000)}];
+      const first=await explanationKey('small request');
+      REF[0].body+=' A final qualification.';
+      const changed=await explanationKey('small request');
+      return typeof first==='string'&&first.length===64&&typeof changed==='string'&&changed!==first;
+    }finally{REF=saved;}
+  });
+  ok('a library larger than the request cap hashes completely and source edits invalidate it',largeLibrary);
+
+  head('incomplete explanations are disclosed');
+  const completion=await page.evaluate(async()=>{
+    const saved=window.fetch;let reason='MAX_TOKENS';
+    window.fetch=async()=>new Response('data: '+JSON.stringify({candidates:[{finishReason:reason,content:{parts:[{text:'Synthetic explanation fragment'}]}}]})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+    try{
+      S.screen='home';
+      const hist=[{role:'user',content:'Explain the invented marker'}];CHATS._general=hist;aiBusy=true;
+      await streamReply(null,hist,'',true);
+      const warned=hist.some(m=>m.incomplete===true)&&/output limit/.test(document.getElementById('ai').textContent);
+      const kept=hist.some(m=>!m.err&&m.role==='assistant'&&m.content==='Synthetic explanation fragment');
+      reason='STOP';const whole=[{role:'user',content:'A different invented marker'}];CHATS._general=whole;aiBusy=true;
+      await streamReply(null,whole,'',true);
+      return {warned,kept,clean:!whole.some(m=>m.err)};
+    }finally{window.fetch=saved;}
+  });
+  ok('output-limit replies retain their text with a notice while complete replies remain clean',completion.warned&&completion.kept&&completion.clean);
 
   head('regression');
   ok('no console/page errors across the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));

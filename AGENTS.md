@@ -14,6 +14,10 @@ must work with synthetic fixtures; the licensed question bank stays private.
   from a licensed bank's CSV or JSON export (`docs/OWN-BANK.md`), and
   `scripts/which-bank.js` keeps ACCSAP's corrections to ACCSAP's bank.
 - `lab/` and `src/lab/`: interactive learning tools.
+- `docs/SHELL-MAP.md`: what each function of the shell's script reads, writes
+  and calls, and the order they can leave it. `tools/shell-map.js --write`
+  writes it and `--check` says whether it is current; write it again in any
+  change that moves code out of the shell (`docs/ARCHITECTURE.md`).
 - `tests/`: logic and browser suites. `scripts/verify.js` is the suite registry;
   `scripts/test-public.js` derives the public test run from the CI workflow and
   reuses a browser suite's pass when nothing it read has changed

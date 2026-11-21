@@ -21,6 +21,11 @@
  *     a phone on its side it waits under the sheet as it did; with Apex full screen it is put away; and open, with Apex
  *     shut, it fits the screen on a phone, on an iPad on its side and in a short window, every tool reachable;
  *   · at Largest a word longer than its line breaks inside the stem, an option and the explanation;
+ *   · a figure question on an iPad on its side, in a quiz or a mock block, draws the figure beside the stem, the first
+ *     option on the screen, answered or not; upright, on a phone, with Apex's column open or at Largest the figure stays above, and with the split
+ *     preference the explanation takes the second column, never a third; a question with no figure has no figure column;
+ *   · scrolled to its end, no screen leaves text under the Apex button or the pencil's rail, on a phone and an iPad either
+ *     way up (eight screens; Home lays the button into its own row and has its own checks);
  *   · nothing throws.
  */
 'use strict';
@@ -485,10 +490,179 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     for (const [go, screen] of [['goStudy', 'study'], ['goNoteSearch', 'notesearch'], ['goEcho', 'echo']]) {
       await page.evaluate(g => window[g](), go);
       await onScreen(page, screen, { marker: '#navbar .nav' });
-      seen.push(await page.evaluate(() => S.screen + ':' + document.querySelectorAll('#navbar [onclick="goEcho()"]').length));
+      seen.push(await page.evaluate(() => S.screen + ':' + document.querySelectorAll('#navbar [onclick="goEcho()"], #navbar [data-action="goEcho"]').length));
     }
     ok('on Study, note search and Echo itself, the bar offers no Echo button', seen.every(x => /:0$/.test(x)) && seen.length === 3, seen.join());
     await page.context().close();
+  }
+
+  head('a figure question on an iPad on its side: the figure beside the stem');
+  /* D3. A figure drawn full width pushed the stem below it: on an iPad Air on its side the options began at 911px of 820.
+     Where two columns of 28em fit, the figure stands on the left and the stem and options on the right; where they do not
+     (portrait, a phone, Apex's column, the largest text) it stays above, and with the explanation already beside the
+     question (the split preference) the figure does not make a third column. */
+  const mockFig = async page => {
+    await page.evaluate(() => { const ids = POOL.filter(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1).slice(0, 3).map(x => x.id);
+      if (S.mock) { mockStopTicker(); S.mock = null; } const was = MockExam.build; MockExam.build = () => ids.slice(); startMock(); MockExam.build = was; mockStopTicker(); });
+    await page.waitForFunction(() => S.screen === 'mock' && !!document.querySelector('.mock-wrap .fig-img') && !!document.querySelector('.mock-wrap .q-card'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+  };
+  {
+    const figQuiz = async (page, answer) => {
+      await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
+      await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img') && !!document.querySelector('.q-card'), null, { timeout: 8000 }).catch(() => {});
+      await quiet(page);
+      if (answer) {
+        await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci));
+        await page.waitForFunction(() => S.answered === true && !!document.querySelector('.reveal-card'), null, { timeout: 6000 }).catch(() => {});
+        await quiet(page);
+      }
+    };
+    /* The question's entrance (anim-pop) moves the stem while it runs: measure where it comes to rest. */
+    const rest = page => page.waitForFunction(() => !document.getAnimations().some(a => a.playState === 'running'
+      && a.effect && a.effect.getComputedTiming().iterations !== Infinity), null, { timeout: 6000 }).catch(() => {});
+    const lay = async page => { await rest(page); return page.evaluate(() => {
+      const R = s => { const el = document.querySelector(s); if (!el) return null; const r = el.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width) }; };
+      return { split: document.getElementById('app').classList.contains('fig-split'), readingSplit: document.getElementById('app').classList.contains('reading-split'),
+        fig: R('.fig-slot'), card: R('.q-card'), opt: R('.opt'), exp: R('.reading-explanation'), em: parseFloat(getComputedStyle(document.querySelector('.q-card')).fontSize), vh: innerHeight };
+    }); };
+    const beside = d => !!(d.fig && d.card && d.opt) && d.split && d.card.l >= d.fig.r && Math.abs(d.card.t - d.fig.t) <= 2 && d.card.w >= 28 * d.em;
+    const above = d => !!(d.fig && d.card) && !d.split && d.card.t >= d.fig.b;
+
+    const page = await open({ width: 1180, height: 820 }, { hasTouch: true });
+    await figQuiz(page, false);
+    const air = await lay(page);
+    ok('an iPad Air on its side: the stem stands beside the figure, at its top, in a column of at least 28em', beside(air), JSON.stringify(air));
+    ok('and the first option is on the screen without scrolling', !!air.opt && air.opt.b <= air.vh, JSON.stringify(air.opt));
+    await page.evaluate(() => toggleAI());
+    await page.waitForFunction(() => document.getElementById('shell').classList.contains('ai-open'), null, { timeout: 4000 }).catch(() => {});
+    await quiet(page);
+    await page.waitForFunction(() => !document.getElementById('app').classList.contains('fig-split'), null, { timeout: 3000 }).catch(() => {});
+    const withApex = await lay(page);
+    ok('with Apex\'s column open there is no room for two: the figure goes back above the stem', above(withApex), JSON.stringify(withApex));
+    await page.evaluate(() => toggleAI());
+    await page.waitForFunction(() => document.getElementById('app').classList.contains('fig-split'), null, { timeout: 3000 }).catch(() => {});
+    ok('and beside it again when Apex is closed', beside(await lay(page)));
+    await setSize(page, 3);
+    await quiet(page);
+    const largest = await lay(page);
+    ok('at the Largest text the two columns would be too narrow: above', above(largest), JSON.stringify(largest));
+    await setSize(page, 0);
+    await quiet(page);
+    await figQuiz(page, true);
+    const answered = await lay(page);
+    ok('answered, the figure stays beside the stem and the explanation comes below both', beside(answered) && !!answered.exp
+      && answered.exp.t >= Math.max(answered.fig.b, answered.opt.b), JSON.stringify(answered));
+    await page.evaluate(() => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.q-card') && !document.querySelector('.fig-img'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const plain = await page.evaluate(() => ({ figs: !!document.querySelector('.reading-figs'), split: document.getElementById('app').classList.contains('fig-split') }));
+    ok('a question with no figure has no figure column', !plain.figs && !plain.split, JSON.stringify(plain));
+    /* A mock block draws its question its own way (a clock above, the actions below); its figure stands beside it too. */
+    await mockFig(page);
+    const mock = await lay(page);
+    ok('a mock block on its side: the stem beside the figure, the first option on the screen', beside(mock) && mock.opt.b <= mock.vh, JSON.stringify(mock));
+    await page.context().close();
+  }
+  {
+    const page = await open({ width: 1366, height: 1024 }, { hasTouch: true });
+    await page.evaluate(() => updateDisplaySetting('layout', 'split'));
+    await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const before = await page.evaluate(() => document.getElementById('app').classList.contains('fig-split'));
+    await page.evaluate(() => selectOpt(S.questions[S.qIdx].ci));
+    await page.waitForFunction(() => S.answered === true && !!document.querySelector('.reveal-card'), null, { timeout: 6000 }).catch(() => {});
+    await quiet(page);
+    const after = await page.evaluate(() => ({ fig: document.getElementById('app').classList.contains('fig-split'), reading: document.getElementById('app').classList.contains('reading-split') }));
+    ok('with the split preference, the figure stands beside the stem until the answer, then the explanation takes the second column (never three)',
+      before && after.reading && !after.fig, JSON.stringify({ before, after }));
+    await page.context().close();
+  }
+  for (const [w, h, what] of [[820, 1180, 'an iPad Air upright'], [390, 844, 'a phone']]) {
+    const page = await open({ width: w, height: h }, { hasTouch: true, isMobile: w < 600 });
+    await page.evaluate(() => { const q = POOL.find(x => !x.bad && x.img && IMGS[x.id] && IMGS[x.id].length === 1); startAdhocQuiz([q], null); });
+    await page.waitForFunction(() => S.screen === 'quiz' && !!document.querySelector('.fig-img') && !!document.querySelector('.q-card'), null, { timeout: 8000 }).catch(() => {});
+    await quiet(page);
+    const d = await page.evaluate(() => { const f = document.querySelector('.fig-slot'), c = document.querySelector('.q-card');
+      return f && c ? { split: document.getElementById('app').classList.contains('fig-split'), figBottom: Math.round(f.getBoundingClientRect().bottom), cardTop: Math.round(c.getBoundingClientRect().top) } : null; });
+    ok(what + ': the figure stays above the stem', !!d && !d.split && d.cardTop >= d.figBottom, JSON.stringify(d));
+    await mockFig(page);
+    const m = await page.evaluate(() => { const f = document.querySelector('.mock-wrap .fig-slot'), c = document.querySelector('.mock-wrap .q-card');
+      return f && c ? { split: document.getElementById('app').classList.contains('fig-split'), figBottom: Math.round(f.getBoundingClientRect().bottom), cardTop: Math.round(c.getBoundingClientRect().top) } : null; });
+    ok(what + ', in a mock block: the figure stays above the stem', !!m && !m.split && m.cardTop >= m.figBottom, JSON.stringify(m));
+    await page.context().close();
+  }
+
+  head('the floating controls leave the end of every screen readable');
+  /* D5. The Apex button and the pencil's rail float over the screen. Text can pass under them while it scrolls, but the end
+     of every screen must scroll clear: on a phone the last line of Sessions stayed under the Apex button. Read where the
+     page is scrolled to its end: every text under a visible floating control, as the engine hit-tests it. */
+  {
+    const SCREENS = [['Chapters', () => goStudy()], ['a question', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); }],
+      ['a question answered', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); selectOpt((q.ci + 1) % q.o.length); }],
+      ['a figure question', () => { const q = POOL.find(x => !x.bad && x.img); startAdhocQuiz([q], q.ch); }],
+      ['Progress', () => goStats()], ['the notes', () => goRefs()],
+      ['the notes (paged fixture)', () => { REF = Array.from({length:1152}, (_, i) => ({id:'fixture-'+i, title:'Invented note '+i, tags:[], body:'An invented note for the scrolling check.', ts:i})); goRefs(); }],
+      ['the Rhythm Lab', () => goLab()], ['Sessions', () => goSessions()]];
+    for (const [w, h, what] of [[390, 844, 'a phone'], [820, 1180, 'an iPad Air upright'], [1180, 820, 'an iPad Air on its side']]) {
+      /* Motion reduced, so what scrolls into view is drawn where it rests, not part-way through its entrance. */
+      const page = await open({ width: w, height: h }, { hasTouch: true, isMobile: w < 600, reducedMotion: 'reduce' });
+      const under = [], seen = [];
+      for (const [name, go] of SCREENS) {
+        await page.evaluate(`(${go})()`);
+        /* Reach the library's actual end before testing clearance. The pager is
+           asynchronous and can add more than forty pages, so a stable height
+           after a few frames is not evidence that the library has ended. Use
+           the same action as its Show more button, and refuse a stuck pager. */
+        if (name.startsWith('the notes')) await page.evaluate(() => {
+          while (document.getElementById('refPager')) {
+            const before = refShown; refMore();
+            if (refShown <= before) throw Error('Reference pager made no progress');
+          }
+        });
+        await quiet(page);
+        const r = await page.evaluate(async () => {
+          /* The end of the screen: the document's and #app's own (on an iPad upright #app is the scroller), again until the
+             height stops growing (the notes draw more as they are reached). */
+          const se = document.scrollingElement, app = document.getElementById('app'), frame = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+          for (let i = 0, was = -1; i < 40 && se.scrollHeight + app.scrollHeight !== was; i++) {
+            was = se.scrollHeight + app.scrollHeight; se.scrollTop = se.scrollHeight; app.scrollTop = app.scrollHeight; await frame(); await frame(); }
+          const ctl = [document.querySelector('#rail:not(.hidden)'), document.getElementById('aiFab')].filter(el => {
+            if (!el) return false; const cs = getComputedStyle(el), b = el.getBoundingClientRect();
+            return cs.display !== 'none' && cs.visibility === 'visible' && +cs.opacity > 0 && b.width > 2; });
+          const hits = [];
+          for (const el of ctl) {
+            const cr = el.getBoundingClientRect(), w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            for (let t = w.nextNode(); t; t = w.nextNode()) {
+              const pe = t.parentElement; if (!/[A-Za-z0-9]/.test(t.nodeValue) || !pe || el.contains(pe)) continue;
+              /* What of the text is shown: cut to every ancestor that clips its overflow (a note's own scrolling body), or a
+                 line scrolled out of its card would be counted under the button. */
+              const clips = []; for (let a = pe; a && a !== document.documentElement; a = a.parentElement) {
+                const as = getComputedStyle(a); if (a !== pe && (as.overflowX !== 'visible' || as.overflowY !== 'visible')) clips.push(a.getBoundingClientRect());
+                if (as.position === 'fixed') break; }
+              const rg = document.createRange(); rg.selectNodeContents(t);
+              for (const q0 of rg.getClientRects()) {
+                const q = { left: q0.left, top: q0.top, right: q0.right, bottom: q0.bottom };
+                for (const c of clips) { q.left = Math.max(q.left, c.left); q.top = Math.max(q.top, c.top); q.right = Math.min(q.right, c.right); q.bottom = Math.min(q.bottom, c.bottom); }
+                const ix = Math.min(q.right, cr.right) - Math.max(q.left, cr.left), iy = Math.min(q.bottom, cr.bottom) - Math.max(q.top, cr.top);
+                if (ix > 4 && iy > 4) { const top = document.elementFromPoint(Math.max(q.left, cr.left) + ix / 2, Math.max(q.top, cr.top) + iy / 2);
+                  if (top && el.contains(top)) hits.push((el.id || 'rail') + ' over ' + (pe.className || pe.tagName).toString().split(' ')[0]); }
+              }
+            }
+          }
+          const atEnd = se.scrollTop + innerHeight >= se.scrollHeight - 2 && app.scrollTop + app.clientHeight >= app.scrollHeight - 2;
+          se.scrollTop = 0; app.scrollTop = 0;
+          return { hits, controls: ctl.length, screen: S.screen, atEnd };
+        });
+        seen.push(name + ':' + r.controls + (r.atEnd ? '' : ' (not at its end)'));
+        for (const x of r.hits) under.push(name + ': ' + x);
+      }
+      ok(what + ': at the end of every screen, no text is under the Apex button or the pencil\'s rail', under.length === 0,
+        under.length ? under.slice(0, 4).join('; ') : seen.join(' '));
+      ok(what + ': and each was scrolled to its end with the Apex button on screen (precondition)', seen.every(x => !/:0/.test(x) && !/not at its end/.test(x)), seen.join(' '));
+      await page.context().close();
+    }
   }
 
   head('hygiene');

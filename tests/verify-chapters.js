@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /*
  * The Chapters screen: a stagger that actually staggers, and a bar that
- * actually fills instead of arriving pre-drawn.
+ * actually fills instead of arriving pre-drawn; and the Study screen's rings,
+ * tiles, review, missed, every-question and back buttons, tapped, start what
+ * they say.
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-chapters.js /path/to/build.html
  *
@@ -23,7 +25,7 @@ const path = require('path');
 const { CATEGORY } = require('./_olderbank.js');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, settled } = require('./_render.js');
+const { booted, settled, onScreen, quiet } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chapters.js <patched.html>'); process.exit(1); }
@@ -273,6 +275,48 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        r.zero.length > 0 && r.zero.every(x => dashed(x.bg)), r.zero.length ? r.zero[0].bg.slice(0, 70) : 'none found');
     ok('and a chapter with real progress keeps its solid one',
        r.started.length > 0 && r.started.every(x => !dashed(x.bg)), r.started.length ? r.started[0].bg.slice(0, 40) : 'none found');
+  }
+
+  head('the Study screen\'s buttons start what they say when tapped');
+  /* docs/ROADMAP.md, E2: the screen's controls name actions, and only a tap through the page shows that one reaches
+     its function. The plan chips, the topic runs, the exam date and the flagged and annotated cards are tapped in
+     their own suites (planscreen, topicrunscreen, examdate, flags); the rest are tapped here. Each tap starts from the
+     Study screen drawn and quiet, and is held to what it starts: a screen, a chapter and a mode, and the questions in
+     it, read from the page after the tap. A tap that cannot be made, or that starts nothing, is a FAIL. */
+  {
+    const toStudy = async () => { await page.evaluate(() => goStudy()); await onScreen(page, 'study', { marker: '#planCard' }); await quiet(page); };
+    /* Six questions due yesterday and three missed, so the review and missed cards have something to start. */
+    await page.evaluate(() => {
+      const d = new Date(); d.setDate(d.getDate() - 1); const due = FSRS.localDateToISO(d);
+      S.srs = {}; POOL.slice(0, 6).forEach(q => { S.srs[q.id] = { difficulty: 5, stability: 3, ivl: 3, reps: 1, lapses: 0, last: due, due, sv: 1 }; });
+      S.missed = new Set(POOL.slice(10, 13).map(q => q.id)); save();
+    });
+    /* What the quiz the tap started holds: its chapter and mode, and whether every question in it is one it should be. */
+    const started = () => page.evaluate(() => ({ screen: S.screen, chapter: S.chapter, mode: S.mode, n: (S.questions || []).length,
+      inChapter: (S.questions || []).every(q => q.ch === S.chapter), missed: (S.questions || []).every(q => S.missed.has(q.id)),
+      due: (S.questions || []).filter(q => S.srs[q.id] && S.srs[q.id].due < FSRS.localDateToISO(new Date())).length, fresh: (S.questions || []).filter(q => !S.srs[q.id]).length }));
+    const tap = async (sel, nth, until) => {
+      await toStudy();
+      const tapped = await page.locator(sel).nth(nth).click({ timeout: 5000 }).then(() => true, () => false);
+      const went = tapped && await page.waitForFunction(until, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+      const r = tapped ? await started() : 'the button could not be tapped';
+      if (went && r.screen === 'quiz') { await onScreen(page, 'quiz', { marker: '.q-card' }); await quiet(page); }
+      if (went && r.screen === 'home') { await onScreen(page, 'home', { marker: '.hero-h1' }); await quiet(page); }
+      return { went, r, detail: JSON.stringify(r) };
+    };
+    const want = await page.evaluate(() => ({ ring: CHAPTERS[1], tile: CHAPTERS[2] }));
+    let t = await tap('.story-rail .story', 1, `S.screen === 'quiz' && S.chapter === ${JSON.stringify(want.ring)} && S.mode === 'all'`);
+    ok('a chapter\'s ring starts that chapter, every question in it from the chapter', t.went && t.r.n > 0 && t.r.inChapter, t.detail);
+    t = await tap('.ch-tiles .ch-tile', 2, `S.screen === 'quiz' && S.chapter === ${JSON.stringify(want.tile)} && S.mode === 'all'`);
+    ok('a chapter\'s tile starts that chapter, every question in it from the chapter', t.went && t.r.n > 0 && t.r.inChapter, t.detail);
+    t = await tap('.review-card', 0, `S.screen === 'quiz' && S.chapter === null && S.mode === 'due'`);
+    ok('the review card starts the review queue: the six due, and new questions to make twenty', t.went && t.r.n === 20 && t.r.due === 6 && t.r.fresh === 14, t.detail);
+    t = await tap('.miss-card', 0, `S.screen === 'quiz' && S.chapter === null && S.mode === 'missed'`);
+    ok('the missed card starts the missed questions, and only them', t.went && t.r.n === 3 && t.r.missed, t.detail);
+    t = await tap('.all-card', 0, `S.screen === 'quiz' && S.chapter === null && S.mode === 'all' && S.questions.length === POOL.length`);
+    ok('the every-question card starts the whole bank', t.went, t.detail);
+    t = await tap('.study-back', 0, `S.screen === 'home'`);
+    ok('the way back goes home', t.went, t.detail);
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

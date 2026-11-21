@@ -126,7 +126,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       vw: window.innerWidth, vh: window.innerHeight,
       appVisible: getComputedStyle(app).visibility !== 'hidden',
       bodyW: body ? Math.round(body.getBoundingClientRect().width) : 0,
-      hasButton: !!document.querySelector('.ai-head [onclick="toggleApexFull()"]'),
+      hasButton: !!document.querySelector('.ai-head [data-action="toggleApexFull"]'),
     };
   });
 
@@ -135,7 +135,27 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('as a side panel it takes part of the width, not all of it',
      side.w > 0 && side.w < side.vw * 0.75, `${side.w} of ${side.vw}px`);
 
-  await page.evaluate(() => toggleApexFull());
+  /* docs/ROADMAP.md, E2: the head's buttons name actions, heard by the page's one listener on the document, so they are
+     tapped here, not called: grounding and Apex's settings first, then full page, below, and closing. */
+  const groundedNow = () => page.evaluate(() => ({ on: AI_GROUNDED,
+    pressed: (document.querySelector('.ai-head [data-action="toggleGrounded"]') || {}).getAttribute?.('aria-pressed') }));
+  const g0 = await groundedNow();
+  await page.click('.ai-head [data-action="toggleGrounded"]');
+  await page.waitForTimeout(200);
+  const g1 = await groundedNow();
+  await page.click('.ai-head [data-action="toggleGrounded"]');
+  await page.waitForTimeout(200);
+  const g2 = await groundedNow();
+  ok('its grounding button, tapped, turns grounding on and says so, and tapped again turns it off',
+     g1.on === !g0.on && g1.pressed === String(!g0.on) && g2.on === g0.on && g2.pressed === String(g0.on), JSON.stringify([g0, g1, g2]));
+  await page.click('.ai-head [data-action="aiSettings"]');
+  await page.waitForTimeout(200);
+  const sets = await page.evaluate(() => ({ open: !!document.getElementById('generalSettings')?.open, at: document.activeElement && document.activeElement.id }));
+  ok('its settings button, tapped, opens Settings at Apex', sets.open && sets.at === 'apexSettingsHeading', JSON.stringify(sets));
+  await page.evaluate(() => closeSettings());
+  await page.waitForTimeout(200);
+
+  await page.click('.ai-head [data-action="toggleApexFull"]');
   await page.waitForTimeout(350);
   const full = await geoOf();
   await page.evaluate(async () => {
@@ -167,7 +187,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      would otherwise take the whole screen with no warning. */
   await page.evaluate(() => { toggleApexFull(); });
   await page.waitForTimeout(200);
-  await page.evaluate(() => { toggleAI(); });
+  await page.click('.ai-head [data-action="toggleAI"]');
   await page.waitForTimeout(200);
   const closed = await page.evaluate(() => {
     const sh = document.getElementById('shell');

@@ -4,7 +4,7 @@
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-home.js <patched.html|url>
  *
- * Four claims:
+ * Five claims:
  *   · the welcome bar (the hero ECG strip) is genuinely larger than it was;
  *   · the Brain page's gauge reports the REAL state of the bank — its mastery
  *     ring is FSRS's own recall estimate and is drawn to the number it shows,
@@ -14,6 +14,9 @@
  *   · home says ONE thing: the trace and the pearl — the study material it
  *     used to carry is behind a door on the Labs page rather than below the
  *     fold;
+ *   · the home screen's buttons, tapped through the page, the brain's keys, and the pager's and the pearl's
+ *     scrolls, each its own, reach what they say
+ *     (docs/ROADMAP.md, E2: they name actions, not inline handlers);
  *   · S.homeLayout still persists and still reaches the home screen's own
  *     hero sizing on a cold load. It used to also drive a visible three-way
  *     switch — Signal/Focus/Grid — but studyflow removed that control: it
@@ -120,7 +123,31 @@ onDeath(() => ({ section, checks: passed + failed, errors,
      `drawn ${prog.mastDrawn} of 100, number ${prog.mid}`);
   ok('and so does the coverage ring', Math.abs(prog.seenDrawn - prog.seenFrac) < 1, `drawn ${prog.seenDrawn}, ${prog.seenFrac}%`);
   ok('the gauge states both figures in words', /mastered/i.test(prog.label) && /seen/i.test(prog.label), prog.label);
-  ok('and the progress bar it replaced is gone from Home', !prog.bar);
+  /* The session strip and its meter are gone (the owner's choice, November 2026): the bank's figures are the hero's line,
+     the questions in the bank, how much of it is started, and how many were answered today. */
+  const homeProgress = await page.evaluate(() => {
+    const numbers=[...document.querySelectorAll('#homePage0 .hero-line .hl-item b')].map(el=>parseInt(el.textContent,10));
+    const seen=startedCount(), percentage=TOTAL_Q?Math.min(100,Math.round(seen/TOTAL_Q*100)):0;
+    return {numbers, want:[TOTAL_Q,percentage,(S.daily[todayISO()]||{a:0}).a], strip:!!document.querySelector('.atlas-session,.observatory-meter')};
+  });
+  const metricEdges = await page.evaluate(() => {
+    const srs=S.srs, practice=S.practice, daily=S.daily;
+    try {
+      const first=POOL[0].id, foreign='__audit_absent_question__';
+      if(POOL.some(q=>q.id===foreign))throw new Error('audit id must be absent');
+      S.srs={[first]:{}};S.practice={[first]:{},[foreign]:{}};
+      const coverage=startedCount()===1 && Object.hasOwn(S.practice,foreign);
+      S.daily={[todayISO()]:{a:7,c:4,r:2}};
+      const detached=document.createElement('div');detached.innerHTML=buildHome();
+      const today=detached.querySelectorAll('.hero-line .hl-item')[2];
+      const label=!!today && today.textContent.trim()==='7 today';
+      return {coverage,label};
+    } finally {
+      S.srs=srs;S.practice=practice;S.daily=daily;
+    }
+  });
+  ok('Home\'s line counts the bank, what of it is started and today\'s answers, and no strip repeats them',
+    JSON.stringify(homeProgress.numbers)===JSON.stringify(homeProgress.want) && !homeProgress.strip && metricEdges.coverage && metricEdges.label,JSON.stringify({homeProgress,metricEdges}));
 
   head('it fills the display, like an app');
   /* Added to the Home Screen, iPadOS gives a web app the whole screen and draws
@@ -415,8 +442,8 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        pro.appW / pro.vw > 0.9, `${pro.appW} of ${pro.vw}`);
     ok('and the home screen fits in one screen, with nothing to scroll',
        pro.over <= 0, `${pro.over}px over`);
-    ok('the pearl sits to the left of the heart',
-       pro.hero.x >= pro.pearl.x + pro.pearl.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
+    ok('the live heart leads the pearl in landscape',
+       pro.pearl.x >= pro.hero.x + pro.hero.w - 4, `pearl x${pro.pearl.x} vs hero right ${pro.hero.x + pro.hero.w}`);
     ok('and it runs taller than the letterbox it used to be',
        pro.pearl.h > 400, `${pro.pearl.h}px tall`);
     /* The doors moved off Home: it is the hero and the pearl now, and the doors are on the Labs page, two swipes away
@@ -475,9 +502,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const port = await at(1024, 1366);
     ok('portrait still stacks, and still fits',
        port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
-    /* The pages run the full width now, and Home's column is the fixed measure (.home-page-in, 900px). */
-    ok('and its column reserves space for the navigation rail',
-       !!port.col && port.col.w === port.vw - 128, port.col ? `${port.col.w}px` : 'no column');
+    /* No rail or bar stands beside the pages (the owner's choice, November 2026): Home's column is the screen's width
+       less the page's own padding, 24px a side. */
+    ok('and its column runs the screen\'s width, with no rail to make room for',
+       !!port.col && port.col.w === port.vw - 48, port.col ? `${port.col.w}px of ${port.vw}` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem.
@@ -604,6 +632,42 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     }
   }
 
+  head('on a phone, the Apex button stands under the pages, never over them');
+  /* Lifted above the tab bar, the button stood over the page's first lines on arrival, and with some pearls over the
+     pearl's key statement. Which words it covered depended on the pearl and on the scroll, so the same reasoning as
+     the check above applies: assert the property that makes covering impossible, not that today's page happened to be
+     clear. The pages scroll inside #homePager; a button whose box never meets the pager's box covers none of them. The
+     tab bar is gone (the owner's choice, November 2026), and the button keeps a band of its own where it stood. */
+  {
+    const prev = page.viewportSize();
+    const rows = [];
+    for (const [w, h] of [[390, 844], [375, 667], [320, 568]]) {
+      await resized(page, w, h);
+      await page.evaluate(() => { goHome(); render(); });
+      await settled(page, () => { const f = document.getElementById('aiFab'), p = document.getElementById('homePager');
+        /* Still means no finite animation left: the button's glow runs for ever and is not a move. */
+        const moving = !!f && f.getAnimations().some(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity);
+        return S.screen === 'home' && !!f && !!p && !moving && p.getBoundingClientRect().height > 0; },
+        { label: 'Home drawn with the Apex button still' });
+      rows.push(await page.evaluate(() => {
+        const r = e => e.getBoundingClientRect(), f = r(document.getElementById('aiFab')), p = r(document.getElementById('homePager'));
+        const meet = (a, b) => a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+        return { vw: innerWidth, vh: innerHeight, shown: getComputedStyle(document.getElementById('aiFab')).display !== 'none',
+          overPages: meet(f, p), inView: f.left >= 0 && f.right <= innerWidth && f.bottom <= innerHeight,
+          under: f.top >= p.bottom, scrolls: document.documentElement.scrollHeight - innerHeight,
+          size: [Math.round(f.width), Math.round(f.height)], name: document.getElementById('aiFab').getAttribute('aria-label') };
+      }));
+    }
+    if (prev) await resized(page, prev.width, prev.height);
+    for (const g of rows) {
+      const at = `${g.vw}x${g.vh}`;
+      ok(`${at}: the Apex button is shown and its box never meets the pages'`, g.shown && !g.overPages, JSON.stringify(g));
+      ok(`${at}: it stands under the pages, on screen, and the screen does not scroll`, g.under && g.inView && g.scrolls <= 0, JSON.stringify(g));
+      ok(`${at}: it stays a touch target with a name`,
+         g.size[0] >= 44 && g.size[1] >= 44 && /Apex/.test(g.name || ''), JSON.stringify(g));
+    }
+  }
+
   head('and the hint itself is readable, on every theme');
   /* The AA floor, applied to the new card rather than assumed of it — this is
      the component most likely to be
@@ -650,6 +714,168 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     for (const r of rows) {
       ok(`${r.theme}: every word in the hint clears AA`, !r.error && r.worst >= 4.5, r.error || `${r.worst}:1`);
     }
+  }
+
+  head('the home screen\'s buttons reach what they say when tapped');
+  /* docs/ROADMAP.md, E2: the three pages' buttons name actions, and only a tap through the page shows that one reaches
+     its function. A tab to Labs, a neuron, a chapter's row, the heart's button and its credit, the pearl's Recall,
+     another pearl, Show all and Read note, the Chapters door, and the Sessions and Practice Lab cards are tapped in
+     their own suites (homepager, pwa, pearl, home above, mockscreen, lab); the rest are tapped here. Each tap starts
+     from its page drawn and quiet, and is held to what it changes, read from the page after the tap. Chambers and flow
+     does nothing without the 3D heart, which a headless engine may not draw, so that one is held to reaching
+     toggleHeroMechanics(), recorded where the page looks it up. A tap that cannot be made, or that changes nothing, is a FAIL. */
+  {
+    const { onScreen, quiet, transitionDone } = require('./_render.js');
+    /* After two minutes with no input the app raises its ambient screen over the page (src/ui/livingDiagram.js, IDLE_MS),
+       and a suite's page.evaluate() is no input; a slow machine passes two minutes here. So each step begins with a key
+       pressed, as a person's touch would begin it: input, which keeps the screen from rising, and a key, which puts it
+       away if it has (the page's own rule). */
+    const toPage = async n => {
+      await page.keyboard.press('Shift');
+      await page.waitForFunction(() => typeof AMBIENT === 'undefined' || !AMBIENT.active(), null, { timeout: 5000, polling: 40 }).catch(() => {});
+      await page.evaluate(() => goHome());
+      await onScreen(page, 'home', { marker: '#homePage2' });
+      await page.evaluate(n => homeGo(n), n);
+      await page.waitForFunction(n => homePage === n, n, { timeout: 8000, polling: 40 }).catch(() => {});
+      await quiet(page);
+    };
+    /* A button low on a page is scrolled to first, as a reader scrolls to it, and the page let settle: the pages sit in a
+       pager that snaps sideways, and a scroll left to the click itself can still be moving when the click gives up. */
+    const tap = async (n, sel, until, arg) => {
+      await toPage(n);
+      await page.evaluate(sel => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ block: 'center', inline: 'nearest' }); }, sel);
+      await quiet(page);
+      await transitionDone(page);
+      /* What is under the button's middle when a tap cannot be made, so a failure says what was in the way. */
+      let blocked = '';
+      const tapped = await page.locator(sel).first().click({ timeout: 5000 }).then(() => true, async () => {
+        blocked = await page.evaluate(sel => { const el = document.querySelector(sel); if (!el) return 'no such button';
+          const r = el.getBoundingClientRect(), at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+          return JSON.stringify({ box: [r.x, r.y, r.width, r.height].map(Math.round), view: [innerWidth, innerHeight], under: at ? at.tagName.toLowerCase() + (at.id ? '#' + at.id : '') + (typeof at.className === 'string' && at.className ? '.' + at.className.split(' ')[0] : '') : null, itself: !!at && (at === el || el.contains(at)) }); }, sel).catch(() => 'unreadable');
+        return false; });
+      const went = tapped && await page.waitForFunction(until, arg, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+      const said = tapped ? await page.evaluate(() => JSON.stringify({ screen: S.screen, mode: S.mode, chapter: S.chapter, homePage })) : 'the button could not be tapped: ' + blocked;
+      if (went) await quiet(page);
+      return { went, said };
+    };
+    const was = await page.evaluate(() => ({ atlasPaused, heroCutaway }));
+    /* A headless engine draws the 3D heart in software: measured here, a frame every 200 ms with it live and every 300 ms
+       cut away, against 17 ms paused, and a click waits on frames. The illustration and its switch are gone (the owner's
+       choice, November 2026), so every tap here is made with the heart paused, which stops its drawing; its motion is
+       put back as it was at the end. The menu's motion button is the one tap that plays it, and it is paused again after. */
+    await page.evaluate(() => { if (!atlasPaused) toggleAtlasMotion(); });
+    let t;
+    await toPage(0);
+    await page.locator('#heroHeartBtn').click({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => !document.getElementById('heroMenu').hidden, null, { timeout: 5000, polling: 40 }).catch(() => {});
+    await page.evaluate(() => { window.__mech = 0; const real = toggleHeroMechanics; toggleHeroMechanics = function () { window.__mech++; return real.apply(this, arguments); }; window.__realMech = real; });
+    const mechTapped = await page.locator('#heroMechanics').click({ timeout: 5000 }).then(() => true, () => false);
+    const mech = await page.evaluate(() => { const n = window.__mech; toggleHeroMechanics = window.__realMech; return n; });
+    ok('the menu\'s chambers and flow reaches toggleHeroMechanics(), once', mechTapped && mech === 1, mechTapped ? mech + ' call(s)' : 'the button could not be tapped');
+    await page.evaluate(w => { if (heroCutaway !== w) toggleHeroMechanics(); }, was.heroCutaway);
+    const menuTapped = await page.locator('#atlasPause').click({ timeout: 5000 }).then(() => true, () => false);
+    const menuPlayed = menuTapped && await page.waitForFunction(() => atlasPaused === false, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    ok('the menu\'s motion button plays the paused heart', menuPlayed, menuTapped ? String(await page.evaluate(() => atlasPaused)) : 'the button could not be tapped');
+    await page.evaluate(() => { if (!atlasPaused) toggleAtlasMotion(); toggleHeroMenu(false); });
+
+    /* The pearl keeps one way out of it, Read note; Recall, Paragraph and Source are gone with the hero's switch. */
+    const pearl = await page.evaluate(() => !!pearlNow());
+    t = pearl ? await tap(0, '#pearlCard .pearl-open', () => S.screen === 'refs') : { went: false, said: 'no pearl to read' };
+    ok('the pearl\'s Read note opens the notes', t.went, t.said);
+
+    /* The scrolls are SCROLL_ACTIONS', which listens as a scroll goes down and acts only for the element that scrolled. The
+       page's own pearlScroll() and homePagerScroll() are counted where the table looks them up: a scroll of the pearl's
+       statement, which sits inside the pager, is the statement's alone, and a scroll of the pager is the pager's. The
+       statement is held short for this if it is not already taller than its box, so there is something to scroll. */
+    await toPage(0);
+    const spied = await page.evaluate(() => {
+      window.__scrolls = { pearl: 0, pager: 0 }; window.__realScrolls = { pearlScroll, homePagerScroll };
+      pearlScroll = function () { window.__scrolls.pearl++; return window.__realScrolls.pearlScroll.apply(this, arguments); };
+      homePagerScroll = function () { window.__scrolls.pager++; return window.__realScrolls.homePagerScroll.apply(this, arguments); };
+      const w = document.getElementById('pearlBody'); if (!w) return 'no statement';
+      if (w.scrollHeight - w.clientHeight < 40) w.style.maxHeight = '40px';
+      return w.scrollHeight - w.clientHeight;
+    });
+    await page.evaluate(() => { const w = document.getElementById('pearlBody'); if (w) w.scrollTop = 30; });
+    const pearlScrolled = typeof spied === 'number' && spied > 0 && await page.waitForFunction(() => window.__scrolls.pearl > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    await quiet(page);
+    const afterPearl = await page.evaluate(() => Object.assign({}, window.__scrolls));
+    ok('a scroll of the pearl\'s statement reaches pearlScroll()', pearlScrolled, JSON.stringify({ over: spied, calls: afterPearl }));
+    await page.evaluate(() => { const p = document.getElementById('homePager'); p.scrollLeft = p.clientWidth; });
+    const pagerScrolled = await page.waitForFunction(() => window.__scrolls.pager > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    ok('and a scroll of the pager reaches homePagerScroll()', pagerScrolled, JSON.stringify(await page.evaluate(() => window.__scrolls)));
+    /* Each page in the pager scrolls up and down by itself on a phone, and names no action: its scroll is not the pager's.
+       The Brain page is given something to scroll for this, a spacer taken away after. */
+    await page.evaluate(() => homeGo(1));
+    await page.waitForFunction(() => homePage === 1, null, { timeout: 8000, polling: 40 }).catch(() => {});
+    await quiet(page);
+    const down = await page.evaluate(() => { const pg = document.getElementById('homePage1'); const sp = document.createElement('div'); sp.id = 'scrollSpacer'; sp.style.height = '3000px'; pg.appendChild(sp);
+      window.__scrolls.pager = 0; window.__pageScrolls = 0; pg.addEventListener('scroll', () => { window.__pageScrolls++; }, { once: false }); pg.scrollTop = 600; return pg.scrollHeight - pg.clientHeight; });
+    const pageScrolled = down > 0 && await page.waitForFunction(() => window.__pageScrolls > 0, null, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    await quiet(page);
+    const pageCalls = await page.evaluate(() => window.__scrolls.pager);
+    ok('and a page scrolled up or down inside the pager does not reach homePagerScroll()', pageScrolled && pageCalls === 0, JSON.stringify({ over: down, pageScrolled, pagerCalls: pageCalls }));
+    await page.evaluate(() => { const sp = document.getElementById('scrollSpacer'); if (sp) sp.remove(); document.getElementById('homePage1').scrollTop = 0; });
+    await page.evaluate(() => { pearlScroll = window.__realScrolls.pearlScroll; homePagerScroll = window.__realScrolls.homePagerScroll; const w = document.getElementById('pearlBody'); if (w) w.style.maxHeight = ''; homeGo(0); });
+    await quiet(page);
+
+    /* Home's session strip, with its Review, Continue and Start, is gone (the owner's choice, November 2026). */
+    const kept = await page.evaluate(() => JSON.stringify({ srs: S.srs, practice: S.practice }));
+    await page.evaluate(() => { S.srs = {}; S.practice = {}; });
+    ok('Home has no session strip to tap', await page.evaluate(() => !document.querySelector('.atlas-session')));
+
+    /* Someone new: no cards and not welcomed, so the greeting is drawn, and Got it puts it away for good. */
+    await page.evaluate(() => { try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {} LOG.length = 0; });
+    t = await tap(0, '#homeHello .hello-x', () => { try { return localStorage.getItem('accsap12.welcomed') === '1'; } catch (_) { return false; } });
+    ok('Got it puts the greeting away, and keeps it away', t.went, t.said);
+    await page.evaluate(k => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); }, kept);
+
+    t = await tap(0, '#homePage0 .home-door[data-page="1"]', () => homePage === 1);
+    ok('Home\'s Brain door goes to the Brain page', t.went, t.said);
+    t = await tap(1, '#homePage1 .home-back', () => homePage === 0);
+    ok('and Brain\'s Home button back to Home', t.went, t.said);
+    t = await tap(0, '#homePage0 .home-door[data-page="2"]', () => homePage === 2);
+    ok('Home\'s Labs door goes to the Labs page', t.went, t.said);
+    t = await tap(2, '#homePage2 .home-back', () => homePage === 0);
+    ok('and Labs\' Home button back to Home', t.went, t.said);
+
+    /* With no notes to draw a pearl from, the intro is shown, and its button opens the notes. */
+    const pearls = await page.evaluate(() => { const was = pearlCache; pearlCache = []; pearlCurrent = null; window.__pearls = was; return Array.isArray(was) ? was.length : 0; });
+    t = await tap(0, '#atlasIntro .atlas-primary', () => S.screen === 'refs');
+    ok('with no pearl, the intro\'s Open notes opens the notes', t.went, t.said);
+    await page.evaluate(() => { pearlCache = window.__pearls; });
+
+    for (const [sel, screen, says] of [['.lab-card.lab-rhythm', 'lab', 'the Rhythm Lab card opens the Rhythm Lab'], ['.lab-card.lab-echo', 'echo', 'the Echo Studio card opens Echo Studio'],
+      ['.door[data-action="openSearch"]', 'search', 'the Search door opens the search'], ['.door[data-action="goStats"]', 'stats', 'the Progress door opens Progress'],
+      ['.door[data-action="goRefs"]', 'refs', 'the Notes door opens the notes'], ['.door[data-action="goMemory"]', 'memory', 'the Memory door opens what Apex knows'],
+      ['.door[data-action="goAnnotations"]', 'annotations', 'the Annotations door opens the annotations']]) {
+      t = await tap(2, '#homePage2 ' + sel, s => S.screen === s, screen);
+      ok(says, t.went, t.said);
+    }
+
+    /* The Brain page: Review with cards due, and a chosen neuron's Practise, which starts that neuron's chapter. */
+    await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); const due = FSRS.localDateToISO(d); const q = POOL[0]; S.srs[q.id] = Object.assign({}, S.srs[q.id] || {}, { difficulty: 5, stability: 3, ivl: 3, reps: 1, lapses: 0, last: due, due, sv: 1 }); });
+    t = await tap(1, '#homePage1 .brain-actions .brain-go', () => S.screen === 'quiz' && S.mode === 'due');
+    ok('the Brain page\'s Review starts the review queue', t.went, t.said);
+    await toPage(1);
+    const chosen = await page.evaluate(() => { brainPick(0, false); const x = brainArtL && brainArtL.L.nodes[0]; return x ? x.docId : null; });
+    const practise = chosen !== null && await page.locator('#brainInfo .brain-go').click({ timeout: 5000 }).then(() => true, () => false);
+    const started = practise && await page.waitForFunction(ch => S.screen === 'quiz' && S.chapter === ch && S.mode === 'all', chosen, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    ok('and a chosen neuron\'s Practise starts its chapter', started, practise ? await page.evaluate(() => JSON.stringify({ screen: S.screen, chapter: S.chapter })) + ' · wanted ' + chosen : 'the button could not be tapped');
+    /* The brain's keys are its KEY_ACTIONS entry: an arrow moves the keyboard to the next neuron, Enter practises the one
+       the keyboard is on, once, and the click the page makes for a focused role="button" on Enter is not made as well. */
+    await toPage(1);
+    const first = await page.evaluate(() => { const g = document.querySelector('#brainArt .neuron'); if (!g) return null; g.setAttribute('tabindex', '0'); g.focus(); return { i: +g.dataset.i, n: document.querySelectorAll('#brainArt .neuron').length }; });
+    if (first) await page.keyboard.press('ArrowRight');
+    const moved = first && await page.waitForFunction(w => document.activeElement && document.activeElement.matches && document.activeElement.matches('#brainArt .neuron') && +document.activeElement.dataset.i === (w.i + 1) % w.n, first, { timeout: 5000, polling: 40 }).then(() => true, () => false);
+    ok('in the brain, an arrow moves the keyboard to the next neuron', moved, first ? await page.evaluate(() => document.activeElement && document.activeElement.dataset ? 'on ' + document.activeElement.dataset.i : 'nowhere') + ' of ' + first.n : 'no neuron drawn');
+    const want = moved && await page.evaluate(() => { const i = +document.activeElement.dataset.i; window.__starts = 0; const real = startQuiz; window.__realStart = real; startQuiz = function () { window.__starts++; return real.apply(this, arguments); }; return brainArtL.L.nodes[i].docId; });
+    if (want) await page.keyboard.press('Enter');
+    const entered = want && await page.waitForFunction(ch => S.screen === 'quiz' && S.chapter === ch, want, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    const starts = want ? await page.evaluate(() => { const n = window.__starts; startQuiz = window.__realStart; return n; }) : 0;
+    ok('and Enter practises that neuron\'s chapter, once', entered && starts === 1, want ? JSON.stringify({ screen: await page.evaluate(() => S.screen), starts, wanted: want }) : 'no neuron moved to');
+    await page.evaluate(([k, w]) => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); if (atlasPaused !== w) toggleAtlasMotion(); goHome(); }, [kept, was.atlasPaused]);
+    await onScreen(page, 'home', { marker: '#homePage0' });
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

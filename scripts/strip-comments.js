@@ -118,8 +118,11 @@ function strip(src, compact = false) {
     }
     // Only horizontal whitespace outside literals: keep every line terminator for ASI.
     if (compact && (c === ' ' || c === '\t')) {
-      if (out.length > lineStart && !/[ \t]$/.test(out)) out += ' ';
-      i++; continue;
+      while (i < n && (s[i] === ' ' || s[i] === '\t')) i++;
+      // Punctuation already separates tokens. Keep line terminators and
+      // operator/identifier separators, including + + and - -.
+      if (out.length > lineStart && !/[ \t;,{([]$/.test(out) && !/[;,)\]}]/.test(s[i] || '') && !/[\n\r]/.test(s[i] || '')) out += ' ';
+      continue;
     }
     if (c === ' ' || c === '\t' || c === '\r') { out += c; i++; continue; }
     /* a++ / 2 — a postfix ++ or -- ends an operand, so a / after it divides */

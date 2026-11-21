@@ -22,7 +22,7 @@
  *                  counts and time. No output text, so nothing licensed.
  *   --list         print the suites, their tags and what each covers, then exit
  *
- * WHY THIS EXISTS. There are 158 suites and roughly 7240 checks, and they
+ * WHY THIS EXISTS. There are 158 suites and roughly 7282 checks, and they
  * were only ever runnable by remembering both the file name and that Playwright
  * lives in the global node_modules. One command now runs the lot and prints a
  * table, so "is the build good?" has an answer rather than a procedure.
@@ -70,7 +70,7 @@ const SUITES = [
   ['physio',       'the cardiac cycle is computed, not drawn, and keeps its own clock'],
   ['loops',        'no animation loop outlives the screen it was started for, so after every screen has been visited and left a quiz runs the one loop that runs everywhere'],
   ['theme',        'nine palettes, two axes, unthemed semantics'],
-  ['home',         'the welcome bar, the progress bar, three layouts'],
+  ['home',         'the welcome bar, the progress bar, three layouts, and the home screen\'s buttons, the brain\'s keys, and the pager\'s and the pearl\'s scrolls reach what they say'],
   ['splash-heart', 'the photographed heart paints before the app parses'],
   ['crisp',        'every canvas backs itself at high device-pixel density'],
   ['type',         'one modular type scale and one spacing scale, still held'],
@@ -85,12 +85,12 @@ const SUITES = [
   ['boundary',     'a retrieved note is material to teach from, never an instruction'],
   ['chat',         'the panel keeps what you typed, and sends a window not an archive'],
   ['store',        'the big stores live in a database, and nothing is ever in neither place'],
-  ['quiznav',      'going back never re-grades a question or re-schedules a card'],
+  ['quiznav',      'going back never re-grades a question or re-schedules a card, and Skip, Home and start over do what they say when clicked'],
   ['quietquiz',    'answering a question does not replay what was already on the screen, while the verdict and the right and wrong options still arrive, and the next question arrives as before, and the annotation pencil does not pop in again, and a screen redrawn in place starts no entrance again while the cards below the fold of a long list start nothing until they are scrolled to'],
   ['planscreen',   'the "I have N minutes" card plans a review session of that size, in order, and rating in it moves the schedule'],
-  ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload'],
+  ['mockscreen',   'a mock exam is a timed block with no verdict until it is handed in, which counts the answers once as practice would, and survives a reload, the Sessions screen\'s way back reaches the Labs page when tapped, and the block\'s Pause, Resume, Previous, End block and Back to the block do what they say when clicked'],
   ['flags',        'a question is flagged by button or F and kept; the Flagged deck, its Study card and the Annotations list hold what they say; a mock block\'s flags join the list when it is handed in'],
-  ['reflist',      'the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages'],
+  ['reflist',      'the reference library is drawn a page at a time, newest first; the button adds the next page in place, reaching the end loads it, and a visit starts at the first page, and the library left by deleting the note being looked at still pages, and its other buttons reach their functions when tapped'],
   ['apexask',      'every answer keeps the option chosen; Apex is told what the fellow chose and how they miss, through the real panel; the miss row, chips and results button ask it; its tools answer from the page; a mock block puts it away'],
   ['settings',     'unified reading, appearance and Apex settings; device preferences and credential safety'],
   ['readsize',     'a text size for the stem, options, explanation and Apex, kept on the device; controls a finger can hit; the pencil\'s rail clear of Apex in each way it opens'],
@@ -98,14 +98,15 @@ const SUITES = [
   ['examdate', 'the exam date is set on the plan card, counted down from the calendar, kept across a reload, and refused when it is not a real day'],
   ['studyvisuals', 'the Study cards draw the app\'s own numbers: rings, chips, pace pill, countdown, run icons and pips, the voice dock, every icon resolving'],
   ['voicescreen', 'the Voice card reads a session aloud, scores a spoken letter as a tap would, rates it, skips and stops on command, and ends when you leave'],
-  ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn'],
+  ['chapters',     'the chapter grid staggers in, and its bar fills instead of arriving drawn, and the Study screen\'s rings, tiles, review, missed, every-question and back buttons start what they say when tapped'],
   ['failsafe',     'render() throwing shows a real screen, never a blank or frozen one'],
   ['content',      'a question broken in a way the fellow cannot see is never shipped silently'],
-  ['backup',       'a restored backup appears now, not only after the next launch'],
+  ['backup',       'a restored backup appears now, not only after the next launch, and the Progress screen\'s buttons reach their functions when tapped'],
   ['backup-ids',   'restored reference and memory ids stay data when their Edit and Delete buttons are pressed'],
   ['windows',      'a second window of the app takes the progress record and the reference notes another wrote, when it is told and when it is next seen, and leaves the question on its screen alone'],
   ['tokens',       'the semantic colour names alias the legacy hue names, not just resemble them'],
   ['ink',          'green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are'],
+  ['contrast',     'every text on fifteen screens and eight on a phone, read against the pixels under it in every theme, clears its contrast'],
   ['a11y',         'every screen passes axe-core\'s WCAG 2.2 AA and best-practice rules in a light and a dark theme, with nothing allowed through'],
   ['homepager',    'the home screen is three pages a swipe apart (Home, Brain, Labs): the pill follows the finger, the off-screen pages are inert, and the page is kept'],
   /* The three below need no browser and no build — they load a src/ module
@@ -230,6 +231,10 @@ const SUITES = [
   ['flagset-pure', 'a flag is an id kept once and in order, read back from storage or a backup only if it is nothing but ids; the flagged deck holds the questions the bank has; a note or a mark lists a question, newest first, found by every word typed'],
   /* Topic runs: questions about the same thing, grouped by their distinctive words. */
   ['topicrun-pure', 'questions on one topic are gathered into a run by their distinctive words, never across chapters, never as a pair'],
+  /* Look-alikes side by side (docs/ROADMAP.md, S6): the two things an Apex gap memory names, paired in review. */
+  /* One physiology engine (docs/ROADMAP.md, S8): the lesions made in one circulation, held to textbook ranges. */
+  ['circulation-pure', 'one circulation of elastance chambers, valves with leaflets and blood with mass, and Windkessel beds makes each lesion fall in its textbook ranges, keeps its blood, settles, opens a valve only on a forward gradient and passes nothing once it is shut, and hands the views one beat whose events are where its leaflets open and seal and whose loop has its corners on its own lines and moves under each PV intervention as the textbook says and whose leaks run backward and whose two heart sounds split as the textbook says, and gives the 3D heart each lesion read off its beat'],
+  ['confusable-pure', 'a gap Apex noted is read as the two things it names; a review deals a question on the other side straight after one on a side, keeps every due card, and takes chapters in turn, as the mock block does'],
   /* Voice mode's logic: what is read, what is heard, what happens next. */
   ['voice-pure', 'a spoken answer is understood as speech recognition delivers it, a doubtful one is asked again, and the session ends with a summary'],
   ['icons-pure', 'every icon the app names is drawn by the one sprite in the page, and no symbol is defined anywhere else'],
@@ -286,6 +291,86 @@ const SUITES = [
      it transforms, which is right and was asserted nowhere — and the escaper
      it leans on is not in this repository at all. */
   ['md-pure',      'nothing a model says can become something the page runs'],
+  /* The sentence shown when the provider refuses a request decides what the
+     fellow does next, and a wrong one has cost an evening more than once. It
+     was the body of the shell's apiError() and could only be reached through a
+     browser; it is src/core/providererror.js now (roadmap E1). */
+  ['providererror-pure', 'a refused request is told as what it is: the site\'s refusal, a rejected or blocked key, a daily quota, no allowance or a wait read from the response, a retired model, an outage; the provider\'s words escaped, and the response read no more than it was'],
+  /* What a review session holds was three functions in the shell reading the
+     bank and the cards as globals. Their rule, that due cards are never capped
+     to a round number, had no check that did not need a browser. */
+  /* Reading the fellow's own notes as they are imported (docs/ROADMAP.md, E1): five functions of the page, which read
+     nothing of its own, moved to src/core/refimport.js. */
+  /* What a saved progress record may hold (docs/ROADMAP.md, E1): the rules a restore, an export and a record from
+     another window go through, moved to src/core/progressdata.js. */
+  /* A pen stroke made small enough to keep, and its outline drawn (docs/ROADMAP.md, E1): moved to src/core/stroke.js. */
+  /* The numbers the Progress, Study and Brain screens lead with (docs/ROADMAP.md, E1, the readers): moved to
+     src/core/progressstats.js. */
+  ['progressstats-pure', 'a chapter\'s mastery, the mean recall of the scheduled cards, the next seven days\' due cards, the questions started in this bank and the last thirty days are worked out as the screens read them, by the calendar across the day the clocks change, changing nothing'],
+  ['stroke-pure', 'a pen point keeps what a screen can show, points a line already describes are dropped and a corner kept, a stroke is simplified in place from three points, and an outline is filled as one curved path'],
+  ['progressdata-pure', 'a progress record the app wrote restores to the state it keeps; one it never wrote (a day off the calendar, more correct than answered, a negative count, a resume past its deck, a list for a map) is refused whole; an absent flag list leaves the flags alone; an export keeps the good entries and leaves out the bad'],
+  ['refimport-pure', 'an imported file becomes notes: its front matter read and never a note, one note per heading outside a fenced block, titled and tagged from what the file says, and an image link finds its figure only where the match is unique'],
+  ['reviewqueue-pure', 'a review session is every due card, however many, then new questions a round at a time across chapters up to its size; a card for a question the bank lacks is never dealt; nothing handed in is changed; and an interval is said in days, weeks or months'],
+  /* What Apex sends the model and what it reads back: the window, the request
+     and the stream. It was inline in the shell's oneTurnGemini() and around it,
+     so its shape was only ever checked through a browser and a stubbed network.
+     src/core/apexwire.js now (roadmap E1 step 2), the seam a second provider needs. */
+  ['apexwire-pure', 'a request carries a window of the thread that opens on a user turn and no failed turn; it goes to Google with a key and to this site\'s relay without, carrying no secret; its body is the text sent, key for key; the stream is read the same whatever its chunk boundaries, each part kept with its signature; a tool\'s answer goes back with the model\'s own parts'],
+  /* What a turn with the tutor changes was seven script-level names, declared in four places and rebound by
+     whichever function got there, which is why the loop that runs a turn could not leave the shell. They are
+     one object now, src/core/apexturn.js, and the old names are views of it (roadmap E1). */
+  ['apexturn-pure', 'a turn\'s state is one object the page holds once, made by the module, and each of the seven old names reads and writes its own field of it, and nothing else'],
+  /* The loop that runs a turn, streamReply() in the shell until the turn's state had one owner. Its rules are
+     the ones the shell's comments told as stories; here each is a check, and the page's hand-over is one too. */
+  ['apexloop-pure', 'a turn stopped as its reply arrives keeps and runs nothing; explain-only runs no tool; a cut-off reply is kept and marked; a mock block stops the tools; an answer is cut at 9,000 characters but a grounded search\'s; six steps at most; however a turn ends it ends in the same order; and the page hands the loop its own state and parts, each looked up when called'],
+  /* The first screen to leave the shell (roadmap E1 step 3): what a finished session ends on was
+     buildResults() over the page's globals; it is src/app/results.js now, handed the state and the helpers. */
+  ['results-pure', 'the results screen gives the quiz\'s score or the session\'s, changes colour at 80 and 60, draws a row for every chapter answered in the bank\'s order, offers the missed only when something is, restarts what was being done, reads eight names of the state and changes nothing, names actions the page\'s ACTIONS table calls with no inline handler, Restart reading the chapter when tapped, and the page hands it its own state and helpers'],
+  /* The second screen out of the shell: what Apex has kept about the reader. Its builder is src/app/memory.js;
+     the two handlers that delete stay in the page, where verify-ui-pure reads their confirm(). */
+  ['memoryscreen-pure', 'the Memory screen shows four groups in one order, which are the kinds Memory keeps, a card for each memory with its words escaped and the reader\'s own day, an id carried as data, no inline handler but an action for each button that the page\'s ACTIONS table calls, reads four names of a memory and changes nothing, and the page asks Memory for the list and still asks before it deletes'],
+  /* Roadmap E2: one delegated listener in place of inline handlers, in src/core/actions.js. The Memory screen is the
+     first to name actions instead; verify-memory and verify-backup-ids tap it through the real page. */
+  ['actions-pure', 'a tap on an element with data-action, or inside one, calls the action of that name from the page\'s table once, with the element and the event, the nearest such element winning; nothing is called outside every data-action or the root, or for a name the table does not have as its own function, and what install() returns removes its listener; asked, it listens as an event goes down, and acts only for the element the event is on'],
+  /* The third screen out of the shell: the Rhythm Lab's markup, three builders in src/app/rhythmlab.js. What is
+     chosen, setLab() and the mounts that draw into its canvases stay in the page, and this holds where they meet. */
+  ['rhythmlab-pure', 'the Rhythm Lab names the chosen rhythm and its rate, has a chip for every rhythm, heads the cycle panel with the chosen view and asks the page whether it plays, offers interventions in the PV loop alone, draws a 12-lead only for a rhythm that has one, changes nothing it is given, every element the page\'s mounts look up is in the markup under that name, and its chips and Home button name actions the page\'s ACTIONS table calls, with no inline handler'],
+  /* The fourth: "Your annotations", five functions in src/app/annotations.js, because typing repaints three
+     pieces of the screen and leaves the box alone. ANNO, annoInput() and practiceAnnotated() stay in the page. */
+  ['annotations-pure', 'the annotations screen draws a row for each question with a note or pencil marks, says what it carries, hands the note and the stem to FlagSet.highlight() with the page\'s e(), says which of two things no rows means, counts what matches, changes nothing it is given, and the page\'s own lines draw it, repaint it on typing with what the screen itself draws, start a quiz of what is shown and follow a tap by the attribute the row carries, and its box and buttons name actions the page\'s INPUT_ACTIONS and ACTIONS tables call, with no inline handler'],
+  /* The fifth: the report a mock block ends on, one builder in src/app/mockreport.js. mockReview(), which two of
+     its buttons name, stays in the page. */
+  ['mockreport-pure', 'the mock report gives the grade\'s percent with its colour, words and ring at 80 and 60, the counts, the time in the three ways a block can end, the flags against the Flagged list as it is now, the three slowest, a row for each chapter weakest first, offers what there is to learn from only when there is something, reads two names of the state and changes nothing, the page\'s own line over the real MockExam grades a block as the arithmetic says, and its buttons name actions the page\'s ACTIONS table calls, with no inline handler'],
+  /* The sixth: the topic search, its builder with hl() and snippet() in src/app/search.js. What is typed, the
+     search, its timer and the handlers its markup names stay in the page. */
+  ['search-pure', 'the topic search marks the words typed in text escaped first, quotes the part of a question where one is found, offers topics before anything is typed, counts and lists the matches with their chapter, flags, figures, stem and right answer, has a chapter choice, Quiz these and Clear, reads three names of the search and changes nothing, the page\'s line over its own helpers draws a search, and its controls name seven actions the page\'s ACTIONS, INPUT_ACTIONS and CHANGE_ACTIONS tables call, each from the table for its event, with no inline handler'],
+  /* The seventh: the Study screen, its builder with arc() and examLeftText() in src/app/study.js. The page works
+     out the topic runs into _runsShown first, which startRun() reads; the handlers its markup names stay there. */
+  ['study-pure', 'the Study screen draws a ring and a tile for each chapter as full as it is mastered, the review queue in its three states, the study plan with its two rings, pace, three plans and the exam date in the reader\'s days, topic runs, missed, flagged and annotated only when there are any, reads five names of the state and changes nothing, and the page works out the runs first and draws them over the real core modules'],
+  /* The eighth: the reference library, its builder and pager in src/app/refs.js. refCard() stays in the page,
+     because refMore() adds a page of cards with it in place. */
+  ['refs-pure', 'the reference library shows the newest page of notes in the order given with a pager for the rest, one note on its own with the way back and the form hidden unless it is edited, Save changes and Cancel while editing, reads only how many notes there are and changes nothing, and the page\'s line draws a library through its own refCard() and the real Markdown, and its buttons name seven actions the page\'s ACTIONS table calls, with no inline handler'],
+  /* The ninth: the question screen, its builder with the confidence and miss rows in src/app/quiz.js. The handlers,
+     and setConfidence() and setMissReason(), which repaint those rows' chips in place, stay in the page. */
+  ['quiz-pure', 'the question screen shows the chapter, place and score, the question and its options before and after answering, the reveal with the commentary and peer figures where every option has one, how sure and why missed with the one chosen marked, the review ratings with when each card comes back until it is rated, home, back, flag and next or skip, reads the state it is given and changes nothing, and the page\'s line draws a review over the real FSRS and ReviewQueue, and its buttons name nine actions the page\'s ACTIONS table calls, with no inline handler'],
+  /* The tenth: a mock exam block, its builder and summary in src/app/mock.js. The four mock helpers the ticker and the
+     keys repaint with stay in the page. */
+  ['mock-pure', 'a mock block shows none open, paused with the clock stopped, or the question with the clock, place, progress, answered and flagged, pace, options with the chosen one pressed, back, flag, next or hand in and a grid of the questions, and the summary of the blank and flagged before handing in, reads two names of the state and changes nothing, the page\'s line draws a block over the real MockExam, and its buttons name eleven actions the page\'s ACTIONS table calls, with no inline handler'],
+  /* The eleventh: the Sessions screen, with the mock exam's card and the voice card, in src/app/sessions.js. What is
+     inside the mock card stays a function of the page, because setMockCfg() draws it again in place; the page hands
+     over its three variables as they stand at each drawing. */
+  ['sessions-pure', 'the Sessions screen shows the way back to Labs, the mock exam\'s card and the voice card where the browser can speak and listen: a block in progress with how far it is, resume and a discard that asks twice, or the sizes, paces and chapters to set one up with the chosen ones pressed, the start button, and the last block\'s score as the way to its own report, reads three names of the state and changes nothing, and the page\'s lines draw it over the page\'s own setMockCfg() and the real MockExam, and its controls name eight actions the page\'s ACTIONS and CHANGE_ACTIONS tables call, each from the table for its event, with no inline handler'],
+  /* The twelfth: the Progress screen, with its calibration, retention and mock panels, in src/app/stats.js. The page
+     keeps the line that starts its survey of the figures on this device, the handlers, and the functions it hands
+     over, which read its state, storage and browser. Named for the screen: verify-stats holds the record's numbers. */
+  ['statsscreen-pure', 'the Progress screen shows whether progress is saved, the streak, answers, accuracy and cards due, the card for figures kept on this device, predicted retention and the week ahead, calibration by band with the pace and where the misses come from, the mock blocks handed in, the last thirty days as a line and a heat map, a ring for each chapter\'s mastery, and the reader\'s data with the pending backup\'s confirmation and the Safari tab\'s warning, reads four names of the state and changes nothing, and the page\'s line draws it over the real Calib, FSRS, ReviewQueue and MockExam and starts the survey after the paint, and its buttons name seven actions the page\'s ACTIONS table calls, with no inline handler'],
+  /* The thirteenth, in parts: the home screen's three pages left one at a time into src/app/home.js, the Labs page, the
+     Brain page and the Home page with the hero and the pearl. */
+  ['homescreen-pure', 'the home screen\'s Home page shows the daily pearl or what it is for, the heart in 3D or as an illustration with its menu, the session strip and its one button, and the greeting for someone new; its Labs page shows the four labs and the six study tools with what they say of the app; its Brain page shows the brain, a neuron for each part lit by how well it is remembered, the chosen one\'s info, the gauge and figures, and a row for each chapter; each reads only what it should and changes nothing, and the page\'s lines draw them, the Home page over its own pearl and greeting with the reading flag set as it draws, the Brain page over the real FSRS and BrainMap with the info read after the art lays the brain out'],
+  /* Last of the screens table: the Apex panel's markup, in src/app/apexpanel.js. buildAI() stays the page's, because
+     it reads what was being typed and where the panel was scrolled, puts the markup in, wires the chat and the avatar,
+     and keeps the figures' memo; the module is handed that memo's answer and the head already drawn. */
+  ['apexpanel-pure', 'the Apex panel shows its head with what Apex answers from or about and its four buttons, the setup where there is no key to call with, the thread with each reply as it went or what Apex can do, the dots while a reply is written, what the reply drew on for this thread only, the figures from those notes open or shut, the prompts that apply, the box, Send or Stop and what it is powered by; each part reads only what it draws with and changes nothing, and the page\'s lines draw it over its own helpers, prompts, providers and markdown, finding the figures once per reply'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
@@ -369,7 +454,7 @@ const SUITES = [
   ['stripcomments-pure', 'the split build ships src/\'s modules without their comments, and every one still compiles and behaves'],
   ['cssdocs-pure', 'the split build omits CSS documentation while preserving strings, URLs and token boundaries'],
   ['notesearch',   'the notes search opens, keeps the caret, and opens a note with its figures'],
-  ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, and a query or a note written while it is built is not lost to it'],
+  ['searchwarm',   'the search index is not built at boot, is built in slices when the search screen opens, a query or a note written while it is built is not lost to it, and the screen\'s chips, Clear, box, chapter, rows, Quiz these and Home do what they say when tapped, typed in and chosen from'],
   /* Retrieval quality as a number rather than an impression. It exists because
      the adoption plan gated a MiniSearch swap on "measurably better recall"
      and nothing could measure either side. */
@@ -486,7 +571,11 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
-const PENDING_RECORD = [];
+/* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
+   and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
+   search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. */
+const PENDING_RECORD = ['progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
@@ -610,8 +699,8 @@ const { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin } = r
    does. Everything else GitHub runs on every pull request, on the synthetic
    bank or with no build at all, which makes `--tag laptop` the short routine
    run and the full registry the occasional one that writes the record. */
-const CI_SUITES = require(path.join(ROOT, 'scripts', 'test-public.js'))
-  .ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'));
+const { ciSuites, readShardWorkflow } = require(path.join(ROOT, 'scripts', 'test-public.js'));
+const CI_SUITES = ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'), readShardWorkflow(ROOT));
 const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : [], CI_SUITES.has(n) ? [] : ['laptop']);
 if (flag('--list')) {
   console.log('\nSuites, their tags, and what each defends:\n');

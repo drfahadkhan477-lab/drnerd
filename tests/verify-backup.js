@@ -16,10 +16,11 @@
  *
  * Restored progress must survive an ordinary action before the next boot.
  * Reference figures must survive restoration in an independent storage context.
+ * The Progress screen's buttons, which name actions, reach their functions when tapped.
  */
 'use strict';
 const path = require('path');
-const { launch } = require('./_engine');
+const { launch, engineName } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { resolved } = require('./_render.js');
 
@@ -586,6 +587,88 @@ const restore = `(text) => new Promise((resolve, reject) => {
       ok(`the backup taken at ${g.says}`, g.result === true && g.name === g.want,
          JSON.stringify(g.name) + (g.errs.length ? ' ' + g.errs.slice(0, 1).join('') : ''));
     }
+  }
+
+  head('requesting a download is not proof of a saved backup');
+  const assurance=await page.evaluate(async()=>{
+    const click=HTMLAnchorElement.prototype.click,backup=RefAssets.backup;
+    HTMLAnchorElement.prototype.click=function(){};
+    RefAssets.backup=async()=>({assets:{},missing:[]});
+    try{
+      S.sinceBackup=150;S.lastBackup=123;S.screen='stats';
+      const exported=await exportMarkup();
+      const unchanged=S.sinceBackup===150&&S.lastBackup===123;
+      S.sinceBackup+=7;
+      if(typeof confirmBackupSaved==='function')confirmBackupSaved();
+      return {exported,unchanged,confirmed:S.sinceBackup===7&&S.lastBackup>123};
+    }finally{HTMLAnchorElement.prototype.click=click;RefAssets.backup=backup;}
+  });
+  ok('download requests retain the reminder and confirmation preserves later reviews',assurance.exported&&assurance.unchanged&&assurance.confirmed);
+
+  /* In a Safari tab the data has seven days: WebKit deletes all of a site's script-writable storage after seven days of
+     Safari use with no visit, the database copy included, and a Home Screen app is exempt. The data panel says so in a
+     tab and nowhere else. Read from the panel's own markup under each condition, then once on the engine as it is. */
+  head('in a Safari tab, the data panel says how to keep the data, and only there');
+  const tab=await page.evaluate(()=>{
+    const html=document.documentElement, was=html.classList.contains('installed');
+    const as=(vendor,installed)=>{
+      Object.defineProperty(navigator,'vendor',{configurable:true,get:()=>vendor});
+      html.classList.toggle('installed',installed);
+      const box=document.createElement('div'); box.innerHTML=buildStats();
+      const n=box.querySelector('#safariTabNote'); return n?n.textContent.replace(/\s+/g,' ').trim():null;
+    };
+    try{ return {tab:as('Apple Computer, Inc.',false),installed:as('Apple Computer, Inc.',true),other:as('Google Inc.',false)}; }
+    finally{ delete navigator.vendor; html.classList.toggle('installed',was); }
+  });
+  ok('in a Safari tab the panel says to add it to the Home Screen, why, and to export a backup',
+     !!tab.tab&&/Home Screen/.test(tab.tab)&&/seven days/.test(tab.tab)&&/exempt/.test(tab.tab)&&/backup/.test(tab.tab),String(tab.tab).slice(0,90));
+  ok('and says nothing of it in the installed Home Screen app, or in another browser',tab.installed===null&&tab.other===null,JSON.stringify({installed:tab.installed,other:tab.other}));
+  const shown=await page.evaluate(()=>{const box=document.createElement('div');box.innerHTML=buildStats();return !!box.querySelector('#safariTabNote');});
+  const webkit=engineName()==='webkit';
+  ok(`on this engine as it is (${engineName()}), the note is ${webkit?'shown':'absent'}`,shown===webkit,String(shown));
+
+  /* docs/ROADMAP.md, E2. The Progress screen carries no inline handler: each button names an action that the page's
+     ACTIONS table calls through one listener on the document (src/core/actions.js). This taps each button through the
+     real page, on a page of its own, with each function the table calls replaced by a recorder, so what is held is
+     that the tap reaches the function of that name with what the button carries; what export, import and the rest
+     then do is held above and in their own suites. tests/verify-statsscreen-pure.js holds what each button names. A
+     tap that cannot be made is that check's FAIL line. */
+  head('the Progress screen\'s buttons, tapped');
+  {
+    const context = await browser.newContext(), p = watch(await context.newPage(), events, 'progress-taps');
+    p.on('pageerror', e => { errors.push(e.message); ok('no uncaught page error on the Progress screen', false, e.message); });
+    await boot(p);
+    const NAMES = ['goHome', 'startQuiz', 'offlineDownload', 'offlineStop', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress'];
+    const set = await p.evaluate(names => {
+      window.__taps = [];
+      const ok = names.every(n => typeof window[n] === 'function');
+      for (const n of names) window[n] = function () { window.__taps.push([n].concat([].slice.call(arguments))); };
+      /* A function declared by the page is the global object's property, so the page's own code now finds the recorder
+         by that name: asked here through the page's own scope, not through window. */
+      const reached = names.every(n => (0, eval)(n) === window[n]);
+      window.offlineCapable = () => true; pendingBackupSave = { at: Date.now(), reviews: 0 };
+      S.screen = 'stats'; render();
+      return { ok, reached };
+    }, NAMES);
+    await p.waitForFunction(() => !!document.querySelector('.data-row') && !!document.querySelector('.off-btn') && !!document.querySelector('.mast'), null, { timeout: 15000 });
+    ok('each function the Progress screen\'s buttons call is the page\'s, and the page finds its recorder by that name', set.ok && set.reached, JSON.stringify(set));
+    const tap = async (sel, label) => { await p.evaluate(() => { window.__taps = []; });
+      const made = await p.locator(sel).first().click({ timeout: 5000 }).then(() => true, () => false);
+      return { made, taps: await p.evaluate(() => window.__taps), label }; };
+    const chapter = await p.evaluate(() => CHAPTERS[0]);
+    const rows = [
+      [await tap('.stats-head .sb-back'), [['goHome']], 'Home goes home'],
+      [await tap('.off-btn'), [['offlineDownload']], 'Download the rest downloads the figures'],
+      [await p.evaluate(() => { offlineJob.busy = true; }).then(() => tap('.off-btn')), [['offlineStop']], 'while a download runs, the same button stops it'],
+      [await tap('.mast'), [['startQuiz', chapter]], 'a chapter\'s ring starts a quiz in that chapter'],
+      [await tap('.data-row button:has-text("Export everything")'), [['exportMarkup']], 'Export everything exports'],
+      [await tap('.data-row button:has-text("I saved the backup file")'), [['confirmBackupSaved']], 'I saved the backup file confirms it'],
+      [await tap('.data-row button:has-text("Import backup")'), [['importMarkup']], 'Import backup imports'],
+      [await tap('.data-row button:has-text("Reset progress")'), [['resetProgress']], 'Reset progress resets'],
+    ];
+    await p.evaluate(() => { offlineJob.busy = false; });
+    for (const [r, want, label] of rows) ok(label + ', by one call and no other', r.made && JSON.stringify(r.taps) === JSON.stringify(want), (r.made ? '' : 'the tap could not be made; ') + JSON.stringify(r.taps));
+    await context.close();
   }
 
   await browser.close();

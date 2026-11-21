@@ -28,15 +28,18 @@
    contract; tests/verify-oracle.js compares the arithmetic against ts-fsrs):
      · whole local calendar days only: no sub-day learning or relearning
        steps, and no same-day short-term stability update;
-     · interval = stability rounded UP (fsrsIvl), never down or to nearest;
+     · round the interval at the requested retention UP before fuzz and the deadline;
      · interval capped at 36500 days, the same as upstream's default;
-     · no interval fuzz, so the same card and rating always give the same day;
+     · interval fuzz (S4) only when the caller names the card, never on Again,
+       and drawn from a hash of its id, review count and lapse count rather
+       than at random, so the same card, rating and day always give the same
+       due day; unnamed, there is no fuzz at all (fsrsFuzz);
      · Again never raises stability above what the card had
        (fsrsNextStabilityFail) — upstream's formula can;
      · a legacy SM-2 card is seeded from its old interval at difficulty 5
        (fsrsSeed); malformed stored fields fall back to first-review values;
      · a non-numeric rating counts as Good; out-of-range ones are clamped;
-     · target retention is fixed at 90%, and the weights are the population
+     · target retention defaults to 90% and rises toward a scheduled exam, and the weights are the population
        defaults, never fitted to a deck.
 
    Usage:
@@ -69,12 +72,15 @@ const FSRS_FACTOR = Math.pow(0.9, 1 / FSRS_DECAY) - 1;   // ≈0.234568, tuned s
 /* 2: the interval is capped at FSRS_MAX_IVL (36500 days). Cards stamped 1 were
    scheduled without the cap; they are left as they are, because no realistic
    card has reached it, and the next review reschedules any that did. */
-const SCHEDULER_VERSION = 2;
+/* 3: exam-aware retention and deadlines. Older cards keep their stored state;
+   readers apply the deadline until the next real review writes a schedule. */
+const SCHEDULER_VERSION = 3;
+const BASE_RETENTION = 0.90, EXAM_RETENTION = 0.95, RAMP_DAYS = 60;
 
 /* And the forcing function, because a version somebody has to remember to
    bump is a version that will be wrong. This hashes the numbers that actually
-   determine every interval the module produces (the weights, the decay and
-   the interval cap); verify-fsrs.js pins the
+   determine the model and exam retention curve (the weights, decay, interval
+   cap, retention endpoints and ramp length); verify-fsrs.js pins the
    result. Change a weight without bumping SCHEDULER_VERSION and the pin fails
    and says so — the same bargain SHELL_V makes by deriving itself from
    content.
@@ -82,7 +88,7 @@ const SCHEDULER_VERSION = 2;
    FNV-1a: this module runs in a browser with no crypto import, and the job is
    to notice a change, not to resist an adversary. */
 function fsrsParamsFingerprint() {
-  const src = FSRS_W.join(',') + '|' + FSRS_DECAY + '|' + FSRS_MAX_IVL;
+  const src = FSRS_W.join(',') + '|' + FSRS_DECAY + '|' + [FSRS_MAX_IVL, BASE_RETENTION, EXAM_RETENTION, RAMP_DAYS].join('|');
   let h = 0x811c9dc5;
   for (let i = 0; i < src.length; i++) { h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0; }
   return h.toString(16).padStart(8, '0');
@@ -217,8 +223,39 @@ function fsrsNextStabilityFail(difficulty, stability, retrievability) {
    device clock or an edited backup; the cap closes all of them. Only the
    interval is capped: stability is the model's state, and stays the model's. */
 const FSRS_MAX_IVL = 36500;
-function fsrsIvl(stability) {
-  return Math.min(FSRS_MAX_IVL, Math.max(1, Math.ceil(stability)));
+function intervalModifier(retention) {
+  return (Math.pow(retention, 1 / FSRS_DECAY) - 1) / FSRS_FACTOR;
+}
+function fsrsIvl(stability, retention = BASE_RETENTION) {
+  return Math.min(FSRS_MAX_IVL, Math.max(1, Math.ceil(stability * intervalModifier(retention))));
+}
+
+/* An active exam has a last full study day. On that day a review can only be
+   scheduled for the exam itself. Once exam day arrives new ratings use the
+   ordinary schedule, so completing a review never puts it back in today's queue. */
+function examWindow(today, examDate) {
+  if (!examDate || examDate < today) return null;
+  const eve = isoToLocalDate(examDate);
+  if (!eve || localDateToISO(eve) !== examDate) return null;
+  const days = daysBetween(today, examDate);
+  eve.setDate(eve.getDate() - 1);
+  const fraction = Math.max(0, Math.min(1, (RAMP_DAYS - days) / (RAMP_DAYS - 1)));
+  return { days, examDate, eve: localDateToISO(eve), finalFortnight: days > 0 && days <= 14,
+    retention: BASE_RETENTION + fraction * (EXAM_RETENTION - BASE_RETENTION) };
+}
+
+/* A date can be set, moved or cleared long after the card was scheduled.
+   Apply its deadline on read, without changing the card or its model state. */
+function scheduledDue(card, exam) {
+  if (!card || typeof card.due !== 'string') return null;
+  if (!exam || card.last >= exam.examDate) return card.due;
+  const deadline = card.last >= exam.eve ? exam.examDate : exam.eve;
+  return card.due < deadline ? card.due : deadline;
+}
+
+function isDue(card, today, exam) {
+  const day = scheduledDue(card, exam);
+  return day !== null && day <= today;
 }
 
 /* Seed a "previous state" for a card FSRS has never scheduled before —
@@ -248,9 +285,39 @@ function fsrsSeed(card) {
   return null;
 }
 
+/* SPREAD THE LOAD (roadmap S4). Without fuzz, cards learned on one day with one
+   rating come due on one day, and keep coming due together: a fortnight's new
+   cards turn into a single heavy morning. Upstream FSRS-5 (ts-fsrs) moves an
+   interval of 2.5 days or more to a random day within a range that widens with
+   it: one day, plus 15% of the part between 2.5 and 7 days, 10% between 7 and
+   20, and 5% beyond 20; never under 2 days, never past the cap, and never back
+   to or before the day of the review that set it. This takes the same range.
+   The draw is not random: it is a hash of the card's id, its review count and
+   its lapse count (FNV-1a), so a stored history is still a function of its
+   inputs, a preview shows the day the rating will give, and a test can replay
+   it. With no id there is no fuzz, which is what the oracle compares. */
+const FSRS_FUZZ_RANGES = [[2.5, 7, 0.15], [7, 20, 0.1], [20, Infinity, 0.05]];
+function fsrsFuzzFactor(key) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h / 4294967296;
+}
+function fsrsFuzz(ivl, elapsed, key) {
+  if (typeof key !== 'string' || !key || ivl < 2.5) return ivl;
+  let delta = 1;
+  for (const [start, end, factor] of FSRS_FUZZ_RANGES) delta += factor * Math.max(Math.min(ivl, end) - start, 0);
+  let lo = Math.max(2, Math.round(ivl - delta));
+  const hi = Math.min(Math.round(ivl + delta), FSRS_MAX_IVL);
+  if (ivl > elapsed) lo = Math.max(lo, elapsed + 1);
+  lo = Math.min(lo, hi);
+  return Math.min(Math.floor(fsrsFuzzFactor(key) * (hi - lo + 1) + lo), FSRS_MAX_IVL);
+}
+
 /* Pure — safe to call repeatedly (e.g. once per rating button, every render,
-   to preview each button's resulting interval) without mutating the card. */
-function fsrsUpdate(card, rating, today) {
+   to preview each button's resulting interval) without mutating the card.
+   `id`, when given, names the card and turns on the deterministic fuzz above;
+   a preview and the rating it previews must pass the same one. */
+function fsrsUpdate(card, rating, today, id, examDate) {
   /* Math.round(NaN) is NaN, and Math.max(1, Math.min(4, NaN)) is NaN too — the
      clamp does not clamp. A NaN rating then failed the `rating === 1` test,
      skipped the hard and easy multipliers, and came out the far side looking
@@ -267,13 +334,13 @@ function fsrsUpdate(card, rating, today) {
      thought today was yesterday. */
   const now = (today && isoToLocalDate(today)) ? today : todayISO();
   const prev = fsrsSeed(card);
-  let difficulty, stability;
+  let difficulty, stability, elapsed = 0;
   if (!prev) {
     difficulty = fsrsInitDifficulty(rating);
     stability = fsrsInitStability(rating);
   } else {
     const lastDay = (card && card.last) ? card.last : now;
-    const elapsed = daysBetween(lastDay, now);
+    elapsed = daysBetween(lastDay, now);
     const r = elapsed > 0 ? fsrsRetrievability(prev.stability, elapsed) : 1;
     difficulty = fsrsNextDifficulty(prev.difficulty, rating);
     stability = rating === 1
@@ -288,9 +355,17 @@ function fsrsUpdate(card, rating, today) {
      defensible, and above all finite. */
   if (!Number.isFinite(stability) || stability <= 0) stability = fsrsInitStability(rating);
   if (!Number.isFinite(difficulty)) difficulty = fsrsInitDifficulty(rating);
-  const ivl = fsrsIvl(stability);
   const reps = rating === 1 ? 0 : (card && card.reps || 0) + 1;
   const lapses = (card && card.lapses || 0) + (rating === 1 ? 1 : 0);
+  /* Again is not fuzzed: Again never makes a card more durable, and its day must not come later than the card's day
+     before it either (verify-fsrs reads both, named and unnamed); a lapse is not where the load piles up. A day the
+     fuzz set earlier than the card's stability rounded up would let an unfuzzed Again land after it (3 days, then 4),
+     so Again is also held to the card's own interval before it. */
+  const exam = examWindow(now, examDate);
+  let ivl = fsrsFuzz(fsrsIvl(stability, exam && exam.days > 0 ? exam.retention : BASE_RETENTION), Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
+    rating === 1 || id === undefined || id === null || id === '' ? null : `${id}:${reps}:${lapses}`);
+  if (rating === 1 && prev && card && Number.isInteger(card.ivl) && card.ivl >= 1) ivl = Math.min(ivl, card.ivl);
+  if (exam && exam.days > 0) ivl = Math.min(ivl, Math.max(1, exam.days - 1));
   /* setDate() rolls months and years for us and steps whole calendar days, so
      a DST boundary inside the interval does not shift the due date — which
      adding ivl * 86400000 milliseconds would. */
@@ -298,10 +373,25 @@ function fsrsUpdate(card, rating, today) {
   return { difficulty, stability, ivl, reps, lapses, due: localDateToISO(dueDate), last: now, sv: SCHEDULER_VERSION };
 }
 
+/* THE FIRST ANSWER TO A QUESTION IS A RETRIEVAL, and it makes the question's card.
+   A question answered in a quiz that has never been scheduled gets its first
+   card from that answer: wrong is Again; right but Guess or Unsure is Hard
+   (a lucky guess is not knowledge); right and Fairly sure or Certain is Good;
+   right with no confidence given (the prompt is optional) is Good. Never Easy:
+   one answer is one data point, and Easy's first interval is about two weeks.
+   Only the FIRST answer does this. A card that exists is moved by the review
+   queue alone, so drilling a chapter cannot rewrite schedules (recordAnswer in
+   the shell). cf is calib.js's band id: 0 Guess, 1 Unsure, 2 Fairly sure,
+   3 Certain; anything else counts as not given. */
+function fsrsFirstRating(ok, cf) {
+  if (!ok) return 1;
+  return cf === 0 || cf === 1 ? 2 : 3;
+}
+
 root.FSRS = {
-  update: fsrsUpdate, retrievability: fsrsRetrievability, seed: fsrsSeed,
+  update: fsrsUpdate, firstRating: fsrsFirstRating, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
-  ivl: fsrsIvl, daysBetween, todayISO, isoToLocalDate, localDateToISO,
+  examWindow, scheduledDue, isDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO,
   W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };

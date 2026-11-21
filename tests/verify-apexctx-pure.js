@@ -5,7 +5,8 @@
  *   node tests/verify-apexctx-pure.js
  *
  * No browser and no build. runTool(), flushNav(), aiCtx() and the helpers they call are cut out of app/systole.html
- * (tests/_appcut.js: each anchor once) and run in a vm over an invented world: one question keyed C, answered B, the review
+ * (tests/_appcut.js: each anchor once), with the page's own turn state (APEX_TURN, made by src/core/apexturn.js, and
+ * the old names the tools still say, which the page defines as views of it), and run in a vm over an invented world: one question keyed C, answered B, the review
  * log row the page writes for that answer, and the real src/core/apexsignals.js. Nothing here copies what the page does.
  *
  * What is measured, rather than assumed:
@@ -36,8 +37,13 @@ const safely = (fn, otherwise) => { try { return fn(); } catch (_) { return othe
 const APP = 'app/systole.html';
 const code = [
   cut(APP, 'const BANK=(window.SYSTOLE_BANK', '\n/* ═══════════ custom line-icon system'),
+  /* The turn's state, as the page makes it: the module (its slot is filled by cut), the one owner, and the views that
+     give the tools pendingNav, toolTrace and groundedTurnLeft. Until the state had an owner this world got
+     groundedTurnLeft from a `let` that happened to stand inside the next cut, and pendingNav from a plain property
+     below; neither was the page's. `window` is this world itself (world() below), as in the page. */
+  cut(APP, '@@SLOT[src:src/core/apexturn.js]@@', "pendingNav:apexTurnView('nav')});", { inclusive: true }),
   cut(APP, 'const STOP=new Set((', 'function refAdd(title,body,tags,source){'),
-  cut(APP, 'const TOOLS=[', '\nlet pendingNav=null, toolTrace=[];'),
+  cut(APP, 'const TOOLS=[', '\n/* pendingNav and toolTrace are views of the turn\'s state'),
   cut(APP, 'function apexAway(){', '\nfunction runTool(name,input){'),
   cut(APP, 'function runTool(name,input){', '\nfunction flushNav(){'),
   cut(APP, 'function flushNav(){', '\n/* ═══════ reference-note library UI'),
@@ -59,7 +65,7 @@ function world(over) {
   const calls = [];
   const ctx = {
     ALL_Q: [q, other], REF: [], Memory: { build: () => '' }, Vision: { figureContextLine: () => '' }, AI: { provider: 'gemini' },
-    AI_GROUNDED: !!over.grounded, window: {}, BANK_INFO: require('../scripts/which-bank.js').ACCSAP,
+    AI_GROUNDED: !!over.grounded, BANK_INFO: require('../scripts/which-bank.js').ACCSAP,
     document: { documentElement: { hasAttribute: () => !!over.block } },
     ApexSignals: require('../src/core/apexsignals.js').ApexSignals,
     LOG: over.log || [missRow()], QBYID: { ZZ_7: q, ZZ_8: other },
@@ -71,8 +77,9 @@ function world(over) {
     StudyPlan: { readiness: () => ({ text: 'INVENTED-READINESS: 41 days left, on track.' }) },
     planNow: m => ({ items: over.noPlan ? [] : [{ id: 'ZZ_7' }, { id: 'ZZ_8' }], text: over.noPlan ? 'Nothing to plan: there are no questions to draw from.' : m + ' min · 2 questions: 1 due for review, 1 new.' }),
     startPlan: m => calls.push(['plan', m]), jumpTo: id => calls.push(['open', id]), startQuiz: (ch, mode) => calls.push(['startQuiz', mode]),
-    startAdhocQuiz: qs => calls.push(['quiz', qs.map(x => x.id)]), shuf: a => a, pendingNav: null,
+    startAdhocQuiz: qs => calls.push(['quiz', qs.map(x => x.id)]), shuf: a => a,
   };
+  ctx.window = ctx;
   vm.createContext(ctx);
   vm.runInContext(code, ctx);
   ctx.AI_GROUNDED = !!over.grounded;
