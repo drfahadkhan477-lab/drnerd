@@ -154,7 +154,7 @@ head('the page hands the module what it has, and keeps what the markup names');
      module, in a context that has nothing else. */
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  const parts = [read('src/core/markdown.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), 'function refImgSrc(){ return ""; }',
+  const parts = [read('src/core/markdown.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), 'function refImgSrc(){ return ""; }', read('src/core/imagesize.js'), whole('const REF_IMG_SIZE=new Map();', '\n}'),
     whole('function md(t){', '\n'), whole('const REF_PAGE=', '\n'), whole('let refShown=REF_PAGE', '\n').replace(/^let /, 'var '), whole('let refEditing=null, refViewing=null;', '\n').replace(/^let /, 'var '),
     whole('function refCard(r){', '\n    </div>`;\n}'), whole('const refsNewestFirst=()=>', '\n'), whole('const refViewed=()=>', '\n'), read('src/app/refs.js'), whole('function buildRefs(){', '\n')].join('\n');
   const ctx = { REF: Array.from({ length: 30 }, (_, k) => ({ id: 'n' + k, title: k === 29 ? 'Amyloid <b>red</b> flags' : 'Note ' + k, tags: '', body: '### Head\nbody ' + k, ts: k, source: '' })) };

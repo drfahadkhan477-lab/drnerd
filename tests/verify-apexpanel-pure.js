@@ -220,7 +220,7 @@ ${' '.repeat(2)}`;
      reply being written, then one where the key is gone. */
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  const parts = [read('src/core/markdown.js'), read('src/core/vision.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function clip(s,n){', '\n'),
+  const parts = [read('src/core/markdown.js'), read('src/core/vision.js'), read('src/core/imagesize.js'), whole('const REF_IMG_SIZE=new Map();', '\n}'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function clip(s,n){', '\n'),
     whole('const PROVIDERS=[', '\n];'), whole('const MODELS={', '\n};'), whole('function cur(){', '\n'), whole('function apexHosted(){', '\n}'), whole('const APEX_ASK={', '\n};'), whole('const CHIPS=[', '\n];'),
     whole('function chatFor(q){', '\n'), whole('function apexLocalHtml(){', '\n}'), whole('function apexIsFull(){', '\n}'), whole('function visionBadge(q){', '\n}'), whole('const KEY_PREFIX=', '\n'), whole('function setupHtml(p=AI.provider){', '\n}'), whole('function md(t){', '\n'),
     whole('let apexFigMemo=', '\n'), read('src/app/apexpanel.js'), whole('const apexKit=()=>', 'icon});'), whole('function buildAI(){', '\n}'), whole('function apexFigsFor(', '\n}')].join('\n');

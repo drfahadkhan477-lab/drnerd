@@ -4286,8 +4286,19 @@ function refImgSrc(key){
   if(baked) return baked;
   return (typeof RefAssets!=='undefined'&&RefAssets.get(key))||'';
 }
+/* A figure's width and height, read from its own header (src/core/imagesize.js) once for each picture a key names:
+   a figure written with its size keeps its room while it loads, and a card does not grow under a finger. */
+@@SLOT[src:src/core/imagesize.js]@@
+const REF_IMG_SIZE=new Map();
+function refImgSize(key,src){
+  const had=REF_IMG_SIZE.get(key);
+  if(had&&had.src===src) return had.z;
+  const z=ImageSize.of(src);
+  REF_IMG_SIZE.set(key,{src,z});
+  return z;
+}
 @@SLOT[src:src/core/markdown.js]@@
-function md(t){ return Markdown.render(t,e,refImgSrc); }
+function md(t){ return Markdown.render(t,e,refImgSrc,refImgSize); }
 function apexIsFull(){
   const sh=document.getElementById('shell');
   return !!sh && sh.classList.contains('ai-full');
