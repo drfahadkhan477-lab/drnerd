@@ -575,6 +575,13 @@ memory and retrieved notes. Order it so the stable part (prompt, profile, memory
 comes first and retrieval last, and both providers can cache the prefix. Claim a
 saving only from the cached-token counts the responses report. *Opus.*
 
+*Gemini:* #410 moved the profile and study signals before memory and
+question context. Explain-only also puts its instructions before the
+context, so retrieved notes end the system instruction in both modes.
+Memory and notes keep the per-turn fence, which changes on each turn.
+#400 reports cached-token counts from saved exchanges. The saved sample
+omitted those counts, so provider savings remain unmeasured.
+
 **A3 — Measure live answers.** `tests/fixtures/apex-grounding/cases.json` and
 `scripts/prepare-apex-eval.js` exist, and `docs/APEX-QUALITY.md` describes the
 half that does not. Build the runner that sends the prepared requests to a
@@ -583,6 +590,10 @@ judge using the existing rubric, and a results file recording model id, date,
 answer and a verdict per criterion, where unmeasured stays unmeasured. Keep it
 apart from suite counts. *Fable* to design the judge and the adversarial cases
 (conflicting notes, late exceptions, insufficient evidence); *Sonnet* to run it.
+
+*Implemented in #399:* the synthetic runner has a provider request limit,
+and the offline scorer records each claim's verdict. See
+[APEX-QUALITY.md](APEX-QUALITY.md) for the rubric and replay commands.
 
 **A4 — Check citations in the app.** After a grounded answer, a small-model pass
 compares each sentence that cites a note with the fenced excerpt and marks the

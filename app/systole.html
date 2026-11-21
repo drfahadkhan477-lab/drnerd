@@ -4234,8 +4234,9 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
     Vision.withFigures(wire, q, (typeof IMGS!=='undefined'?IMGS[q&&q.id]:null), AI.provider),
     refImagesForHits(lastHits), AI.provider));
   /* The request's shape is the wire's (src/core/apexwire.js); its words, its tools and its ceiling are the page's. */
+  const explainInstruction=explainOnly?'\n\nExplain the supplied context concisely. No tools are available in this mode. Do not claim to search, save or change study state. If the supplied evidence is insufficient, say so.':'';
   const requestBody=ApexWire.gemini.request(
-      systemPrompt()+'\n\n'+aiCtx(q)+(extra||'')+(explainOnly?'\nExplain the supplied context concisely. No tools are available in this mode. Do not claim to search, save or change study state. If the supplied evidence is insufficient, say so.':''),
+      systemPrompt()+explainInstruction+'\n\n'+aiCtx(q)+(extra||''),
       explainOnly?null:TOOLS, contents, 2000);
   const cacheKey=explainOnly?await explanationKey(requestBody):null;
   if(aiAbort.signal.aborted) throw new DOMException('Stopped','AbortError');
