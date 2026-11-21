@@ -448,10 +448,25 @@ contracts and together cost about 0.5% of measured runner time. Focus the
 next measurement on WebKit shard balance and the browser suites that drove
 reruns. The earlier `verify-homepager` Brain-turn failure was addressed by
 [#357](https://github.com/drfahadkhan477-lab/drnerd/pull/357).
-[#397](https://github.com/drfahadkhan477-lab/drnerd/pull/397) estimates a
-shorter longest WebKit shard. Compare elapsed time and summed runner-minutes
-after it lands, since moving work between shards can reduce the former
-while leaving the latter similar.
+*WebKit follow-up after #397 merged:* two completed master push runs on each
+side of the change ran the shared browser workflow and passed all WebKit shards
+on attempt 1. The median slowest shard went from 15.25 to 11.72 minutes. The
+median elapsed time from the first WebKit shard's start to the last one's
+completion went from 15.80 to 11.72 minutes. The median sum of shard
+runner-minutes went from 39.52 to 40.37. The push at the merge commit was
+cancelled before its WebKit shards ran. One later workflow failed in Chromium
+and is included because its WebKit jobs all completed successfully.
+[Before](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44857423826),
+[before](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44861112392),
+[after](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44861285980),
+[after](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44864440401).
+
+Two later PR runs with four green first-attempt WebKit shards took 13.73 and
+16.50 elapsed minutes, with 40.68 and 45.32 runner-minutes. The small master
+sample supports keeping the weights. The PR timings show that the slowest
+shard still varies across runs, so collect more data before retuning.
+[#406 run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44862935819),
+[#408 run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44866313083).
 
 **E5 — Measure battery on the iPad, then set a frame budget.** The discovery doc
 showed the container cannot measure it. Add a hidden diagnostics line that counts
