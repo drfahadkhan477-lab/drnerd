@@ -70,12 +70,13 @@ function retention(srs, today){
 }
 /* how many cards come due on each of the next 7 days — so exam week doesn't
    ambush you with a queue you never saw coming. */
-function forecast(srs, today){
+function forecast(srs, today, examDate){
+  const exam=root.FSRS.examWindow(today,examDate);
   const out=[];
   for(let i=0;i<7;i++){
     const d=day(today,i);
     let n=0;
-    for(const id in srs){ if(srs[id].due===d) n++; }
+    for(const id in srs){ if(root.FSRS.scheduledDue(srs[id],exam)===d) n++; }
     out.push({d,n});
   }
   return out;

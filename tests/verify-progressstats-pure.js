@@ -123,7 +123,7 @@ head('the page\'s five names are the calls into this');
   const lines = [
     'function masteryFor(ch){ return ProgressStats.mastery(POOL,S.srs,S.practice,ch,todayISO()); }',
     'function avgRetention(){ return ProgressStats.retention(S.srs,todayISO()); }',
-    'function forecast7(){ return ProgressStats.forecast(S.srs,todayISO()); }',
+    'function forecast7(){ return ProgressStats.forecast(S.srs,todayISO(),S.examDate); }',
     'function startedCount(){ return ProgressStats.started(POOL,S.srs,S.practice); }',
     'function last30(){ return ProgressStats.last30(S.daily,todayISO()); }',
   ];
