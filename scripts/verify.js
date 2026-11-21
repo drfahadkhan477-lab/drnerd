@@ -688,8 +688,8 @@ const { limitFor, sectionClock, slowest, stop, watch, spawnLimited, fmtMin } = r
    does. Everything else GitHub runs on every pull request, on the synthetic
    bank or with no build at all, which makes `--tag laptop` the short routine
    run and the full registry the occasional one that writes the record. */
-const CI_SUITES = require(path.join(ROOT, 'scripts', 'test-public.js'))
-  .ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'));
+const { ciSuites, readShardWorkflow } = require(path.join(ROOT, 'scripts', 'test-public.js'));
+const CI_SUITES = ciSuites(fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8'), readShardWorkflow(ROOT));
 const tagsFor = n => tagsOf(n).concat(SERIAL.has(n) ? ['serial'] : [], CI_SUITES.has(n) ? [] : ['laptop']);
 if (flag('--list')) {
   console.log('\nSuites, their tags, and what each defends:\n');
