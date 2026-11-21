@@ -147,9 +147,10 @@ async function screens(page) {
     // study content; keep the real app chrome and every branding assertion.
     await s.page.evaluate(fixture => {
       for (const q of ALL_Q) {
-        q.s = fixture.s; q.ex = fixture.ex; q.ci = fixture.ci;
+        q.s = fixture.s; q.ex = fixture.ex; q.ci = fixture.ci; q.ch = 'Reviewed chapter';
         q.o = fixture.o.map(o => { const copy = { ...o }; delete copy.p; return copy; });
       }
+      CHAPTERS.splice(0, CHAPTERS.length, 'Reviewed chapter');
       REF = [{ id: 'tested-study-note', title: 'Reviewed study note',
         source: 'Tested Bank', text: fixture.ex, tags: [] }];
       pearlCurrent = null;
