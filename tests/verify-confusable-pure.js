@@ -156,10 +156,12 @@ head('the page: a review keeps every due card, and the mock block is arranged');
   ok('restrictive cardiomyopathy straight after constrictive pericarditis, and HCM after AS, a card met (none here) before one never met, in the bank\'s order',
      dealt.indexOf('c1') === dealt.indexOf('p1') + 1 && dealt.indexOf('v2') === dealt.indexOf('v1') + 1, J(dealt));
   ok('and each question once', new Set(dealt).size === dealt.length, J(dealt));
-  ok('every due card, asked on its own (Home\'s review of them all), is dealt through it too: each once, with its partners, each after its question',
+  ok('every due card, asked on its own, is dealt through it too: each once, with its partners, each after its question',
      !err && J(all.slice().sort()) === J(['c1', 'p1', 'p2', 'p4', 'v1', 'v2']) && all.indexOf('c1') === all.indexOf('p1') + 1, err || J(all));
-  ok('the review the page starts by itself is reviewDeck() over the queue, and Home\'s review of every card due is reviewDeck() over them',
-     count("else if(mode==='due') qs=deck||reviewDeck(reviewQueue(20));") === 1 && count("reviewAllDue:()=>startQuiz(null,'due',reviewDeck(dueQuestions())),") === 1);
+  /* Home's review of every card due went with its session strip (the owner's choice, November 2026); Brain's Review is
+     the review the page starts by itself. */
+  ok('the review the page starts by itself is reviewDeck() over the queue, and Home\'s review of every card due is gone',
+     count("else if(mode==='due') qs=deck||reviewDeck(reviewQueue(20));") === 1 && count('reviewAllDue') === 0);
   ok('and startQuiz() does not shuffle a review afterwards, which would part each pair', count("if(!deck&&mode!=='due') qs=shuf(qs);") === 1 && count('if(!deck) qs=shuf(qs);') === 0);
   ok('the mock block is dealt by MockExam with Confusable.arrange as its order', count('const ids=MockExam.build({pool:POOL,size:mockSize(),chapter:ch,seen:mockSeen,arrange:qs=>Confusable.arrange(qs)});') === 1);
 }

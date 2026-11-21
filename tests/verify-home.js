@@ -123,17 +123,15 @@ onDeath(() => ({ section, checks: passed + failed, errors,
      `drawn ${prog.mastDrawn} of 100, number ${prog.mid}`);
   ok('and so does the coverage ring', Math.abs(prog.seenDrawn - prog.seenFrac) < 1, `drawn ${prog.seenDrawn}, ${prog.seenFrac}%`);
   ok('the gauge states both figures in words', /mastered/i.test(prog.label) && /seen/i.test(prog.label), prog.label);
+  /* The session strip and its meter are gone (the owner's choice, November 2026): the bank's figures are the hero's line,
+     the questions in the bank, how much of it is started, and how many were answered today. */
   const homeProgress = await page.evaluate(() => {
-    const meter=document.querySelector('.observatory-meter');
-    const numbers=[...document.querySelectorAll('.observatory-stats strong')].map(el=>parseInt(el.textContent,10));
+    const numbers=[...document.querySelectorAll('#homePage0 .hero-line .hl-item b')].map(el=>parseInt(el.textContent,10));
     const seen=startedCount(), percentage=TOTAL_Q?Math.min(100,Math.round(seen/TOTAL_Q*100)):0;
-    return !!meter && Number(meter.getAttribute('aria-valuenow'))===seen &&
-      Number(meter.getAttribute('aria-valuemax'))===Math.max(1,TOTAL_Q) &&
-      meter.querySelector('span').style.width===percentage+'%' &&
-      JSON.stringify(numbers)===JSON.stringify([percentage,(S.daily[todayISO()]||{a:0}).a,dueQuestions().length]);
+    return {numbers, want:[TOTAL_Q,percentage,(S.daily[todayISO()]||{a:0}).a], strip:!!document.querySelector('.atlas-session,.observatory-meter')};
   });
   const metricEdges = await page.evaluate(() => {
-    const srs=S.srs, practice=S.practice, daily=S.daily, paused=atlasPaused;
+    const srs=S.srs, practice=S.practice, daily=S.daily;
     try {
       const first=POOL[0].id, foreign='__audit_absent_question__';
       if(POOL.some(q=>q.id===foreign))throw new Error('audit id must be absent');
@@ -141,21 +139,15 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       const coverage=startedCount()===1 && Object.hasOwn(S.practice,foreign);
       S.daily={[todayISO()]:{a:7,c:4,r:2}};
       const detached=document.createElement('div');detached.innerHTML=buildHome();
-      const today=detached.querySelector('.observatory-stats>div:nth-child(2)');
-      const label=today.querySelector('span').textContent==='Answers today' && today.querySelector('strong').textContent==='7';
-      if(!atlasPaused)toggleAtlasMotion();
-      const fill=document.querySelector('.observatory-meter>span');
-      fill.style.animation='none';void fill.offsetWidth;fill.style.animation='';
-      const css=getComputedStyle(fill);
-      const motion=css.animationName==='none'||css.animationPlayState==='paused';
-      return {coverage,label,motion};
+      const today=detached.querySelectorAll('.hero-line .hl-item')[2];
+      const label=!!today && today.textContent.trim()==='7 today';
+      return {coverage,label};
     } finally {
       S.srs=srs;S.practice=practice;S.daily=daily;
-      if(atlasPaused!==paused)toggleAtlasMotion();
     }
   });
-  ok('Home metrics count current-bank answers, label them accurately and respect pause',
-    homeProgress && metricEdges.coverage && metricEdges.label && metricEdges.motion,JSON.stringify(metricEdges));
+  ok('Home\'s line counts the bank, what of it is started and today\'s answers, and no strip repeats them',
+    JSON.stringify(homeProgress.numbers)===JSON.stringify(homeProgress.want) && !homeProgress.strip && metricEdges.coverage && metricEdges.label,JSON.stringify({homeProgress,metricEdges}));
 
   head('it fills the display, like an app');
   /* Added to the Home Screen, iPadOS gives a web app the whole screen and draws
@@ -510,9 +502,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const port = await at(1024, 1366);
     ok('portrait still stacks, and still fits',
        port.over <= 0 && port.pearl.x < port.hero.x + 40, `pearl x${port.pearl.x}`);
-    /* The pages run the full width now, and Home's column is the fixed measure (.home-page-in, 900px). */
-    ok('and its column reserves space for the navigation rail',
-       !!port.col && port.col.w === port.vw - 128, port.col ? `${port.col.w}px` : 'no column');
+    /* No rail or bar stands beside the pages (the owner's choice, November 2026): Home's column is the screen's width
+       less the page's own padding, 24px a side. */
+    ok('and its column runs the screen\'s width, with no rail to make room for',
+       !!port.col && port.col.w === port.vw - 48, port.col ? `${port.col.w}px of ${port.vw}` : 'no column');
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem.
@@ -639,11 +632,12 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     }
   }
 
-  head('on a phone, the Apex button stands beside the tab bar, never over the pages');
-  /* Lifted above the bar, the button stood over the page's first lines on arrival, and with some pearls over the
+  head('on a phone, the Apex button stands under the pages, never over them');
+  /* Lifted above the tab bar, the button stood over the page's first lines on arrival, and with some pearls over the
      pearl's key statement. Which words it covered depended on the pearl and on the scroll, so the same reasoning as
      the check above applies: assert the property that makes covering impossible, not that today's page happened to be
-     clear. The pages scroll inside #homePager; a button whose box never meets the pager's box covers none of them. */
+     clear. The pages scroll inside #homePager; a button whose box never meets the pager's box covers none of them. The
+     tab bar is gone (the owner's choice, November 2026), and the button keeps a band of its own where it stood. */
   {
     const prev = page.viewportSize();
     const rows = [];
@@ -658,20 +652,19 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       rows.push(await page.evaluate(() => {
         const r = e => e.getBoundingClientRect(), f = r(document.getElementById('aiFab')), p = r(document.getElementById('homePager'));
         const meet = (a, b) => a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
-        const bar = r(document.querySelector('.home-tabs')), tabs = [...document.querySelectorAll('.home-tab')].map(r);
         return { vw: innerWidth, vh: innerHeight, shown: getComputedStyle(document.getElementById('aiFab')).display !== 'none',
-          overPages: meet(f, p), onTab: tabs.some(t => meet(f, t)), inView: f.left >= 0 && f.right <= innerWidth && f.bottom <= innerHeight,
-          rowShared: f.top < bar.bottom && f.bottom > bar.top, size: [Math.round(f.width), Math.round(f.height)],
-          tabW: Math.round(Math.min(...tabs.map(t => t.width))), name: document.getElementById('aiFab').getAttribute('aria-label') };
+          overPages: meet(f, p), inView: f.left >= 0 && f.right <= innerWidth && f.bottom <= innerHeight,
+          under: f.top >= p.bottom, scrolls: document.documentElement.scrollHeight - innerHeight,
+          size: [Math.round(f.width), Math.round(f.height)], name: document.getElementById('aiFab').getAttribute('aria-label') };
       }));
     }
     if (prev) await resized(page, prev.width, prev.height);
     for (const g of rows) {
       const at = `${g.vw}x${g.vh}`;
       ok(`${at}: the Apex button is shown and its box never meets the pages'`, g.shown && !g.overPages, JSON.stringify(g));
-      ok(`${at}: it stands in the tab bar's row, clear of every tab, on screen`, g.rowShared && !g.onTab && g.inView, JSON.stringify(g));
-      ok(`${at}: it stays a touch target with a name, and the tabs keep theirs`,
-         g.size[0] >= 44 && g.size[1] >= 44 && /Apex/.test(g.name || '') && g.tabW >= 44, JSON.stringify(g));
+      ok(`${at}: it stands under the pages, on screen, and the screen does not scroll`, g.under && g.inView && g.scrolls <= 0, JSON.stringify(g));
+      ok(`${at}: it stays a touch target with a name`,
+         g.size[0] >= 44 && g.size[1] >= 44 && /Apex/.test(g.name || ''), JSON.stringify(g));
     }
   }
 
@@ -765,25 +758,14 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       if (went) await quiet(page);
       return { went, said };
     };
-    const was = await page.evaluate(() => ({ atlas3D, atlasPaused, pearlAsWritten, heroCutaway }));
+    const was = await page.evaluate(() => ({ atlasPaused, heroCutaway }));
     /* A headless engine draws the 3D heart in software: measured here, a frame every 200 ms with it live and every 300 ms
-       cut away, against 33 ms with the illustration, and a click waits on frames. So every tap here is made with the
-       illustration up, which draws the same buttons; the explore button's is the one that turns the 3D heart on. The
-       heart is put back as it was at the end. */
-    await page.evaluate(() => { if (atlas3D) toggleAtlas3D(); });
-
-    let t = await tap(0, '#atlasExplore', () => atlas3D === true);
-    ok('the explore button turns the illustration over to the 3D heart', t.went, t.said);
-    await page.evaluate(() => { if (atlas3D) toggleAtlas3D(); });
-    t = await tap(0, '#atlasLandingPause', w => atlasPaused === !w, was.atlasPaused);
-    ok('the heart\'s pause on the landing pauses it, or plays it', t.went, t.said);
-    /* The menu is the live heart's, so the heart is shown for it, and paused first: paused, it draws a frame every 17 ms
-       (measured), so the taps on its menu are not waiting on it. Chambers and flow while it is paused, then the menu's
-       motion button, which plays it. */
-    await page.evaluate(() => { if (atlasPaused) toggleAtlasMotion(); if (!atlas3D) toggleAtlas3D(); });
-    await toPage(0);
+       cut away, against 17 ms paused, and a click waits on frames. The illustration and its switch are gone (the owner's
+       choice, November 2026), so every tap here is made with the heart paused, which stops its drawing; its motion is
+       put back as it was at the end. The menu's motion button is the one tap that plays it, and it is paused again after. */
     await page.evaluate(() => { if (!atlasPaused) toggleAtlasMotion(); });
-    await quiet(page);
+    let t;
+    await toPage(0);
     await page.locator('#heroHeartBtn').click({ timeout: 5000 }).catch(() => {});
     await page.waitForFunction(() => !document.getElementById('heroMenu').hidden, null, { timeout: 5000, polling: 40 }).catch(() => {});
     await page.evaluate(() => { window.__mech = 0; const real = toggleHeroMechanics; toggleHeroMechanics = function () { window.__mech++; return real.apply(this, arguments); }; window.__realMech = real; });
@@ -794,14 +776,12 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const menuTapped = await page.locator('#atlasPause').click({ timeout: 5000 }).then(() => true, () => false);
     const menuPlayed = menuTapped && await page.waitForFunction(() => atlasPaused === false, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
     ok('the menu\'s motion button plays the paused heart', menuPlayed, menuTapped ? String(await page.evaluate(() => atlasPaused)) : 'the button could not be tapped');
-    await page.evaluate(() => { if (atlasPaused) toggleAtlasMotion(); toggleHeroMenu(false); if (atlas3D) toggleAtlas3D(); });
+    await page.evaluate(() => { if (!atlasPaused) toggleAtlasMotion(); toggleHeroMenu(false); });
 
+    /* The pearl keeps one way out of it, Read note; Recall, Paragraph and Source are gone with the hero's switch. */
     const pearl = await page.evaluate(() => !!pearlNow());
-    t = pearl ? await tap(0, '#pearlReading', w => pearlAsWritten === !w, was.pearlAsWritten) : { went: false, said: 'no pearl to read' };
-    ok('the pearl\'s Paragraph reads the statement as written, or as steps', t.went, t.said);
-    t = pearl ? await tap(0, '#pearlSourceToggle', () => document.getElementById('pearlSource') && !document.getElementById('pearlSource').hidden) : { went: false, said: 'no pearl to read' };
-    ok('and its Source shows where the pearl is from', t.went, t.said);
-    await page.evaluate(() => { const s = document.getElementById('pearlSource'); if (s && !s.hidden) pearlSourceToggle(); if (pearlAsWritten) pearlReading(); });
+    t = pearl ? await tap(0, '#pearlCard .pearl-open', () => S.screen === 'refs') : { went: false, said: 'no pearl to read' };
+    ok('the pearl\'s Read note opens the notes', t.went, t.said);
 
     /* The scrolls are SCROLL_ACTIONS', which listens as a scroll goes down and acts only for the element that scrolled. The
        page's own pearlScroll() and homePagerScroll() are counted where the table looks them up: a scroll of the pearl's
@@ -839,20 +819,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     await page.evaluate(() => { pearlScroll = window.__realScrolls.pearlScroll; homePagerScroll = window.__realScrolls.homePagerScroll; const w = document.getElementById('pearlBody'); if (w) w.style.maxHeight = ''; homeGo(0); });
     await quiet(page);
 
-    /* The strip under the hero: Review with cards due, Continue with a history and none due, Start with nothing. */
+    /* Home's session strip, with its Review, Continue and Start, is gone (the owner's choice, November 2026). */
     const kept = await page.evaluate(() => JSON.stringify({ srs: S.srs, practice: S.practice }));
-    await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); const due = FSRS.localDateToISO(d);
-      S.srs = {}; POOL.slice(0, 4).forEach(q => { S.srs[q.id] = { difficulty: 5, stability: 3, ivl: 3, reps: 1, lapses: 0, last: due, due, sv: 1 }; }); clearResume(null, 'due'); });
-    const dueIds = await page.evaluate(() => dueQuestions().map(q => q.id).sort().join(' '));
-    t = await tap(0, '.atlas-session button', () => S.screen === 'quiz' && S.mode === 'due');
-    const dealt = await page.evaluate(() => (S.questions || []).map(q => q.id).sort().join(' '));
-    ok('with cards due, the strip\'s Review deals every card due, and only those', t.went && dueIds.split(' ').length === 4 && dealt === dueIds, t.said + ' · ' + dealt);
-    await page.evaluate(() => { Object.keys(S.srs).forEach(id => { S.srs[id].due = '2099-01-01'; }); });
-    t = await tap(0, '.atlas-session button', () => S.screen === 'study');
-    ok('with a history and none due, its Continue opens Chapters', t.went, t.said);
     await page.evaluate(() => { S.srs = {}; S.practice = {}; });
-    t = await tap(0, '.atlas-session button', () => S.screen === 'quiz' && S.mode === 'due');
-    ok('with nothing yet, its Start begins the twenty-minute plan', t.went, t.said);
+    ok('Home has no session strip to tap', await page.evaluate(() => !document.querySelector('.atlas-session')));
 
     /* Someone new: no cards and not welcomed, so the greeting is drawn, and Got it puts it away for good. */
     await page.evaluate(() => { try { localStorage.removeItem('accsap12.welcomed'); } catch (_) {} LOG.length = 0; });
@@ -860,10 +830,14 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     ok('Got it puts the greeting away, and keeps it away', t.went, t.said);
     await page.evaluate(k => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); }, kept);
 
-    t = await tap(2, '#homeTab1', () => homePage === 1);
-    ok('the Brain tab goes to the Brain page', t.went, t.said);
-    t = await tap(1, '#homeTab0', () => homePage === 0);
-    ok('and the Home tab back to Home', t.went, t.said);
+    t = await tap(0, '#homePage0 .home-door[data-page="1"]', () => homePage === 1);
+    ok('Home\'s Brain door goes to the Brain page', t.went, t.said);
+    t = await tap(1, '#homePage1 .home-back', () => homePage === 0);
+    ok('and Brain\'s Home button back to Home', t.went, t.said);
+    t = await tap(0, '#homePage0 .home-door[data-page="2"]', () => homePage === 2);
+    ok('Home\'s Labs door goes to the Labs page', t.went, t.said);
+    t = await tap(2, '#homePage2 .home-back', () => homePage === 0);
+    ok('and Labs\' Home button back to Home', t.went, t.said);
 
     /* With no notes to draw a pearl from, the intro is shown, and its button opens the notes. */
     const pearls = await page.evaluate(() => { const was = pearlCache; pearlCache = []; pearlCurrent = null; window.__pearls = was; return Array.isArray(was) ? was.length : 0; });
@@ -900,7 +874,7 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const entered = want && await page.waitForFunction(ch => S.screen === 'quiz' && S.chapter === ch, want, { timeout: 8000, polling: 40 }).then(() => true, () => false);
     const starts = want ? await page.evaluate(() => { const n = window.__starts; startQuiz = window.__realStart; return n; }) : 0;
     ok('and Enter practises that neuron\'s chapter, once', entered && starts === 1, want ? JSON.stringify({ screen: await page.evaluate(() => S.screen), starts, wanted: want }) : 'no neuron moved to');
-    await page.evaluate(([k, w]) => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); if (atlas3D !== w) toggleAtlas3D(); goHome(); }, [kept, was.atlas3D]);
+    await page.evaluate(([k, w]) => { const o = JSON.parse(k); S.srs = o.srs; S.practice = o.practice; save(); if (atlasPaused !== w) toggleAtlasMotion(); goHome(); }, [kept, was.atlasPaused]);
     await onScreen(page, 'home', { marker: '#homePage0' });
   }
 
