@@ -265,6 +265,13 @@ head before it asks whether there is a key, puts the markup in, wires the chat
 and the avatar, and restores what it read. The figures from the notes drawn on
 are found by the page's `apexFigsFor()`, which keeps the last answer
 (`apexFigMemo`), and handed in.
+Then the map's first group again, the leaves, a feature at a time: the notes
+importer's parsers (`src/core/refimport.js`, `RefImport`, held by
+`verify-refimport-pure`): a file into notes (`parse`), its front matter and its
+sections, the file an image link names, and a note's figures, which were
+`parseImportText()`, `stripFrontmatter()`, `splitSections()`,
+`refResolveAsset()` and `extractRefImages()` and stay those names as one line
+each. `refAbsorbImages()`, which stores the bytes, stays the page's.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
