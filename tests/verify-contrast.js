@@ -19,7 +19,7 @@
  * the twelve theme states verify-ink uses, with motion reduced, so an animated glow is read where it rests.
  * WHAT IT LEAVES OUT: text a reader is not given (hidden, screen-reader-only, aria-hidden, on a disabled control), a text
  * with no letter or digit in it (a separator dot), text behind an open modal dialog or inside [inert] (inactive), and
- * text a reader cannot see where it is: cut away by an ancestor that clips its overflow, under a frosted bar or a sheet
+ * text a reader cannot see where it is: cut away by a box that clips overflow, under a frosted bar or a sheet
  * with a solid ground, or under any element whose pixels did not change when the text was taken away. A text under a
  * transparent element is read. How many were set aside, and why, is printed.
  * Text drawn inside a canvas is not a text node and is not read; a canvas under a text is read, as the pixels it painted.
@@ -104,13 +104,15 @@ const COLLECT = () => {
     const c = parse(cs.color); if (!c || c[3] * op < 0.05) continue;
     const rg = document.createRange(); rg.selectNodeContents(n);
     for (const q of rg.getClientRects()) {
-      /* What a reader is shown of the box: cut to the viewport and to every ancestor that clips its overflow (a fixed
-         box escapes the ones above it). A box cut away entirely is not shown, and not read. */
+      /* A Range can report the full line even when its own element truncates it with an ellipsis. Clip to that
+         element as well as its ancestors so the hidden part does not sample a neighbour's background. */
       let x0 = Math.max(0, q.left), y0 = Math.max(0, q.top), x1 = Math.min(innerWidth, q.right), y1 = Math.min(innerHeight, q.bottom);
       for (let a = el; a && a !== document.documentElement; a = a.parentElement) {
         const as = getComputedStyle(a);
-        if (a !== el && (as.overflowX !== 'visible' || as.overflowY !== 'visible')) {
-          const b = a.getBoundingClientRect(); x0 = Math.max(x0, b.left); y0 = Math.max(y0, b.top); x1 = Math.min(x1, b.right); y1 = Math.min(y1, b.bottom);
+        if (as.overflowX !== 'visible' || as.overflowY !== 'visible') {
+          const b = a.getBoundingClientRect();
+          if (as.overflowX !== 'visible') { x0 = Math.max(x0, b.left); x1 = Math.min(x1, b.right); }
+          if (as.overflowY !== 'visible') { y0 = Math.max(y0, b.top); y1 = Math.min(y1, b.bottom); }
         }
         if (as.position === 'fixed') break;
       }
@@ -238,6 +240,13 @@ const READ = async ({ png, shown, boxes }) => {
   const tablet = await open({ width: 1180, height: 820 }, '1180px', false);
   const wide = await sweep(tablet, SCREENS);
   report(SCREENS, wide, '');
+  await tablet.blank.setContent('<div id="contrastClip" style="width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+    + 'An invented chapter name much wider than its caption</div>');
+  const clipBoxes = (await tablet.blank.evaluate(COLLECT)).boxes.filter(b => b.where.startsWith('#contrastClip'));
+  const clip = await tablet.blank.locator('#contrastClip').evaluate(el => {
+    const { left, right } = el.getBoundingClientRect();
+    return { left, right, overflow: el.scrollWidth - el.clientWidth };
+  });
   await tablet.ctx.close();
 
   head('and on a phone (390x844, touch)');
@@ -256,6 +265,9 @@ const READ = async ({ png, shown, boxes }) => {
   ok('every screen gave it text to read (at least five boxes) in each state on its own, on both devices', !wide.thin.length && !narrow.thin.length,
     wide.thin.length || narrow.thin.length ? [...wide.thin, ...narrow.thin.map(t => t + ' on a phone')].slice(0, 4).join('; ') : JSON.stringify(wide.counts) + ' ' + JSON.stringify(narrow.counts));
   ok('and taking the text away changed the photograph, so no text was read against itself', wide.hiddenWorked && narrow.hiddenWorked);
+  ok('a truncated caption is measured within its own clipping box', clip.overflow > 0 && clipBoxes.length > 0
+    && clipBoxes.every(b => b.x >= clip.left && b.x + b.w <= clip.right),
+    `visible x=${clip.left}–${clip.right}, samples end at ${clipBoxes.map(b => b.x + b.w).join(', ')}`);
   /* A text set aside as covered is not read at all, so an element laid over the whole screen would empty the sweep. */
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0), under = d => Object.entries(d.skipped.under).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k || '(nothing)'} ${n}`).join(', ');
   ok('fewer text boxes were set aside as scrolled out of sight or covered than were read, on each device',
