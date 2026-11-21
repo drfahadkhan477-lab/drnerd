@@ -325,7 +325,7 @@ const BK_READS = new Set(), BS_READS = new Set(), ART_READS = new Set(), INFO_RE
   const artOut = run(() => M.brainArtHtml(watched({ 'Valves & <b>': '#112233' }, none(), 'CH_COLORS'), watched(artKit({ brainLayoutNow: () => wL, brainSel: 2 }), ART_READS, 'kit')));
   const infoOut = run(() => M.brainInfoHtml(watched({ brainArtL: watched({ sig: 'x', L: wL }, none(), 'brainArtL'), brainSel: 0, BRAIN_STATE_LABEL: LABEL, e: String, icon: () => '' }, INFO_READS, 'kit')));
   const names = s => [...s].sort().join(' ');
-  ok('the Brain page reads, of the state, the cards scheduled and practised, and nothing else', !page.startsWith('THREW') && names(BS_READS) === 'practice srs', names(BS_READS) + ' · ' + page.slice(0, 40));
+  ok('the Brain page reads the exam date and the scheduled and practised cards', !page.startsWith('THREW') && names(BS_READS) === 'examDate practice srs', names(BS_READS) + ' · ' + page.slice(0, 40));
   ok('of its kit, eleven names; the art, six; the info, five', names(BK_READS) === 'POOL TOTAL_Q avgRetention brainInfoHtml buildBrainArt chIcon chInk e icon masteryFor todayISO' && names(ART_READS) === 'BRAIN_STATE_LABEL BRAIN_TUNE BrainMap brainLayoutNow brainSel e' && names(INFO_READS) === 'BRAIN_STATE_LABEL brainArtL brainSel e icon',
      names(BK_READS) + ' | ' + names(ART_READS) + ' | ' + names(INFO_READS));
   ok('none of the three sets, deletes or defines anything on what it is given, the layout and its neurons included', wrote.length === 0 && !artOut.startsWith('THREW') && !infoOut.startsWith('THREW'), wrote.join(', ') || 'nothing');
