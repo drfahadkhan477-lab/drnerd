@@ -690,8 +690,9 @@ refuses to continue without the export.
 
 `changes` skips browser jobs on a pull request only when all changed paths
 are known to be outside their inputs. A master push or manual run exercises
-both browser groups. PR updates cancel older runs for that PR. Master pushes
-run to completion. The workflow uses read-only repository permissions.
+both browser groups. PR updates cancel older runs for that PR. A newer push
+to master can replace a pending run while the active run continues. The
+workflow uses read-only repository permissions.
 
 Actions are pinned to commit SHAs. To update one, use `git ls-remote` for
 both the desired tag and its peeled `^{}` ref. Record the commit SHA and
@@ -717,7 +718,10 @@ The synthetic app runs in four shards per engine. Both callers in
 `verify.yml` use `verify-browser-shard.yml` and download the single artifact
 made by `synthetic-build`. The reusable workflow defines each suite as an
 individually named step, so GitHub exposes suite timing and failure details.
-`scripts/shard.js` assigns the suites to shards using the recorded times.
+`scripts/shard.js` weights Chromium suites with the suite record and WebKit
+suites with `scripts/webkit-ci-timings.json`. The WebKit file lists the public
+GitHub Actions runs behind its median successful step durations. An untimed
+suite gets the median weight of the timed suites in that engine's list.
 `npm test` reads the Chromium list for its synthetic suites and runs them
 in the engine selected locally.
 
