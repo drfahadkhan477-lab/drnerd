@@ -199,6 +199,9 @@ jobs:
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup,') }}
         name: a restored backup appears now, not only after the next launch (142 checks)
         run: node tests/verify-backup.js build/synthetic/systole.html
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backupcrypto,') }}
+        name: encrypted export, durable restore, legacy dialog and rejection of damaged backups (15 checks)
+        run: node tests/verify-backupcrypto.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-backup-ids,') }}
         name: restored reference and memory ids stay data in their controls (3 checks)
         run: node tests/verify-backup-ids.js build/synthetic/systole.html

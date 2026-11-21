@@ -642,7 +642,12 @@ const restore = `(text) => new Promise((resolve, reject) => {
     const set = await p.evaluate(names => {
       window.__taps = [];
       const ok = names.every(n => typeof window[n] === 'function');
-      for (const n of names) window[n] = function () { window.__taps.push([n].concat([].slice.call(arguments))); };
+      for (const n of names) window[n] = (...args) => {
+        if (n === 'importMarkup' && args.length) {
+          args[0] = args[0] === document.querySelector('.data-row [data-action="importMarkup"]');
+        }
+        window.__taps.push([n, ...args]);
+      };
       /* A function declared by the page is the global object's property, so the page's own code now finds the recorder
          by that name: asked here through the page's own scope, not through window. */
       const reached = names.every(n => (0, eval)(n) === window[n]);
@@ -663,7 +668,7 @@ const restore = `(text) => new Promise((resolve, reject) => {
       [await tap('.mast'), [['startQuiz', chapter]], 'a chapter\'s ring starts a quiz in that chapter'],
       [await tap('.data-row button:has-text("Export everything")'), [['exportMarkup']], 'Export everything exports'],
       [await tap('.data-row button:has-text("I saved the backup file")'), [['confirmBackupSaved']], 'I saved the backup file confirms it'],
-      [await tap('.data-row button:has-text("Import backup")'), [['importMarkup']], 'Import backup imports'],
+      [await tap('.data-row button:has-text("Import backup")'), [['importMarkup', true]], 'Import backup imports and passes its own button'],
       [await tap('.data-row button:has-text("Reset progress")'), [['resetProgress']], 'Reset progress resets'],
     ];
     await p.evaluate(() => { offlineJob.busy = false; });
