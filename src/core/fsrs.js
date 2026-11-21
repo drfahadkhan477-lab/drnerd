@@ -28,7 +28,7 @@
    contract; tests/verify-oracle.js compares the arithmetic against ts-fsrs):
      · whole local calendar days only: no sub-day learning or relearning
        steps, and no same-day short-term stability update;
-     · interval = stability rounded UP (fsrsIvl), never down or to nearest;
+     · round the interval at the requested retention UP before fuzz and the deadline;
      · interval capped at 36500 days, the same as upstream's default;
      · interval fuzz (S4) only when the caller names the card, never on Again,
        and drawn from a hash of its id, review count and lapse count rather
@@ -79,8 +79,8 @@ const BASE_RETENTION = 0.90, EXAM_RETENTION = 0.95, RAMP_DAYS = 60;
 
 /* And the forcing function, because a version somebody has to remember to
    bump is a version that will be wrong. This hashes the numbers that actually
-   determine every interval the module produces (the weights, the decay and
-   the interval cap); verify-fsrs.js pins the
+   determine the model and exam retention curve (the weights, decay, interval
+   cap, retention endpoints and ramp length); verify-fsrs.js pins the
    result. Change a weight without bumping SCHEDULER_VERSION and the pin fails
    and says so — the same bargain SHELL_V makes by deriving itself from
    content.

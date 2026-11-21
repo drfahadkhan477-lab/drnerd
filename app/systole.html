@@ -1797,12 +1797,17 @@ function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),tar
    has questions left (src/core/confusable.js). Every due card stays in it. */
 const PAIR_MAX=4;
 function reviewDeck(qs){
-  const exam=S.examDate && FSRS.examWindow(todayISO(),S.examDate);
-  if(exam && exam.finalFortnight) return qs;
   const base=shuf(qs);
   const sets=Confusable.sets((typeof Memory!=='undefined')?Memory.all():[],POOL);
   const extra=Confusable.partners(base,sets,POOL,{max:PAIR_MAX,prefer:id=>S.srs[id]?0:1});
-  return Confusable.arrange(base,{partners:extra,byId:QBYID});
+  const arranged=Confusable.arrange(base,{partners:extra,byId:QBYID});
+  const today=todayISO(), exam=FSRS.examWindow(today,S.examDate);
+  if(!exam || !exam.finalFortnight) return arranged;
+  /* Restore the queue's ranked due prefix. Everything else, including any
+     extra look-alikes, keeps its interleaved order. */
+  const due=qs.filter(q=>FSRS.isDue(S.srs[q.id],today,exam));
+  const ids=new Set(due.map(q=>q.id));
+  return due.concat(arranged.filter(q=>!ids.has(q.id)));
 }
 
 /* ── active-recall rating (shown after the explanation, review sessions only) ── */

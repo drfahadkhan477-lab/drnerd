@@ -205,7 +205,7 @@ function rankedDue(pool, srs, today, exam, weights) {
   const due = pool.filter(q => FSRS.isDue(srs[q.id], today, exam));
   const shares = exam && exam.finalFortnight && weights;
   const names = Object.keys(shares || {});
-  const chapters = names.length ? new Set(pool.map(q => q.ch)) : null;
+  const chapters = new Set(names.length ? pool.map(q => q.ch) : []);
   const weighted = names.length && names.every(ch => chapters.has(ch) && Number.isFinite(shares[ch]) && shares[ch] >= 0)
     && names.some(ch => shares[ch] > 0);
   return due.map(q => {
