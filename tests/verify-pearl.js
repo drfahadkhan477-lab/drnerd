@@ -19,6 +19,7 @@ const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { booted, settled, watchTransitions } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
+const { heldRoom, keptRoom, roomSaid, ownSize } = require('./_figroom.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-pearl.js <patched.html>'); process.exit(1); }
@@ -463,7 +464,25 @@ let section = '';
     ok('the replacement figure opens from the keyboard',
        await page.waitForFunction(() => !!document.querySelector('.pswp[role="dialog"]'), null, { timeout: 3000 }).then(() => true, () => false));
     await page.evaluate(()=>closePeek());
-  }else ok('the replacement figure opens from the keyboard',false,'fixture supplied no resolvable replacement figure');
+    /* A figure written without a size has no room until it decodes (tests/_figroom.js). On a tablet the pearl's card
+       gives its figure a box of its own, and the picture never moved it; on a phone the figure is a band as wide as
+       the card, and with no size and a width:auto it was a 16 px column in Chromium that grew under the reader. So the
+       room is measured at a phone's width, where it can be lost, with this same pearl drawn again. */
+    const size0 = page.viewportSize();
+    await page.setViewportSize({ width: 430, height: 932 });
+    await page.evaluate(() => render());
+    await page.waitForFunction(() => { const im = document.querySelector('#pearlFig img'); return !!im && im.complete && im.naturalWidth > 0 && !window.__vtLive; }, null, { timeout: 10000 }).catch(() => {});
+    const room = await heldRoom(page, '#pearlFig img');
+    ok('the pearl\'s figure is written with its own width and height', ownSize(room), room.found ? room.attrs.join(' ') : 'no loaded figure');
+    ok('and, at a phone\'s width, has the room while it is loading that it takes once it has loaded', keptRoom(room), roomSaid(room));
+    await page.setViewportSize(size0);
+    await page.evaluate(() => render());
+    await settled(page, () => !!document.getElementById('pearlCard') && !window.__vtLive, { label: 'the home screen again' });
+  }else{
+    ok('the replacement figure opens from the keyboard',false,'fixture supplied no resolvable replacement figure');
+    ok('the pearl\'s figure is written with its own width and height',false,'fixture supplied no resolvable replacement figure');
+    ok('and, at a phone\'s width, has the room while it is loading that it takes once it has loaded',false,'fixture supplied no resolvable replacement figure');
+  }
   const sourceTitle=await page.evaluate(()=>pearlCurrent.title);
   await page.locator('.pearl-open').click();
   await settled(page,()=>S.screen==='refs'&&!!document.querySelector('.hero-title'),{label:'reference screen'});

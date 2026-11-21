@@ -69,13 +69,13 @@ const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 /* ── md() as the page ships it ────────────────────────────────────────────
    md() is render() in src/core/markdown.js, which the build writes into the
    page through a slot. Its text is cut from that file, from its one
-   `function render(t, e, refImgSrc) {` to the first closing brace at column 0
+   `function render(t, e, refImgSrc, refImgSize) {` to the first closing brace at column 0
    after it, for the checks that read the code; the function itself is the
    module's, loaded as any src/core module is. */
 const MODULE = 'src/core/markdown.js';
 function liftMd() {
   const file = read(MODULE);
-  const open = 'function render(t, e, refImgSrc) {';
+  const open = 'function render(t, e, refImgSrc, refImgSize) {';
   const n = file.split(open).length - 1;
   if (n !== 1) throw new Error(`${MODULE}: expected one "${open}", found ${n}`);
   const i = file.indexOf(open), j = file.indexOf('\n}\n', i);
@@ -107,7 +107,7 @@ const md = compile(REFERENCE, { k: 'data:image/png;base64,AAAA' });
 head('the function under test is the one the page ships');
 {
   ok('md() was found and is a whole function',
-     /^function render\(t, e, refImgSrc\) \{/.test(MD_SRC.trim()) && /return s;/.test(MD_SRC),
+     /^function render\(t, e, refImgSrc, refImgSize\) \{/.test(MD_SRC.trim()) && /return s;/.test(MD_SRC),
      `${MD_SRC.split('\n').length} lines`);
   /* Vacuity guard: a cut that stopped early would still compile and would
      test a fragment. The figure branch is the last thing md() learned. */
@@ -248,6 +248,25 @@ head('the figure rule is the one place md() writes an attribute');
      offences(attacked).length === 0, offences(attacked).join(', ') || 'inert');
 }
 
+head('a figure carries its own size, when it is known');
+{
+  /* A figure with no width and height is given no room until it has decoded, so its card grew as it arrived and a
+     tap landed on whatever had moved there (tests/verify-reflist.js). The page hands render() a reader of the
+     picture's own size (src/core/imagesize.js); here it is an invented one, which records what it was asked. */
+  const asked = [];
+  const sized = z => t => Markdown.render(t, REFERENCE, key => (key === 'k' ? 'data:image/png;base64,AAAA' : ''), (key, src) => { asked.push([key, src]); return typeof z === 'function' ? z() : z; });
+  const img = out => (out.match(/<img[^>]*>/) || [''])[0];
+  const out = sized({ w: 913, h: 477 })('![a caption](refimg://k)');
+  ok('given a size, the picture is written with its width and height', / width="913" height="477"/.test(img(out)) && /<img src="data:image\/png;base64,AAAA" alt="a caption" width="913" height="477" loading="lazy">/.test(out), img(out));
+  ok('the reader is asked with the key and the picture the key found', JSON.stringify(asked) === JSON.stringify([['k', 'data:image/png;base64,AAAA']]), JSON.stringify(asked));
+  ok('without a reader, or with one that knows none, the picture is written as before, with no size', !/ width=| height=/.test(img(md('![a](refimg://k)'))) && !/ width=| height=/.test(img(sized(null)('![a](refimg://k)'))), img(md('![a](refimg://k)')));
+  /* A reader is the page's, but what it returns lands inside an attribute: only whole positive numbers are written. */
+  const odd = [{ w: 1.5, h: 2 }, { w: -3, h: 4 }, { w: 0, h: 4 }, { w: '9" onerror="alert(1)', h: 9 }, { w: 9 }, 'big', 7];
+  const written = odd.map(z => img(sized(z)('![a](refimg://k)')));
+  ok('a size that is not two whole positive numbers is not written, and nothing it holds reaches the markup', written.every(t => !/ width=| height=|onerror/.test(t)), written.find(t => / width=| height=|onerror/.test(t)) || 'none written');
+  ok('a key that finds no picture asks no size and draws nothing', (() => { asked.length = 0; const o = sized({ w: 1, h: 1 })('![x](refimg://nope)'); return o.indexOf('<img') < 0 && asked.length === 0; })());
+}
+
 head('and that is exactly what e() has to guarantee');
 {
   /* THE CONTRACT, PROVEN BY BREAKING IT. e() is not in this repository, so the
@@ -272,13 +291,13 @@ head('the page\'s md() is that function, given the page\'s own escaper and figur
 {
   /* render() is safe only with an escaper that does its job, and it is the
      page that chooses the escaper. So the page is read: its md() must be the
-     one line that hands render() the page's e and refImgSrc, the module must
+     one line that hands render() the page's e, refImgSrc and refImgSize, the module must
      be written into the page once, and the page's e, cut out and run here,
      must do what the reference escaper above does. Comments are blanked: the
      shell explains itself, and quotes what is looked for. */
   const page = blankComments(read('app/systole.html'));
-  const CALL = 'function md(t){ return Markdown.render(t,e,refImgSrc); }';
-  ok('the page\'s md() is one call into the module, with e and refImgSrc',
+  const CALL = 'function md(t){ return Markdown.render(t,e,refImgSrc,refImgSize); }';
+  ok('the page\'s md() is one call into the module, with e, refImgSrc and refImgSize',
      page.split(CALL).length - 1 === 1 && page.split('function md(').length - 1 === 1,
      `${page.split(CALL).length - 1} of that line, ${page.split('function md(').length - 1} md() in the page`);
   const slot = page.indexOf('@@SLOT[src:' + MODULE + ']@@');

@@ -391,7 +391,7 @@
    letting the model place a figure, and it was unusable the moment it worked. */
 .msg .ref-fig{margin:10px 0;border:1px solid var(--border);border-radius:12px;
   overflow:hidden;background:var(--white);max-width:100%}
-.msg .ref-fig img{display:block;width:auto;max-width:100%;height:auto;
+.msg .ref-fig img{display:block;max-width:100%;height:auto;
   max-height:340px;object-fit:contain;background:var(--white)}
 .msg .ref-fig figcaption{padding:7px 11px;font-size:13px;line-height:1.45;
   color:var(--muted);border-top:1px solid var(--border)}
@@ -453,10 +453,15 @@
 .ref-body .ref-fig{margin:0 auto 14px;padding:0;border:1px solid var(--border);
   border-radius:10px;overflow:hidden;background:var(--card);
   width:fit-content;max-width:100%}
-/* width:auto, NOT width:100%. The old rule asked a 644px crop to fill an 876px
-   card — 1752 device pixels on a 2x iPad, a 2.7x upscale, which is what was
-   reported as blurry. max-width still shrinks the wide ones to fit. */
-.ref-body .ref-fig img{display:block;width:auto;max-width:100%;height:auto}
+/* No width here, and NOT width:100%. The old rule asked a 644px crop to fill an
+   876px card — 1752 device pixels on a 2x iPad, a 2.7x upscale, which is what
+   was reported as blurry. The picture's own width comes from its width
+   attribute, which md() writes from the picture's header (src/core/imagesize.js)
+   with its height, so its room is kept before it decodes; a width:auto here
+   would override the attribute and give it no room until then. A figure written
+   without a size takes its natural width once loaded, as width:auto did.
+   max-width still shrinks the wide ones to fit. */
+.ref-body .ref-fig img{display:block;max-width:100%;height:auto}
 .ref-body .ref-fig figcaption{padding:8px 12px;font-size:13px;line-height:1.45;
   color:var(--muted);border-top:1px solid var(--border)}
 /* A measure, not the width of the card. Long lines are hard to track back

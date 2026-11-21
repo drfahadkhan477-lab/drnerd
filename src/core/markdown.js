@@ -6,10 +6,12 @@
    escapes the whole text first, and every rule after that works on the escaped string and never reads
    the raw text again.
 
-     render(t, e, refImgSrc)   the HTML for the text t
+     render(t, e, refImgSrc, refImgSize)   the HTML for the text t
        e           the page's escaper: & < > " ' each to its entity. Called once, first, on all of t.
                    The figure rule writes a caption into alt="…", so it has to escape the double quote.
        refImgSrc   key → the src of the figure a note cites as ![caption](refimg://key), or '' for none
+       refImgSize  (key, src) → { w, h }, the figure's size in whole pixels, or null; optional. Given, the <img>
+                   carries width and height, so its room is kept before it loads (src/core/imagesize.js)
 
    Both are handed in rather than reached for, because they are the page's: the escaper is declared in
    app/systole.html, and a figure is found in the build's baked table or in the device's imported ones.
@@ -17,14 +19,14 @@
    which stays a function of the page.
 
    It was app/systole.html's md() until it moved here unchanged (docs/ROADMAP.md, E1); the page's md(t)
-   is now the one line that calls it with the page's e and refImgSrc. tests/verify-md-pure.js holds it.
+   is now the one line that calls it with the page's e, refImgSrc and refImgSize. tests/verify-md-pure.js holds it.
 
    No DOM, no clock, no storage: bare Node can test it. ES2015; Safari 13.4 is the floor (README).
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
 
-function render(t, e, refImgSrc) {
+function render(t, e, refImgSrc, refImgSize) {
   let s=e(t);
   s=s.replace(/```([\s\S]*?)```/g,(m,c)=>`<pre><code>${c}</code></pre>`);
   s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
@@ -34,9 +36,13 @@ function render(t, e, refImgSrc) {
   s=s.replace(/!\[([^\]]*)\]\(refimg:\/\/([^)\s]+)\)/g,(m,cap,key)=>{
     const src=refImgSrc(key);
     if(!src) return '';
+    /* The figure's own size, so the browser keeps its room before it has decoded it. Whole numbers only: they are
+       written into the attributes as they are. */
+    const z=refImgSize?refImgSize(key,src):null;
+    const dim=z&&Number.isInteger(z.w)&&Number.isInteger(z.h)&&z.w>0&&z.h>0?` width="${z.w}" height="${z.h}"`:'';
       /* The caption is the image's alt and is shown under it: the shown copy is hidden from a screen reader, which read it twice. */
   return `<figure class="ref-fig" data-action="openFigureFrom" role="button" tabindex="0"
-      title="Open this figure full size"><img src="${src}" alt="${cap}" loading="lazy"><figcaption aria-hidden="true">${cap}</figcaption></figure>`;
+      title="Open this figure full size"><img src="${src}" alt="${cap}"${dim} loading="lazy"><figcaption aria-hidden="true">${cap}</figcaption></figure>`;
   });
   /* Headings before inline marks, so a ## line never becomes a paragraph. */
   s=s.replace(/^####\s+(.+)$/gm,'<h4>$1</h4>');

@@ -21,6 +21,7 @@ const path = require('path');
 const { launch, isEngineNoise, routablePage } = require('./_engine');
 const { booted, watchTransitions, resized } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
+const { heldRoom, keptRoom, roomSaid, ownSize } = require('./_figroom.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-chatfigs.js <patched.html>'); process.exit(1); }
@@ -134,6 +135,15 @@ const sse = text => [
      open.caption.includes(open.noteTitle.slice(0, 18)), open.caption.slice(-40));
   ok('the strip says what it is', /figure/i.test(open.label), open.label);
 
+  /* A figure written without a size has no room until it decodes, so the strip grew under the thread as each one
+     arrived (tests/_figroom.js). Measured with the strip open: shut, its figures are not drawn at all. */
+  await page.evaluate(() => { apexFigsOpen = true; buildAI(); });
+  await page.waitForFunction(() => [...document.querySelectorAll('.fig-strip .ai-fig img')].some(x => x.complete && x.naturalWidth), null, { timeout: 10000 }).catch(() => {});
+  const stripRoom = await heldRoom(page, '.fig-strip .ai-fig img');
+  ok('a figure in the strip is written with its own width and height', ownSize(stripRoom), stripRoom.found ? stripRoom.attrs.join(' ') : 'no loaded figure');
+  ok('and has the room while it is loading that it takes once it has loaded', keptRoom(stripRoom), roomSaid(stripRoom));
+  await page.evaluate(() => { apexFigsOpen = false; buildAI(); });
+
   head('the vision attachment stays rationed, though the display is not');
   const openSys = (sent.find(Boolean) || {});
   /* In the wire's own spelling. This looked for {"type":"image_url"}, the
@@ -198,6 +208,10 @@ const sse = text => [
      `${fits.imgW}px in ${fits.bodyW}px, natural ${fits.natural}px`);
   ok('so the conversation never scrolls sideways',
      fits.bodyScrollW <= fits.bodyW + 1, `scrollWidth ${fits.bodyScrollW} vs ${fits.bodyW}`);
+  /* And while it loads it has the room it will take, scaled to the panel: a reply does not grow under the reader. */
+  const replyRoom = await heldRoom(page, '.msg.bot figure.ref-fig img');
+  ok('a figure in a reply is written with its own width and height', ownSize(replyRoom), replyRoom.found ? replyRoom.attrs.join(' ') : 'no loaded figure');
+  ok('and has the room while it is loading that it takes once it has loaded, at the panel\'s width', keptRoom(replyRoom), roomSaid(replyRoom));
   await resized(page, 1280, 1000);
   await page.waitForTimeout(300);
 
