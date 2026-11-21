@@ -285,6 +285,15 @@ Ramer–Douglas–Peucker simplification, a stroke simplified before it is store
 and an outline filled as one curved path, which were `roundPt()`, `rdp()`,
 `simplifyStroke()` and `fillOutline()`. `penOutline()`, which reads the page's
 pen and PencilFX's width curve, stays the page's.
+Then the map's second group, the readers, a screen's numbers at a time: what
+the Progress, Study and Brain screens lead with (`src/core/progressstats.js`,
+`ProgressStats`, held by `verify-progressstats-pure`): a chapter's mastery, the
+mean recall, the week's due cards, the questions started and the last thirty
+days, which were `masteryFor()`, `avgRetention()`, `forecast7()`,
+`startedCount()` and `last30()` reading `POOL`, `S` and the clock, and are now
+handed them. The three screen suites that run the page's own lines
+(`verify-statsscreen-pure`, `verify-homescreen-pure`, `verify-study-pure`)
+load the module beside them.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

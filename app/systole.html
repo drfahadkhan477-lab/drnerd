@@ -1875,67 +1875,14 @@ function storageOK(){
   try{ const k='__t'+Date.now(); localStorage.setItem(k,'1'); localStorage.removeItem(k); return true; }
   catch(_){ return false; }
 }
-function masteryFor(ch){
-  const qs=POOL.filter(q=>q.ch===ch);
-  if(!qs.length) return 0;
-  let score=0;
-  const t=todayISO();
-  for(const q of qs){
-    const c=S.srs[q.id];
-    if(c&&c.stability!==undefined){
-      // "mastery" is literally FSRS's own prediction: how likely you are to
-      // recall this card today, given how long it's been and how it's gone.
-      score+=FSRS.retrievability(c.stability, FSRS.daysBetween(c.last||t,t));
-      continue;
-    }
-    // a legacy card not yet touched by a review since the FSRS switch, or a
-    // card only ever practised — both fall back to the old, coarser signal
-    // until their next real review picks up a proper retrievability curve.
-    if(c){ score+=Math.min(1,(c.reps||0)/3); continue; }
-    const p=S.practice[q.id];
-    if(p) score+=Math.min(0.45,(p.c||0)*0.22);
-  }
-  return score/qs.length;
-}
-/* average predicted retention across every card FSRS has actually scheduled —
-   the single number the Progress screen leads with. */
-function avgRetention(){
-  const t=todayISO();
-  let sum=0,n=0;
-  for(const id in S.srs){
-    const c=S.srs[id];
-    if(!c||c.stability===undefined) continue;
-    sum+=FSRS.retrievability(c.stability, FSRS.daysBetween(c.last||t,t)); n++;
-  }
-  return n?Math.round(sum/n*100):null;
-}
-/* how many cards come due on each of the next 7 days — so exam week doesn't
-   ambush you with a queue you never saw coming. */
-function forecast7(){
-  const t=todayISO();
-  const out=[];
-  for(let i=0;i<7;i++){
-    const day=addDays(t,i);
-    let n=0;
-    for(const id in S.srs){ if(S.srs[id].due===day) n++; }
-    out.push({d:day,n});
-  }
-  return out;
-}
-/* Current-bank coverage, without deleting history from other banks. */
-function startedCount(){
-  return POOL.reduce((n,q)=>n+(Object.prototype.hasOwnProperty.call(S.srs,q.id)||
-    Object.prototype.hasOwnProperty.call(S.practice,q.id)?1:0),0);
-}
-function last30(){
-  const out=[];
-  for(let i=29;i>=0;i--){
-    const d=addDays(todayISO(),-i);
-    const v=S.daily[d];
-    out.push({d,a:v?v.a:0,c:v?v.c:0});
-  }
-  return out;
-}
+@@SLOT[src:src/core/progressstats.js]@@
+/* The numbers the Progress, Study and Brain screens lead with: src/core/progressstats.js, handed the bank, the record
+   and today. */
+function masteryFor(ch){ return ProgressStats.mastery(POOL,S.srs,S.practice,ch,todayISO()); }
+function avgRetention(){ return ProgressStats.retention(S.srs,todayISO()); }
+function forecast7(){ return ProgressStats.forecast(S.srs,todayISO()); }
+function startedCount(){ return ProgressStats.started(POOL,S.srs,S.practice); }
+function last30(){ return ProgressStats.last30(S.daily,todayISO()); }
 /* The Progress screen's markup, with its calibration, retention and mock panels, is src/app/stats.js. Drawing it also
    starts the page's survey of the figures kept on this device, which stays here, as do the handlers its buttons name
    and the functions it is handed, which read the page's state, storage and browser. */

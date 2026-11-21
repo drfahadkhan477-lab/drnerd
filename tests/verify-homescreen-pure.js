@@ -445,8 +445,8 @@ head('the page hands the module what it has, and keeps what the markup names');
      info can only say what the chosen one holds if the art has laid the brain out first. */
   const NOWB = new Date(2026, 10, 17, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOWB); } static now() { return NOWB; } }
-  const bparts = [read('src/core/fsrs.js'), read('src/core/brain.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'), whole('function chInk(hex){', '\n}'),
-    whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function masteryFor(ch){', '\n}'), whole('function avgRetention(){', '\n}'), whole('const BRAIN_PER=16,', '\n'), whole('const BRAIN_TUNE={', '\n'),
+  const bparts = [read('src/core/fsrs.js'), read('src/core/progressstats.js'), read('src/core/brain.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'), whole('function chInk(hex){', '\n}'),
+    whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function masteryFor(ch){', '\n'), whole('function avgRetention(){', '\n'), whole('const BRAIN_PER=16,', '\n'), whole('const BRAIN_TUNE={', '\n'),
     whole('let brainArtL=null,', '\n'), whole('function qRecall(q){', '\n}'), whole('function brainUnits(){', '\n}'), whole('function brainLayoutNow(){', '\n}'), read('src/app/home.js'), whole('function buildBrain(dueN,', '}); }'), whole('function buildBrainArt(){', '\n'), whole('function brainInfoHtml(){', '\n')].join('\n');
   const bctx = { Date: FixedDate, themeIsDark: () => false, CHAPTERS: ['Valves & more', 'Rhythm', 'Empty'], CH_COLORS: { Rhythm: '#102030' }, CH_ICONS: {}, TOTAL_Q: 4,
     POOL: [{ id: 'v1', ch: 'Valves & more' }, { id: 'v2', ch: 'Valves & more' }, { id: 'r1', ch: 'Rhythm' }, { id: 'r2', ch: 'Rhythm' }],
