@@ -10,7 +10,8 @@
  * What is measured, rather than assumed:
  *   - a point keeps x and y to four decimals and pressure and tilt to two, and a point without tilt gets none;
  *   - points on the line between their neighbours are dropped, a corner further off it than eps is kept, and the
- *     first and last are always kept; fewer than three points come back as they were;
+ *     first and last are always kept; fewer than three points come back as they were; a stroke that ends where it
+ *     began keeps its shape;
  *   - a stroke is simplified in place at 0.0012 only from three points, and is returned;
  *   - an outline is filled as one closed path, moving to its first corner and curving through each side's midpoint
  *     with the corner as control point; an outline under three points draws nothing;
@@ -49,6 +50,14 @@ head('points a line already describes are dropped');
   ok('a deviation within eps is dropped, one beyond it kept', same(safely(() => K.rdp([[0, 0, 1], [0.5, 0.001, 1], [1, 0, 1]], 0.0012)), [[0, 0, 1], [1, 0, 1]])
      && same(safely(() => K.rdp([[0, 0, 1], [0.5, 0.002, 1], [1, 0, 1]], 0.0012)), [[0, 0, 1], [0.5, 0.002, 1], [1, 0, 1]]));
   ok('fewer than three points come back as they were', same(safely(() => K.rdp([[0, 0, 1], [1, 1, 1]], 0.0012)), [[0, 0, 1], [1, 1, 1]]));
+  /* A stroke that ends exactly where it began (a circle closed on its first point, likely once points are rounded to
+     four decimals) has a chord of no length. Every point then measured 0 off it and the stroke was stored as two
+     points: a ring round an answer came back a dot. The distance from a chord of no length is the distance from its
+     point. A square closed on its start keeps its corners, each leg already straight. */
+  const square = [[0, 0, 1], [0.5, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]];
+  ok('a stroke that ends where it began keeps its shape: a closed square keeps its four corners', same(safely(() => K.rdp(square, 0.0012)),
+    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]]), JSON.stringify(safely(() => K.rdp(square, 0.0012))));
+  ok('and a closed stroke all within eps of its start is still one dot', same(safely(() => K.rdp([[0, 0, 1], [0.0005, 0.0005, 1], [0, 0, 1]], 0.0012)), [[0, 0, 1], [0, 0, 1]]));
 }
 
 head('a stroke is simplified in place, from three points');

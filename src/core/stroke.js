@@ -7,7 +7,8 @@
      round(p)              a point with x and y to four decimals and pressure (and tilt) to two: sub-pixel on any
                            screen this runs on, and about a fifth of a raw coordinate's characters
      rdp(pts, eps)         Ramer–Douglas–Peucker: the points that a line between their neighbours already describes,
-                           to within eps, left out; the first and last always kept
+                           to within eps, left out; the first and last always kept, and a stroke that ends where it
+                           began measured from that point, so it keeps its shape
      simplify(s)           a stroke of three points or more simplified IN PLACE (s.p replaced) at eps 0.0012, and s
                            returned; the page stores what comes back
      fill(ctx, outline)    an outline (perfect-freehand's) filled on a 2D context as one curved path through the
@@ -30,10 +31,12 @@ function round(p){
 function rdp(pts,eps){
   if(pts.length<3) return pts;
   const a=pts[0], b=pts[pts.length-1];
-  const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1e-9;
+  const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy);
   let dmax=0, idx=0;
   for(let i=1;i<pts.length-1;i++){
-    const d=Math.abs((pts[i][0]-a[0])*dy-(pts[i][1]-a[1])*dx)/len;
+    /* A stroke that ends where it began has a chord of no length, and every point was 0 off it: the stroke was kept
+       as two points. Off a chord of no length, the distance is from its point. */
+    const d=len>0?Math.abs((pts[i][0]-a[0])*dy-(pts[i][1]-a[1])*dx)/len:Math.hypot(pts[i][0]-a[0],pts[i][1]-a[1]);
     if(d>dmax){ dmax=d; idx=i; }
   }
   if(dmax<=eps) return [a,b];

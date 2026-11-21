@@ -177,7 +177,7 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a refused request is told as what it is, the provider's words escaped, and the response read no more than it was (67 checks)
         run: node tests/verify-providererror-pure.js
-      - name: a pen point keeps what a screen can show, points a line already describes are dropped and a corner kept, and an outline is filled as one curved path (14 checks)
+      - name: a pen point keeps what a screen can show, points a line already describes are dropped and a corner kept, and an outline is filled as one curved path (16 checks)
         run: node tests/verify-stroke-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
