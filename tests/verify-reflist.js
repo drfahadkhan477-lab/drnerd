@@ -54,6 +54,13 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const drawnIds = () => page.evaluate(() => [...document.querySelectorAll('.ref-card .ref-acts .chip:first-child')]
     .map(b => b.dataset.refId));
   const pager = () => page.evaluate(() => { const p = document.getElementById('refPager'); return !p ? null : { button: p.querySelector('button').textContent.trim(), left: p.querySelector('span').textContent.trim() }; });
+  const clickPager = async () => {
+    const button = page.locator('#refPager button');
+    // After filling the form, the pager is a long scroll away. Put it in view
+    // without starting a smooth scroll, then let Playwright make a real click.
+    await button.evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await button.click();
+  };
   const toLibrary = async id => {
     await page.evaluate(id => goRefs(id), id);
     await onScreen(page, 'refs', { marker: '.ref-card' });
@@ -88,7 +95,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   {
     await page.fill('#refB', 'half a note, typed before the next page');
     await page.evaluate(() => { document.querySelector('.ref-card').dataset.kept = 'yes'; });
-    await page.click('#refPager button');
+    await clickPager();
     const two = await waitCards(PAGE * 2);
     const ids = await drawnIds();
     ok('the next page follows the first, in order', two && same(ids, lib.newest.slice(0, PAGE * 2)), `${ids.length} drawn`);
@@ -96,7 +103,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     ok('the note being typed is still in the form, and the first card is the card that was there, not a copy', kept.text === 'half a note, typed before the next page' && kept.card === 'yes', JSON.stringify(kept));
     const p1 = await pager();
     ok('the button counts down', !!p1 && p1.left === `${TOTAL - PAGE * 2} more in your library`, JSON.stringify(p1));
-    for (let i = 0; i < Math.ceil(TOTAL / PAGE) + 1 && await pager(); i++) { await page.click('#refPager button'); await quiet(page); }
+    for (let i = 0; i < Math.ceil(TOTAL / PAGE) + 1 && await pager(); i++) { await clickPager(); await quiet(page); }
     const all = await drawnIds();
     ok('the last page takes the button away, and every note is drawn once', !(await pager()) && all.length === TOTAL && new Set(all).size === TOTAL, `${all.length} of ${TOTAL}, ${new Set(all).size} distinct`);
   }
@@ -105,14 +112,14 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   {
     await toLibrary();
     ok('a fresh visit is the first page again, not where the last visit ended', same(await drawnIds(), lib.newest.slice(0, PAGE)));
-    await page.click('#refPager button');
+    await clickPager();
     await waitCards(PAGE * 2);
     await page.evaluate(() => goHome());
     await onScreen(page, 'home', { marker: '.hero-h1' });
     await toLibrary();
     ok('coming back from another screen starts at the first page', (await drawnIds()).length === PAGE);
 
-    await page.click('#refPager button');
+    await clickPager();
     await waitCards(PAGE * 2);
     const gone = (await drawnIds())[4];
     await page.evaluate(id => refRemove(id), gone);
@@ -138,7 +145,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     await quiet(page);
     const lone = await page.evaluate(() => ({ cards: document.querySelectorAll('.ref-card').length, button: !!document.querySelector('#refPager button'), notes: REF.length }));
     ok('a note deleted while it was looked at on its own leaves the library, a page of it, and the button for the rest', lone.cards === PAGE && lone.button && lone.notes === TOTAL - 1, JSON.stringify(lone));
-    await page.click('#refPager button');
+    await clickPager();
     ok('and the button adds the next page', await waitCards(PAGE * 2), `${await page.evaluate(() => document.querySelectorAll('.ref-card').length)} drawn`);
     /* The press scrolled to the foot of two pages, and a screen opened afresh scrolls back to the top smoothly. For the first
        frames of that the end of the list is in reach of the observer in the next section, which draws a second page before
