@@ -54,12 +54,41 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const drawnIds = () => page.evaluate(() => [...document.querySelectorAll('.ref-card .ref-acts .chip:first-child')]
     .map(b => b.dataset.refId));
   const pager = () => page.evaluate(() => { const p = document.getElementById('refPager'); return !p ? null : { button: p.querySelector('button').textContent.trim(), left: p.querySelector('span').textContent.trim() }; });
+  /* A precondition of every press, never the thing tested: the button is put in view and pressed only once it has
+     stopped moving. After filling the form the pager is a long scroll away, and scrolled to (without a smooth scroll),
+     the cards above it come within reach of their lazy figures. Each figure has no size until it loads, so its card
+     grows as it does: three cards of 345 px became 418, and the page kept growing and scrolling for a quarter of a
+     second after the scroll had ended. Playwright then pressed the button and let go of the row around it, so the
+     click went to the row and did nothing. It is a wait, not a sleep: it ends when no figure near the screen is still
+     loading and the button and the page's height have held for five frames, or at the deadline. A deadline reached
+     is said, and the press goes ahead, so the check that follows measures what it does. quiet() cannot see this: a
+     figure that loads changes no markup. */
+  const placed = () => page.evaluate(timeout => new Promise(resolve => {
+    const deadline = performance.now() + timeout;
+    let last = null, calm = 0;
+    const tick = () => {
+      const el = document.querySelector('#refPager button');
+      if (!el) return resolve('no button');
+      el.scrollIntoView({ block: 'center', behavior: 'instant' });
+      const top = el.getBoundingClientRect().top, h = innerHeight;
+      const loading = [...document.querySelectorAll('.ref-card img')].some(im => {
+        if (im.complete) return false;
+        const r = im.getBoundingClientRect();
+        return r.bottom > -h && r.top < 2 * h;
+      });
+      const at = Math.round(top) + ',' + document.documentElement.scrollHeight;
+      calm = !loading && at === last ? calm + 1 : 0;
+      last = at;
+      if (calm >= 5) return resolve('');
+      if (performance.now() > deadline) return resolve(loading ? 'a figure near the button was still loading' : 'the button was still moving');
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }), 10000);
   const clickPager = async () => {
-    const button = page.locator('#refPager button');
-    // After filling the form, the pager is a long scroll away. Put it in view
-    // without starting a smooth scroll, then let Playwright make a real click.
-    await button.evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
-    await button.click();
+    const unsettled = await placed();
+    if (unsettled) console.log(`  note: pressed the button anyway after 10 s: ${unsettled}`);
+    await page.locator('#refPager button').click();
   };
   const toLibrary = async id => {
     await page.evaluate(id => goRefs(id), id);
