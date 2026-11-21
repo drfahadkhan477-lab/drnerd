@@ -4388,69 +4388,14 @@ const SCHEMA_KEYS=['schemaVersion','chStats','missed','theme','homeLayout',
   'practice','sinceBackup','lastBackup','resume','focusMode','examDate','exams','flagged'];
 let FOREIGN={};
 
-/* A calendar day as the app writes one (FSRS.localDateToISO): a daily key,
-   an srs due or last. One that does not read back as itself is a day the
-   scheduler and Progress cannot place. */
-const statDay=s=>{ if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const d=FSRS.isoToLocalDate(s); return !!d&&FSRS.localDateToISO(d)===s; };
-
-/* What one entry of each statistics map must hold. The import refuses a file
-   with an entry that fails (progressFromBackup), and an export leaves such
-   an entry out (usableStats), from this one table so the two cannot drift.
-   The Progress screen and the scheduler read entries field by field (d.a in
-   buildStats, S.srs[id].due in forecast7), so one null day passed the
-   import, was saved, and crashed Progress on every later launch. A field is
-   checked where the app reads it; one that is absent is left to the
-   reader's own default, as it always was. Per map: the fields that must be
-   counts, the counts that must be there, and a rule over the whole entry.
-
-   A correct answer is only ever counted as one of the answers (logAnswer,
-   selectOpt), so more correct than answered is a record the app never
-   wrote: 9 of 2 drew a Results row at 450%, and a day's c over its a can
-   put Progress's accuracy over 100%. Written as not-greater, not at-most:
-   undefined<=n is false as well, which would refuse a missing count there
-   and leave the need lists with nothing to prove. */
-const STAT_ENTRY={
-  daily:   [['a','c','r'],['a','c'],(v,day)=>!(v.c>v.a)&&statDay(day)],
-  chStats: [['correct','total'],['correct','total'],v=>!(v.correct>v.total)],  // selectOpt does st.total++, st.correct++
-  practice:[['n','c','t'],['n','c'],v=>!(v.c>v.n)],                          // and pr.n++, pr.c++: a missing count is NaN
-  srs:     [['reps','lapses','ivl','stability','difficulty'],[],v=>(v.due==null||statDay(v.due))&&(v.last==null||statDay(v.last))],
-  resume:  [['i','correct','total','ts'],[],v=>(v.ids==null||(Array.isArray(v.ids)&&v.ids.every(x=>typeof x==='string')))
-    &&(v.i==null||(Number.isInteger(v.i)&&!(v.ids&&v.i>=v.ids.length)))&&(v.answers==null||statRecord(v.answers))]};
-const statRecord=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
-function statEntryOk(k,v,key){
-  const [fields,need,rule]=STAT_ENTRY[k], count=x=>x==null||(Number.isFinite(x)&&x>=0);
-  return statRecord(v)&&fields.every(f=>count(v[f]))&&need.every(f=>v[f]!=null)&&rule(v,key);
-}
-function usableStats(raw){
-  if(!statRecord(raw)) return raw;
-  const out=Object.assign({},raw);
-  for(const k in STAT_ENTRY) if(statRecord(out[k]))
-    out[k]=Object.fromEntries(Object.entries(out[k]).filter(([key,v])=>statEntryOk(k,v,key)));
-  if('exams' in out) out.exams=Array.isArray(out.exams)?out.exams.filter(MockExam.validEntry):[];
-  if('flagged' in out) out.flagged=FlagSet.clean(out.flagged);
-  return out;
-}
-
-function progressFromBackup(raw){
-  for(const k in STAT_ENTRY) if(raw[k]!=null&&!statRecord(raw[k])) throw new Error('Invalid statistics.');
-  /* Every entry too, before anything is stored: see STAT_ENTRY. */
-  for(const k in STAT_ENTRY) for(const [key,v] of Object.entries(raw[k]||{})) if(!statEntryOk(k,v,key)) throw new Error('Invalid statistics.');
-  for(const k of ['sessionCorrect','sessionTotal','reviewStreak','sinceBackup','lastBackup'])
-    if(raw[k]!=null&&(!Number.isFinite(raw[k])||raw[k]<0)) throw new Error('Invalid statistics.');
-  for(const k of ['theme','homeLayout','lastReviewDay','examDate']) if(raw[k]!=null&&typeof raw[k]!=='string') throw new Error('Invalid statistics.');
-  if(raw.missed!=null&&(!Array.isArray(raw.missed)||raw.missed.some(x=>typeof x!=='string'))) throw new Error('Invalid missed list.');
-  if(raw.exams!=null&&(!Array.isArray(raw.exams)||raw.exams.some(x=>!MockExam.validEntry(x)))) throw new Error('Invalid exam history.');
-  if(!FlagSet.valid(raw.flagged)) throw new Error('Invalid flagged list.');
-  return {resume:raw.resume||{},resumed:false,sessionCorrect:raw.sessionCorrect||0,sessionTotal:raw.sessionTotal||0,
-    chStats:raw.chStats||{},missed:new Set(raw.missed||[]),srs:raw.srs||{},reviewStreak:raw.reviewStreak||0,
-    lastReviewDay:raw.lastReviewDay||null,daily:raw.daily||{},practice:raw.practice||{},
-    sinceBackup:raw.sinceBackup||0,lastBackup:raw.lastBackup||null,theme:raw.theme||'auto',homeLayout:raw.homeLayout||'signal',
-    focusMode:!!raw.focusMode,examDate:validExamDate(raw.examDate)?raw.examDate:null,
-    mocks:MockExam.cleanHistory(raw.exams),
-    /* Absent says nothing: a backup made before flags must not empty the flags made since. A list, even an empty one, replaces them. */
-    ...(raw.flagged!=null?{flagged:new Set(FlagSet.clean(raw.flagged))}:{})};
-}
+@@SLOT[src:src/core/progressdata.js]@@
+/* What a saved progress record may hold, read before it is taken: the rules, and the one table they share, are
+   src/core/progressdata.js. A restore (progressFromBackup) refuses a record the app never wrote, before anything is
+   stored; an export (usableStats) leaves such an entry out; adoptProgress asks the first as a restore would. */
+const statRecord=v=>ProgressData.record(v);
+function statEntryOk(k,v,key){ return ProgressData.entryOk(k,v,key); }
+function usableStats(raw){ return ProgressData.usable(raw); }
+function progressFromBackup(raw){ return ProgressData.fromBackup(raw); }
 
 function save(){try{const text=JSON.stringify(Object.assign({},FOREIGN,{
   schemaVersion:DATA_SCHEMA_VERSION,
@@ -5138,11 +5083,7 @@ async function runVoice(v,event){
 }
 /* ── Exam date — one date the owner sets on the Study screen, kept with the rest of the progress. StudyPlan.readiness
    turns it into the countdown and the pace needed. A value that is not a real calendar day is refused, not stored. ── */
-function validExamDate(v){
-  if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [y,m,d]=v.split('-').map(Number), t=new Date(y,m-1,d);
-  return t.getFullYear()===y&&t.getMonth()===m-1&&t.getDate()===d;
-}
+function validExamDate(v){ return ProgressData.examDay(v); }
 function setExamDate(v){
   if(v===''||v==null) S.examDate=null;
   else if(validExamDate(v)) S.examDate=v;
