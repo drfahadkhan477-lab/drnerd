@@ -6,6 +6,7 @@ const path = require('node:path');
 const { pbkdf2Sync, createDecipheriv } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { launch } = require('./_engine');
+const { onDeath, watch } = require('./_deathnote');
 const { booted, onScreen } = require('./_render');
 
 const target = process.argv[2];
@@ -13,13 +14,15 @@ if (!target) { console.error('usage: node tests/verify-backupcrypto.js <build.ht
 const url = /^https?:\/\//.test(target) ? target : pathToFileURL(path.resolve(target)).href;
 const passphrase = 'invented backup passphrase 🌊';
 let passed = 0, failed = 0;
-function ok(label, condition) {
+let section = 'encrypted export';
+const events = [];
+onDeath(() => ({ section, checks: passed + failed, events: events.join(', ') || 'none' }));
+function ok(label, condition, detail = '') {
   condition ? passed++ : failed++;
-  console.log((condition ? '  PASS  ' : '  FAIL  ') + label);
+  console.log((condition ? '  PASS  ' : '  FAIL  ') + label + (detail ? ' → ' + detail : ''));
 }
 
-async function ready(page) {
-  await booted(page);
+async function hydrate(page) {
   await page.evaluate(() => Promise.all([Store.ready(), RefAssets.ready()]));
 }
 
@@ -28,11 +31,12 @@ async function progress(page) {
   await onScreen(page, 'stats', { marker: '.data-row' });
 }
 
-async function open(browser) {
+async function open(browser, label) {
   const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 834, height: 1194 } });
-  const page = await context.newPage();
+  const page = watch(await context.newPage(), events, label);
   await page.goto(url, { waitUntil: 'load', timeout: 200000 });
-  await ready(page);
+  await booted(page);
+  await hydrate(page);
   await progress(page);
   return page;
 }
@@ -79,18 +83,24 @@ function readWithNode(file) {
   return JSON.parse(Buffer.concat([decipher.update(cipher.subarray(0, -16)), decipher.final()]).toString('utf8'));
 }
 
-async function hasData(page, key) {
-  return page.evaluate(key => INK['synthetic:q']?.length === 1 && NOTES.synthetic?.[0]?.text === 'Invented note'
-    && LOG.some(row => row.q === 'synthetic-e7') && CHATS._general?.[0]?.content === 'Invented conversation'
-    && Memory.all().some(row => row.text === 'Invented memory') && S.sessionTotal === 6
-    && S.sessionCorrect === 4 && REF.some(note => note.id === 'synthetic-e7' && note.body.includes('refimg://' + key))
-    && RefAssets.has(key), key);
+async function missingData(page, key) {
+  const present = await page.evaluate(key => ({
+    ink: INK['synthetic:q']?.length === 1,
+    notes: NOTES.synthetic?.[0]?.text === 'Invented note',
+    reviews: LOG.some(row => row.q === 'synthetic-e7'),
+    chat: CHATS._general?.[0]?.content === 'Invented conversation',
+    memory: Memory.all().some(row => row.text === 'Invented memory'),
+    progress: S.sessionTotal === 6 && S.sessionCorrect === 4,
+    references: REF.some(note => note.id === 'synthetic-e7' && note.body.includes('refimg://' + key)),
+    images: RefAssets.has(key),
+  }), key);
+  return Object.keys(present).filter(name => !present[name]);
 }
 
 (async () => {
   const browser = await launch();
   try {
-    const source = await open(browser);
+    const source = await open(browser, 'export');
     let downloads = 0;
     source.on('download', () => downloads++);
     const key = await source.evaluate(async () => {
@@ -141,7 +151,8 @@ async function hasData(page, key) {
       && await source.evaluate(() => pendingBackupSave?.reviews === 7 && S.sinceBackup === 7 && S.lastBackup === 0));
     await source.context().close();
 
-    const targetPage = await open(browser);
+    section = 'encrypted restore';
+    const targetPage = await open(browser, 'restore');
     const before = await snapshot(targetPage);
     await selectFile(targetPage, first.text);
     await dialog(targetPage).getByRole('button', { name: 'Cancel' }).click();
@@ -166,11 +177,15 @@ async function hasData(page, key) {
       await unlock(targetPage, passphrase) === 'That file could not be read.' && await snapshot(targetPage) === before);
 
     await selectFile(targetPage, first.text);
+    const restored = await unlock(targetPage, passphrase);
+    const missing = await missingData(targetPage, key);
     ok('the correct passphrase restores ink, notes, images, reviews, progress, chat and memory now',
-      await unlock(targetPage, passphrase) === 'Annotations restored.' && await hasData(targetPage, key));
+      restored === 'Annotations restored.' && !missing.length, [restored, ...missing].join(' | '));
     await targetPage.reload();
-    await ready(targetPage);
-    ok('restored data survives a reload', await hasData(targetPage, key));
+    await booted(targetPage);
+    await hydrate(targetPage);
+    const missingAfterReload = await missingData(targetPage, key);
+    ok('restored data survives a reload', !missingAfterReload.length, missingAfterReload.join(', '));
 
     await progress(targetPage);
     await targetPage.evaluate(() => { BackupCrypto.available = () => false; });
@@ -182,4 +197,4 @@ async function hasData(page, key) {
   } finally { await browser.close(); }
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exitCode = failed ? 1 : 0;
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})();
