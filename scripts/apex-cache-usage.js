@@ -14,6 +14,12 @@ function tokenCount(metadata, field) {
   return value;
 }
 
+function addTokens(total, count, field) {
+  const next = (total ?? 0) + count;
+  if (!Number.isSafeInteger(next)) throw new Error('Gemini ' + field + ' total exceeds the safe integer range');
+  return next;
+}
+
 function summarize(files) {
   const seen = new Set();
   const counts = {
@@ -49,11 +55,11 @@ function summarize(files) {
       }
       if (prompt !== null) {
         counts.promptCountsReported++;
-        counts.reportedPromptTokens = (counts.reportedPromptTokens ?? 0) + prompt;
+        counts.reportedPromptTokens = addTokens(counts.reportedPromptTokens, prompt, 'promptTokenCount');
       }
       if (cached !== null) {
         counts.cacheCountsReported++;
-        counts.reportedCachedTokens = (counts.reportedCachedTokens ?? 0) + cached;
+        counts.reportedCachedTokens = addTokens(counts.reportedCachedTokens, cached, 'cachedContentTokenCount');
       }
     }
   }

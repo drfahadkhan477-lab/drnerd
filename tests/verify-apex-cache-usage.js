@@ -44,7 +44,19 @@ try {
   }
   assert.match(run(write('impossible', [response({promptTokenCount: 1, cachedContentTokenCount: 2})])).stderr,
     /exceed prompt tokens/);
+  for (const field of ['promptTokenCount', 'cachedContentTokenCount']) {
+    const large = write('large-' + field, [
+      response({[field]: Number.MAX_SAFE_INTEGER}),
+      response({[field]: 2})
+    ]);
+    const result = run(large);
+    assert.equal(result.status, 1, 'a total outside the safe integer range must fail for ' + field);
+    assert.match(result.stderr, /total exceeds the safe integer range/);
+  }
   console.log('PASS Gemini cache coverage, missing and zero counts, retries, and invalid inputs');
+} catch (error) {
+  console.error('FAIL  ' + error.message);
+  process.exitCode = 1;
 } finally {
   fs.rmSync(directory, {recursive: true, force: true});
 }
