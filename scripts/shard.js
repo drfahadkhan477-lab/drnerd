@@ -28,13 +28,13 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { jobBody } = require('./test-public.js');
+const { browserShardBody, readShardWorkflow } = require('./test-public.js');
 
 const ROOT = path.join(__dirname, '..');
 
 /* The suites a job runs, in step order. */
-function jobSuites(yml, job) {
-  const body = jobBody(yml, job);
+function jobSuites(yml, job, shardsYml) {
+  const body = browserShardBody(yml, job, shardsYml);
   if (body === null) throw new Error(`the workflow has no ${job} job`);
   return [...body.matchAll(/^\s*run:\s*node\s+tests\/(verify-[a-z0-9-]+)\.js\b/gm)].map(m => m[1]);
 }
@@ -58,9 +58,9 @@ function assign(names, seconds, of) {
 }
 
 /* shard is 1-based, as the workflow's matrix counts it. */
-function shardOf(yml, stats, job, shard, of) {
+function shardOf(yml, stats, job, shard, of, shardsYml) {
   if (!(Number.isInteger(shard) && shard >= 1 && shard <= of)) throw new Error(`shard ${shard} is not one of 1..${of}`);
-  return assign(jobSuites(yml, job), (stats && stats.seconds) || {}, of)[shard - 1];
+  return assign(jobSuites(yml, job, shardsYml), (stats && stats.seconds) || {}, of)[shard - 1];
 }
 
 module.exports = { jobSuites, assign, shardOf };
@@ -76,7 +76,7 @@ if (require.main === module) {
   try {
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
     const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
-    const list = shardOf(yml, stats, job, +shard, +of);
+    const list = shardOf(yml, stats, job, +shard, +of, readShardWorkflow(ROOT));
     /* An empty shard would skip every step and pass. With fewer suites than
        shards that is the arithmetic, but here it is a mistake: refuse it. */
     if (!list.length) throw new Error(`shard ${shard} of ${of} of ${job} has no suites`);
