@@ -9,6 +9,8 @@
 
      errMsg(j)                                    the provider's own words, out of whichever shape the body took
      message(r, provider, j, viaRelay, e, now)    the sentence to show
+     network(err, name, e)                        the sentence when the request got no response at all: the
+                                                  browser's own reason, escaped, and the causes worth checking
        r          the response, read only for r.status and r.headers.get('retry-after')
        provider   'gemini'
        j          the response's body as JSON, or null when it was not JSON
@@ -18,7 +20,8 @@
 
    It was app/systole.html's errMsg() and the body of its apiError() until it moved here (docs/ROADMAP.md,
    E1), unchanged but for now() standing where Date.now() did. The page's apiError(r, provider) reads the
-   body and calls message(). viaRelay and now are called only on the branches that called them before, so
+   body and calls message(). network() was the page's networkErrorMsg(), moved unchanged; the page keeps
+   that name as one line handing over the page's e. viaRelay and now are called only on the branches that called them before, so
    a response is read exactly as it was. tests/verify-providererror-pure.js holds it.
 
    ES2015, and one thing past it: errMsg() uses ?? (ES2020, Safari 13.1). Safari 13.4 is the floor (README).
@@ -77,6 +80,21 @@ function message(r, provider, j, viaRelay, e, now) {
   return `API error ${r.status}. ${e(d)}`;
 }
 
-root.ProviderError = { errMsg, message };
+/* fetch() throwing means the request never got an HTTP response at all — that's
+   almost never this app's code. Surface the browser's own reason plus the
+   real, checkable causes, instead of a flat "check your connection". */
+function network(err, name, e){
+  const raw=(err&&err.message)||'';
+  return `Could not reach ${name}${raw?` <span class="err-raw">(${e(raw)})</span>`:''}.
+    <details class="err-help"><summary>Why might this happen?</summary>
+    <ul>
+      <li>Open a new Safari tab and load any site — confirms the device is actually online, not just Wi-Fi-connected. Hospital and university networks often need a login page before real internet works.</li>
+      <li>This file must be opened with <b>Open in Safari</b>, not previewed inside the Files app — a preview can run without full network access.</li>
+      <li>A VPN or content blocker can silently block a specific domain while everything else works.</li>
+      <li>If you're on Wi-Fi, try cellular for one test — narrows it to a network-level block.</li>
+    </ul></details>`;
+}
+
+root.ProviderError = { errMsg, message, network };
 
 })(typeof window !== 'undefined' ? window : this);

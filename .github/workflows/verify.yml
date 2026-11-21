@@ -175,7 +175,7 @@ jobs:
         run: node tests/verify-cause-pure.js
       - name: nothing a model says can become something the page runs (64 checks)
         run: node tests/verify-md-pure.js
-      - name: a refused request is told as what it is, the provider's words escaped, and the response read no more than it was (67 checks)
+      - name: a refused request is told as what it is, the provider's words escaped, and the response read no more than it was (74 checks)
         run: node tests/verify-providererror-pure.js
       - name: a chapter's mastery, the mean recall, the week's due cards, the questions started and the last thirty days are worked out as the screens read them, by the calendar (19 checks)
         run: node tests/verify-progressstats-pure.js
@@ -187,11 +187,11 @@ jobs:
         run: node tests/verify-refimport-pure.js
       - name: a review session is every due card then new questions across chapters up to its size, and an interval is said in days, weeks or months (42 checks)
         run: node tests/verify-reviewqueue-pure.js
-      - name: what Apex sends and reads back is the window, the request and the stream it should be, whatever the chunk boundaries, with every signature kept (107 checks)
+      - name: what Apex sends and reads back is the window, the request and the stream it should be, whatever the chunk boundaries, with every signature kept (120 checks)
         run: node tests/verify-apexwire-pure.js
       - name: a turn's state is one object the page holds once, and each old name is a view of its own field (28 checks)
         run: node tests/verify-apexturn-pure.js
-      - name: the loop that runs a turn keeps its rules, stopped, explain-only, cut off, interrupted or too long, and the page hands it its own parts (58 checks)
+      - name: the loop that runs a turn keeps its rules, stopped, explain-only, cut off, interrupted or too long, and the page hands it its own parts (60 checks)
         run: node tests/verify-apexloop-pure.js
       - name: the results screen says the score, the chapters answered and what to do next, changes nothing it is given, names actions where it had inline handlers, and the page hands it its own state and helpers (55 checks)
         run: node tests/verify-results-pure.js
