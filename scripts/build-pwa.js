@@ -957,6 +957,19 @@ step('lift the cycle\'s diagrams out of the app code', () => {
   appCode = appCode.slice(0, at) + `window.WIG_SRC=${JSON.stringify(psw.wig)};` + appCode.slice(at + block.length);
 });
 
+/* Echo Studio uses these modules together when its screen opens. The split build
+   precaches their content-addressed script for the first offline visit. */
+const echoModules = ['src/core/echo.js', 'src/ui/echo.js'];
+step('separate Echo Studio from the startup shell', () => {
+  const block = echoModules.map(name => fs.readFileSync(path.join(ROOT, name), 'utf8')).join('\n');
+  const at = appCode.indexOf(block);
+  if (at < 0 || appCode.indexOf(block, at + 1) >= 0) throw new Error('expected one Echo Studio module pair');
+  const lean = require('./strip-comments.js').strip(block);
+  psw.echo = 'vendor/echo-' + crypto.createHash('sha256').update(lean).digest('hex').slice(0, 12) + '.js';
+  psw.echoBytes = Buffer.from(lean, 'utf8');
+  appCode = appCode.slice(0, at) + `window.ECHO_SRC=${JSON.stringify(psw.echo)};` + appCode.slice(at + block.length);
+});
+
 /* ── 3.75. the comments in src/'s modules ────────────────────────────────
    The shell budget below was set on the reasoning that comments are close to
    free once compressed. Measured, they are half of what src/ gzips to — 76 of
@@ -974,6 +987,7 @@ step('ship src/\'s modules without their comments', () => {
     .map(f => [path.relative(ROOT, f).split(path.sep).join('/'), fs.readFileSync(f, 'utf8')])
     .filter(([name]) => !(psw.labBytes && name.startsWith('src/lab/')))   // lifted to vendor/ (3.746), stripped there
     .filter(([name]) => !(psw.circBytes && name === 'src/core/circulation.js'))   // and this one (3.747)
+    .filter(([name]) => !echoModules.includes(name))
     .filter(([name]) => !(psw.wigBytes && name === 'src/ui/wiggers.js'));  // and this one (3.748)
   strippedModules = stripEmbedded(appCode, mods);
   appCode = strippedModules.code;
@@ -1243,6 +1257,7 @@ fs.writeFileSync(path.join(DIST, psw.pf), psw.pfBytes);
 fs.writeFileSync(path.join(DIST, psw.lab), psw.labBytes);
 fs.writeFileSync(path.join(DIST, psw.circ), psw.circBytes);
 fs.writeFileSync(path.join(DIST, psw.wig), psw.wigBytes);
+fs.writeFileSync(path.join(DIST, psw.echo), psw.echoBytes);
 /* perfect-freehand's too: it carries no notice in the file, so the licence is the notice. */
 fs.copyFileSync(path.join(ROOT, 'docs', 'vendor', 'perfect-freehand', 'LICENSE'), path.join(DIST, 'vendor', 'perfect-freehand-LICENSE.txt'));
 
@@ -1427,7 +1442,7 @@ const CONTENT = 'accsap-content-' + CONTENT_V;
    So: the files the app genuinely cannot start without are precached
    atomically and any failure is a real failure. Everything else is cached
    best-effort, one request at a time, and a miss is shrugged off. */
-const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(psw.lab)}, ${JSON.stringify(psw.circ)}, ${JSON.stringify(psw.wig)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
+const PRECACHE  = ['.', 'index.html', 'app.js', 'manifest.webmanifest', ${JSON.stringify(psw.name)}, ${JSON.stringify(psw.css)}, ${JSON.stringify(psw.pf)}, ${JSON.stringify(psw.lab)}, ${JSON.stringify(psw.circ)}, ${JSON.stringify(psw.wig)}, ${JSON.stringify(psw.echo)}, ${JSON.stringify(echoAssets.map(([n]) => 'echo/' + n)).slice(1, -1)}${NO_CONTENT ? '' : ", 'content/questions.json'"}];
 /* Which bucket a precached URL belongs in. questions.json is precached because
    the app cannot start without it, and content-versioned because that is what
    it is — so install writes it to CONTENT while the shell files go to SHELL.
