@@ -42,10 +42,8 @@ async function heldRoom(page, selector) {
     fig = await page.evaluate(({ selector, url }) => {
       const old = [...document.querySelectorAll(selector)].find(x => x.complete && x.naturalWidth);
       if (!old) return null;
-      const area = im => {
-        const r = im.getBoundingClientRect();
-        return Math.round(r.width) + 'x' + Math.round(r.height);
-      };
+      // Layout room excludes the chat entrance transform, which only changes painting.
+      const area = im => im.offsetWidth + 'x' + im.offsetHeight;
       /* Measure and replace in the same frame. A panel changing width
          while Playwright installs its route is unrelated to image loading. */
       const src = old.getAttribute('src'), drawn = area(old);
@@ -64,7 +62,7 @@ async function heldRoom(page, selector) {
     for (let i = 0; !release && i < 50; i++) await new Promise(r => setTimeout(r, 100));
     if (release) await release();
     const loaded = !release ? null : await page.waitForFunction(() => { const im = document.querySelector('img[data-held]'); return !!im && im.complete && im.naturalWidth > 0; }, null, { timeout: 10000 })
-      .then(() => page.evaluate(() => { const b = document.querySelector('img[data-held]').getBoundingClientRect(); return Math.round(b.width) + 'x' + Math.round(b.height); }), () => null);
+      .then(() => page.evaluate(() => { const im = document.querySelector('img[data-held]'); return im.offsetWidth + 'x' + im.offsetHeight; }), () => null);
     return { found: true, attrs: fig.attrs, drawn: fig.drawn, pending: fig.pending, loading: fig.loading, loaded };
   } finally {
     await page.unroute(url);
