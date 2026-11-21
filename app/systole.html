@@ -614,28 +614,11 @@ function sweepInkHosts(){
    A raw pointer coordinate serialises to ~18 characters; four decimals is
    sub-pixel on any screen this runs on. Ramer-Douglas-Peucker then drops the
    points that sit on a line their neighbours already describe. Together they
-   cut stored ink by roughly an order of magnitude. */
-function roundPt(p){
-  const out=[Math.round(p[0]*1e4)/1e4, Math.round(p[1]*1e4)/1e4, Math.round(p[2]*100)/100];
-  if(p.length>3) out.push(Math.round(p[3]*100)/100);
-  return out;
-}
-function rdp(pts,eps){
-  if(pts.length<3) return pts;
-  const a=pts[0], b=pts[pts.length-1];
-  const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1e-9;
-  let dmax=0, idx=0;
-  for(let i=1;i<pts.length-1;i++){
-    const d=Math.abs((pts[i][0]-a[0])*dy-(pts[i][1]-a[1])*dx)/len;
-    if(d>dmax){ dmax=d; idx=i; }
-  }
-  if(dmax<=eps) return [a,b];
-  return rdp(pts.slice(0,idx+1),eps).slice(0,-1).concat(rdp(pts.slice(idx),eps));
-}
-function simplifyStroke(s){
-  if(s&&s.p&&s.p.length>2) s.p=rdp(s.p,0.0012);
-  return s;
-}
+   cut stored ink by roughly an order of magnitude. The rules are src/core/stroke.js. */
+@@SLOT[src:src/core/stroke.js]@@
+function roundPt(p){ return Stroke.round(p); }
+function rdp(pts,eps){ return Stroke.rdp(pts,eps); }
+function simplifyStroke(s){ return Stroke.simplify(s); }
 
 /* ══════════ the pen's line is one outline, filled (perfect-freehand) ══════════
    A stroke drawn as segments, each a line with round caps, is a chain of beads:
@@ -674,13 +657,7 @@ function penOutline(L,s,r,last){
   return L.getStroke(pts,{size:max/2,thinning:1,smoothing:.5,streamline:.25,simulatePressure:false,last:!!last,
     start:{cap:true,taper:0},end:{cap:true,taper:0}});
 }
-function fillOutline(ctx,o){
-  if(o.length<3) return;
-  ctx.beginPath(); ctx.moveTo(o[0][0],o[0][1]);
-  /* Through the midpoints, each corner a control point: the outline is curved, not a polygon. */
-  for(let i=1;i<o.length;i++){ const a=o[i], b=o[(i+1)%o.length]; ctx.quadraticCurveTo(a[0],a[1],(a[0]+b[0])/2,(a[1]+b[1])/2); }
-  ctx.closePath(); ctx.fill();
-}
+function fillOutline(ctx,o){ return Stroke.fill(ctx,o); }
 
 const INK_TOOLS={pen:{w:2.6,alpha:1,comp:'source-over'},
                  hl:{w:17,alpha:.40,comp:'multiply'}};
