@@ -294,6 +294,14 @@ days, which were `masteryFor()`, `avgRetention()`, `forecast7()`,
 handed them. The three screen suites that run the page's own lines
 (`verify-statsscreen-pure`, `verify-homescreen-pure`, `verify-study-pure`)
 load the module beside them.
+Then the rules of connecting a key, into the modules that already hold the
+wire and the refusals rather than a new one: `cleanKey()`, the reading of a
+ListModels page and `geminiDefaultModel()` are `ApexWire.key`,
+`ApexWire.gemini.models` and `ApexWire.gemini.pick`, and `networkErrorMsg()`
+is `ProviderError.network`, each held by its module's suite. The fetch, the
+pages and the errors of `geminiModels()` stay the page's; `ProviderError`'s
+slot moved up beside `ApexWire`'s, above its first caller. `toOpenAITools()`
+is called by nothing, and is left for a change of its own.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
