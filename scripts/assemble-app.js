@@ -44,7 +44,7 @@
 const fs = require('fs');
 const path = require('path');
 const Slots = require('./app-slots.js');
-const { applyKeyCorrections, ensureKeyCorrections, ALL_Q_RE } = require('./answer-keys.js');
+const { ensureKeyCorrections, ALL_Q_RE } = require('./answer-keys.js');
 const { applyContentFlags } = require('./content-flags.js');
 const { ACCSAP, bankOf, isAccsap } = require('./which-bank.js');
 const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
@@ -171,7 +171,7 @@ function producers({ exportHtml, bank, refsDir = REFS_DIR, imagesDir = IMAGES_DI
       const m = ALL_Q_RE.exec(exportHtml);
       if (!m) throw new Error('the export has no "const ALL_Q=" line');
       const qs = JSON.parse(m[1]);
-      applyKeyCorrections(qs);
+      ensureKeyCorrections(qs);
       applyContentFlags(qs);
       return JSON.stringify(qs);
     },

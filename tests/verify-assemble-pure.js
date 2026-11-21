@@ -107,6 +107,22 @@ head('each payload is what the app is built from');
   ok('an unknown payload has no producer', resolve('payload', 'NOPE') === undefined);
 }
 
+head('an export that already has the six corrected keys');
+{
+  const corrected = JSON.parse(JSON.stringify(BANK));
+  for (const c of CORRECTIONS) corrected.find(q => q.id === c.id).ci = LETTERS.indexOf(c.now);
+  const source = EXPORT.replace(JSON.stringify(BANK), JSON.stringify(corrected));
+  let result = null;
+  try { result = JSON.parse(A.producers({ exportHtml: source, refsDir: refs, imagesDir: imgs })('payload', 'ALL_Q')); } catch (_) {}
+  ok('a fully corrected export retains every corrected answer', !!result && CORRECTIONS.every(c => LETTERS[result.find(q => q.id === c.id).ci] === c.now));
+  const mixed = JSON.parse(JSON.stringify(corrected));
+  mixed.find(q => q.id === CORRECTIONS[0].id).ci = LETTERS.indexOf(CORRECTIONS[0].was);
+  const mixedSource = EXPORT.replace(JSON.stringify(BANK), JSON.stringify(mixed));
+  let rejected = false;
+  try { A.producers({ exportHtml: mixedSource, refsDir: refs, imagesDir: imgs })('payload', 'ALL_Q'); } catch (_) { rejected = true; }
+  ok('an export with mixed corrected and original keys is rejected', rejected);
+}
+
 head('a build, cut and assembled back, is the same bytes');
 const SRC = 'src/core/fsrs.js', srcText = fs.readFileSync(path.join(ROOT, SRC), 'utf8');
 const CHAIN_UNSTAMPED = [
