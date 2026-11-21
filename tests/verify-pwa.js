@@ -734,11 +734,22 @@ async function heapAfterBoot(page, url) {
       typeof Circulation === 'undefined' && typeof window.CIRC_SRC === 'string' && !document.querySelector('script[src="' + window.CIRC_SRC + '"]')));
     ok('nor are the cycle\'s diagrams', await page.evaluate(() =>
       typeof Wiggers === 'undefined' && typeof window.WIG_SRC === 'string' && !document.querySelector('script[src="' + window.WIG_SRC + '"]')));
-    /* Ambient mode's pressure-volume loop is the first diagram asked for here: asked before the diagrams are there, it
-       starts them loading, offline, and moves on; on its next turn it draws. */
-    await page.evaluate(() => { AMBIENT.enter(); for (let i = 0; i < 6 && typeof Wiggers === 'undefined'; i++) AMBIENT.next(); });
+    /* Ambient was entered from Echo, where its idle tick can close it before the diagram is requested.
+       Go Home first. Drive ECG → PV → ECG through the actual view selector so the first PV request loads
+       the offline diagram and falls back to ECG, regardless of WebGL availability. */
+    await page.evaluate(() => goHome());
+    await settled(page, () => S.screen === 'home' && document.body.classList.contains('on-home'), { label: 'Home before ambient mode' });
+    const advanceAmbient = enter => page.evaluate(enter => {
+      const nextView = LivingDiagram.nextView;
+      LivingDiagram.nextView = current => nextView(current, undefined, () => current === 'ecg' ? 0.9 : 0.5);
+      try {
+        if (enter) { AMBIENT.enter(); AMBIENT.tick(); }
+        if (AMBIENT.view() !== 'pvloop') AMBIENT.next();
+      } finally { LivingDiagram.nextView = nextView; }
+    }, enter);
+    await advanceAmbient(true);
     await settled(page, () => typeof Wiggers !== 'undefined', { timeout: 30000 }).catch(() => {});
-    await page.evaluate(() => { for (let i = 0; i < 6 && AMBIENT.view() !== 'pvloop'; i++) AMBIENT.next(); });
+    await advanceAmbient(false);
     const ambientLoop = await page.evaluate(() => AMBIENT.view() === 'pvloop' && AMBIENT.live() === true);
     ok('ambient mode\'s pressure-volume loop loads the diagrams from their own file, offline, and draws', ambientLoop === true,
        JSON.stringify(await page.evaluate(() => ({ view: AMBIENT.view(), live: AMBIENT.live(), wig: typeof Wiggers }))));
