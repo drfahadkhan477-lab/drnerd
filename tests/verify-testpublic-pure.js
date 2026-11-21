@@ -16,7 +16,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { suitesFromWorkflow, run } = require('../scripts/test-public.js');
+const { suitesFromWorkflow, run, browserShardBody, readShardWorkflow } = require('../scripts/test-public.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -28,7 +28,8 @@ const ROOT = path.join(__dirname, '..');
 
 head('the list is the workflow’s, split the way the suites actually are');
 const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
-const { pure, browser, synthetic, split } = suitesFromWorkflow(yml);
+const shardYml = readShardWorkflow(ROOT);
+const { pure, browser, synthetic, split } = suitesFromWorkflow(yml, shardYml);
 const synNames = synthetic.suites.map(x => x.name);
 /* The same "uses a browser" rule verify-stats and verify-engine apply. */
 /* The rule verify.js tags suites with (tests/_targets.js tagsOf), not a copy
@@ -41,7 +42,7 @@ ok('every browser suite does', browser.every(launches), browser.filter(n => !lau
 /* Each suite once: synthetic-webkit runs some of the synthetic job's suites
    again in WebKit, and npm test runs them once, in the engine it is given. A
    suite only that job named would still be missing below. */
-const all = [...new Set([...yml.matchAll(/node\s+tests\/(verify-[a-z0-9-]+)\.js/g)].map(m => m[1]))];
+const all = [...new Set([...(yml + '\n' + shardYml).matchAll(/node\s+tests\/(verify-[a-z0-9-]+)\.js/g)].map(m => m[1]))];
 ok('the synthetic job\u2019s suites are found, each with a target', synNames.length > 0 && synthetic.suites.every(x => /\.html$/.test(x.target)),
    `${synNames.length} suites`);
 ok('and every one of them launches a browser', synNames.every(launches), synNames.filter(n => !launches(n)).join(', ') || 'none');
@@ -59,8 +60,9 @@ ok('and the last of them writes the target the suites read',
   const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
   const cmds = b => [...(b || '').matchAll(/^\s+node\s+scripts\/(synthetic-export|assemble-app)\.js/gm)].length;
   ok('the build commands are the synthetic-build job\u2019s, and neither sharded job builds again',
-     cmds(jobBody(yml, 'synthetic-build')) === 2 && cmds(jobBody(yml, 'synthetic-browser')) === 0 && cmds(jobBody(yml, 'synthetic-webkit')) === 0);
-  const union = [1, 2, 3, 4].flatMap(i => shardOf(yml, stats, 'synthetic-browser', i, 4));
+     cmds(jobBody(yml, 'synthetic-build')) === 2 && cmds(browserShardBody(yml, 'synthetic-browser', shardYml)) === 0 &&
+     cmds(browserShardBody(yml, 'synthetic-webkit', shardYml)) === 0);
+  const union = [1, 2, 3, 4].flatMap(i => shardOf(yml, stats, 'synthetic-browser', i, 4, shardYml));
   ok('and the suites npm test runs are the union of synthetic-browser\u2019s shards, not one of them',
      synNames.length > 30 && JSON.stringify(union.slice().sort()) === JSON.stringify(synNames.slice().sort()), `${union.length} in the shards, ${synNames.length} read`);
 }

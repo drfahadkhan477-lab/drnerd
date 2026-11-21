@@ -21,7 +21,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { jobSuites, assign, shardOf } = require('../scripts/shard.js');
 const { verdict, JOBS } = require('../scripts/browser-done.js');
-const { jobBody } = require('../scripts/test-public.js');
+const { jobBody, browserShardBody, readShardWorkflow } = require('../scripts/test-public.js');
 
 let passed = 0, failed = 0;
 const ok = (label, cond, detail = '') => {
@@ -32,6 +32,7 @@ const head = t => console.log('\n── ' + t + ' ──');
 const ROOT = path.join(__dirname, '..');
 /* Comments blanked, so a sentence about the wiring cannot stand in for it. */
 const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8').replace(/(^|\s)#.*$/gm, '$1');
+const shardYml = readShardWorkflow(ROOT).replace(/(^|\s)#.*$/gm, '$1');
 const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
 const webkitTimings = require('../scripts/webkit-ci-timings.json');
 const SHARDED = ['synthetic-browser', 'synthetic-webkit'];
@@ -82,18 +83,26 @@ head('the split: longest first, to the shard with least time so far');
 
 head('every suite of each sharded job runs in exactly one shard');
 for (const job of SHARDED) {
-  const body = jobBody(yml, job) || '';
-  ok(`${job} is in the workflow`, body.length > 0);
-  const shards = ((body.match(/\n\s+shard:\s*\[([^\]]*)\]/) || [])[1] || '').split(',').map(s => +s.trim()).filter(Boolean);
+  const caller = jobBody(yml, job) || '';
+  const body = browserShardBody(yml, job, shardYml) || '';
+  const engine = job === 'synthetic-browser' ? 'chromium' : 'webkit';
+  const runner = jobBody(shardYml, engine) || '';
+  const setup = job === 'synthetic-browser' ? 'steps: &shard-steps' : 'steps: *shard-steps';
+  ok(`${job} calls the reusable workflow and its runner shares the steps`,
+     caller.includes('uses: ./.github/workflows/verify-browser-shard.yml') &&
+     runner.includes(`if: inputs.job == '${job}'`) &&
+     runner.includes(`SYSTOLE_ENGINE: ${engine}`) && runner.includes(setup));
+  const shards = ((caller.match(/\n\s+shard:\s*\[([^\]]*)\]/) || [])[1] || '').split(',').map(s => +s.trim()).filter(Boolean);
   ok(`${job} is a matrix of shards 1..4`, JSON.stringify(shards) === '[1,2,3,4]', JSON.stringify(shards));
-  ok(`${job}: a shard that fails cannot cancel the others`, /\n\s+fail-fast:\s*false\b/.test(body));
-  ok(`${job}: each shard asks scripts/shard.js for its list, by the job's own name and the matrix's size`,
-     /\n\s+- id: shard\n\s+name: [^\n]+\n\s+run: node scripts\/shard\.js \$\{\{ github\.job \}\} \$\{\{ matrix\.shard \}\} \$\{\{ strategy\.job-total \}\} --github-output\n/.test(body));
-  const all = jobSuites(yml, job);
+  ok(`${job}: a shard that fails cannot cancel the others`, /\n\s+fail-fast:\s*false\b/.test(caller));
+  ok(`${job}: the caller passes the job, shard and matrix size through to scripts/shard.js`,
+     caller.includes(`\n      job: ${job}\n      shard: \${{ matrix.shard }}\n      of: \${{ strategy.job-total }}`) &&
+     body.includes('run: node scripts/shard.js ${{ inputs.job }} ${{ inputs.shard }} ${{ inputs.of }} --github-output'));
+  const all = jobSuites(yml, job, shardYml);
   ok(`${job} runs suites`, all.length > 30, `${all.length}`);
   const dup = all.filter((n, i) => all.indexOf(n) !== i);
   ok(`${job} names each suite in one step only, so no shard runs one twice`, dup.length === 0, dup.join(', ') || 'none');
-  const split = shards.map(i => shardOf(yml, stats, job, i, shards.length));
+  const split = shards.map(i => shardOf(yml, stats, job, i, shards.length, shardYml));
   const problems = partitionProblems(split, all);
   ok(`${job}: the shards together are the job's suites, each in one shard`, shards.length > 0 && problems.length === 0, problems.join('; ') || split.map(s => s.length).join('+') + ` = ${all.length}`);
   /* Every suite step, with the condition it runs under. A step that asks for
@@ -102,7 +111,9 @@ for (const job of SHARDED) {
   const wrong = steps.filter(s => {
     const runs = (s.match(/run:\s*node tests\/(verify-[a-z0-9-]+)\.js/) || [])[1];
     const cond = (s.match(/^if:\s*(.*)$/m) || [])[1] || '';
-    return cond !== `\${{ !cancelled() && contains(steps.shard.outputs.suites, ',${runs},') }}`;
+    const shardCondition = `&& contains(steps.shard.outputs.suites, ',${runs},') }}`;
+    return cond !== `\${{ !cancelled() ${shardCondition}` &&
+      !(job === 'synthetic-browser' && cond === `\${{ !cancelled() && inputs.job == 'synthetic-browser' ${shardCondition}`);
   }).map(s => (s.match(/verify-[a-z0-9-]+/) || ['?'])[0]);
   ok(`${job}: every suite step runs only in its suite's shard, and still after a failure before it`,
      steps.length === all.length && wrong.length === 0, wrong.join(', ') || `${steps.length} steps`);
@@ -116,6 +127,12 @@ for (const job of SHARDED) {
      load.map(s => Math.round(s) + 's').join(', '));
 }
 
+const chromiumSuites = jobSuites(yml, 'synthetic-browser', shardYml);
+const webkitSuites = jobSuites(yml, 'synthetic-webkit', shardYml);
+ok('WebKit gets the Chromium suites except the documented exclusions, in the same order',
+   JSON.stringify(webkitSuites) === JSON.stringify(chromiumSuites.filter(n => !['verify-apex', 'verify-physio', 'verify-layout'].includes(n))),
+   chromiumSuites.filter(n => !webkitSuites.includes(n)).join(', '));
+
 head('one build, handed to the shards');
 {
   const b = jobBody(yml, 'synthetic-build') || '';
@@ -123,7 +140,9 @@ head('one build, handed to the shards');
   ok('and uploads build/synthetic as the artifact the shards download, with an action pinned to a commit',
      /uses: actions\/upload-artifact@[0-9a-f]{40}[ \t]*\n\s+with:\n\s+name: synthetic-build\n\s+path: build\/synthetic\/\n\s+if-no-files-found: error\n/.test(b));
   ok('it waits for the same decision as the shards, failing open', /\n    needs:\s*changes\s*\n/.test(b) && /\n    if: \$\{\{ !cancelled\(\) && needs\.changes\.outputs\.synthetic != 'false' \}\}/.test(b));
-  const uses = [...yml.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)].map(m => m[1]);
+  const localShard = './.github/workflows/verify-browser-shard.yml';
+  const uses = [...(yml + '\n' + shardYml).matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)]
+    .map(m => m[1]).filter(use => use !== localShard);
   ok('every action the workflow uses is pinned to a commit', uses.length > 10 && uses.every(u => PIN.test(u)), uses.filter(u => !PIN.test(u)).join(', ') || `${uses.length} uses`);
 }
 
@@ -170,7 +189,7 @@ head('the scripts, as the workflow runs them');
     const mismatches = [];
     for (const job of SHARDED) {
       const seconds = job === 'synthetic-webkit' ? webkitTimings.seconds : stats.seconds;
-      const expected = assign(jobSuites(yml, job), seconds, 4);
+      const expected = assign(jobSuites(yml, job, shardYml), seconds, 4);
       for (const [index, suites] of expected.entries()) {
         fs.writeFileSync(out, '');
         const run = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'shard.js'), job, String(index + 1), '4', '--github-output'],

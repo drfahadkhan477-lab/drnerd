@@ -4,9 +4,8 @@
 // no answer is graded, and no credentials are needed or read.
 const fs=require('fs');
 const path=require('path');
-const {pathToFileURL}=require('url');
 const {launch}=require('../tests/_engine');
-const {booted}=require('../tests/_render');
+const {askFixture}=require('./apex-eval-case');
 const {isSyntheticBuild}=require('./synthetic-export');
 const cases=require('../tests/fixtures/apex-grounding/cases.json');
 async function main(){
@@ -32,14 +31,7 @@ async function main(){
           return route.continue();
         });
         const page=await context.newPage();
-        await page.goto(pathToFileURL(path.resolve(input)).href);
-        await booted(page);
-        await page.evaluate(f=>{
-          REF.length=0;REF.push(...f.notes);invalidateIndex();
-          AI_GROUNDED=true;AI.provider='gemini';AI.gemini={key:'offline-evaluation-placeholder',model:'evaluation-model'};
-          CHATS={};S.screen='home';fire(f.question);
-        },fixture);
-        await page.waitForFunction(()=>!aiBusy,null,{timeout:30000});
+        await askFixture(page,input,fixture,30000);
         if(captured.length!==1)throw Error('Expected one intercepted request for '+fixture.id);
         report.cases.push({...fixture,request:captured[0],answer:null,verdict:'unmeasured',reviewerNotes:null});
       }finally{await context.close();}

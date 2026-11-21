@@ -15,9 +15,9 @@
  * test) and tests/verify-stats.js read, and a shard is a choice of which of
  * those steps to run, never a second copy of them.
  *
- * THE SPLIT IS COMPUTED, NOT WRITTEN DOWN. The suites are the job's own steps,
- * read from the workflow. WebKit weights come from public GitHub Actions
- * step timings. Chromium weights come from tests/test-stats.json.
+ * The suites are the reusable workflow's steps. WebKit weights come from
+ * public Actions step timings. Chromium weights come from tests/test-stats.json,
+ * written only by full green runs.
  * Longest first, each to the shard with the least time so far, ties to the
  * lower shard and then by name, so every shard of a run computes the same
  * split. A suite the record has not timed yet weighs the median of those it
@@ -28,14 +28,14 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { jobBody } = require('./test-public.js');
+const { browserShardBody, readShardWorkflow } = require('./test-public.js');
 const webkitTimings = require('./webkit-ci-timings.json');
 
 const ROOT = path.join(__dirname, '..');
 
 /* The suites a job runs, in step order. */
-function jobSuites(yml, job) {
-  const body = jobBody(yml, job);
+function jobSuites(yml, job, shardsYml) {
+  const body = browserShardBody(yml, job, shardsYml);
   if (body === null) throw new Error(`the workflow has no ${job} job`);
   return [...body.matchAll(/^\s*run:\s*node\s+tests\/(verify-[a-z0-9-]+)\.js\b/gm)].map(m => m[1]);
 }
@@ -59,10 +59,10 @@ function assign(names, seconds, of) {
 }
 
 /* shard is 1-based, as the workflow's matrix counts it. */
-function shardOf(yml, stats, job, shard, of) {
+function shardOf(yml, stats, job, shard, of, shardsYml) {
   if (!(Number.isInteger(shard) && shard >= 1 && shard <= of)) throw new Error(`shard ${shard} is not one of 1..${of}`);
   const seconds = job === webkitTimings.job ? webkitTimings.seconds : stats?.seconds || {};
-  return assign(jobSuites(yml, job), seconds, of)[shard - 1];
+  return assign(jobSuites(yml, job, shardsYml), seconds, of)[shard - 1];
 }
 
 module.exports = { jobSuites, assign, shardOf };
@@ -78,7 +78,7 @@ if (require.main === module) {
   try {
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
     const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
-    const list = shardOf(yml, stats, job, +shard, +of);
+    const list = shardOf(yml, stats, job, +shard, +of, readShardWorkflow(ROOT));
     /* An empty shard would skip every step and pass. With fewer suites than
        shards that is the arithmetic, but here it is a mistake: refuse it. */
     if (!list.length) throw new Error(`shard ${shard} of ${of} of ${job} has no suites`);

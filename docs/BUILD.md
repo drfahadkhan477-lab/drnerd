@@ -673,7 +673,39 @@ an answer key is right — those are settled exhaustively in Node and do not var
 by device. It checks the things that only vary by device, which is exactly the
 set that has been reaching the fellow.
 
-### Which engine they run in
+### Public CI
+
+Of the 7282 checks in `node scripts/verify.js` plus 155 more under `--pwa`, this workflow runs 7199.
+The other 238 all drive the licensed bank or the split build made from it.
+GitHub builds an invented bank for browser tests, including split-build
+checks over HTTP. Those extra synthetic split-build checks have their own
+results. The published count uses the split build measured from the licensed
+bank, and synthetic runs cannot write the recorded counts.
+
+`syntax` parses source and lists suites. `logic` runs the 100 suites that are pure Node
+and repeats them under `TZ=America/New_York` to catch local date and DST bugs.
+Its leak guard checks every incoming commit because a file added and then
+deleted still enters Git history. `build-guard` checks that a licensed build
+refuses to continue without the export.
+
+`changes` skips browser jobs on a pull request only when all changed paths
+are known to be outside their inputs. A master push or manual run exercises
+both browser groups. PR updates cancel older runs for that PR. A newer push
+to master can replace a pending run while the active run continues. The
+workflow uses read-only repository permissions.
+
+Actions are pinned to commit SHAs. To update one, use `git ls-remote` for
+both the desired tag and its peeled `^{}` ref. Record the commit SHA and
+keep the version in the adjacent comment for review.
+
+**Required checks are matched by name.** The master ruleset requires
+`syntax`, `logic`, `build-guard`, and `browser-done` by the full text of each
+job's `name:` in `verify.yml`. `browser-done` accepts a skip only when the
+change classifier explicitly selected it. Requiring the individual shard
+checks would leave a skipped PR waiting for expanded check names. The
+required names are checked by `verify-shard-pure`.
+
+### Browser shards
 
 Every suite launches through `tests/_engine.js`, so the engine is a flag:
 
@@ -681,25 +713,25 @@ Every suite launches through `tests/_engine.js`, so the engine is a flag:
 node scripts/verify.js --engine webkit     # or firefox; chromium is the default
 ```
 
-The target device is an iPad, so WebKit validation matters. CI runs the
-public-browser job in Chromium and WebKit, and the synthetic app job also
-has a WebKit counterpart with explicit exclusions. Both synthetic jobs run in
-four shards on one build made by `synthetic-build`, and `browser-done` reports
-whether every browser job passed. `scripts/shard.js` uses the suite record for
-Chromium and `scripts/webkit-ci-timings.json` for WebKit. The WebKit file lists the
-public GitHub Actions run IDs behind its medians of successful step durations.
-A suite without a timing gets the median weight of the timed suites in that job.
+The public-browser and split-build jobs exercise both Chromium and WebKit.
+The synthetic app runs in four shards per engine. Both callers in
+`verify.yml` use `verify-browser-shard.yml` and download the single artifact
+made by `synthetic-build`. The reusable workflow defines each suite as an
+individually named step, so GitHub exposes suite timing and failure details.
+`scripts/shard.js` weights Chromium suites with the suite record and WebKit
+suites with `scripts/webkit-ci-timings.json`. The WebKit file lists the public
+GitHub Actions runs behind its median successful step durations. An untimed
+suite gets the median weight of the timed suites in that engine's list.
+`npm test` reads the Chromium list for its synthetic suites and runs them
+in the engine selected locally.
 
-**Required checks are matched by name.** The ruleset on master requires
-`syntax`, `logic`, `build-guard` and `browser-done` by the full text of each
-job's `name:` in `verify.yml` (for example "logic — every suite that needs no
-browser and no build"), not by the job's key. Edit one of those names and the
-ruleset waits for a check that never reports: every pull request sits at
-"Expected — waiting". So rename one only together with the ruleset
-(Settings → Rules → Rulesets → the master rule → Required status checks:
-delete the old entry, add the new one from the suggestions).
-`tests/verify-shard-pure.js` holds the four names and fails first. `verify-engine` enforces
-the shared launcher so suites cannot silently select a different engine.
+Chromium installs the pinned Playwright browser on the host. WebKit uses
+the pinned Playwright Noble image on Ubuntu 24.04 and checks that the
+preinstalled browser renders before the suites start. WebKit CI excludes
+`verify-apex`, `verify-physio`, and `verify-layout`. Their conditions live
+beside their steps. Chromium runs all three. The engine exclusions concern
+the Linux automation harness, whose WebKit page crashes can be intermittent.
+Read the failing suite and its death note before classifying a failure.
 
 The section on prepared reader libraries above records local measurements from before Memorizer moved out.
 Engine differences and unavailable measurements remain explicit: WebKit has
@@ -1008,6 +1040,11 @@ so wiring it to `push` before a runner exists would have left every push to
 master showing a check pending for 24 hours. `timeout-minutes` does not help;
 it bounds execution, not the wait for a runner.
 
+Dispatch it on `master`. Dispatch can otherwise name any branch or tag,
+whose checkout would execute beside the licensed export. The job runs one
+gate at a time so builds and artifacts cannot overwrite one another, and
+installs Chromium and WebKit from the pinned Playwright dependency.
+
 Once a dispatched run has gone green end to end, make it automatic by adding
 the push arm back to the job's `if:`:
 
@@ -1024,6 +1061,10 @@ output quotes question text, and streaming a verify run into one would upload
 the licensed corpus by a route nobody would think of as uploading. The report
 and the failing suite output stay on the machine, at
 `build/release-report.md` and `tests/last-run.log`.
+
+The workflow invokes `npm run --silent` so npm does not echo the export
+path. The gate captures subprocess output and prints a verdict and
+sanitized step details. Incomplete runs return a failure status.
 
 So the workflow answers *did it certify* and the machine answers *why not*.
 If you find yourself wanting to add `actions/upload-artifact` to get the

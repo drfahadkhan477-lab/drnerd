@@ -280,9 +280,10 @@ head('the split build alone');
        ['alpha-pure', 'beta', 'gamma'].every(n => set.has(n)), [...set].join(','));
     ok('and not the full job, which runs only on a machine with the export', !set.has('delta'));
 
-    /* Against the real registry and workflow, with a different instrument: a
-       plain search of verify.yml for the suite's file, not the job parser. */
-    const yml = require('fs').readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
+    /* Search both workflow files for the suite directly, independently of
+       the parser that supplies the registry's tags. */
+    const yml = ['verify.yml', 'verify-browser-shard.yml'].map(file =>
+      require('fs').readFileSync(path.join(ROOT, '.github', 'workflows', file), 'utf8')).join('\n');
     const list = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--list'], { cwd: ROOT, encoding: 'utf8' }).stdout || '';
     const rows = [...list.matchAll(/^  ([a-z0-9-]+)\s+\[([a-z,]+)\]/gm)].map(m => ({ n: m[1], laptop: m[2].split(',').includes('laptop') }));
     const named = n => yml.includes(`tests/verify-${n}.js`);

@@ -19,7 +19,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise, routablePage, engineName } = require('./_engine');
-const { booted, settled } = require('./_render.js');
+const { booted, settled, watchTransitions, transitionDone } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -79,6 +79,7 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: queued.shift() || sse('Noted.') });
   });
 
+  await watchTransitions(page);
   await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
   await booted(page);
   await page.waitForTimeout(800);
@@ -95,6 +96,10 @@ const TOOL_SSE = part({ functionCall: { name: 'get_performance', args: {} } }) +
   });
 
   const qid = await openPanel();
+  /* jumpTo() starts an asynchronous screen change. Let the quiz mount and
+     finish its transition before filling the composer so the navigation
+     cannot replace the textarea while Playwright is typing into it. */
+  await transitionDone(page);
 
   head('the composer survives a rebuild');
   {
