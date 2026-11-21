@@ -141,9 +141,9 @@ head('the reader\'s data');
 {
   const html = draw();
   const data = h => h.slice(h.indexOf('Your data'));
-  ok('export, import and reset, each by its own action', J(actionsOf(data(html))) === J(['exportMarkup', 'importMarkup', 'resetProgress']), J(actionsOf(data(html))));
+  ok('both export options, import and reset name their actions', J(actionsOf(data(html))) === J(['exportMarkup', 'exportMarkup', 'importMarkup', 'resetProgress']), J(actionsOf(data(html))));
   const pending = draw({}, { pendingBackupSave: { at: 1, reviews: 2 } });
-  ok('while a backup is written and not confirmed, the button that confirms it, between export and import', J(actionsOf(data(pending))) === J(['exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress']) && pending.includes('<button class="btn sb-back" data-action="confirmBackupSaved">I saved the backup file</button>'), J(actionsOf(data(pending))));
+  ok('while a backup is written and not confirmed, the button that confirms it, between export and import', J(actionsOf(data(pending))) === J(['exportMarkup', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress']) && pending.includes('<button class="btn sb-back" data-action="confirmBackupSaved">I saved the backup file</button>'), J(actionsOf(data(pending))));
   const tab = draw({}, { safariTabStorage: () => true });
   ok('in a Safari tab, the warning that the data has seven days, found by its id; elsewhere none', tab.includes('<div class="notice" id="safariTabNote"><span>[icon alert]</span><span><b>Add Systole to your Home Screen to keep this.</b>') && tab.includes('seven days of use without a visit here') && !html.includes('safariTabNote'));
   ok('how many reviews are logged, and what the page says of its storage', html.includes('<div class="ref-hint">9 reviews logged · STORAGE<br>') && draw({}, {}, []).includes('<div class="ref-hint">0 reviews logged · STORAGE<br>'));
@@ -284,8 +284,8 @@ head('the page hands the module what it has, and keeps what the markup names');
   const actions = [...new Set(actionsOf(all))].sort();
   ok('its markup, with every button it can show, names eight actions and carries no inline handler',
      J(actions) === J(['confirmBackupSaved', 'exportMarkup', 'goHome', 'importMarkup', 'offlineButton', 'resetProgress', 'startCertainWrong', 'startChapter']) && inlineOf(all).length === 0, actions.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
-  const TABLE = { goHome: 'goHome:()=>goHome(),', startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', offlineButton: 'offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),', startCertainWrong: 'startCertainWrong:()=>startQuiz(null,\'certain\'),', exportMarkup: 'exportMarkup:()=>exportMarkup(),',
-    confirmBackupSaved: 'confirmBackupSaved:()=>confirmBackupSaved(),', importMarkup: 'importMarkup:()=>importMarkup(),', resetProgress: 'resetProgress:()=>resetProgress(),' };
+  const TABLE = { goHome: 'goHome:()=>goHome(),', startChapter: 'startChapter:el=>startQuiz(el.dataset.ch),', offlineButton: 'offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),', startCertainWrong: 'startCertainWrong:()=>startQuiz(null,\'certain\'),', exportMarkup: "exportMarkup:el=>el.dataset.encrypted==='true'?exportMarkup(true,el):exportMarkup(),",
+    confirmBackupSaved: 'confirmBackupSaved:()=>confirmBackupSaved(),', importMarkup: 'importMarkup:el=>importMarkup(el),', resetProgress: 'resetProgress:()=>resetProgress(),' };
   const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
   const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
   const CALLS = ['goHome', 'startQuiz', 'certainWrongQs', 'offlineStop', 'offlineDownload', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress'];
@@ -371,8 +371,11 @@ head('the page hands the module what it has, and keeps what the markup names');
     const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
     return el; });
   tctx.listeners.filter(l => l[0] === 'click').forEach(l => buttons.forEach(el => l[1]({ type: 'click', target: el })));
-  ok('tapped through the real Actions and the page\'s tables: Home, the download, the Certain-and-wrong practice, each ring with its own chapter as it is, export, the confirmation, import and reset, each its own function, once',
-     J(tcalls) === J(['goHome', 'offlineDownload', 'startQuiz [null,"certain"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz [' + J(HOSTILE) + ']', 'exportMarkup', 'confirmBackupSaved', 'importMarkup', 'resetProgress']), J(tcalls));
+  const exportTrigger = { nodeType: 1, dataset: { action: 'exportMarkup', encrypted: 'true' } };
+  const importTrigger = { nodeType: 1, dataset: { action: 'importMarkup' } };
+  ok('the real actions dispatch their arguments, including the focus targets for encrypted export and import',
+     J(tcalls) === J(['goHome', 'offlineDownload', 'startQuiz [null,"certain"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz [' + J(HOSTILE) + ']', 'exportMarkup',
+       'exportMarkup ' + J([true, exportTrigger]), 'confirmBackupSaved', 'importMarkup ' + J([importTrigger]), 'resetProgress']), J(tcalls));
   tcalls.length = 0; vm.runInContext('offlineJob.busy=true', tctx);
   const off = buttons.filter(el => el.getAttribute('data-action') === 'offlineButton');
   tctx.listeners.filter(l => l[0] === 'click').forEach(l => off.forEach(el => l[1]({ type: 'click', target: el })));

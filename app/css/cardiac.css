@@ -960,6 +960,17 @@ html[data-palette="contrast"] .door{background:var(--card)}
 .mast-name{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;max-width:78px}
 .data-row{display:flex;flex-wrap:wrap;gap:7px}
+#backupPassphrase{box-sizing:border-box;width:min(460px,calc(100% - 32px));max-height:calc(100% - 32px);
+  padding:24px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:18px;overflow:auto}
+#backupPassphrase[data-fallback]{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;z-index:2147483647}
+#backupPassphraseBackdrop{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.35);z-index:2147483646}
+#backupPassphrase h2{margin:0;font-size:var(--t-h4)}
+#backupPassphrase p{color:var(--muted);margin:8px 0 16px}
+#backupPassphrase p:empty{display:none}
+#backupPassphrase label{display:block;margin:12px 0;font-weight:600}
+#backupPassphrase input{box-sizing:border-box;display:block;width:100%;min-height:44px;margin-top:6px;
+  padding:8px;background:var(--white);color:var(--text);border:1px solid var(--border);border-radius:8px;font:inherit}
+#backupPassphrase .btn{min-height:44px}
 
 /* ── rhythm lab ── */
 .lab-monitor{position:relative;border-radius:18px;overflow:hidden;height:210px;

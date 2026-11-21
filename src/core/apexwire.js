@@ -12,10 +12,14 @@
      SEND, KEEP           how many messages a request carries, and how many a thread keeps
      wire(hist)           the thread as a request carries it: no failed turns, the last SEND, opening on a user turn
      trim(hist)           the thread as it is kept: cut in place to the last KEEP, on a user turn
+     key(v)               a key as pasted, cleaned: surrounding quotes, a leading "Bearer ", and all space taken off
 
    Gemini's shapes, as ApexWire.gemini:
      url(base, relay, op, model, key, page)   where a request goes: Google's, with a key; this site's relay, without
      headers(key, post)                       and what it carries: the key only when there is one
+     models(j)                                one page of ListModels: { raw: every id named, models: [id, name]
+                                              of those that can chat }
+     pick(models)                             the model to choose when the one asked for is not on the key
      tools(tools)                             the tool list (Anthropic's input_schema shape) as functionDeclarations
      parts(content), contents(wire)           a thread's messages as Gemini's contents; images as inlineData
      request(system, tools, contents, max)    the body of a streamed turn, as the JSON text that is sent
@@ -42,7 +46,8 @@
    that runs a turn (run() in src/core/apexturn.js, with the state a turn changes).
    These were the page's gemUrl(), gemHeaders(), apexWire(), apexTrim(), pushToolExchange(),
    toGeminiTools(), geminiParts(), toGeminiContents() and the inside of oneTurnGemini() and oneShot() until
-   they moved here (docs/ROADMAP.md, E1 step 2). tests/verify-apexwire-pure.js holds them.
+   they moved here (docs/ROADMAP.md, E1 step 2). cleanKey(), geminiDefaultModel(), GEM_NOT_CHAT and the reading of a
+   ListModels page in geminiModels() followed (E1); the page keeps the fetch, the pages and the errors. tests/verify-apexwire-pure.js holds them.
 
    No DOM, no clock, no storage, no network: bare Node can test it. calls() uses Math.random for ids.
    ES2018 for object spread (Safari 11.1); Safari 13.4 is the floor (README).
@@ -246,8 +251,44 @@ function pushToolExchange(wire,turn,results){
   }
 }
 
-root.ApexWire = { SEND: APEX_SEND, KEEP: APEX_KEEP, wire: apexWire, trim: apexTrim,
-  gemini: { url: gemUrl, headers: gemHeaders, tools: toGeminiTools, parts: geminiParts, contents: toGeminiContents,
+/* ═══════════ a key, and which models it can reach ═══════════ */
+/* A key as it is pasted: quotes a notes app or a mail added round it, a
+   "Bearer " copied from a curl line, and any space or line break inside it,
+   taken off. */
+function cleanKey(v){
+  return String(v||'').trim().replace(/^["'\u201c\u2018]|["'\u201d\u2019]$/g,'')
+    .replace(/^Bearer\s+/i,'').replace(/\s+/g,'');
+}
+/* What ListModels lists that cannot hold a conversation, by name. */
+const GEM_NOT_CHAT=/embedding|embed-|aqa|imagen|veo|image-generation|-image|-tts|tts-|audio-native|robotics|learnlm-.*-audio/i;
+/* One page of ListModels: every id it named (raw, the evidence shown when none
+   is usable) and the ones that can chat, as [id, displayName]. */
+function geminiModels(j){
+  const models=[], raw=[];
+  for(const m of (j&&j.models||[])){
+    const id=String(m.name||'').replace(/^models\//,'');
+    if(!id) continue;
+    raw.push(id);
+    const methods=m.supportedGenerationMethods;
+    /* A model that does not report its methods is not therefore useless —
+       judge it by name rather than dropping it silently. */
+    if(Array.isArray(methods)&&methods.length&&!methods.includes('generateContent')) continue;
+    if(GEM_NOT_CHAT.test(id)) continue;
+    models.push([id, m.displayName||id]);
+  }
+  return {models, raw};
+}
+/* Prefer a plain Flash: fastest, and the one the free tier is most generous
+   with. The exclusions are the variants that are Flash in name but not a
+   general chat model. Asked only of a list with something in it. */
+function geminiPick(models){
+  const plain=models.find(m=>/flash/i.test(m[0])&&!/lite|image|tts|audio|native|preview|thinking|robotics/i.test(m[0]));
+  const anyFlash=models.find(m=>/flash/i.test(m[0]));
+  return (plain||anyFlash||models[0])[0];
+}
+
+root.ApexWire = { SEND: APEX_SEND, KEEP: APEX_KEEP, wire: apexWire, trim: apexTrim, key: cleanKey,
+  gemini: { url: gemUrl, headers: gemHeaders, models: geminiModels, pick: geminiPick, tools: toGeminiTools, parts: geminiParts, contents: toGeminiContents,
             request: geminiRequest, plain: geminiPlain, text: geminiText, reader: geminiReader, calls: geminiCalls,
             exchange: pushToolExchange } };
 

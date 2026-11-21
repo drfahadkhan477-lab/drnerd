@@ -534,17 +534,28 @@ function get(key, fallback) {
 
    So a failed write now falls back to localStorage and stamps the key, which
    both keeps the data and tells the next migrate() which copy is newer. */
+const pendingWrites = new Set();
+
 function set(key, value) {
   if (MANAGED.indexOf(key) < 0) return lsSet(key, value);
   mem[key] = value;
   if (usable === false) return lsFallback(key, value);  // no database: as before
   if (!hydrated) dirty[key] = 1;
-  open().then(d => {
-    if (!d) { lsFallback(key, value); return; }
-    if (!hydrated) return;               // ready() will flush it against the merge
+  const write = open().then(d => {
+    if (!d) return lsFallback(key, value);
+    if (!hydrated) return true;          // ready() will flush it against the merge
     return landed(d, key);
-  }).catch(() => { lsFallback(key, mem[key]); });
+  }).catch(() => lsFallback(key, mem[key]));
+  pendingWrites.add(write);
+  write.then(() => pendingWrites.delete(write));
   return true;
+}
+
+/* An import already awaited ready(). Its success message must wait for
+   the managed writes queued by that import to reach durable storage. */
+async function flush() {
+  const outcomes = await Promise.all([...pendingWrites]);
+  return outcomes.every(Boolean);
 }
 
 /* Write the current value; fall back if the database refuses it. When it
@@ -556,11 +567,13 @@ function set(key, value) {
 const fellThisSession = Object.create(null);
 function landed(d, key) {
   return idbPut(d, key, mem[key]).then(stored => {
-    if (!stored) { lsFallback(key, mem[key]); return; }
-    if (!fellThisSession[key]) return;
-    try { localStorage.removeItem(key); } catch (_) {}
-    clearFellBack(key);
-    delete fellThisSession[key];
+    if (!stored) return lsFallback(key, mem[key]);
+    if (fellThisSession[key]) {
+      try { localStorage.removeItem(key); } catch (_) {}
+      clearFellBack(key);
+      delete fellThisSession[key];
+    }
+    return true;
   });
 }
 
@@ -592,7 +605,7 @@ function health() {
   return { usable: usable === true, hydrated, fellBack: fellBack(), mirroring: mirrorArmed };
 }
 
-root.Store = { ready, get, set, available, isHydrated, bytes, merge, health, mirror,
+root.Store = { ready, get, set, flush, available, isHydrated, bytes, merge, health, mirror,
                MANAGED, MIRRORED, MIRROR_PREFIX, DB_NAME, STORE, FALLBACK_KEY };
 
 })(typeof window !== 'undefined' ? window : this);

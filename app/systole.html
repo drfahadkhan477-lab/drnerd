@@ -1052,6 +1052,7 @@ function mountInk(){
 function currentQ(){ return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null; }
 
 /* ── export / import (survives file:// storage limits) ────────────────────── */
+@@SLOT[src:src/core/backupcrypto.js]@@
 /* Store.ready(), but not for ever. Store.open() gives up on a database that
    never answers, but a database that opens and then stops answering partway
    through hydration would still leave Export and Import waiting without a
@@ -1063,35 +1064,123 @@ function storeReadyOrNull(){
   return Promise.race([Store.ready(),new Promise(r=>setTimeout(()=>r(null),STORE_WAIT_MS))]);
 }
 let pendingBackupSave=null;
+let backupBusy=false;
 function confirmBackupSaved(){
   if(!pendingBackupSave)return;
   S.sinceBackup=Math.max(0,(S.sinceBackup||0)-pendingBackupSave.reviews);
   S.lastBackup=pendingBackupSave.at;save();pendingBackupSave=null;
   render();toast('Saved backup confirmed. Keep the file somewhere safe.');
 }
-async function exportMarkup(){
+function requestBackupPassphrase(encrypt,trigger){
+  if(!BackupCrypto.available()){
+    toast('Encrypted backups need Web Crypto. Open Systole from its HTTPS address.');
+    return null;
+  }
+  const dialog=document.createElement('dialog');
+  const native=typeof dialog.showModal==='function';
+  const action=encrypt?'Export encrypted backup':'Restore encrypted backup';
+  dialog.id='backupPassphrase';
+  dialog.setAttribute('role','dialog');
+  dialog.setAttribute('aria-modal','true');
+  dialog.setAttribute('aria-labelledby','backupPassphraseTitle');
+  dialog.innerHTML=`<form method="dialog">
+    <h2 id="backupPassphraseTitle">${action}</h2>
+    ${encrypt?'<p>Choose a long, unique passphrase and keep it somewhere safe. You will need it to restore this file.</p>':'<p>Enter the passphrase used to export this file.</p>'}
+    <label>Passphrase<input name="passphrase" type="password" autocomplete="${encrypt?'new-password':'current-password'}" required></label>
+    ${encrypt?'<label>Confirm passphrase<input name="confirmation" type="password" autocomplete="new-password" required></label>':''}
+    <p role="status"></p>
+    <div class="data-row">
+      <button type="submit" class="btn sb-back">${encrypt?'Download encrypted file':'Unlock and restore'}</button>
+      <button type="button" class="btn sb-back">Cancel</button>
+    </div>
+  </form>`;
+  const form=dialog.querySelector('form');
+  return new Promise((resolve,reject)=>{
+    let passphrase=null;
+    const backdrop=native?null:document.createElement('div');
+    const hidden=[];
+    const finish=()=>{
+      form.reset();
+      dialog.remove();
+      backdrop?.remove();
+      for(const [el,label] of hidden){
+        el.inert=false;
+        if(label===null)el.removeAttribute('aria-hidden');else el.setAttribute('aria-hidden',label);
+      }
+      if(trigger?.isConnected)trigger.focus();
+      resolve(passphrase);
+    };
+    const close=()=>{if(native)dialog.close();else finish();};
+    dialog.addEventListener('close',finish,{once:true});
+    dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
+    dialog.addEventListener('keydown',event=>{
+      event.stopPropagation();
+      if(event.key==='Escape'){event.preventDefault();close();return;}
+      if(native||event.key!=='Tab')return;
+      const controls=form.querySelectorAll('input,button');
+      const first=controls[0],last=controls[controls.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    });
+    form.querySelector('button[type="button"]').onclick=close;
+    form.onsubmit=event=>{
+      event.preventDefault();
+      const value=form.elements.passphrase.value;
+      if(encrypt&&value!==form.elements.confirmation.value){
+        form.querySelector('[role="status"]').textContent='The passphrases do not match.';
+        form.elements.confirmation.focus();
+        return;
+      }
+      passphrase=value;
+      close();
+    };
+    document.body.appendChild(dialog);
+    if(native){
+      try{dialog.showModal();form.elements.passphrase.focus();}catch(error){dialog.remove();reject(error);}
+      return;
+    }
+    backdrop.id='backupPassphraseBackdrop';
+    document.body.insertBefore(backdrop,dialog);
+    dialog.setAttribute('data-fallback','');
+    dialog.setAttribute('open','');
+    form.elements.passphrase.focus();
+    for(const el of document.body.children){
+      if(el===dialog||el===backdrop||el.inert)continue;
+      hidden.push([el,el.getAttribute('aria-hidden')]);
+      el.inert=true;
+      el.setAttribute('aria-hidden','true');
+    }
+  });
+}
+async function exportMarkup(encrypted=false,trigger=document.activeElement){
+  if(backupBusy)return false;
+  backupBusy=true;
   try{
-  if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
-  if(typeof flushLog==='function') flushLog();
-  if(typeof flushInk==='function') flushInk();
-  const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
-  const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
-    refs:(typeof REF!=='undefined'?REF:[]),
-    log:(typeof LOG!=='undefined'?LOG:[]),
-    chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
-    mem:(typeof Memory!=='undefined'?Memory.all():[])},null,0)],
-    {type:'application/json'});
-  const prepared={at:Date.now(),reviews:S.sinceBackup||0};
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='accsap12-annotations-'+todayISO()+'.json';
-  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  pendingBackupSave=missing.length?null:prepared;
-  if(S.screen==='stats')render();
-  if(!missing.length)toast('Download requested. After checking the saved file, confirm it in Progress → Your data.');
-  if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
-  return true;
+    const passphrase=encrypted?await requestBackupPassphrase(true,trigger):null;
+    if(encrypted&&passphrase===null)return false;
+    if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
+    if(typeof flushLog==='function') flushLog();
+    if(typeof flushInk==='function') flushInk();
+    const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
+    const text=JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
+      refs:(typeof REF!=='undefined'?REF:[]),
+      log:(typeof LOG!=='undefined'?LOG:[]),
+      chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
+      mem:(typeof Memory!=='undefined'?Memory.all():[])});
+    const prepared={at:Date.now(),reviews:S.sinceBackup||0};
+    const output=encrypted?JSON.stringify(await BackupCrypto.encrypt(text,passphrase)):text;
+    const blob=new Blob([output],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=(encrypted?'systole-encrypted-backup-':'accsap12-annotations-')+todayISO()+'.json';
+    a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    pendingBackupSave=missing.length?null:prepared;
+    if(S.screen==='stats')render();
+    if(!missing.length)toast('Download requested. After checking the saved file, confirm it in Progress → Your data.');
+    if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
+    return true;
   }catch(_){ toast('Backup could not be exported.'); return false; }
+  finally{backupBusy=false;}
 }
 function validateAnnotationBackup(d){
   const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -1107,15 +1196,28 @@ function validateAnnotationBackup(d){
   if(d.assets!=null) RefAssets.validateBackup(d.assets);
   return d.stats?progressFromBackup(d.stats):null;
 }
-function importMarkup(){
+function importMarkup(trigger=document.activeElement){
+  if(backupBusy)return;
   const inp=document.createElement('input');
   inp.type='file'; inp.accept='application/json';
   inp.onchange=()=>{
     const f=inp.files[0]; if(!f)return;
     const r=new FileReader();
+    r.onerror=()=>toast('That file could not be read.');
     r.onload=async()=>{
+      if(backupBusy)return;
+      backupBusy=true;
       try{
-        const d=JSON.parse(r.result);
+        let d=JSON.parse(r.result);
+        const encrypted=BackupCrypto.isEncrypted(d);
+        if(encrypted){
+          const passphrase=await requestBackupPassphrase(false,trigger);
+          if(passphrase===null)return;
+          try{d=JSON.parse(await BackupCrypto.decrypt(d,passphrase));}
+          catch(_){toast('Wrong passphrase or damaged encrypted backup. Your data is unchanged.');return;}
+          // The encrypted format always wraps an export made by this app.
+          if(!Number.isInteger(d?.v))throw new Error('Invalid encrypted backup payload.');
+        }
         const progress=validateAnnotationBackup(d);
         if(!(await storeReadyOrNull())){ toast('Storage is not responding, so nothing was restored. Reload and try again.'); return; }
         const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
@@ -1137,8 +1239,11 @@ function importMarkup(){
           applyTheme();
         }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
-        toast(assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
+        const writesStored=await Promise.race([Store.flush(),new Promise(resolve=>setTimeout(()=>resolve(false),STORE_WAIT_MS))]);
+        toast(!writesStored?'Annotations restored for this visit, but storage did not confirm every change. Keep the backup and retry before closing.'
+          :assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
       }catch(e){ toast('That file could not be read.'); }
+      finally{backupBusy=false;}
     };
     r.readAsText(f);
   };
@@ -3306,6 +3411,7 @@ function apexHosted(){
   }catch(_){ return false; }
 }
 @@SLOT[src:src/core/apexwire.js]@@
+@@SLOT[src:src/core/providererror.js]@@
 /* BYOK → Google directly, exactly as before. Hosted → the Worker, which
    attaches the secret. op is 'stream' | 'generate' | 'models'. The URL and the
    headers are built by src/core/apexwire.js; the two addresses are the page's. */
@@ -3658,10 +3764,7 @@ function switchProvider(p){
   const inSettings=document.querySelector('#ai .ai-title')?.textContent==='Tutor settings';
   if(inSettings) aiSettings(); else buildAI();
 }
-function cleanKey(v){
-  return String(v||'').trim().replace(/^["'\u201c\u2018]|["'\u201d\u2019]$/g,'')
-    .replace(/^Bearer\s+/i,'').replace(/\s+/g,'');
-}
+function cleanKey(v){ return ApexWire.key(v); }
 function keyMsg(t,cls){ const el=document.getElementById('keyMsg');
   if(el){ el.className='key-msg '+(cls||''); el.innerHTML=t; } }
 /* One discover-then-connect flow, driven by provider. Adding a second
@@ -3760,20 +3863,8 @@ function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvi
     }
   };
 }
-/* fetch() throwing means the request never got an HTTP response at all — that's
-   almost never this app's code. Surface the browser's own reason plus the
-   real, checkable causes, instead of a flat "check your connection". */
-function networkErrorMsg(err,name){
-  const raw=(err&&err.message)||'';
-  return `Could not reach ${name}${raw?` <span class="err-raw">(${e(raw)})</span>`:''}.
-    <details class="err-help"><summary>Why might this happen?</summary>
-    <ul>
-      <li>Open a new Safari tab and load any site — confirms the device is actually online, not just Wi-Fi-connected. Hospital and university networks often need a login page before real internet works.</li>
-      <li>This file must be opened with <b>Open in Safari</b>, not previewed inside the Files app — a preview can run without full network access.</li>
-      <li>A VPN or content blocker can silently block a specific domain while everything else works.</li>
-      <li>If you're on Wi-Fi, try cellular for one test — narrows it to a network-level block.</li>
-    </ul></details>`;
-}
+/* A request that got no response at all: the sentence is src/core/providererror.js's. */
+function networkErrorMsg(err,name){ return ProviderError.network(err,name,e); }
 function geminiPause(ms,signal){
   return new Promise((resolve,reject)=>{
     const abort=()=>{ clearTimeout(timer); if(signal) signal.removeEventListener('abort',abort); reject(new DOMException('Stopped','AbortError')); };
@@ -3837,7 +3928,7 @@ function validateKey(p,k,model){
  * The raw id list comes back alongside, so the caller can say what Google
  * actually returned when nothing survives the filter. A dead end that cannot
  * describe itself is what made this bug take two rounds to find. */
-const GEM_NOT_CHAT=/embedding|embed-|aqa|imagen|veo|image-generation|-image|-tts|tts-|audio-native|robotics|learnlm-.*-audio/i;
+/* Which of a page's models can chat is read by src/core/apexwire.js; the fetch, the pages and the errors are here. */
 async function geminiModels(key){
   const out=[], raw=[]; let pageToken='';
   for(let page=0; page<5; page++){
@@ -3849,30 +3940,14 @@ async function geminiModels(key){
     if(!r.ok) return {error:await apiError(r,'gemini'), models:[], raw:[]};
     relayAnswered(r);
     let j={}; try{ j=await r.json(); }catch(_){}
-    for(const m of (j.models||[])){
-      const id=String(m.name||'').replace(/^models\//,'');
-      if(!id) continue;
-      raw.push(id);
-      const methods=m.supportedGenerationMethods;
-      /* A model that does not report its methods is not therefore useless —
-         judge it by name rather than dropping it silently. */
-      if(Array.isArray(methods)&&methods.length&&!methods.includes('generateContent')) continue;
-      if(GEM_NOT_CHAT.test(id)) continue;
-      out.push([id, m.displayName||id]);
-    }
+    const got=ApexWire.gemini.models(j);
+    out.push(...got.models); raw.push(...got.raw);
     pageToken=j.nextPageToken||'';
     if(!pageToken) break;
   }
   return {models:out, raw};
 }
-/* Prefer a plain Flash: fastest, and the one the free tier is most generous
-   with. The exclusions are the variants that are Flash in name but not a
-   general chat model. */
-function geminiDefaultModel(models){
-  const plain=models.find(m=>/flash/i.test(m[0])&&!/lite|image|tts|audio|native|preview|thinking|robotics/i.test(m[0]));
-  const anyFlash=models.find(m=>/flash/i.test(m[0]));
-  return (plain||anyFlash||models[0])[0];
-}
+function geminiDefaultModel(models){ return ApexWire.gemini.pick(models); }
 
 function aiSettings(){ openSettings('apex'); }
 function bindChat(q){
@@ -4174,7 +4249,6 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
   }
   return {text, raw, calls, finishReason, incomplete:finishReason==='MAX_TOKENS'};
 }
-@@SLOT[src:src/core/providererror.js]@@
 /* A refusal from this site's own relay (hosted: no key typed) is not about a
    key the fellow can re-enter. It is the Worker's gate (Access not set up, or
    its token refused) or the site's key, and the Worker's message says which,
@@ -5283,9 +5357,9 @@ const ACTIONS={
   /* the figures card's one button, which says Stop while a download runs (offlinePaint() writes its words) */
   offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),
   startCertainWrong:()=>startQuiz(null,'certain'),
-  exportMarkup:()=>exportMarkup(),
+  exportMarkup:el=>el.dataset.encrypted==='true'?exportMarkup(true,el):exportMarkup(),
   confirmBackupSaved:()=>confirmBackupSaved(),
-  importMarkup:()=>importMarkup(),
+  importMarkup:el=>importMarkup(el),
   resetProgress:()=>resetProgress(),
   /* the notes library (src/app/refs.js) */
   refMore:()=>refMore(),

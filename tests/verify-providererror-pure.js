@@ -22,7 +22,10 @@
  *   - the response is read as little as before the move: the header only on the rate-limit branch, the
  *     clock only for a Retry-After date, and whether it came from the relay is asked of the page's own
  *     function, with the response it was given;
- *   - the page's apiError() is the call into this, with the page's viaRelay, e and Date.now.
+ *   - a request that got no response says who could not be reached, the browser's reason escaped (and no
+ *     empty brackets without one), and what to check;
+ *   - the page's apiError() and networkErrorMsg() are the calls into this, with the page's viaRelay, e and
+ *     Date.now.
  *
  * The browser half is tests/verify-gemini.js, which calls apiError() in the built page with real
  * Response objects.
@@ -197,6 +200,21 @@ head('the response is read as little as it was');
   ok('whether it came from the relay is asked of the page\'s function, with the response itself', b.seen.relay > 0 && b.seen.relayArg === b.r);
 }
 
+head('a request that got no response at all');
+{
+  const net = (err, name, escaper) => safely(() => P.network(err, name, escaper || esc));
+  const said = net(new TypeError('Load failed'), 'Gemini');
+  ok('names who could not be reached, and the browser\'s own reason beside it', typeof said === 'string' && said.startsWith('Could not reach Gemini <span class="err-raw">(Load failed)</span>.'), String(said).slice(0, 80));
+  ok('and the causes worth checking: being online, Open in Safari, a VPN or blocker, another network',
+     typeof said === 'string' && said.includes('<details class="err-help">') && ['Open a new Safari tab', 'Open in Safari', 'VPN or content blocker', 'try cellular'].every(t => said.includes(t)));
+  ok('with no reason given, none is shown: no empty brackets', String(net({}, 'Gemini')).startsWith('Could not reach Gemini.') && String(net(null, 'Gemini')).startsWith('Could not reach Gemini.') && !String(net(null, 'Gemini')).includes('err-raw'));
+  ok('the name is the one it is given', String(net(null, 'Another provider')).startsWith('Could not reach Another provider.'));
+  const attack = '<img src=x onerror=alert(1)>';
+  ok('the browser\'s reason is escaped before it is written', String(net(new Error(attack), 'Gemini')).includes('(&lt;img src=x onerror=alert(1)&gt;)') && !String(net(new Error(attack), 'Gemini')).includes('<img'));
+  /* Guard on the guard: with an escaper that does nothing, the same check must see the tag. */
+  ok('with an escaper that does nothing the tag gets through, so the check above measures something', String(net(new Error(attack), 'Gemini', String)).includes('<img'));
+}
+
 head('the page\'s apiError() is the call into this');
 {
   /* The module decides; the page reads the body and says where the response came from. The page is
@@ -208,7 +226,9 @@ head('the page\'s apiError() is the call into this');
      `${page.split(CALL).length - 1} of those lines, ${page.split('function apiError(').length - 1} apiError() in the page`);
   const slot = page.indexOf('@@SLOT[src:src/core/providererror.js]@@');
   ok('and the module is written into the page once, above it', slot >= 0 && slot < page.indexOf(CALL) && page.indexOf('@@SLOT[src:src/core/providererror.js]@@', slot + 1) < 0, slot < 0 ? 'no slot' : 'slot at ' + slot);
-  ok('the page keeps no second copy of the decision', !/function errMsg\(/.test(page) && page.split('Your API key was rejected').length - 1 === 0,
+  ok('networkErrorMsg() hands the module the page\'s e, below the module', page.split('function networkErrorMsg(err,name){ return ProviderError.network(err,name,e); }').length - 1 === 1
+     && page.split('function networkErrorMsg(').length - 1 === 1 && slot < page.indexOf('function networkErrorMsg('));
+  ok('the page keeps no second copy of the decision', !/function errMsg\(/.test(page) && page.split('Your API key was rejected').length - 1 === 0 && page.split('Why might this happen').length - 1 === 0,
      `${page.split('Your API key was rejected').length - 1} of its sentences still in the page`);
 }
 
