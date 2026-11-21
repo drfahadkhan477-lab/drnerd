@@ -22,7 +22,7 @@
  * THE LIST IS THE WORKFLOW'S, NOT A COPY OF IT. The suites are read from
  * .github/workflows/verify.yml: every `node tests/verify-*.js` step in the
  * `logic` job (pure), the `public-browser` job (browser), and the
- * `synthetic-browser` job, whose suites are each handed the target the step
+ * reusable browser shard called by `synthetic-browser`, whose suites receive the target the step
  * names, after the build commands (`node scripts/...` lines) of the
  * `synthetic-build` job that makes that target. synthetic-browser is a matrix
  * of shards (scripts/shard.js), and every shard is the whole job body with
@@ -57,6 +57,7 @@ const { spawnSync } = require('child_process');
 const { childEnv } = require('./gitenv.js');   // a suite never inherits where git looks for a repository
 
 const ROOT = path.join(__dirname, '..');
+const SHARD_WORKFLOW = '.github/workflows/verify-browser-shard.yml';
 
 /* The body of one top-level job: from "  <job>:" to the next line indented
    exactly two spaces, or the end of the file. */
@@ -66,6 +67,28 @@ function jobBody(yml, job) {
   const rest = yml.slice(start + job.length + 5);
   const next = rest.search(/\n  [A-Za-z0-9_-]+:\s*\n/);
   return next < 0 ? rest : rest.slice(0, next);
+}
+
+function readShardWorkflow(root = ROOT) {
+  return fs.readFileSync(path.join(root, SHARD_WORKFLOW), 'utf8');
+}
+
+/* The shared steps live on the Chromium runner and are aliased by WebKit.
+   The few Chromium-only steps say so in their condition. Read the same
+   step list and exclusions Actions sees, without a parallel suite manifest. */
+function browserShardBody(yml, job, shardsYml) {
+  const caller = jobBody(yml, job);
+  if (!caller || !/^    uses:/m.test(caller)) return caller;
+  if (!caller.includes(`uses: ./${SHARD_WORKFLOW}\n`))
+    throw new Error(`the ${job} job must call ${SHARD_WORKFLOW}`);
+  if (!shardsYml) throw new Error('the reusable browser shard workflow is missing');
+  const body = jobBody(shardsYml, 'chromium');
+  if (!body) throw new Error('the reusable workflow has no shared browser steps');
+  return body.split(/(?=\n      - )/).filter(step => {
+    const firstLine = step.trimStart().split('\n', 1)[0];
+    const engine = firstLine.match(/inputs\.job == '(synthetic-browser|synthetic-webkit)'/);
+    return !engine || engine[1] === job;
+  }).join('');
 }
 
 const invoked = body => [...(body || '').matchAll(/^\s*run:\s*node\s+tests\/(verify-[a-z0-9-]+)\.js\s*$/gm)].map(m => m[1]);
@@ -96,22 +119,23 @@ function splitJob(body) {
     .map(m => [m[1]].concat(m[2].trim().split(/\s+/).filter(Boolean)));
 }
 
-function suitesFromWorkflow(yml) {
+function suitesFromWorkflow(yml, shardsYml) {
   const logic = jobBody(yml, 'logic'), browser = jobBody(yml, 'public-browser');
   if (logic === null || browser === null)
     throw new Error(`the workflow has no ${logic === null ? 'logic' : 'public-browser'} job — nothing to take the suite list from`);
-  return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(jobBody(yml, 'synthetic-browser'), jobBody(yml, 'synthetic-build')),
+  return { pure: invoked(logic), browser: invoked(browser), synthetic: syntheticJob(browserShardBody(yml, 'synthetic-browser', shardsYml), jobBody(yml, 'synthetic-build')),
            split: splitJob(jobBody(yml, 'split-build')) };
 }
 
-/* opts: { root, yml, pure, engine, executablePath, log } — the seams the
+/* opts: { root, yml, shardsYml, pure, engine, executablePath, log } — the seams the
    suite drives. Returns { code, ran, failed, notRun }. */
 function run(opts) {
   const o = opts || {};
   const root = o.root || ROOT;
   const log = o.log || (s => console.log(s));
   const yml = o.yml != null ? o.yml : fs.readFileSync(path.join(root, '.github', 'workflows', 'verify.yml'), 'utf8');
-  const { pure, browser, synthetic, split } = suitesFromWorkflow(yml);
+  const shardsYml = o.shardsYml ?? (yml.includes(`uses: ./${SHARD_WORKFLOW}\n`) ? readShardWorkflow(root) : undefined);
+  const { pure, browser, synthetic, split } = suitesFromWorkflow(yml, shardsYml);
   const synNames = synthetic.suites.map(x => x.name);
   /* The split build is reported as one item, under its job's name. */
   const splitNames = split.length ? ['split-build'] : [];
@@ -268,12 +292,12 @@ function run(opts) {
    scripts/verify.js tags the rest `laptop`: the ones only a machine with the
    export can run, which is what the owner's quick laptop run is. Read from the
    workflow, so a suite added to CI leaves that set the same day. */
-function ciSuites(yml) {
-  const w = suitesFromWorkflow(yml);
+function ciSuites(yml, shardsYml) {
+  const w = suitesFromWorkflow(yml, shardsYml);
   return new Set([...w.pure, ...w.browser, ...w.synthetic.suites.map(x => x.name)].map(n => n.replace(/^verify-/, '')));
 }
 
-module.exports = { suitesFromWorkflow, run, jobBody, ciSuites };
+module.exports = { suitesFromWorkflow, run, jobBody, browserShardBody, readShardWorkflow, ciSuites };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

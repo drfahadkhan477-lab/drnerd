@@ -758,6 +758,10 @@ async function heapAfterBoot(page, url) {
     /* Then a lesion in the Rhythm Lab's cycle panel draws from the engine the Lab loaded. */
     await page.evaluate(() => { goLab(); });
     await settled(page, () => !!document.querySelector('[data-physio-lesion="as"]') && typeof physio !== 'undefined' && !!physio, { timeout: 30000 });
+    /* Normal, too, is the engine's beat once the engine is there (physio.js draws only until then). */
+    await page.evaluate(() => document.querySelector('[data-physio-lesion="normal"]').click());
+    const normalDrawn = await settled(page, () => typeof Circulation !== 'undefined' && physio.cycle() === Circulation.cycle('normal'), { timeout: 30000 }).then(() => true, () => false);
+    ok('the cycle panel\'s Normal is the engine\'s normal beat, offline', normalDrawn === true, JSON.stringify({ normalDrawn }));
     await page.evaluate(() => document.querySelector('[data-physio-lesion="as"]').click());
     const circDrawn = await settled(page, () => !!physio.cycle() && physio.cycle().preset === 'as', { timeout: 30000 }).then(() => true, () => false);
     ok('and a lesion tapped in the cycle panel then draws its beat, offline', circDrawn === true, JSON.stringify({ circDrawn }));
