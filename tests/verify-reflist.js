@@ -23,6 +23,7 @@
  */
 'use strict';
 const path = require('path');
+const fs = require('fs');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted, onScreen, quiet } = require('./_render.js');
@@ -145,13 +146,22 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     /* A figure written without a size has no room until it decodes, so it, and the card round it, grew as it arrived:
        cards of 345 px became 418 under a scrolling finger. tests/_figroom.js puts a drawn figure back as a fresh <img>,
        with the attributes the page wrote, and holds its picture back. */
-    await toLibrary();
+    // Use a public image and note so this check does not depend on which
+    // licensed notes happen to occupy the first page of the library.
+    const image = 'data:image/jpeg;base64,' + fs.readFileSync(path.join(__dirname, '..', 'assets', 'echo', 'four-chamber.jpg')).toString('base64');
+    await page.evaluate(image => {
+      REF_IMGS['test-figure.jpg'] = image;
+      REF.push({ id: 'test-figure-note', title: 'Test figure', body: '![Test figure](refimg://test-figure.jpg)', tags: [], ts: Date.now() });
+    }, image);
+    await toLibrary('test-figure-note');
+    await page.waitForFunction(() => { const img = document.querySelector('.ref-card .ref-fig img'); return img && img.complete; });
     const sized = await page.evaluate(() => [...document.querySelectorAll('.ref-card .ref-fig img')].filter(x => x.complete && x.naturalWidth)
       .map(x => [x.getAttribute('width'), x.getAttribute('height'), x.naturalWidth, x.naturalHeight]));
     ok('each figure drawn is written with its own width and height', sized.length > 0 && sized.every(([w, h, nw, nh]) => w === String(nw) && h === String(nh)),
        `${sized.length} figures; ` + JSON.stringify(sized.find(([w, h, nw, nh]) => w !== String(nw) || h !== String(nh)) || sized[0]));
     const room = await heldRoom(page, '.ref-card .ref-fig img');
     ok('a figure has the room while it is loading that it takes once it has loaded', keptRoom(room), roomSaid(room));
+    await page.evaluate(() => { REF = REF.filter(r => r.id !== 'test-figure-note'); delete REF_IMGS['test-figure.jpg']; });
   }
 
   head('leaving, deleting, adding, and one note on its own');
