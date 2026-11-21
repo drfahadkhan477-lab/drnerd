@@ -370,6 +370,60 @@ meta-suites have failed across recent merges. Retire what has never failed and
 guards nothing that can still break. *Opus* for the analysis; *Haiku* to read the
 logs.
 
+*Measured 21 November 2026:* the 30 most recently merged PRs targeting
+`master`, from #365 to #396 by merge time, had 55 Verify workflow runs and
+59 attempts. Match each `pull_request` run to the PR's head branch between
+its opening and merge timestamps, then include every attempt. All 30 PRs
+had a run at the merged head. Runner-minutes sum the GitHub Actions job
+start-to-completion intervals, including time spent on failed or cancelled
+jobs with timestamps and excluding skipped jobs. These are elapsed runner
+minutes across jobs, so they differ from time spent waiting for a PR and
+from billed minutes. The sample excludes post-merge pushes and manual runs.
+
+| Scope | Median per PR | Mean per PR | 90th percentile per PR | Total |
+| --- | ---: | ---: | ---: | ---: |
+| All observed PR runs | 94.9 min | 176.0 min | 188.9 min | 5,281.5 min |
+| Merged-head runs and their attempts | 91.9 min | 99.3 min | 101.2 min | 2,979.1 min |
+
+The synthetic Chromium and WebKit shards accounted for 4,748.2 minutes
+(89.9%), with 2,461.9 minutes in WebKit. PR #384 alone used 1,713.6
+runner-minutes across its successive commits and attempts.
+
+Four runs failed and then passed on the same workflow run and SHA. That is
+4 of 55 observed runs (7.3%), or 3 of 30 at merged heads (10.0%). This is an
+observed lower bound because failures without a same-SHA rerun are
+unclassified. Eight runs ended cancelled. The four confirmed reruns used
+364.2 runner-minutes:
+
+- [#384](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44524340807),
+  `verify-splash-heart`.
+- [#387](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44514933922),
+  `verify-mockscreen`.
+- [#369](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44208390958)
+  and [#365](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44183762046),
+  `verify-lab`.
+
+The named meta-suites all completed green. Durations below cover named
+steps, separate from setup and the second timezone's grouped rerun. The
+Actions API timestamps have second-level precision.
+
+| Meta-suites | Successful measurements | Runner-minutes |
+| --- | ---: | ---: |
+| `verify-devtools-pure` | 59 | 13.0 |
+| `verify-suitecache-pure`, `verify-suitetime-pure` | 59 each | 10.5 |
+| `verify-suitecache` | 118 across both engines | 2.8 |
+| `verify-testpublic-pure`, `verify-cichanges-pure`, `verify-stats`, `verify-shard-pure`, `verify-record-pure` | 59 each | 2.0 |
+
+*Retirement recommendation:* keep these suites. They exercised distinct
+contracts and together cost about 0.5% of measured runner time. Focus the
+next measurement on WebKit shard balance and the browser suites that drove
+reruns. The earlier `verify-homepager` Brain-turn failure was addressed by
+[#357](https://github.com/drfahadkhan477-lab/drnerd/pull/357).
+[#397](https://github.com/drfahadkhan477-lab/drnerd/pull/397) estimates a
+shorter longest WebKit shard. Compare elapsed time and summed runner-minutes
+after it lands, since moving work between shards can reduce the former
+while leaving the latter similar.
+
 **E5 — Measure battery on the iPad, then set a frame budget.** The discovery doc
 showed the container cannot measure it. Add a hidden diagnostics line that counts
 frames drawn per second per canvas, note the iPad's battery percentage before and
