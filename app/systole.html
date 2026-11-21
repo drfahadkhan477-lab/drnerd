@@ -1782,14 +1782,14 @@ function addDays(iso,n){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''
    2 Hard, 3 Good, 4 Easy (RATINGS below carries these, not SM-2's 0/3/4/5). */
 /* The card's id spreads its due day within FSRS's fuzz range (S4); a preview and the rating it previews pass the same
    id, so the day a button shows is the day a tap gives. */
-function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),id); }
+function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),id,S.examDate); }
 
 @@SLOT[src:src/core/reviewqueue.js]@@
 /* What is due, the new questions that top a session up, and the session itself: the rules are
    src/core/reviewqueue.js. These hand it the bank, the cards and today. */
-function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO()); }
+function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO(),S.examDate); }
 function newQuestionsForReview(limit){ return ReviewQueue.fresh(POOL,S.srs,limit); }
-function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target); }
+function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target,S.examDate); }
 /* docs/ROADMAP.md, S6. A review session as it is asked, from the questions it is to hold (the queue, or every card
    due): shuffled, then, for a question on one side of a
    confusion Apex has noted (a gap memory naming two things), a question on the other side straight after it, up to
@@ -1797,6 +1797,8 @@ function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),tar
    has questions left (src/core/confusable.js). Every due card stays in it. */
 const PAIR_MAX=4;
 function reviewDeck(qs){
+  const exam=S.examDate && FSRS.examWindow(todayISO(),S.examDate);
+  if(exam && exam.finalFortnight) return qs;
   const base=shuf(qs);
   const sets=Confusable.sets((typeof Memory!=='undefined')?Memory.all():[],POOL);
   const extra=Confusable.partners(base,sets,POOL,{max:PAIR_MAX,prefer:id=>S.srs[id]?0:1});
@@ -1810,7 +1812,7 @@ function rateReview(grade){
   const q=S.questions[S.qIdx]; if(!q||!S.answered) return;
   const ans=S.answers[S.qIdx]; if(ans&&ans.rated) return;   // the rate-row is gone once true; this is the second line of defence
   logReview(q,grade,grade>=2,'review');
-  S.srs[q.id]=FSRS.update(S.srs[q.id],grade,todayISO(),q.id);
+  S.srs[q.id]=fsrsPreview(S.srs[q.id],grade,q.id);
   if(ans) ans.rated=true;
   logRated();
   bumpStreak();
@@ -4910,7 +4912,7 @@ function restoreDeck(qs,key){
    forgotten first; then the weaker chapters; then new). It runs as a review session (mode 'due'), so a
    card rated here moves its schedule exactly as in the review queue. ── */
 function planNow(minutes){
-  return StudyPlan.plan({minutes,pool:POOL,srs:S.srs,chStats:S.chStats,missed:S.missed});
+  return StudyPlan.plan({minutes,pool:POOL,srs:S.srs,chStats:S.chStats,missed:S.missed,examDate:S.examDate});
 }
 function startPlan(minutes){
   const qs=planNow(minutes).items.map(it=>QBYID[it.id]).filter(q=>q&&!q.bad);
@@ -5147,7 +5149,7 @@ function recordAnswer(q,ok,mode,extra){
    only that); never over a card that exists. */
 function seedFirstCard(q,ok,cf,mode){
   if(mode==='due'||mode==='exam'||mode==='mockreview'||!q||Object.prototype.hasOwnProperty.call(S.srs,q.id)) return;
-  S.srs[q.id]=FSRS.update(null,FSRS.firstRating(ok,cf),todayISO(),q.id);
+  S.srs[q.id]=fsrsPreview(null,FSRS.firstRating(ok,cf),q.id);
 }
 function selectOpt(idx){
   if(S.answered)return;

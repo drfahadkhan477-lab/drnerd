@@ -36,7 +36,18 @@
 (function (root) {
 'use strict';
 
-function due(pool, srs, today){
+const FSRS=root.FSRS || (typeof require==='function' && require('./fsrs.js').FSRS);
+const StudyPlan=root.StudyPlan || (typeof require==='function' && require('./studyplan.js').StudyPlan);
+
+function due(pool, srs, today, examDate){
+  if(examDate){
+    const exam=FSRS.examWindow(today,examDate);
+    if(exam && exam.finalFortnight) return StudyPlan.rankedDue(pool,srs,today,exam,root.Blueprint && root.Blueprint.weights);
+    if(exam) return pool.filter(q=>{
+      const day=FSRS.scheduledDue(srs[q.id],exam);
+      return day!==null && day<=today;
+    });
+  }
   return pool.filter(q=>{ const c=srs[q.id]; return c && c.due<=today; });
 }
 function fresh(pool, srs, limit){
@@ -57,8 +68,8 @@ function fresh(pool, srs, limit){
   }
   return out;
 }
-function queue(pool, srs, today, target){
-  const d=due(pool,srs,today);
+function queue(pool, srs, today, target, examDate){
+  const d=due(pool,srs,today,examDate);
   const topUp=fresh(pool,srs,Math.max(0,target-d.length));
   return [...d,...topUp];
 }

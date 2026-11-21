@@ -198,6 +198,26 @@ function roundRobin(byChapter, order, limit) {
   return out;
 }
 
+/* The final fortnight puts the largest expected loss first. Shares need no
+   normalization to rank. Use equal shares if this bank has no matching
+   blueprint. Every due card remains eligible, including unweighted chapters. */
+function rankedDue(pool, srs, today, exam, weights) {
+  const due = pool.filter(q => {
+    const day = FSRS.scheduledDue(srs[q.id], exam);
+    return day !== null && day <= today;
+  });
+  const shares = exam && exam.finalFortnight && weights;
+  const names = Object.keys(shares || {});
+  const chapters = names.length ? new Set(pool.map(q => q.ch)) : null;
+  const weighted = names.length && names.every(ch => chapters.has(ch) && Number.isFinite(shares[ch]) && shares[ch] >= 0)
+    && names.some(ch => shares[ch] > 0);
+  return due.map(q => {
+    const r = retrievability(srs[q.id], today);
+    const weight = weighted ? (Object.prototype.hasOwnProperty.call(shares, q.ch) ? shares[q.ch] : 0) : 1;
+    return { q, r, risk: weight * (1 - r) };
+  }).sort((a, b) => b.risk - a.risk || a.r - b.r || (a.q.id < b.q.id ? -1 : a.q.id > b.q.id ? 1 : 0)).map(x => x.q);
+}
+
 function plan(o) {
   o = obj(o);
   const pool = arr(o.pool).filter(q => q && typeof q.id === 'string');
@@ -212,11 +232,12 @@ function plan(o) {
   const take = (q, reason) => { used.add(q.id); return { id: q.id, ch: q.ch, reason }; };
 
   /* 1. due, most forgotten first */
-  const due = pool.filter(q => { const c = srs[q.id]; return c && typeof c.due === 'string' && c.due <= today; })
-    .map(q => ({ q, r: retrievability(srs[q.id], today) }))
-    .sort((a, b) => a.r - b.r || (a.q.id < b.q.id ? -1 : 1));
-  const dueQuota = Math.min(due.length, Math.ceil(budget * 0.6));
-  const dueItems = due.slice(0, dueQuota).map(x => take(x.q, 'due'));
+  const exam = FSRS.examWindow(today, o.examDate);
+  const finalFortnight = exam && exam.finalFortnight;
+  const weights = 'blueprint' in o ? o.blueprint : (root.Blueprint && root.Blueprint.weights);
+  const due = rankedDue(pool, srs, today, exam, weights);
+  const dueQuota = Math.min(due.length, finalFortnight ? budget : Math.ceil(budget * 0.6));
+  const dueItems = due.slice(0, dueQuota).map(q => take(q, 'due'));
 
   /* 2. weak chapters: missed first, then never seen */
   const weak = weakChapters(o.chStats, 3);
@@ -247,16 +268,16 @@ function plan(o) {
   /* what the time still allows: more of what is due, then stop */
   let items = dueItems.concat(weakItems, newItems);
   if (items.length < budget) {
-    for (const x of due) {
+    for (const q of due) {
       if (items.length >= budget) break;
-      if (!used.has(x.q.id)) items.push(take(x.q, 'due'));
+      if (!used.has(q.id)) items.push(take(q, 'due'));
     }
   }
 
   /* interleave the three kinds so a session is not a block of each */
   const queues = { due: [], weak: [], new: [] };
   for (const it of items) queues[it.reason].push(it);
-  items = [];
+  items = finalFortnight ? queues.due.splice(0) : [];
   for (let i = 0; ; i++) {
     let added = false;
     for (const k of ['due', 'weak', 'new']) if (queues[k][i]) { items.push(queues[k][i]); added = true; }
@@ -288,7 +309,11 @@ function readiness(o) {
   const unseen = total - seen;
 
   const retention = seen ? seenCards.reduce((s, q) => s + retrievability(srs[q.id], today), 0) / seen : null;
-  const dueNow = seenCards.filter(q => typeof srs[q.id].due === 'string' && srs[q.id].due <= today).length;
+  const exam = FSRS.examWindow(today, o.examDate);
+  const dueNow = seenCards.filter(q => {
+    const day = FSRS.scheduledDue(srs[q.id], exam);
+    return day !== null && day <= today;
+  }).length;
   const { rows, mean } = chapterRows(o.chStats, 1);
   const weak = weakChapters(o.chStats, 3);
   const pr = prior(o.chStats);
@@ -344,6 +369,6 @@ function readiness(o) {
   };
 }
 
-root.StudyPlan = { plan, readiness, weakChapters, retrievability, examScore, betaCdf, betaQuantile, DEFAULT_SEC, PRIOR_N, LEVEL };
+root.StudyPlan = { rankedDue, plan, readiness, weakChapters, retrievability, examScore, betaCdf, betaQuantile, DEFAULT_SEC, PRIOR_N, LEVEL };
 
 })(typeof window !== 'undefined' ? window : this);

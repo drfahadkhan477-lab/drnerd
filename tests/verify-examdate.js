@@ -133,6 +133,47 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const leap = await page.evaluate(() => progressFromBackup({ examDate: '2028-02-29' }).examDate);
   ok('a real leap day survives backup restoration', leap === '2028-02-29');
 
+  head('a stored deck when an exam is brought forward');
+  const tomorrow = await inDays(1), yesterday = await inDays(-1), later = await inDays(90);
+  const ids = await page.evaluate(({tomorrow,yesterday,later}) => {
+    const a=POOL[0], b=POOL.find(q=>q.ch!==a.ch);
+    S.srs={};
+    S.srs[a.id]={due:later,last:yesterday,stability:1,difficulty:5,ivl:90};
+    S.srs[b.id]={due:later,last:yesterday,stability:3,difficulty:5,ivl:90};
+    Blueprint.weights={[a.ch]:1,[b.ch]:10};
+    setExamDate(tomorrow);
+    return [b.id,a.id];
+  },{tomorrow,yesterday,later});
+  const deck = await page.evaluate(() => ({
+    due:dueQuestions().map(q=>q.id), plan:planNow(5).items.slice(0,2).map(q=>q.id),
+    today:forecast7()[0].n, raw:Object.values(S.srs).map(c=>c.due)
+  }));
+  ok('old cards appear in the exam-eve queue, plan and forecast while retaining their saved dates',
+    JSON.stringify(deck.due)===JSON.stringify(ids) && JSON.stringify(deck.plan)===JSON.stringify(ids) &&
+    deck.today===2 && deck.raw.every(d=>d===later), JSON.stringify(deck));
+  await page.evaluate(() => startQuiz(null,'due'));
+  await onScreen(page,'quiz');
+  ok('starting the actual review preserves weighted risk order ahead of new cards',
+    JSON.stringify(await page.evaluate(()=>S.questions.slice(0,2).map(q=>q.id)))===JSON.stringify(ids));
+  await page.evaluate(()=>selectOpt(S.questions[S.qIdx].ci));
+  const easy=page.locator('.rate-btn[data-grade="4"]');
+  await easy.waitFor();
+  ok('the Easy rating previews the exam-day deadline', (await easy.locator('.rate-sched').innerText())==='tomorrow');
+  await easy.click();
+  const stored = await page.evaluate(id => JSON.parse(localStorage.getItem(KEY)).srs[id], ids[0]);
+  ok('tapping Easy saves the previewed day and the new scheduler version', stored.due===tomorrow && stored.ivl===1 && stored.sv===3);
+  const practice = await page.evaluate(() => {
+    const q=POOL.find(q=>!S.srs[q.id]);
+    S.flagged=new Set([q.id]);
+    startQuiz(null,'flagged');
+    selectOpt(q.ci);
+    return S.srs[q.id];
+  });
+  ok('a first correct quiz answer also schedules by the exam', practice && practice.ivl===1 && practice.due===tomorrow);
+  await page.evaluate(()=>setExamDate(''));
+  ok('clearing the exam restores the old due date for the card still to review',
+    await page.evaluate(({id,later})=>S.srs[id].due===later && !dueQuestions().some(q=>q.id===id), {id:ids[1],later}));
+
   ok('nothing threw throughout', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);

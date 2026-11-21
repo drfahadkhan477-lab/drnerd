@@ -510,6 +510,36 @@ for (const seed of [1, 2, 3]) {
      r.recall > 0.87 && r.recall < 0.93, `${r.recall.toFixed(3)} over ${r.reviews} reviews`);
 }
 
+head('exam retention and deadlines across a change of clocks');
+{
+  const day = '2026-03-07';
+  const targets = [90, 60, 30, 14, 1].map(n => F.examWindow(day, plus(day, n)).retention);
+  ok('retention is 90% until 60 days out and climbs to 95% on the eve',
+    targets[0] === 0.9 && targets[1] === 0.9 && targets[1] < targets[2] && targets[2] < targets[3] &&
+    targets[3] < targets[4] && targets[4] === 0.95);
+  const far = F.update(null, 4, day);
+  const close = F.update(null, 4, day, undefined, plus(day, 30));
+  ok('the retention target shortens an uncapped interval without changing learned stability',
+    close.stability === far.stability && close.ivl === F.ivl(far.stability, targets[2]) && close.ivl < far.ivl && far.ivl < 29);
+  const mature = { difficulty: 5, stability: 500, ivl: 500, due: '2027-07-01', last: '2026-03-01' };
+  ok('after fuzz every grade of a mature card lands by the eve across DST', [1,2,3,4].every(g =>
+    F.update(mature, g, day, 'A', '2026-03-10').due === '2026-03-09'));
+  const eve = F.update(mature, 4, '2026-03-09', 'A', '2026-03-10');
+  const examDay = F.update(eve, 4, '2026-03-10', 'A', '2026-03-10');
+  ok('a review on the eve lands on the exam and a review on exam day leaves the queue',
+    eve.ivl === 1 && eve.due === '2026-03-10' && examDay.due > '2026-03-10');
+  ok('a past or invalid date gives the ordinary schedule', ['2026-03-01','2026-02-30','oops'].every(d =>
+    JSON.stringify(F.update(null, 4, day, undefined, d)) === JSON.stringify(far)));
+  const e = F.examWindow(day, '2026-03-10');
+  ok('old schedules follow a moved or cleared exam without any write to the card',
+    F.scheduledDue(mature, e) === '2026-03-09' &&
+    F.scheduledDue(mature, F.examWindow(day,'2026-03-15')) === '2026-03-14' &&
+    F.scheduledDue(mature, null) === '2027-07-01' && mature.ivl === 500);
+  ok('the deadline never postpones an earlier review, invents a missing due day, or repeats an exam-day review',
+    F.scheduledDue({due:day}, e) === day && F.scheduledDue({},e) === null &&
+    F.scheduledDue(examDay,e) === examDay.due);
+}
+
 head('the scheduler says which scheduler it is');
 {
   /* THIS PIN IS LOAD-BEARING. It is the whole mechanism: change any FSRS
@@ -518,7 +548,7 @@ head('the scheduler says which scheduler it is');
      that discards the one signal the pin exists to give. Bump
      SCHEDULER_VERSION first, decide what happens to cards already scheduled
      under the old model, and only then update the value here. */
-  const PINNED = 'e70d5984';
+  const PINNED = 'e658b9af';
   ok('the FSRS parameters are exactly the ones this pin was taken over',
      F.paramsFingerprint() === PINNED,
      F.paramsFingerprint() === PINNED ? PINNED
