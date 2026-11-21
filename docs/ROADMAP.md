@@ -272,6 +272,13 @@ sections, the file an image link names, and a note's figures, which were
 `parseImportText()`, `stripFrontmatter()`, `splitSections()`,
 `refResolveAsset()` and `extractRefImages()` and stay those names as one line
 each. `refAbsorbImages()`, which stores the bytes, stays the page's.
+Then what a saved progress record may hold (`src/core/progressdata.js`,
+`ProgressData`, held by `verify-progressdata-pure`): the one table a restore,
+an export and a record from another window are read by, and the rules over it,
+which were `STAT_ENTRY`, `statDay()`, `statRecord()`, `statEntryOk()`,
+`usableStats()`, `progressFromBackup()` and `validExamDate()`. The page keeps
+the five it calls by name as one line each; `load()`, `save()` and
+`adoptProgress()`, which touch storage and the page's state, stay the page's.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
