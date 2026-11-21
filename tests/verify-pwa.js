@@ -719,13 +719,14 @@ async function heapAfterBoot(page, url) {
     ok('a figure seen before is still there offline', decoded);
     // First visit to Echo happens AFTER the outage: this measures installation
     // caching, rather than images a previous visit happened to cache.
+    const echoCold = await page.evaluate(() => typeof EchoUI === 'undefined' && typeof window.ECHO_SRC === 'string');
     await page.evaluate(() => { ECHO.tab = 'visual'; goEcho(); });
     await settled(page, () => !!document.querySelector('.echo-panel'));
     for (const image of await page.locator('.echo-teaching-image').all()) {
       await image.scrollIntoViewIfNeeded();
       await image.evaluate(i => i.decode().catch(() => null));
     }
-    ok('public echo teaching images decode on their first visit offline', await page.evaluate(() => {
+    ok('Echo Studio loads on demand and its teaching images decode on the first offline visit', echoCold && await page.evaluate(() => {
       const images = Array.from(document.querySelectorAll('.echo-teaching-image'));
       return images.length === 2 && images.every(i => i.naturalWidth > 100 && /\/echo\/echo-/.test(i.src));
     }));

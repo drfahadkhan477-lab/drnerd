@@ -3198,9 +3198,28 @@ window.ECHO_MEDIA = {fourChamber:'data:image/jpeg;base64,@@SLOT[asset:assets/ech
 
 var ECHO = { tab: 'reference', disease: null, fields: {} };
 
-function buildEchoScreen(){ return EchoUI.screenHtml(ECHO); }
+let echoLoadState = 'idle';
+function buildEchoScreen(){
+  if(typeof EchoUI !== 'undefined') return EchoUI.screenHtml(ECHO);
+  if(echoLoadState === 'idle' && window.ECHO_SRC){
+    echoLoadState = 'loading';
+    const script = document.createElement('script');
+    script.src = window.ECHO_SRC;
+    script.onload = script.onerror = () => {
+      echoLoadState = typeof EchoUI === 'undefined' ? 'failed' : 'ready';
+      if(echoLoadState === 'failed') script.remove();
+      if(S.screen === 'echo') render();
+    };
+    document.head.appendChild(script);
+  }
+  if(echoLoadState === 'failed') return '<p role="status">Echo Studio could not load.</p><button data-action="goEcho">Retry</button>';
+  return '<p role="status">Loading Echo Studio…</p>';
+}
 
-function goEcho(){ S.screen = 'echo'; render(); }
+function goEcho(){
+  if(echoLoadState === 'failed') echoLoadState = 'idle';
+  S.screen = 'echo'; render();
+}
 
 function echoRepaintResults(){
   var out = document.querySelector('.echo-out');
