@@ -195,6 +195,23 @@ head('readiness follows the numbers');
   ok('the verdict reads as a sentence with the real numbers', /60 of 120/.test(r0.text) && /60 days left/.test(r0.text), r0.text);
 }
 
+head('the last fortnight gives due reviews the time available');
+{
+  const pool = [{id:'cold',ch:'Alpha'},{id:'warm',ch:'Beta'},{id:'new',ch:'Alpha'}];
+  const srs = {
+    cold:{stability:1,last:day(-10),due:day(-1)},
+    warm:{stability:4,last:day(-10),due:TODAY}
+  };
+  const order = (days, blueprint) => SP.plan({pool,srs,today:TODAY,minutes:3,secPerQuestion:60,
+    examDate:day(days),blueprint}).items.map(it=>it.id).join(',');
+  ok('a matching blueprint can put a higher-share chapter first; both due precede new',
+    order(14,{Alpha:1,Beta:5}) === 'warm,cold,new');
+  ok('without usable weights the lowest recall leads, including on the eve',
+    [null,{}, {Absent:10,Beta:5}].every(w => order(1,w) === 'cold,warm,new'));
+  ok('at fifteen days ordinary planning still interleaves new and due cards',
+    order(15,{Alpha:1,Beta:5}) === 'cold,new,warm');
+}
+
 head('S7: each chapter, and the exam, as an interval');
 {
   const near = (x, y, tol) => Math.abs(x - y) < (tol || 1e-9);

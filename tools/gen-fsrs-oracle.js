@@ -82,6 +82,15 @@ for (const S of S_GRID) for (const D of D_GRID) for (const el of EL_GRID) for (c
    the grid above never exercises because it always has a prior state. */
 const init = GRADES.map(g => [g, P.init_difficulty.call(oracle, g), P.init_stability.call(oracle, g)]);
 
+/* Capture the reference multiplier before its whole-day rounding, and a
+   sample of its actual integer intervals. Systole rounds up; ts-fsrs rounds
+   to nearest. Values chosen away from rounding boundaries exercise both. */
+const intervals = [0.90, 0.91, 0.925, 0.94, 0.95].map(retention => {
+  const ref = ts.fsrs({ w: OURS.W, enable_fuzz: false, request_retention: retention });
+  return { retention, modifier: ref.interval_modifier,
+    days: S_GRID.map(stability => [stability, ref.next_interval(stability, 0)]) };
+});
+
 const out = {
   _generated: 'by tools/gen-fsrs-oracle.js — do not hand-edit',
   _why: 'An independent implementation of FSRS, fed our own weights, so the ' +
@@ -100,6 +109,7 @@ const out = {
             'theirRetrievability', 'nextDifficulty', 'nextStability'],
   initColumns: ['grade', 'initDifficulty', 'initStability'],
   outputPrecision: 1e-8,   // ts-fsrs rounds every public result to 8 decimals
+  intervals,
   init,
   rows,
 };

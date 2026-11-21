@@ -1782,14 +1782,14 @@ function addDays(iso,n){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''
    2 Hard, 3 Good, 4 Easy (RATINGS below carries these, not SM-2's 0/3/4/5). */
 /* The card's id spreads its due day within FSRS's fuzz range (S4); a preview and the rating it previews pass the same
    id, so the day a button shows is the day a tap gives. */
-function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),id); }
+function fsrsPreview(card,rating,id){ return FSRS.update(card,rating,todayISO(),id,S.examDate); }
 
 @@SLOT[src:src/core/reviewqueue.js]@@
 /* What is due, the new questions that top a session up, and the session itself: the rules are
    src/core/reviewqueue.js. These hand it the bank, the cards and today. */
-function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO()); }
+function dueQuestions(){ return ReviewQueue.due(POOL,S.srs,todayISO(),S.examDate); }
 function newQuestionsForReview(limit){ return ReviewQueue.fresh(POOL,S.srs,limit); }
-function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target); }
+function reviewQueue(target){ return ReviewQueue.queue(POOL,S.srs,todayISO(),target,S.examDate); }
 /* docs/ROADMAP.md, S6. A review session as it is asked, from the questions it is to hold (the queue, or every card
    due): shuffled, then, for a question on one side of a
    confusion Apex has noted (a gap memory naming two things), a question on the other side straight after it, up to
@@ -1800,7 +1800,14 @@ function reviewDeck(qs){
   const base=shuf(qs);
   const sets=Confusable.sets((typeof Memory!=='undefined')?Memory.all():[],POOL);
   const extra=Confusable.partners(base,sets,POOL,{max:PAIR_MAX,prefer:id=>S.srs[id]?0:1});
-  return Confusable.arrange(base,{partners:extra,byId:QBYID});
+  const arranged=Confusable.arrange(base,{partners:extra,byId:QBYID});
+  const today=todayISO(), exam=FSRS.examWindow(today,S.examDate);
+  if(!exam || !exam.finalFortnight) return arranged;
+  /* Restore the queue's ranked due prefix. Everything else, including any
+     extra look-alikes, keeps its interleaved order. */
+  const due=qs.filter(q=>FSRS.isDue(S.srs[q.id],today,exam));
+  const ids=new Set(due.map(q=>q.id));
+  return due.concat(arranged.filter(q=>!ids.has(q.id)));
 }
 
 /* ── active-recall rating (shown after the explanation, review sessions only) ── */
@@ -1810,7 +1817,7 @@ function rateReview(grade){
   const q=S.questions[S.qIdx]; if(!q||!S.answered) return;
   const ans=S.answers[S.qIdx]; if(ans&&ans.rated) return;   // the rate-row is gone once true; this is the second line of defence
   logReview(q,grade,grade>=2,'review');
-  S.srs[q.id]=FSRS.update(S.srs[q.id],grade,todayISO(),q.id);
+  S.srs[q.id]=fsrsPreview(S.srs[q.id],grade,q.id);
   if(ans) ans.rated=true;
   logRated();
   bumpStreak();
@@ -1873,67 +1880,14 @@ function storageOK(){
   try{ const k='__t'+Date.now(); localStorage.setItem(k,'1'); localStorage.removeItem(k); return true; }
   catch(_){ return false; }
 }
-function masteryFor(ch){
-  const qs=POOL.filter(q=>q.ch===ch);
-  if(!qs.length) return 0;
-  let score=0;
-  const t=todayISO();
-  for(const q of qs){
-    const c=S.srs[q.id];
-    if(c&&c.stability!==undefined){
-      // "mastery" is literally FSRS's own prediction: how likely you are to
-      // recall this card today, given how long it's been and how it's gone.
-      score+=FSRS.retrievability(c.stability, FSRS.daysBetween(c.last||t,t));
-      continue;
-    }
-    // a legacy card not yet touched by a review since the FSRS switch, or a
-    // card only ever practised — both fall back to the old, coarser signal
-    // until their next real review picks up a proper retrievability curve.
-    if(c){ score+=Math.min(1,(c.reps||0)/3); continue; }
-    const p=S.practice[q.id];
-    if(p) score+=Math.min(0.45,(p.c||0)*0.22);
-  }
-  return score/qs.length;
-}
-/* average predicted retention across every card FSRS has actually scheduled —
-   the single number the Progress screen leads with. */
-function avgRetention(){
-  const t=todayISO();
-  let sum=0,n=0;
-  for(const id in S.srs){
-    const c=S.srs[id];
-    if(!c||c.stability===undefined) continue;
-    sum+=FSRS.retrievability(c.stability, FSRS.daysBetween(c.last||t,t)); n++;
-  }
-  return n?Math.round(sum/n*100):null;
-}
-/* how many cards come due on each of the next 7 days — so exam week doesn't
-   ambush you with a queue you never saw coming. */
-function forecast7(){
-  const t=todayISO();
-  const out=[];
-  for(let i=0;i<7;i++){
-    const day=addDays(t,i);
-    let n=0;
-    for(const id in S.srs){ if(S.srs[id].due===day) n++; }
-    out.push({d:day,n});
-  }
-  return out;
-}
-/* Current-bank coverage, without deleting history from other banks. */
-function startedCount(){
-  return POOL.reduce((n,q)=>n+(Object.prototype.hasOwnProperty.call(S.srs,q.id)||
-    Object.prototype.hasOwnProperty.call(S.practice,q.id)?1:0),0);
-}
-function last30(){
-  const out=[];
-  for(let i=29;i>=0;i--){
-    const d=addDays(todayISO(),-i);
-    const v=S.daily[d];
-    out.push({d,a:v?v.a:0,c:v?v.c:0});
-  }
-  return out;
-}
+@@SLOT[src:src/core/progressstats.js]@@
+/* The numbers the Progress, Study and Brain screens lead with: src/core/progressstats.js, handed the bank, the record
+   and today. */
+function masteryFor(ch){ return ProgressStats.mastery(POOL,S.srs,S.practice,ch,todayISO()); }
+function avgRetention(){ return ProgressStats.retention(S.srs,todayISO()); }
+function forecast7(){ return ProgressStats.forecast(S.srs,todayISO(),S.examDate); }
+function startedCount(){ return ProgressStats.started(POOL,S.srs,S.practice); }
+function last30(){ return ProgressStats.last30(S.daily,todayISO()); }
 /* The Progress screen's markup, with its calibration, retention and mock panels, is src/app/stats.js. Drawing it also
    starts the page's survey of the figures kept on this device, which stays here, as do the handlers its buttons name
    and the functions it is handed, which read the page's state, storage and browser. */
@@ -2292,7 +2246,7 @@ function mountPractice(){
     }
     return;
   }
-  if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'));
+  if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'),S.examDate);
   else LabUI.unmount();
 }
 function goPractice(){ S.screen='practice'; render(); toTop(); }
@@ -4910,7 +4864,7 @@ function restoreDeck(qs,key){
    forgotten first; then the weaker chapters; then new). It runs as a review session (mode 'due'), so a
    card rated here moves its schedule exactly as in the review queue. ── */
 function planNow(minutes){
-  return StudyPlan.plan({minutes,pool:POOL,srs:S.srs,chStats:S.chStats,missed:S.missed});
+  return StudyPlan.plan({minutes,pool:POOL,srs:S.srs,chStats:S.chStats,missed:S.missed,examDate:S.examDate});
 }
 function startPlan(minutes){
   const qs=planNow(minutes).items.map(it=>QBYID[it.id]).filter(q=>q&&!q.bad);
@@ -5147,7 +5101,7 @@ function recordAnswer(q,ok,mode,extra){
    only that); never over a card that exists. */
 function seedFirstCard(q,ok,cf,mode){
   if(mode==='due'||mode==='exam'||mode==='mockreview'||!q||Object.prototype.hasOwnProperty.call(S.srs,q.id)) return;
-  S.srs[q.id]=FSRS.update(null,FSRS.firstRating(ok,cf),todayISO(),q.id);
+  S.srs[q.id]=fsrsPreview(null,FSRS.firstRating(ok,cf),q.id);
 }
 function selectOpt(idx){
   if(S.answered)return;

@@ -285,6 +285,15 @@ Ramer–Douglas–Peucker simplification, a stroke simplified before it is store
 and an outline filled as one curved path, which were `roundPt()`, `rdp()`,
 `simplifyStroke()` and `fillOutline()`. `penOutline()`, which reads the page's
 pen and PencilFX's width curve, stays the page's.
+Then the map's second group, the readers, a screen's numbers at a time: what
+the Progress, Study and Brain screens lead with (`src/core/progressstats.js`,
+`ProgressStats`, held by `verify-progressstats-pure`): a chapter's mastery, the
+mean recall, the week's due cards, the questions started and the last thirty
+days, which were `masteryFor()`, `avgRetention()`, `forecast7()`,
+`startedCount()` and `last30()` reading `POOL`, `S` and the clock, and are now
+handed them. The three screen suites that run the page's own lines
+(`verify-statsscreen-pure`, `verify-homescreen-pure`, `verify-study-pure`)
+load the module beside them.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
@@ -618,6 +627,15 @@ equates interval with stability only at 90%; and the final fortnight orders by
 lowest retrievability weighted by chapter. Bump `SCHEDULER_VERSION`, and compare
 with ts-fsrs at the same requested retention in the oracle suite. *Opus*, with
 *Fable* reviewing the mathematics.
+
+The S2 policy keeps 90% retention until 60 days out, then raises it
+linearly to 95% on the eve. Leave room for a review on the eve; a card rated
+that day may come due on exam day. From exam day onward, a new rating starts
+an ordinary interval. Bring existing cards into the pre-exam queue without
+rewriting their saved dates when the fellow changes or clears the exam date.
+Quiz, review and Practice Lab ratings use the same deadline.
+In the last 14 days rank due bank cards by estimated chance of forgetting times
+chapter share, with equal shares until a matching owner blueprint is supplied.
 
 **S3 — Weights fitted to the fellow.** `fsrs.js` runs FSRS-5's population weights
 and is already built for a change (`SCHEDULER_VERSION`, the parameter

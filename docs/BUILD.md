@@ -682,7 +682,7 @@ checks over HTTP. Those extra synthetic split-build checks have their own
 results. The published count uses the split build measured from the licensed
 bank, and synthetic runs cannot write the recorded counts.
 
-`syntax` parses source and lists suites. `logic` runs the 103 suites that are pure Node
+`syntax` parses source and lists suites. `logic` runs the 104 suites that are pure Node
 and repeats them under `TZ=America/New_York` to catch local date and DST bugs.
 Its leak guard checks every incoming commit because a file added and then
 deleted still enters Git history. `build-guard` checks that a licensed build
@@ -928,7 +928,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        158 suites · 103 need no browser · + pwa
+tests/        158 suites · 104 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
