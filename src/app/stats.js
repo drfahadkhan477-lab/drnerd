@@ -255,6 +255,7 @@ function screenHtml(S, LOG, CHAPTERS, CH_COLORS, kit){
       <div class="panel-h">Your data</div>
       <div class="data-row">
         <button class="btn sb-back" data-action="exportMarkup">⤓ Export everything</button>
+        <button class="btn sb-back" data-action="exportMarkup" data-encrypted="true">Export encrypted backup</button>
         ${pendingBackupSave?'<button class="btn sb-back" data-action="confirmBackupSaved">I saved the backup file</button>':''}
         <button class="btn sb-back" data-action="importMarkup">⤒ Import backup</button>
         <button class="btn sb-back" data-action="resetProgress">Reset progress</button>

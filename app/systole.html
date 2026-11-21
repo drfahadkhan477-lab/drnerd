@@ -1052,6 +1052,7 @@ function mountInk(){
 function currentQ(){ return (S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null; }
 
 /* ── export / import (survives file:// storage limits) ────────────────────── */
+@@SLOT[src:src/core/backupcrypto.js]@@
 /* Store.ready(), but not for ever. Store.open() gives up on a database that
    never answers, but a database that opens and then stops answering partway
    through hydration would still leave Export and Import waiting without a
@@ -1063,35 +1064,82 @@ function storeReadyOrNull(){
   return Promise.race([Store.ready(),new Promise(r=>setTimeout(()=>r(null),STORE_WAIT_MS))]);
 }
 let pendingBackupSave=null;
+let backupBusy=false;
 function confirmBackupSaved(){
   if(!pendingBackupSave)return;
   S.sinceBackup=Math.max(0,(S.sinceBackup||0)-pendingBackupSave.reviews);
   S.lastBackup=pendingBackupSave.at;save();pendingBackupSave=null;
   render();toast('Saved backup confirmed. Keep the file somewhere safe.');
 }
-async function exportMarkup(){
+function requestBackupPassphrase(encrypt){
+  const dialog=document.createElement('dialog');
+  if(!BackupCrypto.available()||typeof dialog.showModal!=='function'){
+    toast('Encrypted backups need Web Crypto and a supported browser. Open Systole from its HTTPS address.');
+    return null;
+  }
+  const action=encrypt?'Export encrypted backup':'Restore encrypted backup';
+  dialog.id='backupPassphrase';
+  dialog.setAttribute('aria-labelledby','backupPassphraseTitle');
+  dialog.innerHTML=`<form method="dialog">
+    <h2 id="backupPassphraseTitle">${action}</h2>
+    ${encrypt?'<p>Choose a long, unique passphrase and keep it somewhere safe. You will need it to restore this file.</p>':'<p>Enter the passphrase used to export this file.</p>'}
+    <label>Passphrase<input name="passphrase" type="password" autocomplete="${encrypt?'new-password':'current-password'}" required autofocus></label>
+    ${encrypt?'<label>Confirm passphrase<input name="confirmation" type="password" autocomplete="new-password" required></label>':''}
+    <p role="status"></p>
+    <div class="data-row">
+      <button type="submit" class="btn sb-back">${encrypt?'Download encrypted file':'Unlock and restore'}</button>
+      <button type="button" class="btn sb-back">Cancel</button>
+    </div>
+  </form>`;
+  const form=dialog.querySelector('form');
+  return new Promise((resolve,reject)=>{
+    let passphrase=null;
+    dialog.addEventListener('close',()=>{form.reset();dialog.remove();resolve(passphrase);},{once:true});
+    form.querySelector('button[type="button"]').onclick=()=>dialog.close();
+    form.onsubmit=event=>{
+      event.preventDefault();
+      const value=form.elements.passphrase.value;
+      if(encrypt&&value!==form.elements.confirmation.value){
+        form.querySelector('[role="status"]').textContent='The passphrases do not match.';
+        form.elements.confirmation.focus();
+        return;
+      }
+      passphrase=value;
+      dialog.close();
+    };
+    document.body.appendChild(dialog);
+    try{dialog.showModal();}catch(error){dialog.remove();reject(error);}
+  });
+}
+async function exportMarkup(encrypted=false){
+  if(backupBusy)return false;
+  backupBusy=true;
   try{
-  if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
-  if(typeof flushLog==='function') flushLog();
-  if(typeof flushInk==='function') flushInk();
-  const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
-  const blob=new Blob([JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
-    refs:(typeof REF!=='undefined'?REF:[]),
-    log:(typeof LOG!=='undefined'?LOG:[]),
-    chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
-    mem:(typeof Memory!=='undefined'?Memory.all():[])},null,0)],
-    {type:'application/json'});
-  const prepared={at:Date.now(),reviews:S.sinceBackup||0};
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='accsap12-annotations-'+todayISO()+'.json';
-  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  pendingBackupSave=missing.length?null:prepared;
-  if(S.screen==='stats')render();
-  if(!missing.length)toast('Download requested. After checking the saved file, confirm it in Progress → Your data.');
-  if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
-  return true;
+    const passphrase=encrypted?await requestBackupPassphrase(true):null;
+    if(encrypted&&passphrase===null)return false;
+    if(!(await storeReadyOrNull())){ toast('Storage is not responding, so the backup was not exported. Reload and try again.'); return false; }
+    if(typeof flushLog==='function') flushLog();
+    if(typeof flushInk==='function') flushInk();
+    const {assets,missing}=typeof RefAssets!=='undefined'?await RefAssets.backup(REF.map(r=>r.body)):{assets:{},missing:[]};
+    const text=JSON.stringify({v:6,ink:INK,notes:NOTES,assets,
+      refs:(typeof REF!=='undefined'?REF:[]),
+      log:(typeof LOG!=='undefined'?LOG:[]),
+      chat:loadJSON('accsap12.chat',{}),stats:usableStats(loadJSON('accsap12.v2',{})),
+      mem:(typeof Memory!=='undefined'?Memory.all():[])});
+    const prepared={at:Date.now(),reviews:S.sinceBackup||0};
+    const output=encrypted?JSON.stringify(await BackupCrypto.encrypt(text,passphrase)):text;
+    const blob=new Blob([output],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=(encrypted?'systole-encrypted-backup-':'accsap12-annotations-')+todayISO()+'.json';
+    a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    pendingBackupSave=missing.length?null:prepared;
+    if(S.screen==='stats')render();
+    if(!missing.length)toast('Download requested. After checking the saved file, confirm it in Progress → Your data.');
+    if(missing.length) toast('Backup exported without '+missing.length+' image'+(missing.length>1?'s':'')+' your notes cite: '+(missing.length>1?'they are':'it is')+' not on this device.');
+    return true;
   }catch(_){ toast('Backup could not be exported.'); return false; }
+  finally{backupBusy=false;}
 }
 function validateAnnotationBackup(d){
   const record=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -1108,14 +1156,27 @@ function validateAnnotationBackup(d){
   return d.stats?progressFromBackup(d.stats):null;
 }
 function importMarkup(){
+  if(backupBusy)return;
   const inp=document.createElement('input');
   inp.type='file'; inp.accept='application/json';
   inp.onchange=()=>{
     const f=inp.files[0]; if(!f)return;
     const r=new FileReader();
+    r.onerror=()=>toast('That file could not be read.');
     r.onload=async()=>{
+      if(backupBusy)return;
+      backupBusy=true;
       try{
-        const d=JSON.parse(r.result);
+        let d=JSON.parse(r.result);
+        const encrypted=BackupCrypto.isEncrypted(d);
+        if(encrypted){
+          const passphrase=await requestBackupPassphrase(false);
+          if(passphrase===null)return;
+          try{d=JSON.parse(await BackupCrypto.decrypt(d,passphrase));}
+          catch(_){toast('Wrong passphrase or damaged encrypted backup. Your data is unchanged.');return;}
+          // The encrypted format always wraps an export made by this app.
+          if(!Number.isInteger(d?.v))throw new Error('Invalid encrypted backup payload.');
+        }
         const progress=validateAnnotationBackup(d);
         if(!(await storeReadyOrNull())){ toast('Storage is not responding, so nothing was restored. Reload and try again.'); return; }
         const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
@@ -1139,6 +1200,7 @@ function importMarkup(){
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
         toast(assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
       }catch(e){ toast('That file could not be read.'); }
+      finally{backupBusy=false;}
     };
     r.readAsText(f);
   };
@@ -5331,7 +5393,7 @@ const ACTIONS={
   /* the figures card's one button, which says Stop while a download runs (offlinePaint() writes its words) */
   offlineButton:()=>offlineJob.busy?offlineStop():offlineDownload(),
   startCertainWrong:()=>startQuiz(null,'certain'),
-  exportMarkup:()=>exportMarkup(),
+  exportMarkup:el=>el.dataset.encrypted==='true'?exportMarkup(true):exportMarkup(),
   confirmBackupSaved:()=>confirmBackupSaved(),
   importMarkup:()=>importMarkup(),
   resetProgress:()=>resetProgress(),

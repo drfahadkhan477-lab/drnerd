@@ -20,6 +20,12 @@ are still decided by whichever wrote last. The ink, the sticky notes, the chats
 and the review log are kept in the database, which does not tell the other
 window: for those, whichever window wrote last wins, so annotate in one.
 
+Under **Progress → Your data**, choose **Export encrypted backup** to protect
+your backup with a passphrase. Save the file and keep its passphrase somewhere
+safe. Systole cannot recover the passphrase for you. To restore, choose
+**Import backup**, select the file, and enter the passphrase. You can also use
+**Export everything** to save a plain JSON backup.
+
 Build the thing you host:
 
 ```bash
