@@ -86,14 +86,19 @@ const PRESETS = {
   /* The same heart breathing as hard as the tamponade below: the control for its pulsus. */
   dyspnoea: { resp: { depth: 10 } },
   /* Chronic lesions carry the remodelling they cause: AS's concentric hypertrophy (a stronger, somewhat stiffer LV,
-     and its wall, which only the 3D heart reads), AR's dilated, compliant LV, MS's dilated atrium, HFpEF's
-     hypertensive LV. */
+     and its wall, which only the 3D heart reads), AR's dilated, compliant LV, MS's dilated atrium, chronic MR's
+     large LA and dilated LV, HFpEF's hypertensive LV. */
   /* The hypertrophied LV also contracts and relaxes slowly: its activation builds later and more steeply, lasts
      longer, and falls away gently (impaired relaxation), so it empties late and A2 follows P2. */
   as: { valves: { aortic: [0.7, 0] }, lv: { ees: 3.6, lam: 0.036, hill: [0.28, 0.40, 1.8, 16] }, wall: 1.35 },
   ar: { valves: { aortic: [4.0, 0.65] }, lv: { v0: 60, lam: 0.020 }, stressed: 1550 },
   ms: { valves: { mitral: [0.85, 0] }, la: { v0: 70 }, stressed: 2600 },
+  /* MR, acute: the leak into a small, stiff LA that has not had time to stretch, so the regurgitant volume raises
+     its pressure steeply, a tall v wave. */
   mr: { valves: { mitral: [5.0, 0.65] }, la: { p0: 0.8, lam: 0.05 }, stressed: 1550 },
+  /* MR, chronic and compensated: the same leak after years, into a large, compliant LA that takes it at a modest
+     pressure, and a dilated LV (eccentric hypertrophy) with the blood the kidneys have kept. */
+  mrchronic: { valves: { mitral: [5.0, 0.65] }, la: { v0: 60, lam: 0.02 }, lv: { v0: 60, lam: 0.022 }, stressed: 2800 },
   hfref: { lv: { ees: 0.6, vd: 50, v0: 90, lam: 0.02 }, stressed: 1750 },
   hfpef: { lv: { lam: 0.060, p0: 0.30, ees: 3.2 }, wall: 1.2, stressed: 1650 },
   /* Fluid in the sac, a breathless patient, and the veins tightened to keep the pressure up. */
@@ -456,6 +461,12 @@ const VALIDATION = [
   ['mr', 'ef', 0.6, I, 'ejection fraction high: the LV empties into the atrium too'],
   ['mr', 'laV', 30, I, 'a tall v wave on the wedge'],
   ['mr', 'co', 2.5, 6.5, 'forward output kept up by a larger total stroke'],
+
+  ['mrchronic', 'rf', 0.5, I, 'severe chronic mitral regurgitation: regurgitant fraction 50% or more'],
+  ['mrchronic', 'edv', 170, I, 'the LV dilates: eccentric hypertrophy'],
+  ['mrchronic', 'laMean', 0, 20, 'compensated: the large LA holds the wedge near normal'],
+  ['mrchronic', 'ef', 0.6, I, 'ejection fraction high while compensated: the LV empties into the LA too'],
+  ['mrchronic', 'co', 3.5, 7.0, 'forward output kept at rest'],
 
   ['hfref', 'ef', 0, 0.4, 'reduced ejection fraction: 40% or less'],
   ['hfref', 'lvEdp', 16, I, 'filling pressure raised'],

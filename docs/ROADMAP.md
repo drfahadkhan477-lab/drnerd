@@ -661,9 +661,10 @@ cycle. The Home heart's menu offers the lesions. *Remodelling:* the chronic
 presets now carry what they do over years: AS's concentric hypertrophy (a
 stronger, somewhat stiffer LV, and a wall 1.35 times as thick, which the 3D
 heart draws), MS's dilated atrium (LA 1.6 times the normal volume), HFpEF's
-hypertensive LV; every VALIDATION row still holds. MR is left acute (a stiff,
-small LA and its tall v wave); a chronic MR, its LA large and compliant, would
-be a preset of its own.
+hypertensive LV; every VALIDATION row still holds. MR comes twice, as acute
+(a stiff, small LA and its tall v wave) and as chronic (`mrchronic`: the same
+leak into a large, compliant LA, a small v wave, a wedge near normal, and a
+dilated LV keeping forward output up); a check holds the two apart.
 *Timing (before Normal can come from the engine):* the ventricles' half-cosine
 activation gave isovolumic phases about twice the textbook's and a short
 ejection. They now carry the double-Hill elastance curve (Stergiopulos,
@@ -701,7 +702,7 @@ gives the engine's own Ees, Ea and EDV. This LV's EDPVR is steep, so preload
 widens its loop less than physio.js draws. physio.js still draws until the
 engine has loaded (the split build), and draws the Starling, Guyton and
 conduction views, and ambient mode's loop.
-Next: a septum with its own mechanics, for constriction; a chronic MR; a
+Next: a septum with its own mechanics, for constriction; a
 normal EDPVR as compliant as the textbook's (it would widen preload's loop,
 and every preset would be fitted again). The split build lifts
 src/ui/wiggers.js too (it was the shell's last kilobyte): the shell is at 278 KB

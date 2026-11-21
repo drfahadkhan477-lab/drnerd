@@ -532,7 +532,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       out.back = physio.cycle() === Circulation.cycle('normal'); out.backPhase = physio.phaseNow().id; out.normalPhase = Circulation.cycle('normal').phaseAt(physio.time()).id;
       return out;
     });
-    ok('the Wiggers view offers each lesion as a chip', JSON.stringify(lz.chips) === JSON.stringify(['normal', 'as', 'ar', 'ms', 'mr', 'hfref', 'hfpef', 'tamponade', 'constriction']), JSON.stringify(lz.chips));
+    ok('the Wiggers view offers each lesion as a chip', JSON.stringify(lz.chips) === JSON.stringify(['normal', 'as', 'ar', 'ms', 'mr', 'mrchronic', 'hfref', 'hfpef', 'tamponade', 'constriction']), JSON.stringify(lz.chips));
     ok('a tap on AS draws aortic stenosis\'s computed beat, the chip marked and the choice kept', lz.preset === 'as' && lz.ok === true && lz.hot === 'as' && lz.kept === 'as', JSON.stringify({ preset: lz.preset, hot: lz.hot, kept: lz.kept }));
     ok('whose LV peaks far above its aorta', lz.gap > 40, lz.gap.toFixed(0) + ' mmHg');
     ok('the phase it reports is that beat\'s, and the note says which lesion and that it is computed', lz.phase === lz.want && /AS\./.test(lz.note) && /Computed by the circulation model/.test(lz.note), lz.phase + ' / ' + lz.want + ' · ' + lz.note.slice(0, 80));
@@ -553,7 +553,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       same: physio.loopNow() === Circulation.cycle(Circulation.INTERVENTIONS[physio.intervention()]).loop });
     const before = await page.evaluate(engineLoop);
     before.lesions = await page.evaluate(() => document.querySelectorAll('[data-physio-lesion]').length);
-    ok('on the normal heart the PV loop offers the lesions and the interventions, and draws the engine\'s loop for the intervention chosen', before.lesions === 9 && before.ivs > 0 && before.same, JSON.stringify(before));
+    ok('on the normal heart the PV loop offers the lesions and the interventions, and draws the engine\'s loop for the intervention chosen', before.lesions === 10 && before.ivs > 0 && before.same, JSON.stringify(before));
     await tap('[data-physio-lesion="as"]', 'AS');
     const as = await page.evaluate(() => { const l = physio.loopNow(), c = Circulation.cycle('as');
       return { same: l === c.loop, esp: l.esp, onLine: Math.abs(l.esp - l.espvrAt(l.esv)), ivs: document.querySelectorAll('[data-physio-iv]').length,

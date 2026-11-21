@@ -2070,13 +2070,14 @@ let physioIv='base', physioCanvasEl=null;
 /* docs/ROADMAP.md, S8. The lesion the Wiggers view draws: Normal is physio.js's drawn cycle; each other is
    one beat of src/core/circulation.js with that lesion made in it, its curves computed and its valve
    events measured where they cross. Remembered like the view. */
-const PHYSIO_LESIONS=[['normal','Normal'],['as','AS'],['ar','AR'],['ms','MS'],['mr','MR'],['hfref','HFrEF'],
+const PHYSIO_LESIONS=[['normal','Normal'],['as','AS'],['ar','AR'],['ms','MS'],['mr','Acute MR'],['mrchronic','Chronic MR'],['hfref','HFrEF'],
                       ['hfpef','HFpEF'],['tamponade','Tamponade'],['constriction','Constriction']];
 const PHYSIO_LESION_NOTE={
   as:'A 0.7 cm\u00b2 aortic valve: the LV climbs far above the aorta to push its stroke through.',
   ar:'A leaking aortic valve: the aorta empties back into the LV in diastole, so its diastolic pressure falls and the LV dilates.',
   ms:'A 0.85 cm\u00b2 mitral valve: the LA stays above the LV all through diastole, and there is no diastasis.',
-  mr:'A leaking mitral valve: the LV ejects into the LA too, and the LA shows it as a tall v wave.',
+  mr:'A mitral valve that has just begun to leak: the LV ejects into a small, stiff LA too, and the LA shows it as a tall v wave.',
+  mrchronic:'The same leak after years: a large, compliant LA takes it at a modest pressure, so the v wave is small, and a dilated LV keeps forward output up.',
   hfref:'A weak, dilated LV: a large ventricle ejecting a small fraction at a high filling pressure.',
   hfpef:'A stiff LV: a normal ejection fraction, filled only at a high pressure.',
   tamponade:'Fluid in the pericardium: the chambers are squeezed and fill at equal, high pressures. Breathing is held still here; the pulsus is a breath-to-breath finding.',

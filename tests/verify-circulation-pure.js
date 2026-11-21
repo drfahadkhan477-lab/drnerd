@@ -142,6 +142,16 @@ head('the PV loop of each beat: its corners on its own lines, and each lesion wh
   ok('tamponade: a small loop on a raised floor', L('tamponade').edv < n.edv * 0.6 && L('tamponade').strokeWork < n.strokeWork / 3 && L('tamponade').edp > n.edp + 8, `EDV ${L('tamponade').edv.toFixed(0)}, EDP ${L('tamponade').edp.toFixed(0)}`);
 }
 
+head('mitral regurgitation, acute and chronic: one leak, two atria');
+{
+  const a = M.mr, c = M.mrchronic, A = RUNS.mr, Cr = RUNS.mrchronic;
+  const laMax = r => Math.max.apply(null, r.v.la);
+  ok('the same leak in both: the same valve, the same regurgitant orifice', JSON.stringify(C.params('mr').valves.mitral) === JSON.stringify(C.params('mrchronic').valves.mitral));
+  ok('chronic: a larger LA holds the leak at a lower pressure, so the v wave is far smaller and the wedge lower, than the acute leak into a small, stiff LA',
+     laMax(Cr) > laMax(A) * 1.4 && c.laV < a.laV - 10 && c.laMean < a.laMean - 5, `LA ${laMax(A).toFixed(0)}→${laMax(Cr).toFixed(0)} mL, v wave ${a.laV.toFixed(0)}→${c.laV.toFixed(0)}, wedge ${a.laMean.toFixed(0)}→${c.laMean.toFixed(0)} mmHg`);
+  ok('and a dilated LV that keeps forward output up', c.edv > a.edv + 40 && c.co > a.co, `EDV ${a.edv.toFixed(0)}→${c.edv.toFixed(0)}, output ${a.co.toFixed(2)}→${c.co.toFixed(2)}`);
+}
+
 head('the PV loop\'s interventions on the engine\'s normal heart: each moves the loop as the textbook says');
 {
   const IV = C.INTERVENTIONS, L = k => C.cycle(IV[k]).loop, n = L('base');
