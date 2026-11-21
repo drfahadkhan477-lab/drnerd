@@ -622,7 +622,11 @@ const sseFollowup = 'data: {"candidates":[{"content":{"role":"model","parts":[{"
     return {button:p.button,first:p.requests[0],count:p.requests.length,actions:p.actions,notice:CHATS._general.some(m=>m.err&&/cannot run study tools/.test(m.content))};
   });
   ok('Explain draft is explicit and omits tool declarations',explanation.button&&!!explanation.first&&!explanation.first.tools);
-  ok('explanation retains retrieved note evidence and grounding instruction',JSON.stringify(explanation.first).includes('Omega protocol uses an amber marker.')&&JSON.stringify(explanation.first).includes('supplied evidence is insufficient'));
+  const explainPrompt=(explanation.first?.systemInstruction?.parts || []).map(part=>part.text).join('');
+  const instructionAt=explainPrompt.indexOf('If the supplied evidence is insufficient, say so.');
+  const evidenceAt=explainPrompt.indexOf('Omega protocol uses an amber marker.');
+  ok('explanation puts its grounding instruction before the final retrieved note',
+     instructionAt>=0&&evidenceAt>instructionAt&&/<<<\/NOTE-[A-Z0-9]{12}>>>\s*$/.test(explainPrompt));
   ok('unexpected tool calls cannot act or cause follow-up requests in explanation mode',explanation.count===2&&explanation.actions===0&&explanation.notice);
 
   head('session explanation reuse is exact and complete');
