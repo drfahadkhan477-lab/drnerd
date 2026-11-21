@@ -1086,7 +1086,7 @@ function requestBackupPassphrase(encrypt,trigger){
   dialog.innerHTML=`<form method="dialog">
     <h2 id="backupPassphraseTitle">${action}</h2>
     ${encrypt?'<p>Choose a long, unique passphrase and keep it somewhere safe. You will need it to restore this file.</p>':'<p>Enter the passphrase used to export this file.</p>'}
-    <label>Passphrase<input name="passphrase" type="password" autocomplete="${encrypt?'new-password':'current-password'}" required autofocus></label>
+    <label>Passphrase<input name="passphrase" type="password" autocomplete="${encrypt?'new-password':'current-password'}" required></label>
     ${encrypt?'<label>Confirm passphrase<input name="confirmation" type="password" autocomplete="new-password" required></label>':''}
     <p role="status"></p>
     <div class="data-row">
@@ -1136,7 +1136,7 @@ function requestBackupPassphrase(encrypt,trigger){
     };
     document.body.appendChild(dialog);
     if(native){
-      try{dialog.showModal();}catch(error){dialog.remove();reject(error);}
+      try{dialog.showModal();form.elements.passphrase.focus();}catch(error){dialog.remove();reject(error);}
       return;
     }
     backdrop.id='backupPassphraseBackdrop';
@@ -1239,7 +1239,9 @@ function importMarkup(trigger=document.activeElement){
           applyTheme();
         }
         if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
-        toast(assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
+        const writesStored=await Promise.race([Store.flush(),new Promise(resolve=>setTimeout(()=>resolve(false),STORE_WAIT_MS))]);
+        toast(!writesStored?'Annotations restored for this visit, but storage did not confirm every change. Keep the backup and retry before closing.'
+          :assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
       }catch(e){ toast('That file could not be read.'); }
       finally{backupBusy=false;}
     };

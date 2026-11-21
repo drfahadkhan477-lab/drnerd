@@ -67,9 +67,12 @@ async function selectFile(page, text) {
   await dialog(page).waitFor({ state: 'visible' });
 }
 
-async function unlock(page, phrase) {
+async function submitPassphrase(page, phrase) {
   await dialog(page).getByLabel('Passphrase').fill(phrase);
   await dialog(page).getByRole('button', { name: 'Unlock and restore' }).click();
+}
+async function unlock(page, phrase) {
+  await submitPassphrase(page, phrase);
   await page.waitForFunction(() => !backupBusy, null, { timeout: 15000 });
   return page.locator('#toast').textContent();
 }
@@ -177,7 +180,27 @@ async function missingData(page, key) {
       await unlock(targetPage, passphrase) === 'That file could not be read.' && await snapshot(targetPage) === before);
 
     await selectFile(targetPage, first.text);
-    const restored = await unlock(targetPage, passphrase);
+    await targetPage.evaluate(() => {
+      const flush = Store.flush;
+      window.backupWriteGate = { release: null };
+      Store.flush = () => {
+        const persisted = flush();
+        Store.flush = flush;
+        const hold = new Promise(resolve => { window.backupWriteGate.release = resolve; });
+        return hold.then(() => persisted);
+      };
+    });
+    await submitPassphrase(targetPage, passphrase);
+    await targetPage.waitForFunction(() => window.backupWriteGate.release || !backupBusy);
+    const waited = await targetPage.evaluate(() => {
+      const { release } = window.backupWriteGate;
+      const waiting = !!release && backupBusy && document.getElementById('toast')?.textContent !== 'Annotations restored.';
+      release?.();
+      return waiting;
+    });
+    ok('restore waits for storage confirmation before announcing success', waited);
+    await targetPage.waitForFunction(() => !backupBusy, null, { timeout: 15000 });
+    const restored = await targetPage.locator('#toast').textContent();
     const missing = await missingData(targetPage, key);
     ok('the correct passphrase restores ink, notes, images, reviews, progress, chat and memory now',
       restored === 'Annotations restored.' && !missing.length, [restored, ...missing].join(' | '));
@@ -207,7 +230,8 @@ async function missingData(page, key) {
       restoredInFallback = await unlock(targetPage, passphrase) === 'Annotations restored.'
         && await targetPage.evaluate(() => CHATS._general[0]?.content === 'Invented conversation');
     }
-    ok('the legacy passphrase dialog keeps focus and Escape returns it to the trigger', legacyVisible && focused && wrapped && dismissed);
+    ok('the legacy passphrase dialog keeps focus and Escape returns it to the trigger', legacyVisible && focused && wrapped && dismissed,
+      JSON.stringify({ legacyVisible, focused, wrapped, dismissed }));
     ok('the legacy passphrase dialog can authenticate and restore a backup', restoredInFallback);
 
     await targetPage.evaluate(() => { BackupCrypto.available = () => false; });
