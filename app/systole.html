@@ -2070,31 +2070,43 @@ let physioIv='base', physioCanvasEl=null;
 /* docs/ROADMAP.md, S8. The lesion the Wiggers view draws: Normal is physio.js's drawn cycle; each other is
    one beat of src/core/circulation.js with that lesion made in it, its curves computed and its valve
    events measured where they cross. Remembered like the view. */
-const PHYSIO_LESIONS=[['normal','Normal'],['as','AS'],['ar','AR'],['ms','MS'],['mr','MR'],['hfref','HFrEF'],
+const PHYSIO_LESIONS=[['normal','Normal'],['as','AS'],['ar','AR'],['ms','MS'],['mr','Acute MR'],['mrchronic','Chronic MR'],['hfref','HFrEF'],
                       ['hfpef','HFpEF'],['tamponade','Tamponade'],['constriction','Constriction']];
 const PHYSIO_LESION_NOTE={
   as:'A 0.7 cm\u00b2 aortic valve: the LV climbs far above the aorta to push its stroke through.',
   ar:'A leaking aortic valve: the aorta empties back into the LV in diastole, so its diastolic pressure falls and the LV dilates.',
-  ms:'A 0.7 cm\u00b2 mitral valve: the LA stays above the LV all through diastole, and there is no diastasis.',
-  mr:'A leaking mitral valve: the LV ejects into the LA too, and the LA shows it as a tall v wave.',
+  ms:'A 0.85 cm\u00b2 mitral valve: the LA stays above the LV all through diastole, and there is no diastasis.',
+  mr:'A mitral valve that has just begun to leak: the LV ejects into a small, stiff LA too, and the LA shows it as a tall v wave.',
+  mrchronic:'The same leak after years: a large, compliant LA takes it at a modest pressure, so the v wave is small, and a dilated LV keeps forward output up.',
   hfref:'A weak, dilated LV: a large ventricle ejecting a small fraction at a high filling pressure.',
   hfpef:'A stiff LV: a normal ejection fraction, filled only at a high pressure.',
   tamponade:'Fluid in the pericardium: the chambers are squeezed and fill at equal, high pressures. Breathing is held still here; the pulsus is a breath-to-breath finding.',
   constriction:'A small, rigid pericardium: filling stops abruptly once it is full, the dip and plateau, at equal, high pressures.'};
 let physioLesion=(()=>{try{const v=localStorage.getItem('accsap12.physiolesion');
   return PHYSIO_LESIONS.some(x=>x[0]===v)?v:'normal';}catch(_){return 'normal';}})();
-/* The beat for a lesion, or null for Normal (physio.js). Circulation keeps each beat it has run. */
+/* The beat to draw: a lesion's, or Normal's, which in the PV loop is the chosen intervention's
+   (Circulation.INTERVENTIONS); null until the engine is there, when physio.js draws. Circulation keeps each beat
+   it has run. The normal beat is what the others are measured against: the PV loop's dashed loop, the coronary
+   glow's scale. */
 function physioCycle(id){
-  if(id==='normal'||typeof Circulation==='undefined') return null;
-  try{ return Circulation.cycle(id); }catch(_){ return null; }
+  if(typeof Circulation==='undefined') return null;
+  try{
+    if(id!=='normal') return Circulation.cycle(id);
+    const iv=physioView==='pv'&&Circulation.INTERVENTIONS&&Circulation.INTERVENTIONS[physioIv];
+    return Circulation.cycle(iv||'normal');
+  }catch(_){ return null; }
 }
-/* Hands the live diagram the chosen lesion's beat. The split build lifts the engine into vendor/ and leaves CIRC_SRC
-   naming the file (scripts/build-pwa.js, 3.747): the first lesion drawn loads it, and is drawn when it is there. A
-   failed load is not remembered. */
+function physioRef(){
+  if(typeof Circulation==='undefined') return null;
+  try{ return Circulation.cycle('normal'); }catch(_){ return null; }
+}
+/* Hands the live diagram the chosen beat. The split build lifts the engine into vendor/ and leaves CIRC_SRC
+   naming the file (scripts/build-pwa.js, 3.747): the panel's first drawing loads it, Normal included, and physio.js
+   draws until it is there. A failed load is not remembered, and leaves physio.js drawing. */
 let circLibP=null;
 function physioApplyLesion(){
   if(!physio) return;
-  if(physioLesion!=='normal'&&typeof Circulation==='undefined'){
+  if(typeof Circulation==='undefined'){
     if(window.CIRC_SRC&&!circLibP){
       const s=document.createElement('script'); s.src=window.CIRC_SRC;
       circLibP=new Promise(res=>{ s.onload=()=>{ res(); physioApplyLesion(); __physioNotePhase=''; paintPhysioNote(); };
@@ -2104,7 +2116,7 @@ function physioApplyLesion(){
     physio.setCycle(null);
     return;
   }
-  physio.setCycle(physioCycle(physioLesion));
+  physio.setCycle(physioCycle(physioLesion),physioRef());
 }
 /* Half real time by default. A whole cycle then takes about 1.8 seconds, which
    is long enough to follow the cursor through isovolumic contraction — 50ms in
@@ -2143,6 +2155,12 @@ function physioNoteHtml(){
     return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The dashed loop is the normal heart's. Computed by the circulation model.`;
   if(physioView==='pv'){
     const iv=Physio.INTERVENTIONS.find(x=>x.id===physioIv)||Physio.INTERVENTIONS[0];
+    const y=physio&&physio.cycle&&physio.cycle();
+    /* Drawn by the engine: the resting loop's figures are the engine's own, not physio.js's. */
+    if(y&&y.loop){
+      const l=y.loop, note=iv.id==='base'?`Ees ${l.ees.toFixed(1)} mmHg/mL, Ea ${l.ea.toFixed(2)}, EDV ${l.edv.toFixed(0)} mL. Everything else is measured off this.`:iv.note;
+      return `<b>${e(iv.label)}</b> ${e(note)} Computed by the circulation model.`;
+    }
     return `<b>${e(iv.label)}</b> ${e(iv.note)}`;
   }
   if(physioView==='curves')
@@ -2244,8 +2262,9 @@ function mountPhysio(){
   document.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>{
     physioIv=b.dataset.physioIv;
     physio.setIntervention(physioIv);
+    physioApplyLesion();
     document.querySelectorAll('[data-physio-iv]').forEach(x=>x.classList.toggle('hot',x===b));
-    paintPhysioNote();
+    __physioNotePhase=''; paintPhysioNote();
   });
   /* Dragging the diagram scrubs the cycle. While a finger is down the heart's
      clock is ignored, so you can stop time on the dicrotic notch and read it. */
