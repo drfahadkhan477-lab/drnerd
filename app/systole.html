@@ -3524,27 +3524,24 @@ function apexDid(q){
   }catch(_){ return ''; }
 }
 function aiCtx(q){
-  if(!q) return 'The fellow is browsing the question index; no question is open.'
-    + ((typeof Profile!=='undefined') ? Profile.build() : '')
-    + apexStanding()
-    + ((typeof Memory!=='undefined') ? Memory.build() : '');
+  const profileBlock = (typeof Profile!=='undefined') ? Profile.build() : '';
+  const memory = (typeof Memory!=='undefined') ? Memory.build() : '';
+  /* Put the fellow's profile before the turn-specific context. Memory stays
+     fenced with the current turn's nonce because it can come from a note. */
+  const memoryBlock = memory ? '\n\n'+refBlock('MEMORY','what you have learned about this fellow:',memory) : '';
+  const personalization = (profileBlock+apexStanding()+memoryBlock).trimStart();
+  const prefix = personalization ? personalization+'\n\n' : '';
+  if(!q) return prefix+'The fellow is browsing the question index; no question is open.';
   /* The mark on the keyed option IS the answer key, and how many candidates
      chose each option hints at it, so grounded mode, which tells the model the
      key is withheld, sends each option as its letter and text alone. */
   const opts=q.o.map((o,i)=>`  ${o.l}. ${o.t}`+(AI_GROUNDED?'':(typeof o.p==='number'?`  [${o.p}% of candidates chose this]`:'')+(i===q.ci?'  ← CORRECT':''))).join('\n');
   const own=(typeof NOTES!=='undefined'&&NOTES[q.id]||[]).map(n=>n.text).filter(Boolean);
   const ownBlock=own.length?`\n\nTHE FELLOW'S OWN NOTE ON THIS ITEM (they wrote this while working through it — engage with it directly, and correct it if it is wrong):\n${own.map(t=>'• '+t).join('\n')}`:'';
-  const profileBlock = (typeof Profile!=='undefined') ? Profile.build() : '';
-  /* Grounded mode restricts what Apex may teach FROM. Memory is not source
-     material — it is who is being taught — so it is present in both branches. */
-  let memoryBlock = (typeof Memory!=='undefined') ? Memory.build() : '';
-  /* The fellow can dictate these, and so can a note the model was reading when
-     it decided to remember something. Same rule, same fence. */
-  if(memoryBlock) memoryBlock=refBlock('MEMORY','what you have learned about this fellow:',memoryBlock);
   if(AI_GROUNDED){
-    return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\n(The official ${BANK_BY}commentary for this item is withheld in grounded mode. You can see what is being asked; you may not read the answer key. Teach from the fellow's reference notes below, and if they do not cover it, say so.)\n\n${Vision.figureContextLine(q, AI.provider)}${ownBlock}${apexDid(q)}${profileBlock}${apexStanding()}${memoryBlock}`;
+    return prefix+`CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\n(The official ${BANK_BY}commentary for this item is withheld in grounded mode. You can see what is being asked; you may not read the answer key. Teach from the fellow's reference notes below, and if they do not cover it, say so.)\n\n${Vision.figureContextLine(q, AI.provider)}${ownBlock}${apexDid(q)}`;
   }
-  return `CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\nOFFICIAL ${BANK_BY.toUpperCase()}COMMENTARY\n${q.ex}\n\n${Vision.figureContextLine(q, AI.provider)}Use this as the ground truth for the item. You may go well beyond it.${ownBlock}${apexDid(q)}${profileBlock}${apexStanding()}${memoryBlock}`;
+  return prefix+`CURRENT QUESTION — ${BANK.name}, ${q.ch}, item ${q.n}\n\nSTEM\n${q.s}\n\nOPTIONS\n${opts}\n\nOFFICIAL ${BANK_BY.toUpperCase()}COMMENTARY\n${q.ex}\n\n${Vision.figureContextLine(q, AI.provider)}Use this as the ground truth for the item. You may go well beyond it.${ownBlock}${apexDid(q)}`;
 }
 
 /* What the fellow can ask of Apex about how they answer: a chip in the panel, and a button where it is needed. */
