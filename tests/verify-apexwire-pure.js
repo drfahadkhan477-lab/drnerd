@@ -23,6 +23,9 @@
  *     and of a call at the moments it was told before;
  *   - the tool exchange: the model's own parts back, a first call with no signature given Google's
  *     opt-out token, one functionResponse per result;
+ *   - a pasted key loses the quotes, the "Bearer " and the spaces round and in it, and nothing else;
+ *   - a page of ListModels keeps every id it named as evidence and gives back the ones that can chat, by
+ *     their methods where reported and otherwise by name; the default is a plain Flash, then any Flash;
  *   - the page's functions are the calls into this, and the page keeps no second copy of the shapes.
  *
  * The browser half is tests/verify-gemini.js, verify-chat.js and verify-flushguard.js, which read the
@@ -117,6 +120,35 @@ head('where a request goes, and what it carries');
   ok('a post with a key carries the key and its content type', same(safely(() => G.headers('KEY', true)), { 'content-type': 'application/json', 'x-goog-api-key': 'KEY' }), J(safely(() => G.headers('KEY', true))));
   ok('a hosted request carries no key header at all, not an empty one', same(safely(() => G.headers('', true)), { 'content-type': 'application/json' }) && !('x-goog-api-key' in Object(safely(() => G.headers('', true)))));
   ok('a request that is not a post names no content type', same(safely(() => G.headers('KEY', false)), { 'x-goog-api-key': 'KEY' }) && same(safely(() => G.headers('', false)), {}));
+}
+
+head('a key as pasted, and which models it can reach');
+{
+  const key = v => safely(() => W.key(v));
+  ok('quotes round a pasted key are taken off, straight or curly', key('"AIza-1"') === 'AIza-1' && key("'AIza-1'") === 'AIza-1' && key('\u201cAIza-1\u201d') === 'AIza-1' && key('\u2018AIza-1\u2019') === 'AIza-1', key('\u201cAIza-1\u201d'));
+  ok('so is a "Bearer " copied from a request, in any case, and every space and line break', key('  bearer AIza 1\n2\t3 ') === 'AIza123' && key('Bearer\tAQ.x') === 'AQ.x', key('  bearer AIza 1\n2\t3 '));
+  ok('a quote inside the key is the key\'s', key('AI"za') === 'AI"za');
+  ok('nothing pasted is an empty key, not the word undefined', key(null) === '' && key(undefined) === '' && key('') === '');
+
+  const page = { models: [
+    { name: 'models/gemini-9-flash', displayName: 'Gemini 9 Flash', supportedGenerationMethods: ['generateContent', 'countTokens'] },
+    { name: 'models/text-embedding-9', supportedGenerationMethods: ['embedContent'] },
+    { name: 'models/gemini-9-pro' },
+    { name: 'models/gemini-9-flash-tts', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/imagen-9', supportedGenerationMethods: [] },
+    { displayName: 'no name' },
+  ] };
+  const got = safely(() => G.models(page));
+  ok('every id the page named is kept as evidence, models/ taken off, a model with no name left out', same(got && got.raw, ['gemini-9-flash', 'text-embedding-9', 'gemini-9-pro', 'gemini-9-flash-tts', 'imagen-9']), J(got && got.raw));
+  ok('the ones that can chat come back as [id, name], the id standing for a name not given', same(got && got.models, [['gemini-9-flash', 'Gemini 9 Flash'], ['gemini-9-pro', 'gemini-9-pro']]), J(got && got.models));
+  ok('a model that reports its methods without generateContent is left out; one that reports none is judged by its name',
+     same(safely(() => G.models({ models: [{ name: 'models/a', supportedGenerationMethods: ['embedContent'] }, { name: 'models/b', supportedGenerationMethods: [] }, { name: 'models/c' }] })).models, [['b', 'b'], ['c', 'c']]));
+  ok('by name, an embedding, a voice and an image model are not chat', same(safely(() => G.models({ models: ['text-embedding-9', 'embed-x', 'aqa', 'veo-9', 'gemini-9-flash-image', 'tts-9', 'gemini-9-audio-native', 'robotics-9', 'learnlm-9-audio'].map(n => ({ name: 'models/' + n })) })).models, []));
+  ok('a page with no models, or no page, is nothing either way', same(safely(() => G.models({})), { models: [], raw: [] }) && same(safely(() => G.models(null)), { models: [], raw: [] }));
+
+  const pick = list => safely(() => G.pick(list.map(id => [id, id])));
+  ok('the model chosen is a plain Flash, ahead of a Lite, a preview or a pro listed first', pick(['gemini-9-pro', 'gemini-9-flash-lite', 'gemini-9-flash-preview', 'gemini-9-flash', 'gemini-8-flash']) === 'gemini-9-flash', pick(['gemini-9-pro', 'gemini-9-flash-lite', 'gemini-9-flash-preview', 'gemini-9-flash']));
+  ok('with only Flash variants, the first of them; with no Flash, the first model', pick(['gemini-9-pro', 'gemini-9-flash-thinking', 'gemini-9-flash-lite']) === 'gemini-9-flash-thinking' && pick(['gemini-9-pro', 'gemini-9-ultra']) === 'gemini-9-pro');
 }
 
 head('request building: a thread as Gemini\'s contents, the tools as declarations');
@@ -301,9 +333,12 @@ head('the page\'s functions are the calls into this');
      [n('const contents=ApexWire.gemini.contents(Vision.withImages('), n('const requestBody=ApexWire.gemini.request('), n('explainOnly?null:TOOLS, contents, 2000);'), n('const stream=ApexWire.gemini.reader({'), n('stream.push(dec.decode(value,{stream:true}));'), n('const calls=ApexWire.gemini.calls(raw);')].join(' '));
   ok('the panel is told of words and of a call by the page\'s own three functions', n("speaking(){ apexSetState('speaking'); },") === 1 && n('words(){ apexPulse(); painter.schedule(); },') === 1 && n("tool(){ apexSetState('tool'); }});") === 1);
   ok('the one-message requests are built and read by the module', n("body:ApexWire.gemini.plain('hi',1)});") === 1 && n('body:ApexWire.gemini.plain(prompt,maxTokens)});') === 1 && n('return ApexWire.gemini.text(j);') === 1);
+  ok('cleanKey() and geminiDefaultModel() are the module\'s', n('function cleanKey(v){ return ApexWire.key(v); }') === 1 && n('function cleanKey(') === 1
+     && n('function geminiDefaultModel(models){ return ApexWire.gemini.pick(models); }') === 1 && n('function geminiDefaultModel(') === 1);
+  ok('geminiModels() reads each page it fetches through the module', n('const got=ApexWire.gemini.models(j);') === 1 && n('out.push(...got.models); raw.push(...got.raw);') === 1);
   const slot = page.indexOf('@@SLOT[src:src/core/apexwire.js]@@');
   ok('the module is written into the page once, above the first of them', slot >= 0 && page.indexOf('@@SLOT[src:src/core/apexwire.js]@@', slot + 1) < 0 && slot < page.indexOf('function gemUrl('), slot < 0 ? 'no slot' : 'slot at ' + slot);
-  const kept = ['streamGenerateContent', 'functionDeclarations', 'functionResponse', 'inlineData', 'skip_thought_signature_validator', 'x-goog-api-key', '&pageToken=', 'Earlier messages in this thread', 'function toGeminiContents(', 'function geminiParts(', 'function toGeminiTools(', 'APEX_SEND', 'thoughtSignature'].filter(t => n(t) > 0);
+  const kept = ['streamGenerateContent', 'functionDeclarations', 'functionResponse', 'inlineData', 'skip_thought_signature_validator', 'x-goog-api-key', '&pageToken=', 'Earlier messages in this thread', 'function toGeminiContents(', 'function geminiParts(', 'function toGeminiTools(', 'APEX_SEND', 'thoughtSignature', 'GEM_NOT_CHAT', 'supportedGenerationMethods', 'Bearer\\s+', 'lite|image|tts'].filter(t => n(t) > 0);
   ok('and the page keeps no second copy of the shapes', kept.length === 0, kept.join(', ') || 'none left');
 }
 

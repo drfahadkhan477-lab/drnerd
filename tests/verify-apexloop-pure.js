@@ -59,7 +59,7 @@ function world(o) {
       if (!r) return { text: '', calls: [], finishReason: 'STOP' };
       if (r.abort) st.abort.abort();
       if (r.throws) throw r.throws;
-      return { text: r.text || '', raw: [], calls: (r.calls || []).map((c, i) => Object.assign({ id: 'call_' + step + '_' + i, input: {} }, c)), finishReason: r.finishReason, ...(r.reused ? { reused: true } : {}) };
+      return { text: r.text || '', raw: [], calls: (r.calls || []).map((c, i) => Object.assign({ id: 'call_' + step + '_' + i, input: {} }, c)), finishReason: r.finishReason, ...(r.reused ? { reused: true } : {}), ...('incomplete' in r ? { incomplete: r.incomplete } : {}) };
     },
     runTool: (name, input) => { log.push(['runTool', name]); const f = (o.tools || {})[name]; return f ? f(input, page) : { result: 'ran ' + name }; },
     exchange: (wire, turn, results) => { log.push(['exchange', results.map(r => [r.id, r.name, r.content.length])]); wire.push({ role: 'model', parts: [] }, { role: 'user', parts: [] }); },
@@ -137,6 +137,10 @@ head('3. a reply that stops short');
 {
   const cut0 = world({ replies: [{ text: 'A long answer that', finishReason: 'MAX_TOKENS' }] }); await cut0.go();
   ok('cut off by the output limit, its words are kept and marked incomplete, and no notice is added', cut0.hist.length === 2 && J(cut0.hist[1]) === '{"role":"assistant","content":"A long answer that","incomplete":true}', J(cut0.hist));
+  const flagged = world({ replies: [{ text: 'A long answer that', incomplete: true }] }); await flagged.go();
+  ok('a turn that says only that it is incomplete, with no finish reason, is marked the same', flagged.hist.length === 2 && J(flagged.hist[1]) === '{"role":"assistant","content":"A long answer that","incomplete":true}', J(flagged.hist));
+  const whole = world({ replies: [{ text: 'A whole answer.', incomplete: false }] }); await whole.go();
+  ok('and one that says it is complete carries no mark', whole.hist.length === 2 && J(whole.hist[1]) === '{"role":"assistant","content":"A whole answer."}', J(whole.hist));
   const empty = world({ replies: [{ text: '', finishReason: 'MAX_TOKENS' }] }); await empty.go();
   ok('cut off with no words, it is a notice that the explanation may be incomplete', empty.hist.length === 2 && empty.hist[1]?.err === true && /reached the model’s output limit/.test(empty.hist[1]?.content), J(empty.hist[1]));
   const safety = world({ replies: [{ text: 'Some words', finishReason: 'SAFETY' }] }); await safety.go();
