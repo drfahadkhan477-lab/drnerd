@@ -181,7 +181,7 @@ jobs:
         run: node tests/verify-progressstats-pure.js
       - name: a pen point keeps what a screen can show, points a line already describes are dropped and a corner kept, and an outline is filled as one curved path (16 checks)
         run: node tests/verify-stroke-pure.js
-      - name: a figure's width and height are read from its own header, in each format the notes can hold, from the header alone, and nothing is said for what cannot be read (29 checks)
+      - name: a figure's width and height are read from its own header, in each format the notes can hold, from the header alone, and nothing is said for what cannot be read (32 checks)
         run: node tests/verify-imagesize-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js

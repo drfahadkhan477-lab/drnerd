@@ -16,8 +16,10 @@
  *     with the wrong chunk after it, a JPEG whose data starts before any frame header, a size of 0 or past MAX;
  *   - only the header is decoded: what follows it may be anything (for a JPEG, what follows the first bytes read,
  *     when its frame header is among them);
+ *   - a size becomes an <img>'s width and height only when it is two whole positive numbers;
  *   - the page reads a picture's size once for each picture a key names, and again when the key names another,
- *     and the module is written into the page before the Markdown renderer that writes the size.
+ *     and the module is written into the page before the Markdown renderer that writes the size; the pearl's
+ *     figure and Apex's strip write it through the page's refImgAttrs().
  */
 'use strict';
 const fs = require('fs');
@@ -101,6 +103,15 @@ head('only the header is decoded');
   ok('and a JPEG from its first bytes, when its frame header is among them', J(broken('image/jpeg', JPEG(SOF(0xc0, 8, 9)))) === J({ w: 8, h: 9 }), J(broken('image/jpeg', JPEG(SOF(0xc0, 8, 9)))));
 }
 
+head('a size as an <img>\'s attributes');
+{
+  ok('two whole positive numbers become a width and a height', safely(() => I.attrs({ w: 913, h: 477 })) === ' width="913" height="477"', J(safely(() => I.attrs({ w: 913, h: 477 }))));
+  /* What is written lands inside the markup as it is: nothing but two whole positive numbers is. */
+  const odd = [null, undefined, {}, { w: 9 }, { w: 1.5, h: 2 }, { w: -3, h: 4 }, { w: 0, h: 4 }, { w: '9" onerror="alert(1)', h: 9 }, { w: '9', h: '9' }, 'big', 7];
+  const written = odd.map(z => safely(() => I.attrs(z)));
+  ok('anything else becomes nothing', written.every(t => t === ''), J(written.find(t => t !== '')));
+}
+
 head('the page reads a size once for each picture');
 {
   /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
@@ -120,6 +131,12 @@ head('the page reads a size once for each picture');
   ok('the module is written into the page once, before the Markdown renderer, and md() hands the renderer the page\'s reader',
      sizeSlot >= 0 && page.indexOf('@@SLOT[src:src/core/imagesize.js]@@', sizeSlot + 1) < 0 && sizeSlot < mdSlot
      && page.split('function md(t){ return Markdown.render(t,e,refImgSrc,refImgSize); }').length - 1 === 1, sizeSlot < 0 ? 'no slot' : 'slot at ' + sizeSlot);
+  const n = t => page.split(t).length - 1;
+  ok('refImgAttrs() is the page\'s reader as attributes, and the pearl\'s figure and Apex\'s strip are written with it',
+     n('function refImgAttrs(key,src){ return ImageSize.attrs(refImgSize(key,src)); }') === 1 && n('function refImgAttrs(') === 1
+     && n('alt="${e(cap||\'Figure from this note\')}"${refImgAttrs(p.figKey,src)} loading="lazy">') === 1 && n('apexFigsFor,refImgAttrs,') === 1
+     && fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'apexpanel.js'), 'utf8').split('alt="${e(f.caption)}"${refImgAttrs(f.key,f.dataUrl)} loading="lazy">').length - 1 === 1,
+     [n('function refImgAttrs(key,src){ return ImageSize.attrs(refImgSize(key,src)); }'), n('${refImgAttrs(p.figKey,src)}'), n('apexFigsFor,refImgAttrs,')].join(' '));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

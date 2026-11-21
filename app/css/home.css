@@ -293,7 +293,10 @@ body.on-home .ai-fab{bottom:max(14px,var(--sab))}
     grid-template-areas:"label label" "img cap";column-gap:20px;row-gap:4px;align-items:center;
     padding:18px 24px 22px;border-left:0;border-top:1px solid var(--border2)}
   .pearl-card .pearl-fig .pearl-fig-label{grid-area:label}
-  .pearl-card .pearl-fig img{grid-area:img;width:auto;max-width:100%;max-height:300px;margin:0 auto}
+  /* No width here: the picture's own width and height (written from its header, src/core/imagesize.js) and
+     cardiac.css's width:100% keep its room while it loads; a width:auto here gave a picture still loading a 16 px
+     column in Chromium, and the band grew under the reader when it arrived. */
+  .pearl-card .pearl-fig img{grid-area:img;max-width:100%;max-height:300px;margin:0 auto}
   .pearl-card .pearl-fig figcaption{grid-area:cap;padding:0;font-size:var(--t-body);line-height:1.55}
   .pearl-emblem{flex:none;max-width:none;flex-direction:row;justify-content:flex-start;gap:20px;min-height:0;
     padding:22px 28px;border-left:0;border-top:1px solid var(--border2)}

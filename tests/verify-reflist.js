@@ -26,6 +26,7 @@ const path = require('path');
 const { launch } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
 const { booted, onScreen, quiet } = require('./_render.js');
+const { heldRoom, keptRoom, roomSaid } = require('./_figroom.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-reflist.js <build.html>'); process.exit(1); }
@@ -142,39 +143,15 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   head('a figure keeps its room while it loads');
   {
     /* A figure written without a size has no room until it decodes, so it, and the card round it, grew as it arrived:
-       cards of 345 px became 418 under a scrolling finger. Here a card's figure is put back as a fresh <img>, with the
-       attributes the page wrote, whose picture the test holds back; a fresh one, because an <img> given a new src goes
-       on painting the old picture, and would keep its room whatever the page wrote. The figure's own box is measured,
-       not the card's: a note's body is capped in height, and a card already at the cap does not grow. */
+       cards of 345 px became 418 under a scrolling finger. tests/_figroom.js puts a drawn figure back as a fresh <img>,
+       with the attributes the page wrote, and holds its picture back. */
     await toLibrary();
     const sized = await page.evaluate(() => [...document.querySelectorAll('.ref-card .ref-fig img')].filter(x => x.complete && x.naturalWidth)
       .map(x => [x.getAttribute('width'), x.getAttribute('height'), x.naturalWidth, x.naturalHeight]));
     ok('each figure drawn is written with its own width and height', sized.length > 0 && sized.every(([w, h, nw, nh]) => w === String(nw) && h === String(nh)),
        `${sized.length} figures; ` + JSON.stringify(sized.find(([w, h, nw, nh]) => w !== String(nw) || h !== String(nh)) || sized[0]));
-    /* Each figure's room, as the screen has it: width by height in whole pixels. */
-    await page.evaluate(() => { window.__room = el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }; });
-    const fig = await page.evaluate(() => {
-      const im = [...document.querySelectorAll('.ref-card .ref-fig img')].find(x => x.complete && x.naturalWidth);
-      if (!im) return null;
-      im.id = 'heldFig';
-      return { src: im.getAttribute('src'), drawn: window.__room(im) };
-    });
-    let release = null;
-    if (fig) await page.route('http://fig.invalid/held', route => { release = () => route.fulfill({ status: 200, contentType: fig.src.slice(5, fig.src.indexOf(';')), body: Buffer.from(fig.src.slice(fig.src.indexOf(',') + 1), 'base64') }); });
-    const held = !fig ? null : await page.evaluate(() => {
-      const old = document.getElementById('heldFig'), im = old.cloneNode(false);
-      im.removeAttribute('loading'); im.src = 'http://fig.invalid/held';
-      old.replaceWith(im);
-      return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r({ pending: !im.complete, room: window.__room(im) }))));
-    });
-    /* The request reaches the route a moment after the src is set: it is let through once it has. */
-    for (let i = 0; held && !release && i < 50; i++) await new Promise(r => setTimeout(r, 100));
-    if (release) release();
-    const loaded = !release ? null : await page.waitForFunction(() => { const im = document.getElementById('heldFig'); return im && im.complete && im.naturalWidth > 0; }, null, { timeout: 10000 })
-      .then(() => page.evaluate(() => window.__room(document.getElementById('heldFig'))), () => null);
-    ok('a figure has the room while it is loading that it takes once it has loaded', !!held && held.pending && loaded !== null && held.room === loaded && loaded === fig.drawn,
-       fig ? `${held && held.room} loading (${held && held.pending ? 'pending' : 'not pending'}), ${loaded} loaded, ${fig.drawn} as drawn` : 'no figure in the first page');
-    if (fig) await page.unroute('http://fig.invalid/held');
+    const room = await heldRoom(page, '.ref-card .ref-fig img');
+    ok('a figure has the room while it is loading that it takes once it has loaded', keptRoom(room), roomSaid(room));
   }
 
   head('leaving, deleting, adding, and one note on its own');

@@ -3666,7 +3666,7 @@ function apexLocalHtml(){
    the questions drawn on and the chat (bindChat()), restores what it read, and starts the avatar again.
    The figures from the notes drawn on are found here (apexFigsFor()), where their last answer is kept. */
 @@SLOT[src:src/app/apexpanel.js]@@
-const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,
+const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,
   apexIsFull,apexHosted,apexLocalHtml,setupHtml,visionBadge,cur,clip,md,e,icon});
 function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
@@ -4297,6 +4297,8 @@ function refImgSize(key,src){
   REF_IMG_SIZE.set(key,{src,z});
   return z;
 }
+/* The same, as an <img>'s width and height attributes, or nothing: the pearl's figure and Apex's strip of them. */
+function refImgAttrs(key,src){ return ImageSize.attrs(refImgSize(key,src)); }
 @@SLOT[src:src/core/markdown.js]@@
 function md(t){ return Markdown.render(t,e,refImgSrc,refImgSize); }
 function apexIsFull(){
@@ -6650,7 +6652,7 @@ function pearlFigure(p){
   const cap=(p.figCap||'').trim();
   return `<figure class="pearl-fig" id="pearlFig" data-action="openPearlFigure" role="button" tabindex="0"
     title="Enlarge figure"><span class="pearl-fig-label" aria-hidden="true">${icon('image','icon-sm')} Figure <i>${icon('expand','icon-sm')} Tap to enlarge</i></span>
-    <img src="${e(src)}" alt="${e(cap||'Figure from this note')}" loading="lazy">
+    <img src="${e(src)}" alt="${e(cap||'Figure from this note')}"${refImgAttrs(p.figKey,src)} loading="lazy">
     ${cap?`<figcaption aria-hidden="true">${e(cap)}</figcaption>`:''}</figure>`;
 }
 /* A pearl whose note has no figure still has a picture beside it: its chapter's emblem, glowing in the theme's accent,

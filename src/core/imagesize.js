@@ -11,6 +11,7 @@
      of(src)    { w, h } for a data: URL of a PNG, GIF, JPEG or WebP whose header says its size;
                 null for anything else (an AVIF, a URL that is not data:, a header cut short or
                 contradicting itself), and the <img> is written without a size, as before
+     attrs(z)   ' width="w" height="h"' for a size of two whole positive numbers, '' for anything else
 
    Only the header is decoded: a few dozen bytes, or for a JPEG 64, and four times as many again each time its
    first frame header is not yet reached (an EXIF block can put it tens of kilobytes in); never more
@@ -110,6 +111,12 @@ function of(src){
   }
 }
 
-root.ImageSize = { of, HEAD, MAX };
+/* A size as the attributes of an <img>, or nothing: only two whole positive numbers are written, because they land
+   inside the markup as they are. */
+function attrs(z){
+  return z && Number.isInteger(z.w) && Number.isInteger(z.h) && z.w > 0 && z.h > 0 ? ' width="' + z.w + '" height="' + z.h + '"' : '';
+}
+
+root.ImageSize = { of, attrs, HEAD, MAX };
 
 })(typeof window !== 'undefined' ? window : this);

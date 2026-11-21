@@ -391,7 +391,7 @@
    letting the model place a figure, and it was unusable the moment it worked. */
 .msg .ref-fig{margin:10px 0;border:1px solid var(--border);border-radius:12px;
   overflow:hidden;background:var(--white);max-width:100%}
-.msg .ref-fig img{display:block;width:auto;max-width:100%;height:auto;
+.msg .ref-fig img{display:block;max-width:100%;height:auto;
   max-height:340px;object-fit:contain;background:var(--white)}
 .msg .ref-fig figcaption{padding:7px 11px;font-size:13px;line-height:1.45;
   color:var(--muted);border-top:1px solid var(--border)}

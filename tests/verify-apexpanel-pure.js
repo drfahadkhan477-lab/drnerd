@@ -49,6 +49,8 @@ const kitOf = over => Object.assign({
   CHIPS: [['Why <is> this?', 'p0'], ['Kill', 'p1'], ['Picked', 'p2', q => !!q], ['Never', 'p3', () => false]],
   aiBusy: false, lastHits: HITS, lastHitsKey: 'Q1', apexChipsOpen: false, apexFigsOpen: false,
   apexFigsFor: (hits, lastBot, hist) => (figCalls.push(J([hits.map(h => h.id), lastBot, hist.length])), FIGS),
+  /* The first figure's size is known, the second's is not (an AVIF, say): only the first carries one. */
+  refImgAttrs: (key, src) => (key === 'k1' && src === 'data:image/png;base64,AA' ? ' width="9" height="4"' : ''),
   apexIsFull: () => false, apexHosted: () => true, apexLocalHtml: () => '[LOCAL]', setupHtml: () => '[SETUP]', visionBadge: q => ' · VB(' + q.id + ')',
   cur: () => ({ key: '', model: 'g-pro' }), clip: (s, n) => 'CLIP' + n + '(' + s + ')', md: s => 'MD(' + s + ')',
   e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']',
@@ -120,7 +122,8 @@ head('the figures');
   const fs_ = g1(p, /(<div class="fig-strip[\s\S]*?<\/div><\/div>)/) || '';
   ok('shut, its toggle says how many and from where', fs_.startsWith('<div class="fig-strip" id="aiFigWrap">\n    <button class="src-lbl fig-toggle" type="button" id="aiFigs" aria-controls="aiFigList"\n      aria-expanded="false">[icon chevron-down icon-sm]2 figures from those notes</button>\n    <div class="fig-list" id="aiFigList">'), fs_.slice(0, 260));
   ok('open, said so; one figure is "figure"', panel(Q, HIST, { apexFigsOpen: true }).includes('<div class="fig-strip open" id="aiFigWrap">') && panel(Q, HIST, { apexFigsOpen: true }).includes('aria-expanded="true">[icon chevron-down icon-sm]2 figures') && panel(Q, HIST, { apexFigsFor: () => [FIGS[0]] }).includes('1 figure from those notes</button>'));
-  ok('each a way to open it full size, by openFigureFrom(), its caption through e() and clipped to 150 as alt and caption, and its note clipped to 44', fs_.includes('<figure class="ai-fig" data-action="openFigureFrom" role="button" tabindex="0"\n      title="Open this figure full size"><img src="data:image/png;base64,AA" alt="E(Cap <1>)" loading="lazy">\n      <figcaption>E(CLIP150(Cap <1>))<span class="ai-fig-src">E(CLIP44(Note <one>))</span></figcaption></figure>') && times(fs_, '<figure class="ai-fig"') === 2);
+  ok('each a way to open it full size, by openFigureFrom(), its caption through e() and clipped to 150 as alt and caption, and its note clipped to 44', fs_.includes('<figure class="ai-fig" data-action="openFigureFrom" role="button" tabindex="0"\n      title="Open this figure full size"><img src="data:image/png;base64,AA" alt="E(Cap <1>)" width="9" height="4" loading="lazy">\n      <figcaption>E(CLIP150(Cap <1>))<span class="ai-fig-src">E(CLIP44(Note <one>))</span></figcaption></figure>') && times(fs_, '<figure class="ai-fig"') === 2);
+  ok('each with its own width and height, asked by its key and picture, and none for a figure whose size is not known', fs_.includes('alt="E(Cap <1>)" width="9" height="4" loading="lazy">') && fs_.includes('<img src="data:image/png;base64,BB" alt="E(Cap 2)" loading="lazy">'), (fs_.match(/<img[^>]*>/g) || []).join(' '));
   ok('none, no strip', !panel(Q, HIST, { apexFigsFor: () => [] }).includes('fig-strip'));
 }
 
@@ -155,14 +158,14 @@ const KIT_READS = new Set();
   const outs = [run(() => M.headHtml(deepWatch(Q, 'q'), kit)), run(() => M.setupPanelHtml('[HEAD]', kit)), run(() => M.panelHtml('[HEAD]', deepWatch(Q, 'q'), deepWatch(HIST, 'hist'), kit)),
     run(() => M.headHtml(null, watched(kitOf({ AI_GROUNDED: true }), KIT_READS, 'kit')))];
   const names = [...KIT_READS].sort().join(' ');
-  ok('of its kit, twenty-two names', !outs.some(o => o.startsWith('THREW')) && names === 'AI AI_GROUNDED CHIPS MODELS PROVIDERS REF aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexHosted apexIsFull apexLocalHtml clip cur e icon lastHits lastHitsKey md setupHtml visionBadge', names);
+  ok('of its kit, twenty-three names', !outs.some(o => o.startsWith('THREW')) && names === 'AI AI_GROUNDED CHIPS MODELS PROVIDERS REF aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexHosted apexIsFull apexLocalHtml clip cur e icon lastHits lastHitsKey md refImgAttrs setupHtml visionBadge', names);
   ok('it sets, deletes and defines nothing on the question, the thread, the notes drawn on, the settings or the kit', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object') { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.panelHtml('[HEAD]', deep(Object.assign({}, Q)), deep(HIST.map(m => Object.assign({}, m))), deep(kitOf({ lastHits: HITS.map(h => Object.assign({}, h)), apexFigsFor: () => FIGS }))));
   ok('given everything frozen, it draws the same panel', !frozen.startsWith('THREW') && frozen === panel(Q, HIST) && frozen.includes('2 figures from those notes'), frozen.slice(0, 60));
   const readsOf = f => { const r = new Set(); run(() => f(watched(kitOf({ AI_GROUNDED: true }), r, 'kit'))); run(() => f(watched(kitOf(), r, 'kit'))); return [...r].sort().join(' '); };
-  ok('of those, the head reads six, the setup two and the panel seventeen, each only what it draws with', readsOf(k => M.headHtml(Q, k)) === 'AI_GROUNDED REF apexIsFull e icon visionBadge' && readsOf(k => M.setupPanelHtml('[HEAD]', k)) === 'apexLocalHtml setupHtml'
-     && readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)) === 'AI CHIPS MODELS PROVIDERS aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexHosted apexLocalHtml clip cur e icon lastHits lastHitsKey md', readsOf(k => M.headHtml(Q, k)) + ' · ' + readsOf(k => M.setupPanelHtml('[HEAD]', k)));
+  ok('of those, the head reads six, the setup two and the panel eighteen, each only what it draws with', readsOf(k => M.headHtml(Q, k)) === 'AI_GROUNDED REF apexIsFull e icon visionBadge' && readsOf(k => M.setupPanelHtml('[HEAD]', k)) === 'apexLocalHtml setupHtml'
+     && readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)) === 'AI CHIPS MODELS PROVIDERS aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexHosted apexLocalHtml clip cur e icon lastHits lastHitsKey md refImgAttrs', readsOf(k => M.headHtml(Q, k)) + ' · ' + readsOf(k => M.setupPanelHtml('[HEAD]', k)));
 }
 
 head('the page hands the module what it has, and keeps what touches the page');
@@ -171,7 +174,7 @@ head('the page hands the module what it has, and keeps what touches the page');
   const page = blankComments(raw);
   const count = text => page.split(text).length - 1;
   const SLOT = '@@SLOT[src:src/app/apexpanel.js]@@';
-  const KIT = 'const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,\n  apexIsFull,apexHosted,apexLocalHtml,setupHtml,visionBadge,cur,clip,md,e,icon});';
+  const KIT = 'const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,\n  apexIsFull,apexHosted,apexLocalHtml,setupHtml,visionBadge,cur,clip,md,e,icon});';
   const BUILD = `function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
@@ -193,7 +196,7 @@ ${' '.repeat(2)}`;
   ok('the module is written into the page once, above apexKit() and buildAI()', count(SLOT) === 1 && page.indexOf(SLOT) < page.indexOf('const apexKit=') && page.indexOf(SLOT) < page.indexOf(BUILD));
   ok('the kit is made at each drawing, never kept: a function, called by buildAI() alone', count(KIT) === 1 && count('apexKit') === 2 && count('apexKit()') === 1, count('apexKit') + ' ' + count('apexKit()'));
   const handed = String(g1(page, /const apexKit=\(\)=>\(\{([^}]*)\}\);/)).replace(/\s+/g, '');
-  ok('the kit is the twenty-two names the module was seen to ask for, each under its own name', KIT_READS.size === 22 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
+  ok('the kit is the twenty-three names the module was seen to ask for, each under its own name', KIT_READS.size === 23 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
   const memo = g1(page, /(function apexFigsFor\(hits,lastBot,hist\)\{[\s\S]*?\n\})/) || '';
   ok('the figures\' memo is the page\'s: keyed on the notes, the reply\'s length and whether one is being written, kept in apexFigMemo, which it alone writes', memo.startsWith(MEMO) && memo.includes("const figKey=hits.map(h=>h.id).join(',')+'|'+lastBot.length+'|'+(aiBusy?1:0);") && memo.includes('if(apexFigMemo.key!==figKey){') && memo.endsWith('  return apexFigMemo.figs;\n}') && count('let apexFigMemo={key:null,figs:[]};') === 1 && count('apexFigMemo=') === 2, memo.slice(0, 80));
   ok('and finds none while a reply is being written or with no thread, three at most, none the reply already placed', memo.includes("apexFigMemo={ key:figKey, figs:(hist.length&&!aiBusy)\n      ? refFiguresForHits(hits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)\n      : [] };"));
@@ -220,7 +223,7 @@ ${' '.repeat(2)}`;
      reply being written, then one where the key is gone. */
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  const parts = [read('src/core/markdown.js'), read('src/core/vision.js'), read('src/core/imagesize.js'), whole('const REF_IMG_SIZE=new Map();', '\n}'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function clip(s,n){', '\n'),
+  const parts = [read('src/core/markdown.js'), read('src/core/vision.js'), read('src/core/imagesize.js'), whole('const REF_IMG_SIZE=new Map();', '\n}'), whole('function refImgAttrs(key,src){', '\n'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function clip(s,n){', '\n'),
     whole('const PROVIDERS=[', '\n];'), whole('const MODELS={', '\n};'), whole('function cur(){', '\n'), whole('function apexHosted(){', '\n}'), whole('const APEX_ASK={', '\n};'), whole('const CHIPS=[', '\n];'),
     whole('function chatFor(q){', '\n'), whole('function apexLocalHtml(){', '\n}'), whole('function apexIsFull(){', '\n}'), whole('function visionBadge(q){', '\n}'), whole('const KEY_PREFIX=', '\n'), whole('function setupHtml(p=AI.provider){', '\n}'), whole('function md(t){', '\n'),
     whole('let apexFigMemo=', '\n'), read('src/app/apexpanel.js'), whole('const apexKit=()=>', 'icon});'), whole('function buildAI(){', '\n}'), whole('function apexFigsFor(', '\n}')].join('\n');

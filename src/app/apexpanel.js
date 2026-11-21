@@ -29,6 +29,8 @@
                                                  the figures from those notes not already in the reply; the
                                                  page keeps the last answer (apexFigMemo), because finding
                                                  them is the costly part and buildAI() runs after every step
+                     refImgAttrs(key, src)       a figure's width and height as attributes, so it keeps its
+                                                 room while it loads (src/core/imagesize.js), or ''
                      apexIsFull(), apexHosted(), cur()
                                                  whether the panel is full screen, whether Gemini goes
                                                  through this site, and the provider's settings
@@ -98,7 +100,7 @@ function setupPanelHtml(head, kit){
 }
 
 function panelHtml(head, q, hist, kit){
-  const {AI,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,apexHosted,apexLocalHtml,cur,clip,md,e,icon}=kit;
+  const {AI,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,apexHosted,apexLocalHtml,cur,clip,md,e,icon}=kit;
   const msgs=hist.length
     ? hist.map(m=>m.role==='user'
         ? `<div class="msg user">${e(m.content)}</div>`
@@ -121,7 +123,7 @@ function panelHtml(head, q, hist, kit){
       aria-expanded="${apexFigsOpen?'true':'false'}">${icon('chevron-down','icon-sm')}${figs.length} figure${figs.length===1?'':'s'} from those notes</button>
     <div class="fig-list" id="aiFigList">
     ${figs.map(f=>`<figure class="ai-fig" data-action="openFigureFrom" role="button" tabindex="0"
-      title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}" loading="lazy">
+      title="Open this figure full size"><img src="${f.dataUrl}" alt="${e(f.caption)}"${refImgAttrs(f.key,f.dataUrl)} loading="lazy">
       <figcaption>${e(clip(f.caption,150))}<span class="ai-fig-src">${e(clip(f.noteTitle,44))}</span></figcaption></figure>`).join('')}</div></div>`:'';
   return head+
     `<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">${apexLocalHtml()}${msgs}${aiBusy?'<div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div>':''}</div>
