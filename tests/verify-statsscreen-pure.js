@@ -306,10 +306,10 @@ head('the page hands the module what it has, and keeps what the markup names');
      scheduler and reviewed once, one question practised. */
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  const parts = ['calib', 'fsrs', 'reviewqueue', 'mockexam'].map(m => read('src/core/' + m + '.js')).concat([whole('function icon(name, cls){', '\n}'), whole('function certainWrongQs(){', '\n'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
+  const parts = ['calib', 'fsrs', 'reviewqueue', 'mockexam', 'progressstats'].map(m => read('src/core/' + m + '.js')).concat([whole('function icon(name, cls){', '\n}'), whole('function certainWrongQs(){', '\n'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
     whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function addDays(iso,n){', '\n'), whole('function dueQuestions(){', '\n'), whole('let pendingBackupSave=null;', '\n'),
-    whole('function safariTabStorage(){', '\n}'), whole('function storageLine(){', '\n}'), whole('function storageOK(){', '\n}'), whole('function masteryFor(ch){', '\n}'), whole('function avgRetention(){', '\n}'),
-    whole('function forecast7(){', '\n}'), whole('function startedCount(){', '\n}'), whole('function last30(){', '\n}'), whole('function offlineCapable(){', '\n}'), read('src/app/stats.js'), whole('function buildStats(){', '\n}')]).join('\n');
+    whole('function safariTabStorage(){', '\n}'), whole('function storageLine(){', '\n}'), whole('function storageOK(){', '\n}'), whole('function masteryFor(ch){', '\n'), whole('function avgRetention(){', '\n'),
+    whole('function forecast7(){', '\n'), whole('function startedCount(){', '\n'), whole('function last30(){', '\n'), whole('function offlineCapable(){', '\n}'), read('src/app/stats.js'), whole('function buildStats(){', '\n}')]).join('\n');
   const NOW = new Date(2026, 10, 16, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
   const timers = [], flags = { installed: false }; let surveys = 0;
