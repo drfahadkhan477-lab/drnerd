@@ -296,7 +296,7 @@ const SUITES = [
      fellow does next, and a wrong one has cost an evening more than once. It
      was the body of the shell's apiError() and could only be reached through a
      browser; it is src/core/providererror.js now (roadmap E1). */
-  ['providererror-pure', 'a refused request is told as what it is: the site\'s refusal, a rejected or blocked key, a daily quota, no allowance or a wait read from the response, a retired model, an outage; the provider\'s words escaped, and the response read no more than it was'],
+  ['providererror-pure', 'a refused request is told as what it is: the site\'s refusal, a rejected or blocked key, a daily quota, no allowance or a wait read from the response, a retired model, an outage; the provider\'s words escaped, and the response read no more than it was; a request that got no response says who could not be reached and what to check'],
   /* What a review session holds was three functions in the shell reading the
      bank and the cards as globals. Their rule, that due cards are never capped
      to a round number, had no check that did not need a browser. */
@@ -316,7 +316,7 @@ const SUITES = [
      and the stream. It was inline in the shell's oneTurnGemini() and around it,
      so its shape was only ever checked through a browser and a stubbed network.
      src/core/apexwire.js now (roadmap E1 step 2), the seam a second provider needs. */
-  ['apexwire-pure', 'a request carries a window of the thread that opens on a user turn and no failed turn; it goes to Google with a key and to this site\'s relay without, carrying no secret; its body is the text sent, key for key; the stream is read the same whatever its chunk boundaries, each part kept with its signature; a tool\'s answer goes back with the model\'s own parts'],
+  ['apexwire-pure', 'a request carries a window of the thread that opens on a user turn and no failed turn; it goes to Google with a key and to this site\'s relay without, carrying no secret; its body is the text sent, key for key; the stream is read the same whatever its chunk boundaries, each part kept with its signature; a tool\'s answer goes back with the model\'s own parts; a pasted key is cleaned, a page of models read for the ones that can chat, and a plain Flash chosen'],
   /* What a turn with the tutor changes was seven script-level names, declared in four places and rebound by
      whichever function got there, which is why the loop that runs a turn could not leave the shell. They are
      one object now, src/core/apexturn.js, and the old names are views of it (roadmap E1). */

@@ -3411,6 +3411,7 @@ function apexHosted(){
   }catch(_){ return false; }
 }
 @@SLOT[src:src/core/apexwire.js]@@
+@@SLOT[src:src/core/providererror.js]@@
 /* BYOK → Google directly, exactly as before. Hosted → the Worker, which
    attaches the secret. op is 'stream' | 'generate' | 'models'. The URL and the
    headers are built by src/core/apexwire.js; the two addresses are the page's. */
@@ -3763,10 +3764,7 @@ function switchProvider(p){
   const inSettings=document.querySelector('#ai .ai-title')?.textContent==='Tutor settings';
   if(inSettings) aiSettings(); else buildAI();
 }
-function cleanKey(v){
-  return String(v||'').trim().replace(/^["'\u201c\u2018]|["'\u201d\u2019]$/g,'')
-    .replace(/^Bearer\s+/i,'').replace(/\s+/g,'');
-}
+function cleanKey(v){ return ApexWire.key(v); }
 function keyMsg(t,cls){ const el=document.getElementById('keyMsg');
   if(el){ el.className='key-msg '+(cls||''); el.innerHTML=t; } }
 /* One discover-then-connect flow, driven by provider. Adding a second
@@ -3865,20 +3863,8 @@ function bindSetup(root=document, provider=()=>AI.provider, switched=switchProvi
     }
   };
 }
-/* fetch() throwing means the request never got an HTTP response at all — that's
-   almost never this app's code. Surface the browser's own reason plus the
-   real, checkable causes, instead of a flat "check your connection". */
-function networkErrorMsg(err,name){
-  const raw=(err&&err.message)||'';
-  return `Could not reach ${name}${raw?` <span class="err-raw">(${e(raw)})</span>`:''}.
-    <details class="err-help"><summary>Why might this happen?</summary>
-    <ul>
-      <li>Open a new Safari tab and load any site — confirms the device is actually online, not just Wi-Fi-connected. Hospital and university networks often need a login page before real internet works.</li>
-      <li>This file must be opened with <b>Open in Safari</b>, not previewed inside the Files app — a preview can run without full network access.</li>
-      <li>A VPN or content blocker can silently block a specific domain while everything else works.</li>
-      <li>If you're on Wi-Fi, try cellular for one test — narrows it to a network-level block.</li>
-    </ul></details>`;
-}
+/* A request that got no response at all: the sentence is src/core/providererror.js's. */
+function networkErrorMsg(err,name){ return ProviderError.network(err,name,e); }
 function geminiPause(ms,signal){
   return new Promise((resolve,reject)=>{
     const abort=()=>{ clearTimeout(timer); if(signal) signal.removeEventListener('abort',abort); reject(new DOMException('Stopped','AbortError')); };
@@ -3942,7 +3928,7 @@ function validateKey(p,k,model){
  * The raw id list comes back alongside, so the caller can say what Google
  * actually returned when nothing survives the filter. A dead end that cannot
  * describe itself is what made this bug take two rounds to find. */
-const GEM_NOT_CHAT=/embedding|embed-|aqa|imagen|veo|image-generation|-image|-tts|tts-|audio-native|robotics|learnlm-.*-audio/i;
+/* Which of a page's models can chat is read by src/core/apexwire.js; the fetch, the pages and the errors are here. */
 async function geminiModels(key){
   const out=[], raw=[]; let pageToken='';
   for(let page=0; page<5; page++){
@@ -3954,30 +3940,14 @@ async function geminiModels(key){
     if(!r.ok) return {error:await apiError(r,'gemini'), models:[], raw:[]};
     relayAnswered(r);
     let j={}; try{ j=await r.json(); }catch(_){}
-    for(const m of (j.models||[])){
-      const id=String(m.name||'').replace(/^models\//,'');
-      if(!id) continue;
-      raw.push(id);
-      const methods=m.supportedGenerationMethods;
-      /* A model that does not report its methods is not therefore useless —
-         judge it by name rather than dropping it silently. */
-      if(Array.isArray(methods)&&methods.length&&!methods.includes('generateContent')) continue;
-      if(GEM_NOT_CHAT.test(id)) continue;
-      out.push([id, m.displayName||id]);
-    }
+    const got=ApexWire.gemini.models(j);
+    out.push(...got.models); raw.push(...got.raw);
     pageToken=j.nextPageToken||'';
     if(!pageToken) break;
   }
   return {models:out, raw};
 }
-/* Prefer a plain Flash: fastest, and the one the free tier is most generous
-   with. The exclusions are the variants that are Flash in name but not a
-   general chat model. */
-function geminiDefaultModel(models){
-  const plain=models.find(m=>/flash/i.test(m[0])&&!/lite|image|tts|audio|native|preview|thinking|robotics/i.test(m[0]));
-  const anyFlash=models.find(m=>/flash/i.test(m[0]));
-  return (plain||anyFlash||models[0])[0];
-}
+function geminiDefaultModel(models){ return ApexWire.gemini.pick(models); }
 
 function aiSettings(){ openSettings('apex'); }
 function bindChat(q){
@@ -4279,7 +4249,6 @@ async function oneTurnGemini(q,wire,extra,explainOnly=false){
   }
   return {text, raw, calls, finishReason};
 }
-@@SLOT[src:src/core/providererror.js]@@
 /* A refusal from this site's own relay (hosted: no key typed) is not about a
    key the fellow can re-enter. It is the Worker's gate (Access not set up, or
    its token refused) or the site's key, and the Worker's message says which,
