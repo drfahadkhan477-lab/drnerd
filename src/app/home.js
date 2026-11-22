@@ -136,6 +136,7 @@ function homeHtml(S, CHAPTERS, kit){
       <div class="hero-inner">
         <div class="hero-greet">${e(greet())}</div>
         <div class="hero-h1">Systole</div>
+        <div class="hero-owner">© 2026 Dr Fahad Khan · FCPS Cardiology</div>
         <div class="hero-line">
           <span class="hl-item"><b>${TOTAL_Q}</b> questions</span><span class="hl-dot" aria-hidden="true"></span>
           <span class="hl-item"><b>${covered}%</b> started</span><span class="hl-dot" aria-hidden="true"></span>

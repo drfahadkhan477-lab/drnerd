@@ -4810,7 +4810,8 @@ function openSettings(section='reading'){
       ${tuneHtml()}
       <p>Brightness and contrast affect Systole only; device brightness is unchanged.</p>
       <button type="button" class="btn" data-action="resetDisplaySettings">Reset display settings</button></section>
-    <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>`;
+    <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>
+    <footer><p>© 2026 Dr Fahad Khan, FCPS Cardiology. All rights reserved in the Systole app.</p></footer>`;
   document.body.append(box);syncSettingsControls();refreshSettingsThemes();settingsApex();
   box.addEventListener('cancel',ev=>{ev.preventDefault();closeSettings();});
   box.addEventListener('click',ev=>{if(ev.target===box){const r=box.getBoundingClientRect();if(ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom)closeSettings();}});
