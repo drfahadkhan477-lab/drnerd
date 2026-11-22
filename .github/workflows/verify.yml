@@ -193,6 +193,8 @@ jobs:
         run: node tests/verify-themes-pure.js
       - name: the build's notes reach a device and are kept up to date, and a note the fellow wrote or edited is never touched (19 checks)
         run: node tests/verify-refseed-pure.js
+      - name: only an all deck is kept, twelve at most, and a kept deck comes back as it was or not at all (19 checks)
+        run: node tests/verify-resume-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
       - name: an imported file becomes notes, its front matter read and never a note, one note per heading outside a fenced block, and an image link finds its figure only where the match is unique (30 checks)

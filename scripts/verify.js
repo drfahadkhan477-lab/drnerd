@@ -304,6 +304,9 @@ const SUITES = [
      nothing of its own, moved to src/core/refimport.js. */
   /* What a saved progress record may hold (docs/ROADMAP.md, E1): the rules a restore, an export and a record from
      another window go through, moved to src/core/progressdata.js. */
+  /* A practice deck put down and taken up again (docs/ROADMAP.md, E1): which decks are kept, how many, and when a kept
+     one can be dealt again, moved to src/core/resume.js. */
+  ['resume-pure', 'only an "all" deck is kept, twelve at most and the oldest touched first out; a kept deck comes back in its order at its place, question one included, and not when the bank lost a question, the pool is another deck, or it was finished'],
   /* The build's own notes brought up to date on a device without touching the fellow's (docs/ROADMAP.md, E1): the hash
      and the sync's rules, moved to src/core/refseed.js. */
   ['refseed-pure', 'the build\'s notes reach a device and are kept up to date, while a note the fellow wrote or edited is never touched; no seed yet or the same seed again is nothing to do; the hash is FNV-1a'],
@@ -593,8 +596,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure. */
-const PENDING_RECORD = ['refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure; and resuming a deck: resume-pure. */
+const PENDING_RECORD = ['resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
