@@ -503,6 +503,8 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('the note follows the live phase on the Wiggers view');
   await page.evaluate(() => { document.querySelector('[data-physio-view="wiggers"]').click(); });
   await page.waitForTimeout(200);
+  // Keep the diagram visible while the frame clock drives its phase note.
+  await page.locator('#physioCanvas').scrollIntoViewIfNeeded();
   // Read every painted frame in the same observation window. Four protocol
   // round trips can repeatedly land in the same phase on a slow WebKit host.
   const notes = await page.evaluate(() => new Promise(resolve => {
