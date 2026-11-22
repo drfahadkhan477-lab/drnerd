@@ -1567,43 +1567,12 @@ function systemPrompt(){ return AI_GROUNDED ? SYSTEM+GROUNDED : SYSTEM; }
    The nonce is what makes it unforgeable: it is new for every request, so a
    note written yesterday cannot contain today's closing fence. Stripping
    lookalikes from the body as well means it cannot be hit by accident either. */
-let refFenceId=null;
-function refFence(){
-  if(!refFenceId){
-    /* padStart is not decoration. A byte's base36 is one character below 36 and
-       two above it, so six raw bytes produced anywhere from six to twelve
-       characters — a fence whose LENGTH leaked how lucky the draw was, and
-       occasionally only 30 bits of it. Two characters per byte, always. */
-    const b=(typeof crypto!=='undefined'&&crypto.getRandomValues)
-      ? Array.from(crypto.getRandomValues(new Uint8Array(6)))
-      : Array.from({length:6},()=>Math.floor(Math.random()*256));
-    refFenceId=b.map(n=>(n%1296).toString(36).padStart(2,'0')).join('').slice(0,12).toUpperCase();
-  }
-  return refFenceId;
-}
-/* A new fence for every turn: a nonce that never changes is a nonce that can
-   eventually be learned and written into a note. */
-function refFenceRoll(){ refFenceId=null; return refFence(); }
-/* Nothing inside a fence may contain something that looks like a fence. */
-function refSafe(s){
-  /* Narrow on purpose. An earlier version collapsed any run of three angle
-     brackets, which quietly rewrote "LVEDP >>> RVEDP" in a haemodynamics note.
-     What has to go is fence-SHAPED text: a whole forged delimiter, half of one
-     sitting against a word, and a bare block id that could be cited as if it
-     named a real block. Ordinary comparisons are left exactly as written. */
-  return String(s==null?'':s)
-    .replace(/<<<\/?[^\n>]{0,64}>>>/g,'[fence removed]')
-    .replace(/<{3,}([\/\w])/g,'--$1')
-    .replace(/([\/\w])>{3,}/g,'$1--')
-    .replace(/\b(?:NOTE|MEMORY)-[A-Za-z0-9]{6,}\b/g,'[block id removed]');
-}
-function refBlock(label,head,body){
-  const F=refFence();
-  return `<<<${label}-${F}>>>
-${head}
-${refSafe(body)}
-<<</${label}-${F}>>>`;
-}
+/* The fence round each block, its nonce, and what is taken out of a note so it cannot forge one: src/core/fence.js. */
+@@SLOT[src:src/core/fence.js]@@
+function refFence(){ return Fence.current(); }
+function refFenceRoll(){ return Fence.roll(); }
+function refSafe(s){ return Fence.safe(s); }
+function refBlock(label,head,body){ return Fence.block(label,head,body); }
 function groundedContext(userText,q,limit=6,budget=CTX_BUDGET*3){
   const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{kind:'r',limit});
   if(!hits.length){

@@ -324,6 +324,10 @@ Then the words round what Apex is told of how the fellow answers:
 Then the pearl's card: `PEARL_NUM` with `pearlMark()`, and `pearlChapter()`,
 are `Pearl.mark` and `Pearl.chapterOf` (held by `verify-pearl-pure`);
 `pearlLadder()`, which draws, and `pearlFigureKey()`, a key handler, stay.
+Then the fence round the fellow's material in what Apex is sent: the nonce
+(`refFenceId`), `refFence()`, `refFenceRoll()`, `refSafe()` and `refBlock()` are
+`src/core/fence.js`'s `Fence` (held by `verify-fence-pure`, and in a browser by
+`verify-boundary`).
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
