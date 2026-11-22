@@ -10,6 +10,8 @@
      tick / hold / resume / pause / unpause      the clock
      grade(rec, lookup)                          the score, by chapter, with the time
      summary / validEntry / cleanHistory         what is kept of a finished block
+     sizes / size / startText                    what the Study card offers to start, and says it will
+     clockText / paceText / cellLabel / said     what the block's screen says of its clock, pace and grid
      serialize / restore                         what survives the page being closed
 
    THE RULES, because each is a way a mock exam quietly stops being one:
@@ -360,7 +362,30 @@ function readRecord(raw, env, wantDone) {
   };
 }
 
+/* ── what is said, as the screen says it (docs/ROADMAP.md, E1: these were the page's mockSizes(), mockSize(),
+   mockStartText(), mockClockText(), mockPaceText(), mockCellLabel() and mockSaidNow(), moved unchanged but for what
+   they read of the page, which they are now handed) ── */
+/* The sizes a block can be from `avail` questions: the standard ones that fit, or all of them when none does. */
+function sizes(avail) { const s = SIZES.filter(n => n <= avail); return s.length ? s : [avail]; }
+/* The size a block asked to be `n` will be: n if it is offered, else the largest offered under it, else the smallest. */
+function size(avail, n) { const s = sizes(avail); return s.includes(n) ? n : (s.filter(x => x <= n).pop() || s[0]); }
+function startText(n, sec) {
+  const t = sec ? fmtClock(n * sec * 1000, 'down') + ' on the clock' : 'no time limit';
+  return `Start a ${n}-question block · ${t}`;
+}
+/* The time left on a timed block, or the time taken on one with no limit. */
+function clockText(rec) { const rem = remainingMs(rec); return rem == null ? fmtClock(rec.elapsedMs) : fmtClock(rem, 'down'); }
+function paceText(rec) {
+  const p = pace(rec); if (!p) return '';
+  return p.status === 'ahead' ? 'Ahead of pace' : p.status === 'behind' ? 'Behind pace · aim for question ' + p.expected : 'On pace';
+}
+function cellLabel(c) { return 'Question ' + c.n + (c.answered ? ', answered' : ', not answered') + (c.flagged ? ', flagged' : '') + (c.current ? ', current' : ''); }
+/* What has already been said for the clock as it stands: a block taken up again past the five-minute mark is not
+   told "five minutes left" a second time. No block is nothing said. */
+function said(rec) { const u = rec ? urgency(rec) : 'none'; return { five: u === 'low' || u === 'critical', one: u === 'critical' }; }
+
 root.MockExam = {
+  sizes, size, startText, clockText, paceText, cellLabel, said,
   VERSION, SIZES, PACES, DEFAULT_PACE, MAX_GAP_MS, HISTORY_CAP,
   build, start, select, toggleFlag, go, states,
   tick, hold, resume, pause, unpause, limitMs, remainingMs, expired, urgency, pace, fmtClock, finish,

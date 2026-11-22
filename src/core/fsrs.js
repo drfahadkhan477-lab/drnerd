@@ -123,6 +123,14 @@ function localDateToISO(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 function todayISO() { return localDateToISO(new Date()); }
+/* A day n days from a 'YYYY-MM-DD', counted on the calendar: the date is moved with setDate and read back as the local
+   day, so a day the clocks change is still one day. Not a day at all gives null. */
+function addDays(iso, n) {
+  const d = isoToLocalDate(iso);
+  if (!d) return null;
+  d.setDate(d.getDate() + n);
+  return localDateToISO(d);
+}
 
 /* Both ends parsed the same way, so the difference is whole days even across a
    spring-forward boundary where one of them is only 23 hours long — Math.round
@@ -391,7 +399,7 @@ function fsrsFirstRating(ok, cf) {
 root.FSRS = {
   update: fsrsUpdate, firstRating: fsrsFirstRating, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
-  examWindow, scheduledDue, isDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO,
+  examWindow, scheduledDue, isDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO, addDays,
   W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };

@@ -174,7 +174,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const whole = (from, to) => { const a = page.indexOf(from); if (a < 0 || page.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = page.indexOf(to, a); return raw.slice(a, b + to.length); };
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const parts = [read('src/core/mockexam.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function mockQ(){', '\n'), whole('function mockClockText(r){', '\n'),
-    whole('function mockPaceText(r){', '\n}'), whole('function mockCellLabel(c){', '\n'), read('src/app/mock.js'), whole('function buildMock(){', '\n')].join('\n');
+    whole('function mockPaceText(r){', '\n'), whole('function mockCellLabel(c){', '\n'), read('src/app/mock.js'), whole('function buildMock(){', '\n')].join('\n');
   const ctx = { innerWidth: 1194, IMGS: { a: ['f1'] }, QBYID: { a: { id: 'a', img: true, s: 'A <b>stem</b>', o: [{ l: 'A', t: 'One' }, { l: 'B', t: 'Two & three' }] }, b: { id: 'b', s: 'Second', o: [{ l: 'A', t: 'x' }, { l: 'B', t: 'y' }] } },
     S: { mockView: 'q', mock: { v: 1, ids: ['a', 'b'], i: 0, far: 0, sel: { 0: 1 }, flag: {}, ms: {}, secPerQ: 90, chapter: null, startedAt: 0, elapsedMs: 30000, paused: false, done: false, submittedAt: null, expired: false, last: null } } };
   ctx.window = ctx; vm.createContext(ctx);

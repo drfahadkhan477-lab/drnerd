@@ -814,7 +814,22 @@ function steps(text) {
    nothing either. */
 function entryFits(body, e) { return fromTable(body, e) !== undefined; }
 
-root.Pearl = { harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
+/* ── what the home screen's card makes of a pearl (docs/ROADMAP.md, E1: these were the page's PEARL_NUM, pearlMark()
+   and pearlChapter(), moved unchanged but for the chapters, which are handed in) ── */
+/* The measurements are what the question turns on, so they are marked. Applied
+   AFTER escaping, and matching only digits and a unit word, so it can never
+   reach into an entity the escaper produced — &amp; has no digit in it. */
+const NUM = /\b\d[\d.,]*(?:\s?[–—-]\s?\d[\d.,]*)?\s?(?:%|(?:mg|mcg|kg|g|mmHg|mL|mm|cm|hours?|hrs?|days?|weeks?|months?|years?|minutes?|mins?|beats|bpm|mmol|mEq|msec|ms|mo)\b)/g;
+function mark(escaped) {
+  return escaped.replace(NUM, (m) => /\d/.test(m) ? `<b class="pearl-num">${m}</b>` : m);
+}
+/* The bank's chapter a pearl's note is from: one whose name the note's chapter holds, or holds the first word of. */
+function chapterOf(p, chapters) {
+  const c = String(p && p.chapter || '').toLowerCase();
+  return chapters.find(ch => c && (c.includes(ch.toLowerCase()) || c.includes(ch.toLowerCase().split(/[ &]/)[0]))) || null;
+}
+
+root.Pearl = { mark, chapterOf, harvest, bake, bodyKey, entryFits, pick, isPearl, usable, hasMainVerb, score, sentences, paragraphs, plain, clean,
                weakWords, aimWords, steps, lesson, FAMILY, matchingFigure, passageSpan, passageContext, subject, runs, MIN, MAX, MAX_RUN, AIM_CEILING };
 
 })(typeof window !== 'undefined' ? window : this);

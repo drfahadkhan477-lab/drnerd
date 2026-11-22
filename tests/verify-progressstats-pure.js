@@ -17,9 +17,10 @@
  *     clocks change;
  *   - started counts this bank's questions with a card or a practice record, and not another bank's, nor a name an
  *     object inherits;
+ *   - recent is the week's answers over seven, today included, by the calendar across the day the clocks change;
  *   - last30 is the thirty days ending today, oldest first, a day with nothing at 0;
  *   - nothing given is changed;
- *   - the page's five names are the calls into this, and the module is written into the page after FSRS and above
+ *   - the page's six names are the calls into this, and the module is written into the page after FSRS and above
  *     them.
  *
  * Run it in a zone whose clocks change (CI's logic job runs it again under TZ=America/New_York): the forecast and a
@@ -109,13 +110,27 @@ head('the last thirty days');
      across.slice(15, 19).join(' '));
 }
 
+head('questions a day this week');
+{
+  /* 12 today, 9 six days ago (the seventh day of the week back), 50 seven days ago (outside it), and a day with an
+     entry of 0 answered: (12 + 9) / 7 = 3. */
+  const daily = { '2026-03-05': { a: 12, c: 9 }, '2026-02-27': { a: 9, c: 1 }, '2026-02-26': { a: 50, c: 50 }, '2026-03-02': { a: 0, c: 0 } };
+  ok('the answers of the last seven days, today included, over seven', safely(() => P.recent(daily, TODAY)) === 3, String(safely(() => P.recent(daily, TODAY))));
+  ok('a week with nothing is 0', safely(() => P.recent({}, TODAY)) === 0);
+  /* The seven days ending 10 March take in 8 March, the day New York's clocks go forward: counted in milliseconds
+     from a local midnight, one day is skipped and the day before the week is taken instead. Each day answers its own
+     day of the month, so a day skipped, doubled or added shows: 4 + 5 + … + 10 = 49, over seven. */
+  const week = {}; for (let d = 3; d <= 10; d++) week['2026-03-' + String(d).padStart(2, '0')] = { a: d, c: 0 };
+  ok('seven calendar days, across the day the clocks change', safely(() => P.recent(week, '2026-03-10')) === 7, String(safely(() => P.recent(week, '2026-03-10'))));
+}
+
 head('nothing given is changed');
 {
   P.mastery(POOL, SRS, PRACTICE, 'Valves', TODAY); P.retention(SRS, TODAY); P.forecast(SRS, TODAY); P.started(POOL, SRS, PRACTICE); P.last30({}, TODAY);
   ok('the bank, the cards and the practice record are as they were before anything here was asked', J([POOL, SRS, PRACTICE]) === BEFORE);
 }
 
-head('the page\'s five names are the calls into this');
+head('the page\'s six names are the calls into this');
 {
   /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
   const page = blankComments(read('app/systole.html'));
@@ -126,12 +141,13 @@ head('the page\'s five names are the calls into this');
     'function forecast7(){ return ProgressStats.forecast(S.srs,todayISO(),S.examDate); }',
     'function startedCount(){ return ProgressStats.started(POOL,S.srs,S.practice); }',
     'function last30(){ return ProgressStats.last30(S.daily,todayISO()); }',
+    'function recentPerDay(){ return ProgressStats.recent(S.daily,todayISO()); }',
   ];
   const missing = lines.filter(l => !once(l));
-  ok('each old name is one line handing over the bank, the record and today', missing.length === 0, missing.join(' | ') || 'all five');
+  ok('each old name is one line handing over the bank, the record and today', missing.length === 0, missing.join(' | ') || 'all six');
   const slot = page.indexOf('@@SLOT[src:src/core/progressstats.js]@@'), fsrs = page.indexOf('@@SLOT[src:src/core/fsrs.js]@@');
-  ok('the module is written into the page once, after FSRS and above all five', slot >= 0 && page.indexOf('@@SLOT[src:src/core/progressstats.js]@@', slot + 1) < 0 && fsrs >= 0 && fsrs < slot
-     && ['function masteryFor(', 'function avgRetention(', 'function forecast7(', 'function startedCount(', 'function last30('].every(t => page.indexOf(t) > slot), slot < 0 ? 'no slot' : 'slot at ' + slot);
+  ok('the module is written into the page once, after FSRS and above all six', slot >= 0 && page.indexOf('@@SLOT[src:src/core/progressstats.js]@@', slot + 1) < 0 && fsrs >= 0 && fsrs < slot
+     && ['function masteryFor(', 'function avgRetention(', 'function forecast7(', 'function startedCount(', 'function recentPerDay(', 'function last30('].every(t => page.indexOf(t) > slot), slot < 0 ? 'no slot' : 'slot at ' + slot);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -341,6 +341,39 @@ head('the small helpers');
   ok('letterOf: the bank\'s letter, else the alphabet', G.letterOf([{ l: 'C' }, { l: 'D' }], 1) === 'D' && G.letterOf([], 2) === 'C' && G.letterOf(null, 0) === 'A' && G.letterOf([{ l: '' }], 0) === 'A');
 }
 
+head('the latest answer, and the blocks the prompt carries');
+{
+  /* An answer, a self-rating after it (not an answer), an older answer, another question's, and torn rows. */
+  const log = [{ q: 'Q1', m: 'practice', n: 1 }, null, { q: 'Q2', m: 'exam', n: 2 }, { q: 'Q1', m: 'exam', n: 3 }, { q: 'Q1', m: 'rate', n: 4 }, 'torn', { q: 'Q1' }];
+  ok('the latest row that answered the question, a self-rating or a row with no mode passed over', safely(() => A.lastAnswer(log, 'Q1').n) === 3, String(safely(() => A.lastAnswer(log, 'Q1').n)));
+  ok('each answering mode counts: practice, a review answer and an exam', ['practice', 'review-answer', 'exam'].every(m => safely(() => A.lastAnswer([{ q: 'Q', m }], 'Q').m) === m));
+  ok('none for a question never answered, for a log that is not one, or none at all', safely(() => A.lastAnswer(log, 'Q9'), 'THREW') === null && safely(() => A.lastAnswer(null, 'Q1'), 'THREW') === null
+     && safely(() => A.lastAnswer({ length: 1, 0: { q: 'Q1', m: 'exam' } }, 'Q1'), 'THREW') === null);
+  const sb = safely(() => A.standingBlock(['Certain and wrong: 4 of 12', 'Pace: 70 s']), '');
+  ok('the lines are carried under a heading that says they are signals to choose from, not a report to read back',
+     sb === '\n\nHOW THE FELLOW ANSWERS (from their own review log: signals, not scores. Use them to choose what to press on; do not read them back as a report):\nCertain and wrong: 4 of 12\nPace: 70 s', JSON.stringify(sb).slice(0, 80));
+  ok('and no lines, or none given, is no block', safely(() => A.standingBlock([]), 'x') === '' && safely(() => A.standingBlock(null), 'x') === '' && safely(() => A.standingBlock(undefined), 'x') === '');
+  const open = safely(() => A.didBlock('Chose B, Certain, 94 s', false), ''), grounded = safely(() => A.didBlock('Answered, Certain, 94 s', true), '');
+  ok('the line about the question in front of Apex is carried under its heading, with the push to correct a confident wrong answer',
+     open === '\n\nWHAT THE FELLOW DID ON THIS ITEM (their own answer; engage with it. A wrong answer given with high confidence is the most valuable thing to correct):\nChose B, Certain, 94 s', JSON.stringify(open).slice(0, 90));
+  /* Rule 2: grounded mode is never told whether the answer was right, so it is not told to correct one that was not. */
+  ok('but grounded mode is not told to correct a wrong answer, having not been told whether it was wrong',
+     grounded === '\n\nWHAT THE FELLOW DID ON THIS ITEM (their own answer; engage with it):\nAnswered, Certain, 94 s' && !/wrong|correct/i.test(grounded), JSON.stringify(grounded).slice(0, 90));
+  ok('and no line is no block', safely(() => A.didBlock('', false), 'x') === '' && safely(() => A.didBlock(null, true), 'x') === '');
+}
+
+head('the page\'s apexStanding(), lastAnswerRow() and apexDid() are the calls into this');
+{
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const page = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => page.split(t).length - 1;
+  ok('apexStanding() hands the page\'s lines to standingBlock(), and lastAnswerRow() the page\'s log to lastAnswer()',
+     n("function apexStanding(){ try{ return ApexSignals.standingBlock(apexStandingLines()); }catch(_){ return ''; } }") === 1 && n('function lastAnswerRow(id){ return ApexSignals.lastAnswer(LOG,id); }') === 1
+     && n('function apexStanding(') === 1 && n('function lastAnswerRow(') === 1);
+  ok('apexDid() ends in didBlock() with the page\'s grounded mode', n('    return ApexSignals.didBlock(line,AI_GROUNDED);') === 1);
+  ok('and the page keeps no second copy of the headings', n('HOW THE FELLOW ANSWERS') === 0 && n('WHAT THE FELLOW DID ON THIS ITEM') === 0);
+}
+
 head('the module is what it says it is');
 {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'apexsignals.js'), 'utf8');
@@ -349,7 +382,7 @@ head('the module is what it says it is');
   ok('it stays inside what Safari 13.4 reads: no ?. ?? or lookbehind', !/\?\.[A-Za-z_$(\[]|\?\?|\(\?<[=!]/.test(code));
   ok('it throws nowhere on its own account', !/\bthrow\b/.test(code));
   ok('it asks calib.js and mockexam.js for the arithmetic and the validator, and keeps no copy', /Calib\.calibration/.test(code) && /Calib\.reasons/.test(code) && /MockExam\.cleanHistory/.test(code) && !/function median|function validEntry/.test(code));
-  ok('it exposes the three readings and the helpers', ['standing', 'answerLine', 'digest', 'clip', 'ago', 'letterOf'].every(k => typeof A[k] === 'function'));
+  ok('it exposes the three readings, the blocks round them and the helpers', ['standing', 'answerLine', 'digest', 'lastAnswer', 'standingBlock', 'didBlock', 'clip', 'ago', 'letterOf'].every(k => typeof A[k] === 'function'));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

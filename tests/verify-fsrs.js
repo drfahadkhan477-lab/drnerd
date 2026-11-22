@@ -632,6 +632,14 @@ head('a due date means the same thing in every timezone');
     out.daysAcrossDst=F.daysBetween('2026-03-01','2026-04-01');
     /* And the default "today" the module picks when no day is passed. */
     out.defaultToday=F.update(null,3).last;
+    /* A day n days from another, by the calendar: either side of New York's spring change (8 March 2026) and of
+       Auckland's and Adelaide's autumn change (5 April 2026), a year's end, a leap day, and none at all. */
+    out.stepClocks=[F.addDays('2026-03-07',1),F.addDays('2026-03-08',1),F.addDays('2026-03-09',-2),F.addDays('2026-04-04',1),F.addDays('2026-04-05',1),F.addDays('2026-04-06',-2)];
+    out.stepYear=[F.addDays('2026-12-31',1),F.addDays('2028-02-28',1),F.addDays('2028-03-01',-1),F.addDays('2026-06-15',0),F.addDays('2026-01-01',365)];
+    /* And it agrees with daysBetween, the scheduler's own count, wherever it lands. */
+    out.stepRound=[];
+    for(let n=-400;n<=400;n+=37) out.stepRound.push(F.daysBetween('2026-03-08',F.addDays('2026-03-08',n))===n);
+    out.stepBad=[F.addDays('2026-3-8',1),F.addDays('',1),F.addDays(null,1),F.addDays('8 March 2026',1)];
     process.stdout.write(JSON.stringify(out));
   `;
 
@@ -659,7 +667,30 @@ head('a due date means the same thing in every timezone');
        r.daysAcrossDst === 31, String(r.daysAcrossDst));
     ok(`${tz}: the default today is a well-formed calendar day`,
        /^\d{4}-\d{2}-\d{2}$/.test(r.defaultToday), String(r.defaultToday));
+    ok(`${tz}: a day from a day is counted on the calendar, either side of a change of clocks`,
+       JSON.stringify(r.stepClocks) === JSON.stringify(['2026-03-08', '2026-03-09', '2026-03-07', '2026-04-05', '2026-04-06', '2026-04-04']), JSON.stringify(r.stepClocks));
+    ok(`${tz}: and across a year's end and a leap day, nought days being the day itself`,
+       JSON.stringify(r.stepYear) === JSON.stringify(['2027-01-01', '2028-02-29', '2028-02-29', '2026-06-15', '2027-01-01']), JSON.stringify(r.stepYear));
+    ok(`${tz}: and agrees with daysBetween wherever it lands, a year either way`,
+       Array.isArray(r.stepRound) && r.stepRound.length === 22 && r.stepRound.every(Boolean), JSON.stringify(r.stepRound));
+    ok(`${tz}: and what is not a day is no day`, JSON.stringify(r.stepBad) === JSON.stringify([null, null, null, null]), JSON.stringify(r.stepBad));
   }
+}
+
+head('the page counts days through this module');
+{
+  /* The page's isoLocal(), todayISO() and addDays() were copies of the functions above, and one of them once stepped
+     back a day east of Greenwich. They are now one line each into this module. Read with comments blanked: the shell
+     explains itself, and quotes what is looked for. */
+  const { blankComments } = require('./_source.js');
+  const page = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => page.split(t).length - 1;
+  const lines = ['function isoLocal(d){ return FSRS.localDateToISO(d); }', 'function todayISO(){ return FSRS.todayISO(); }', 'function addDays(iso,n){ return FSRS.addDays(iso,n); }'];
+  const missing = lines.filter(l => n(l) !== 1).concat(['isoLocal', 'todayISO', 'addDays'].filter(x => n('function ' + x + '(') !== 1).map(x => x + '() defined more than once'));
+  ok('isoLocal(), todayISO() and addDays() are each one line into this module, defined once', missing.length === 0, missing.join(' | ') || 'all three');
+  const slot = page.indexOf('@@SLOT[src:src/core/fsrs.js]@@');
+  ok('and the module is written into the page above them', slot >= 0 && ['function isoLocal(', 'function todayISO(', 'function addDays('].every(t => page.indexOf(t) > slot), slot < 0 ? 'no slot' : 'slot at ' + slot);
+  ok('and the page keeps no day arithmetic of its own there', n("+'-'+p(d.getMonth()+1)+'-'+") === 0 && n("new Date(iso+'T00:00:00')") === 0);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

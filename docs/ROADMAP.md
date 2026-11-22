@@ -308,6 +308,22 @@ Then the notes search's tokenizer (`src/core/terms.js`, `Terms`, held by
 `SHORTOK` and `tok()`. The index, `stubTerms()` and `search()`, which read the
 page's index, stay the page's; the four suites that cut the ranker out of the
 shell start at the module's slot.
+Then the page's calendar: `isoLocal()`, `todayISO()` and `addDays()` were
+copies of `src/core/fsrs.js`'s date functions, and are now one line each into
+them (`addDays` is new there, held by `verify-fsrs` in seven zones), and
+`recentPerDay()` is `ProgressStats.recent`.
+Then the mock exam's words and sizes: `mockSizes()`, `mockSize()`,
+`mockStartText()`, `mockClockText()`, `mockPaceText()`, `mockCellLabel()` and
+`mockSaidNow()` are `MockExam.sizes`, `size`, `startText`, `clockText`,
+`paceText`, `cellLabel` and `said`, handed what they read of the page and held
+by `verify-mockexam-pure`.
+Then the words round what Apex is told of how the fellow answers:
+`lastAnswerRow()`, `apexStanding()` and the end of `apexDid()` are
+`ApexSignals.lastAnswer`, `standingBlock` and `didBlock`, held by
+`verify-apexsignals-pure`; the page keeps the guards and what it reads.
+Then the pearl's card: `PEARL_NUM` with `pearlMark()`, and `pearlChapter()`,
+are `Pearl.mark` and `Pearl.chapterOf` (held by `verify-pearl-pure`);
+`pearlLadder()`, which draws, and `pearlFigureKey()`, a key handler, stay.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
