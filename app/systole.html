@@ -6609,10 +6609,7 @@ function pearlFigure(p){
 /* A pearl whose note has no figure still has a picture beside it: its chapter's emblem, glowing in the theme's accent,
    with rings turning round it. It is decoration (aria-hidden), not a figure: #pearlFig stays the note's own, so a pearl
    never wears a picture that is not about it. */
-function pearlChapter(p){
-  const c=String(p&&p.chapter||'').toLowerCase();
-  return CHAPTERS.find(ch=>c&&(c.includes(ch.toLowerCase())||c.includes(ch.toLowerCase().split(/[ &]/)[0])))||null;
-}
+function pearlChapter(p){ return Pearl.chapterOf(p,CHAPTERS); }
 function pearlEmblem(p){
   if(!p||pearlFigure(p)) return '';
   const ch=pearlChapter(p);
@@ -6621,13 +6618,8 @@ function pearlEmblem(p){
     <span class="pe-orb">${ch?chIcon(ch):icon('heart-pulse')}</span>
     <span class="pe-cap">${e(ch||p.chapter||'From your notes')}</span></div>`;
 }
-/* The measurements are what the question turns on, so they are marked. Applied
-   AFTER escaping, and matching only digits and a unit word, so it can never
-   reach into an entity the escaper produced — &amp; has no digit in it. */
-const PEARL_NUM=/\b\d[\d.,]*(?:\s?[–—-]\s?\d[\d.,]*)?\s?(?:%|(?:mg|mcg|kg|g|mmHg|mL|mm|cm|hours?|hrs?|days?|weeks?|months?|years?|minutes?|mins?|beats|bpm|mmol|mEq|msec|ms|mo)\b)/g;
-function pearlMark(escaped){
-  return escaped.replace(PEARL_NUM,(m)=>/\d/.test(m)?`<b class="pearl-num">${m}</b>`:m);
-}
+/* The measurements are what the question turns on, so they are marked: src/core/pearl.js, after escaping. */
+function pearlMark(escaped){ return Pearl.mark(escaped); }
 /* One sentence, broken where it already bends. A single step means the
    sentence had no joint worth cutting — it is then set as prose rather than as
    a ladder of one, which would be a numbered list with nothing to order. */

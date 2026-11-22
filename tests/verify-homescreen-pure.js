@@ -471,7 +471,7 @@ head('the page hands the module what it has, and keeps what the markup names');
      none, then for someone new. */
   const hparts = [read('src/core/pearl.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
     whole('let pearlCache=null,', '\n'), whole('function greet(){', '\n}'), whole('function pearlAll(){', '\n}'), whole('function pearlNow(){', '\n}'), whole('let pearlPicked=null,', '\n'), whole('function pearlFigure(p){', '\n}'),
-    whole('function pearlChapter(p){', '\n}'), whole('function pearlEmblem(p){', '\n}'), whole('const PEARL_NUM=', '\n'), whole('function pearlMark(escaped){', '\n}'), whole('const PEARL_KINDS=', '};'), whole('function pearlLadder(p){', '\n}'),
+    whole('function pearlChapter(p){', '\n'), whole('function pearlEmblem(p){', '\n}'), whole('function pearlMark(escaped){', '\n'), whole('const PEARL_KINDS=', '};'), whole('function pearlLadder(p){', '\n}'),
     whole('function helloSeen(){', '\n}'), whole('function showHello(){', '\n}'), read('src/app/home.js'), whole('function buildHome(){', '\n}')].join('\n');
   const store = {};
   const hctx = { CHAPTERS: ['Valves & more', 'Rhythm'], CH_ICONS: {}, POOL: [{ id: 'v1', ch: 'Valves & more' }, { id: 'r1', ch: 'Rhythm' }], TOTAL_Q: 2, LOG: [],

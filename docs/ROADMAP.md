@@ -321,6 +321,9 @@ Then the words round what Apex is told of how the fellow answers:
 `lastAnswerRow()`, `apexStanding()` and the end of `apexDid()` are
 `ApexSignals.lastAnswer`, `standingBlock` and `didBlock`, held by
 `verify-apexsignals-pure`; the page keeps the guards and what it reads.
+Then the pearl's card: `PEARL_NUM` with `pearlMark()`, and `pearlChapter()`,
+are `Pearl.mark` and `Pearl.chapterOf` (held by `verify-pearl-pure`);
+`pearlLadder()`, which draws, and `pearlFigureKey()`, a key handler, stay.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -185,6 +185,8 @@ jobs:
         run: node tests/verify-imagesize-pure.js
       - name: a text becomes the terms the search scores, without stopwords, numbers or short words but clinical abbreviations, its forms stemmed to meet (23 checks)
         run: node tests/verify-terms-pure.js
+      - name: a pearl's measurements are marked after escaping and never inside an entity, and its chapter is the bank's whose name its note holds (19 checks)
+        run: node tests/verify-pearl-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
       - name: an imported file becomes notes, its front matter read and never a note, one note per heading outside a fenced block, and an image link finds its figure only where the match is unique (30 checks)
