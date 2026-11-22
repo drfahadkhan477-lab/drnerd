@@ -402,12 +402,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     uses: ./.github/workflows/verify-browser-shard.yml
     with:
       job: synthetic-browser
       shard: ${{ matrix.shard }}
       of: ${{ strategy.job-total }}
+      selected: ${{ needs.changes.outputs.selected }}
 
   synthetic-webkit:
     name: synthetic-webkit — the real app, built around an invented bank, in WebKit, the engine the iPad runs, shard ${{ matrix.shard }}
@@ -416,12 +417,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     uses: ./.github/workflows/verify-browser-shard.yml
     with:
       job: synthetic-webkit
       shard: ${{ matrix.shard }}
       of: ${{ strategy.job-total }}
+      selected: ${{ needs.changes.outputs.selected }}
 
   # Release-shaped public verification: ../../docs/BUILD.md#public-ci.
   split-build:
@@ -595,6 +597,8 @@ jobs:
     outputs:
       public: ${{ steps.which.outputs.public }}
       synthetic: ${{ steps.which.outputs.synthetic }}
+      selected: ${{ steps.which.outputs.selected }}
+      shards: ${{ steps.which.outputs.shards }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

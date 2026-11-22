@@ -694,6 +694,16 @@ both browser groups. PR updates cancel older runs for that PR. A newer push
 to master can replace a pending run while the active run continues. The
 workflow uses read-only repository permissions.
 
+For a pull request changing only `tests/verify-reflist.js`, the synthetic
+Chromium and WebKit matrices each run that suite in one shard. The existing
+split-build and public-browser jobs still run. A shared helper, a second file,
+an application module, an unknown suite, or any non-PR event keeps all four
+shards. `ci-changes` owns the audited allowlist, and `shard.js` rejects an
+unknown selected suite or a selected suite with more than one shard. The
+required aggregator continues to require both browser matrices and the split
+build. Add a test to the allowlist only after checking that both engine jobs
+run it and that no other browser suite depends on its file.
+
 Actions are pinned to commit SHAs. To update one, use `git ls-remote` for
 both the desired tag and its peeled `^{}` ref. Record the commit SHA and
 keep the version in the adjacent comment for review.

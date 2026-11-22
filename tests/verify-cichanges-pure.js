@@ -172,7 +172,7 @@ head('the script itself, in throwaway repositories');
     const out = path.join(tmp, 'out-' + Math.random().toString(36).slice(2));
     fs.writeFileSync(out, '');
     execFileSync(process.execPath, [script], { cwd, stdio: 'pipe', env: { ...process.env, GITHUB_EVENT_NAME: event, GITHUB_OUTPUT: out } });
-    return fs.readFileSync(out, 'utf8').trim().replace(/\n/g, ' ');
+    return fs.readFileSync(out, 'utf8').trim().split('\n').slice(0, 2).join(' ');
   };
   const repo = (files) => {
     const d = fs.mkdtempSync(path.join(tmp, 'r-'));
@@ -184,6 +184,16 @@ head('the script itself, in throwaway repositories');
     return d;
   };
   try {
+    const targeted = repo(['tests/verify-reflist.js']);
+    const targetOut = path.join(tmp, 'targeted-output');
+    fs.writeFileSync(targetOut, '');
+    execFileSync(process.execPath, [script], { cwd: targeted, stdio: 'pipe', env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_OUTPUT: targetOut } });
+    const targetLines = fs.readFileSync(targetOut, 'utf8').trim().split('\n');
+    ok('the real classifier emits the targeted suite and one-shard matrix', targetLines.includes('selected=verify-reflist') && targetLines.includes('shards=[1]'), targetLines.join(' '));
+    fs.writeFileSync(targetOut, '');
+    execFileSync(process.execPath, [script], { cwd: targeted, stdio: 'pipe', env: { ...process.env, GITHUB_EVENT_NAME: 'push', GITHUB_OUTPUT: targetOut } });
+    const pushLines = fs.readFileSync(targetOut, 'utf8').trim().split('\n');
+    ok('the real classifier keeps the full matrix for a push', pushLines.includes('selected=all') && pushLines.includes('shards=[1,2,3,4]'), pushLines.join(' '));
     const shell = repo(['app/systole.html']);
     ok('a shell-only commit writes public=false synthetic=true', runIn(shell, 'pull_request') === 'public=false synthetic=true', runIn(shell, 'pull_request'));
     ok('the same commit pushed to master writes both true', runIn(shell, 'push') === 'public=true synthetic=true', runIn(shell, 'push'));
@@ -208,6 +218,32 @@ head('the script itself, in throwaway repositories');
     ok('the script runs', false, String(e.message).split('\n')[0]);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+head('targeted selection is wired through the required browser jobs');
+{
+  const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
+  const shared = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify-browser-shard.yml'), 'utf8');
+  for (const job of ['synthetic-browser', 'synthetic-webkit']) {
+    const body = jobBody(job);
+    ok(`${job} uses the selected shard matrix`, body.includes('shard: ${{ fromJSON(needs.changes.outputs.shards) }}'));
+    ok(`${job} passes the selected suite`, body.includes('selected: ${{ needs.changes.outputs.selected }}'));
+  }
+  ok('changes exposes the selected suite and shard matrix', workflow.includes('selected: ${{ steps.which.outputs.selected }}') && workflow.includes('shards: ${{ steps.which.outputs.shards }}'));
+  ok('the shared workflow passes the selection to the shard runner', shared.includes('SYSTOLE_CI_SELECTED: ${{ inputs.selected }}'));
+}
+
+head('targeted standalone test selection fails closed');
+{
+  const { selectedSuite } = require('../scripts/ci-changes.js');
+  const select = (event, files) => typeof selectedSuite === 'function' ? selectedSuite(event, files) : null;
+  ok('a physiology-test-only PR retains the full matrix because its CI engines differ', select('pull_request', ['tests/verify-physio.js']) === 'all');
+  ok('a reference-list-test-only PR selects its browser suite', select('pull_request', ['tests/verify-reflist.js']) === 'verify-reflist');
+  for (const [event, files] of [['push', ['tests/verify-physio.js']], ['workflow_dispatch', ['tests/verify-physio.js']],
+    ['pull_request', ['tests/verify-physio.js', 'app/systole.html']], ['pull_request', ['tests/_render.js']],
+    ['pull_request', ['tests/verify-unlisted.js']], ['pull_request', []], ['pull_request', null]]) {
+    ok('unrecognized or wider changes run the full matrix: ' + event + ' ' + JSON.stringify(files), select(event, files) === 'all');
   }
 }
 

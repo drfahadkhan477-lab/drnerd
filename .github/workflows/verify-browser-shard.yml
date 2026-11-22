@@ -3,6 +3,9 @@ name: Verify browser shard
 on:
   workflow_call:
     inputs:
+      selected:
+        required: true
+        type: string
       job:
         required: true
         type: string
@@ -65,6 +68,8 @@ jobs:
           name: synthetic-build
           path: build/synthetic
       - id: shard
+        env:
+          SYSTOLE_CI_SELECTED: ${{ inputs.selected }}
         name: which of the job's suites this shard runs, by the record's times
         run: node scripts/shard.js ${{ inputs.job }} ${{ inputs.shard }} ${{ inputs.of }} --github-output
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage0,') }}
