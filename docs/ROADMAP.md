@@ -332,6 +332,9 @@ Then the themes: `THEMES`, `THEME_BY_ID`, `themeDef()`, `themeIsDark()`,
 `themeFollowsSystem()` and the step in `cycleTheme()` are `src/core/themes.js`'s
 `Themes`; `verify-themes-pure` also holds the script that adopts the saved theme
 before paint to the table, and `verify-stats` counts the palettes there.
+Then the notes seeding: `refHash()` and the rules inside `refSeedApply()` are
+`src/core/refseed.js`'s `RefSeed` (held by `verify-refseed-pure`); the page keeps
+the stored version, the save and the index.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
