@@ -189,7 +189,7 @@ jobs:
         run: node tests/verify-pearl-pure.js
       - name: a fence is made from random bytes and kept for a request, a note cannot forge one, and every block of a request is on its fence (22 checks)
         run: node tests/verify-fence-pure.js
-      - name: every theme is one the app can draw, a saved choice is its theme or Auto, and the script before paint draws each as the table says (19 checks)
+      - name: every theme is one the app can draw, a saved choice is its theme or Auto, and the script before paint draws each as the table says (20 checks)
         run: node tests/verify-themes-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js

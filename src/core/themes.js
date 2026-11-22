@@ -37,7 +37,11 @@ const LIST=[
 const byId=Object.fromEntries(LIST.map(t=>[t.id,t]));
 /* Old saved values (auto/light/dark) are still valid ids, except the bare
    'dark' which is now 'midnight' and 'light' which is now 'daylight'. */
-function def(saved){ return byId[saved]||byId[{dark:'midnight',light:'daylight'}[saved]]||byId.auto; }
+/* Only the table's own themes: a saved "constructor" or "__proto__" (a restored backup's theme is any string) found
+   what every object inherits, and the page drew no theme at all. */
+const own=k=>typeof k==='string'&&Object.prototype.hasOwnProperty.call(byId,k)?byId[k]:null;
+const OLD={dark:'midnight',light:'daylight'};
+function def(saved){ return own(saved)||own(Object.prototype.hasOwnProperty.call(OLD,saved)?OLD[saved]:null)||byId.auto; }
 function isDark(t, systemDark){
   if(t.mode==='dark')return true;
   if(t.mode==='light')return false;

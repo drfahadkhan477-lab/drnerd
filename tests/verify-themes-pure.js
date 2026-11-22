@@ -47,6 +47,11 @@ head('which theme a saved choice is');
 {
   ok('a saved id is its own theme', T.LIST.every(t => safely(() => T.def(t.id)) === t));
   ok('the old dark and light are Midnight and Daylight', safely(() => T.def('dark').id) === 'midnight' && safely(() => T.def('light').id) === 'daylight');
+  /* A restored backup's theme is any string (ProgressData only asks that it be one), and the table is a plain
+     object: "constructor" found Object itself, "__proto__" its prototype, and the page set data-theme="undefined" and
+     drew no theme at all. */
+  const inherited = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf'];
+  ok('a name every object inherits is no theme, and is Auto', inherited.every(v => safely(() => T.def(v)) === T.byId.auto), inherited.map(v => { const t = safely(() => T.def(v)); return v + ':' + (t && t.id || typeof t); }).join(' '));
   ok('nothing saved, or a name no theme has, is Auto', [undefined, null, '', 'sepia', 'Midnight'].every(v => safely(() => T.def(v)) === T.byId.auto), [undefined, null, '', 'sepia', 'Midnight'].map(v => safely(() => T.def(v).id)).join(' '));
 }
 
