@@ -59,10 +59,13 @@ function assign(names, seconds, of) {
 }
 
 /* shard is 1-based, as the workflow's matrix counts it. */
-function shardOf(yml, stats, job, shard, of, shardsYml) {
+function shardOf(yml, stats, job, shard, of, shardsYml, selected = 'all') {
   if (!(Number.isInteger(shard) && shard >= 1 && shard <= of)) throw new Error(`shard ${shard} is not one of 1..${of}`);
   const seconds = job === webkitTimings.job ? webkitTimings.seconds : stats?.seconds || {};
-  return assign(jobSuites(yml, job, shardsYml), seconds, of)[shard - 1];
+  const available = jobSuites(yml, job, shardsYml);
+  if (selected !== 'all' && !available.includes(selected)) throw new Error(`unknown selected suite ${selected} for ${job}`);
+  if (selected !== 'all' && of !== 1) throw new Error('a selected suite requires exactly one shard');
+  return assign(selected === 'all' ? available : [selected], seconds, of)[shard - 1];
 }
 
 module.exports = { jobSuites, assign, shardOf };
@@ -78,7 +81,7 @@ if (require.main === module) {
   try {
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8');
     const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
-    const list = shardOf(yml, stats, job, +shard, +of, readShardWorkflow(ROOT));
+    const list = shardOf(yml, stats, job, +shard, +of, readShardWorkflow(ROOT), process.env.SYSTOLE_CI_SELECTED || 'all');
     /* An empty shard would skip every step and pass. With fewer suites than
        shards that is the arithmetic, but here it is a mistake: refuse it. */
     if (!list.length) throw new Error(`shard ${shard} of ${of} of ${job} has no suites`);

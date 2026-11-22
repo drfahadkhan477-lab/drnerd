@@ -92,8 +92,8 @@ for (const job of SHARDED) {
      caller.includes('uses: ./.github/workflows/verify-browser-shard.yml') &&
      runner.includes(`if: inputs.job == '${job}'`) &&
      runner.includes(`SYSTOLE_ENGINE: ${engine}`) && runner.includes(setup));
-  const shards = ((caller.match(/\n\s+shard:\s*\[([^\]]*)\]/) || [])[1] || '').split(',').map(s => +s.trim()).filter(Boolean);
-  ok(`${job} is a matrix of shards 1..4`, JSON.stringify(shards) === '[1,2,3,4]', JSON.stringify(shards));
+  const shards = [1, 2, 3, 4];
+  ok(`${job} takes its shard matrix from the changes decision`, caller.includes('shard: ${{ fromJSON(needs.changes.outputs.shards) }}'));
   ok(`${job}: a shard that fails cannot cancel the others`, /\n\s+fail-fast:\s*false\b/.test(caller));
   ok(`${job}: the caller passes the job, shard and matrix size through to scripts/shard.js`,
      caller.includes(`\n      job: ${job}\n      shard: \${{ matrix.shard }}\n      of: \${{ strategy.job-total }}`) &&
@@ -228,6 +228,17 @@ head('the checks branch protection requires keep their names');
   for (const [job, name] of Object.entries(REQUIRED)) {
     const got = ((jobBody(yml, job) || '').match(/\n    name:\s*(.+)/) || [])[1] || '';
     ok(`${job} is still named as the ruleset requires it; renaming it means updating the ruleset too`, got.trim() === name, got.trim() || 'no name');
+  }
+}
+
+head('targeted PR suite selection');
+{
+  for (const job of ['synthetic-browser', 'synthetic-webkit']) {
+    const got = shardOf(yml, stats, job, 1, 1, shardYml, 'verify-reflist');
+    ok(`${job}: a selected suite runs alone`, JSON.stringify(got) === '["verify-reflist"]', JSON.stringify(got));
+    let rejected = false;
+    try { shardOf(yml, stats, job, 1, 1, shardYml, 'verify-does-not-exist'); } catch (_) { rejected = true; }
+    ok(`${job}: an unknown selected suite fails closed`, rejected);
   }
 }
 

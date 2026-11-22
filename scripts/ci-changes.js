@@ -65,6 +65,16 @@ function decide(event, files) {
   return event === 'pull_request' ? classify(files) : { public: true, synthetic: true };
 }
 
+/* Only suites audited as independent of other browser tests are eligible.
+   Everything else, including shared helpers and application code, stays full. */
+const TARGETED_TESTS = new Map([
+  ['tests/verify-reflist.js', 'verify-reflist'],
+]);
+function selectedSuite(event, files) {
+  if (event !== 'pull_request' || !Array.isArray(files) || files.length !== 1) return 'all';
+  return TARGETED_TESTS.get(files[0]) || 'all';
+}
+
 /* On a pull_request event the checkout is GitHub's merge commit, whose first
    parent is the base branch's tip, so HEAD^1..HEAD is the whole pull request
    as it would land. Needs fetch-depth: 2.
@@ -87,9 +97,12 @@ if (require.main === module) {
   const d = decide(event, files);
   console.log(`event: ${event || '(none)'}; changed files: ${files ? files.length : 'not read'}`);
   console.log(`public-browser: ${d.public ? 'runs' : 'skipped'}; synthetic-browser: ${d.synthetic ? 'runs' : 'skipped'}`);
+  const selected = selectedSuite(event, files);
+  const shards = selected === 'all' ? [1, 2, 3, 4] : [1];
+  console.log(`synthetic suite selection: ${selected}`);
   if (process.env.GITHUB_OUTPUT) {
-    fs.appendFileSync(process.env.GITHUB_OUTPUT, `public=${d.public}\nsynthetic=${d.synthetic}\n`);
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `public=${d.public}\nsynthetic=${d.synthetic}\nselected=${selected}\nshards=${JSON.stringify(shards)}\n`);
   }
 }
 
-module.exports = { classify, decide, DOCS, SYSTOLE_ONLY };
+module.exports = { classify, decide, selectedSuite, DOCS, SYSTOLE_ONLY };
