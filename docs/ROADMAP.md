@@ -308,6 +308,10 @@ Then the notes search's tokenizer (`src/core/terms.js`, `Terms`, held by
 `SHORTOK` and `tok()`. The index, `stubTerms()` and `search()`, which read the
 page's index, stay the page's; the four suites that cut the ranker out of the
 shell start at the module's slot.
+Then the page's calendar: `isoLocal()`, `todayISO()` and `addDays()` were
+copies of `src/core/fsrs.js`'s date functions, and are now one line each into
+them (`addDays` is new there, held by `verify-fsrs` in seven zones), and
+`recentPerDay()` is `ProgressStats.recent`.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -177,7 +177,7 @@ jobs:
         run: node tests/verify-md-pure.js
       - name: a refused request is told as what it is, the provider's words escaped, and the response read no more than it was (74 checks)
         run: node tests/verify-providererror-pure.js
-      - name: a chapter's mastery, the mean recall, the week's due cards, the questions started and the last thirty days are worked out as the screens read them, by the calendar (19 checks)
+      - name: a chapter's mastery, the mean recall, the week's due cards, the questions started and the last thirty days are worked out as the screens read them, by the calendar (22 checks)
         run: node tests/verify-progressstats-pure.js
       - name: a pen point keeps what a screen can show, points a line already describes are dropped and a corner kept, and an outline is filled as one curved path (16 checks)
         run: node tests/verify-stroke-pure.js
