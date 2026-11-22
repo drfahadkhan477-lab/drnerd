@@ -148,6 +148,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
        with the attributes the page wrote, and holds its picture back. */
     // Use a public image and note so this check does not depend on which
     // licensed notes happen to occupy the first page of the library.
+    // The temporary note is removed before the remaining library checks.
     const image = 'data:image/jpeg;base64,' + fs.readFileSync(path.join(__dirname, '..', 'assets', 'echo', 'four-chamber.jpg')).toString('base64');
     await page.evaluate(image => {
       REF_IMGS['test-figure.jpg'] = image;
