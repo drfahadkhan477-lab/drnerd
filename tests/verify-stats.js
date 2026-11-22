@@ -484,8 +484,9 @@ head('no assertion is incapable of failing');
    The count is derived, never typed: a tenth preset moves it on its own.
 
    NARROW ON PURPOSE, and said here rather than left for the reader to assume.
-   It counts DISTINCT THEMES ids appearing in app/systole.html, which is
-   correct while every such entry is a palette the app offers. (Until the
+   It counts DISTINCT theme ids appearing in src/core/themes.js (where the
+   table moved from app/systole.html, roadmap E1), which is correct while
+   every such entry is a palette the app offers. (Until the
    patch chain was deleted it counted them across the *-patch.js scripts,
    which added them one step at a time.)
    It also holds one claim, not every claim in SUITES: the others quote counts
@@ -498,7 +499,7 @@ head('the palette count in a suite claim is the count the app defines');
 
   const ids = new Set();
   {
-    const src = blankComments(read('app/systole.html'));
+    const src = blankComments(read('src/core/themes.js'));
     const re = /\{\s*id:\s*'([a-z0-9]+)'\s*,\s*name:\s*'[^']*'\s*,\s*group:\s*'(?:light|dark)'/g;
     let m;
     while ((m = re.exec(src))) ids.add(m[1]);

@@ -328,6 +328,10 @@ Then the fence round the fellow's material in what Apex is sent: the nonce
 (`refFenceId`), `refFence()`, `refFenceRoll()`, `refSafe()` and `refBlock()` are
 `src/core/fence.js`'s `Fence` (held by `verify-fence-pure`, and in a browser by
 `verify-boundary`).
+Then the themes: `THEMES`, `THEME_BY_ID`, `themeDef()`, `themeIsDark()`,
+`themeFollowsSystem()` and the step in `cycleTheme()` are `src/core/themes.js`'s
+`Themes`; `verify-themes-pure` also holds the script that adopts the saved theme
+before paint to the table, and `verify-stats` counts the palettes there.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -4464,27 +4464,11 @@ document.addEventListener('visibilitychange',()=>{
    a palette (which recolours the core tokens). 'auto' follows the system.
    The swatch is the two colours the eye reads first: the ground, and the
    accent laid over it. */
-const THEMES=[
-  {id:'auto',     name:'Auto',      group:'light', mode:'auto',  palette:null,        bg:'#EFF3F8',ac:'#0284C7',bar:'#0A1628'},
-  {id:'daylight', name:'Daylight',  group:'light', mode:'light', palette:null,        bg:'#EFF3F8',ac:'#0284C7',bar:'#0F1E3D'},
-  {id:'slate',    name:'Slate',     group:'light', mode:'light', palette:'slate',     bg:'#EDF0F6',ac:'#6366F1',bar:'#0F1E3D'},
-  {id:'parchment',name:'Parchment', group:'light', mode:'light', palette:'parchment', bg:'#F3ECDD',ac:'#0E7C86',bar:'#0F1E3D'},
-  {id:'midnight', name:'Midnight',  group:'dark',  mode:'dark',  palette:null,        bg:'#0A1628',ac:'#0EA5E9',bar:'#0A1628'},
-  {id:'nocturne', name:'Nocturne',  group:'dark',  mode:'dark',  palette:'nocturne',  bg:'#0E0B1A',ac:'#A78BFA',bar:'#0E0B1A'},
-  {id:'cathlab',  name:'Cath Lab',  group:'dark',  mode:'dark',  palette:'cathlab',   bg:'#120C07',ac:'#F59E0B',bar:'#120C07'},
-  {id:'monitor',  name:'Monitor',   group:'dark',  mode:'dark',  palette:'monitor',   bg:'#08110D',ac:'#2DD4BF',bar:'#08110D'},
-  {id:'contrast', name:'Contrast',  group:'dark',  mode:'dark',  palette:'contrast',  bg:'#060606',ac:'#38BDF8',bar:'#060606'},
-];
-const THEME_BY_ID=Object.fromEntries(THEMES.map(t=>[t.id,t]));
-/* Old saved values (auto/light/dark) are still valid ids, except the bare
-   'dark' which is now 'midnight' and 'light' which is now 'daylight'. */
-function themeDef(){ return THEME_BY_ID[S.theme]||THEME_BY_ID[{dark:'midnight',light:'daylight'}[S.theme]]||THEME_BY_ID.auto; }
-function themeIsDark(t){
-  t=t||themeDef();
-  if(t.mode==='dark')return true;
-  if(t.mode==='light')return false;
-  return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
-}
+/* The themes, and which one a saved choice is: src/core/themes.js. The page keeps the names. */
+@@SLOT[src:src/core/themes.js]@@
+const THEMES=Themes.LIST, THEME_BY_ID=Themes.byId;
+function themeDef(){ return Themes.def(S.theme); }
+function themeIsDark(t){ return Themes.isDark(t||themeDef(),()=>!!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)); }
 function applyTheme(){
   const h=document.documentElement, t=themeDef();
   if(t.mode==='auto')h.removeAttribute('data-theme'); else h.setAttribute('data-theme',t.mode);
@@ -4511,12 +4495,7 @@ function notifyThemeRenderers(){
   if(typeof twelve!=='undefined'&&twelve) twelve.setDark(d);
   if(typeof physio!=='undefined'&&physio) physio.setDark(d);
 }
-/* True only while the chosen theme has no opinion of its own. Every other
-   theme is a decision, and a decision is not revisited because the sun set. */
-function themeFollowsSystem(){
-  const t=themeDef();
-  return !t || t.mode==='auto';
-}
+function themeFollowsSystem(){ return Themes.followsSystem(themeDef()); }
 /* Everything setTheme does except the two things that would be wrong here:
    it does not save (nothing was chosen) and it does not close the menu
    (nothing was opened). */
@@ -4546,10 +4525,7 @@ function setTheme(id){
 }
 /* Kept so anything still calling it (or a keyboard shortcut) advances sensibly
    through the presets rather than throwing. */
-function cycleTheme(){
-  const i=THEMES.findIndex(t=>t.id===themeDef().id);
-  setTheme(THEMES[(i+1)%THEMES.length].id);
-}
+function cycleTheme(){ setTheme(Themes.next(themeDef().id)); }
 /* ── reading size ──
    How large the question, its options, the explanation and Apex's thread are drawn (app/css/ipad.css). Kept on the device and
    not in the saved record or a backup: the iPad and the phone that share one want different sizes. Standard is no attribute
