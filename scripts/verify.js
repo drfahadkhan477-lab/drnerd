@@ -667,6 +667,7 @@ if (flag('--help') || flag('-h')) {
   --jobs <N|auto>        Set parallel workers; serial suites still run alone
   --suite-timeout <N>    Set the per-suite limit in minutes (0 disables it)
   --report-json <file>   Write counts and timings without suite output
+  --no-record           Preserve the existing recorded test counts
   --bail                Stop at the first failure
   --pwa                 Build, serve and verify the split build
                         (with --only pwa, and no other suite)
@@ -677,7 +678,7 @@ if (flag('--help') || flag('-h')) {
 }
 
 const VALUED = ['--only', '--skip', '--engine', '--tag', '--report-json', '--suite-timeout', '--jobs'];
-const SWITCHES = new Set(['--bail', '--pwa', '--list']);
+const SWITCHES = new Set(['--bail', '--pwa', '--list', '--no-record']);
 const positional = [], seenOptions = new Set();
 const argumentError = message => {
   console.error(`${message}\nUse --help to see verification options.`);
@@ -1170,6 +1171,7 @@ if (flag('--bail') && stopScheduling) console.log('\n  --bail: stopping here.\n'
    green run, until Memorizer moved to its own repository. A --engine webkit
    run still writes nothing: it measures a different browser. */
 function writeStats(pwaCount) {
+  if (flag('--no-record')) return;
   /* A URL run measures the split build, and the numbers in the docs are the
      single-file build's. Same reason --engine webkit does not write: a true
      number about the wrong thing is still wrong in the sentence it lands in. */
