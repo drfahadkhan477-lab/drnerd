@@ -312,6 +312,11 @@ Then the page's calendar: `isoLocal()`, `todayISO()` and `addDays()` were
 copies of `src/core/fsrs.js`'s date functions, and are now one line each into
 them (`addDays` is new there, held by `verify-fsrs` in seven zones), and
 `recentPerDay()` is `ProgressStats.recent`.
+Then the mock exam's words and sizes: `mockSizes()`, `mockSize()`,
+`mockStartText()`, `mockClockText()`, `mockPaceText()`, `mockCellLabel()` and
+`mockSaidNow()` are `MockExam.sizes`, `size`, `startText`, `clockText`,
+`paceText`, `cellLabel` and `said`, handed what they read of the page and held
+by `verify-mockexam-pure`.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

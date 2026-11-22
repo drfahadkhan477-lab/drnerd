@@ -448,5 +448,57 @@ head('a stored block with something wrong in it keeps the rest');
   ok('a start time that is not a time is zero', w.startedAt === 0);
 }
 
+head('what the Study card offers, and the block\'s screen says');
+{
+  const J = v => JSON.stringify(v);
+  const run = fn => { try { return fn(); } catch (e) { return 'THREW ' + e.message; } };
+  ok('a block can be each standard size that fits the questions there are, or all of them when none fits',
+     J(run(() => [M.sizes(100), M.sizes(45), M.sizes(12), M.sizes(0)])) === J([[20, 40, 60], [20, 40], [12], [0]]), J(run(() => [M.sizes(100), M.sizes(45), M.sizes(12)])));
+  ok('a standard size fits exactly as many questions as it asks for', J(run(() => [M.sizes(40), M.sizes(20)])) === J([[20, 40], [20]]), J(run(() => [M.sizes(40), M.sizes(20)])));
+  /* Asked for 40 of 100: 40. Asked for 60 of 45: the largest under it, 40. 30 of 45: 20. 10 of 45: none under it, so
+     the smallest, 20. 40 of 12: the only size, 12. */
+  ok('a block asked to be n is n if offered, else the largest offered under it, else the smallest',
+     J(run(() => [M.size(100, 40), M.size(45, 60), M.size(45, 30), M.size(45, 10), M.size(12, 40)])) === J([40, 40, 20, 20, 12]), J(run(() => [M.size(100, 40), M.size(45, 60), M.size(45, 30), M.size(45, 10), M.size(12, 40)])));
+  /* 40 at 90 s is 3,600,000 ms: an hour, h:mm:ss. 20 at 60 s is twenty minutes, mm:ss. */
+  ok('the start button says the size and the time on the clock, or that there is no limit',
+     run(() => M.startText(40, 90)) === 'Start a 40-question block · 1:00:00 on the clock' && run(() => M.startText(20, 60)) === 'Start a 20-question block · 20:00 on the clock'
+     && run(() => M.startText(40, 0)) === 'Start a 40-question block · no time limit', run(() => M.startText(40, 90)));
+  /* Two questions at 60 s, 30.5 s in: 89.5 s left, a countdown rounding up to 1:30. No limit, 61.999 s in: a stopwatch
+     rounding down to 1:01. */
+  ok('the clock counts down what is left of a timed block, and up the time taken on one with none',
+     run(() => M.clockText({ secPerQ: 60, ids: ['a', 'b'], elapsedMs: 30500 })) === '01:30' && run(() => M.clockText({ secPerQ: 0, ids: ['a', 'b'], elapsedMs: 61999 })) === '01:01',
+     run(() => M.clockText({ secPerQ: 60, ids: ['a', 'b'], elapsedMs: 30500 })) + ' ' + run(() => M.clockText({ secPerQ: 0, ids: ['a', 'b'], elapsedMs: 61999 })));
+  /* Ten at 60 s, three minutes in: an even pace is on question 4. Reached 6, 2 and 4. */
+  const at = far => ({ secPerQ: 60, ids: Array.from({ length: 10 }, (_, i) => 'q' + i), elapsedMs: 180000, far });
+  ok('the pace says ahead, behind with the question to aim for, or on pace, and nothing for a block with no limit',
+     J(run(() => [M.paceText(at(5)), M.paceText(at(1)), M.paceText(at(3)), M.paceText(Object.assign(at(3), { secPerQ: 0 }))])) === J(['Ahead of pace', 'Behind pace · aim for question 4', 'On pace', '']),
+     J(run(() => [M.paceText(at(5)), M.paceText(at(1)), M.paceText(at(3))])));
+  ok('a cell of the grid says its number, whether it is answered, and if flagged or current',
+     run(() => M.cellLabel({ n: 3, answered: true, flagged: true, current: true })) === 'Question 3, answered, flagged, current' && run(() => M.cellLabel({ n: 1 })) === 'Question 1, not answered',
+     run(() => M.cellLabel({ n: 3, answered: true, flagged: true, current: true })));
+  /* Twenty at 60 s is twenty minutes: four left is low, thirty seconds critical, ten minutes neither. Four questions at
+     60 s is a block under five minutes, never low. */
+  const left = (n, remMs) => ({ secPerQ: 60, ids: Array.from({ length: n }, (_, i) => 'q' + i), elapsedMs: n * 60000 - remMs });
+  ok('what has been said for the clock: five minutes past the five-minute mark, both past one minute, nothing before, or for no block',
+     J(run(() => [M.said(left(20, 240000)), M.said(left(20, 30000)), M.said(left(20, 600000)), M.said(left(4, 200000)), M.said(null)]))
+     === J([{ five: true, one: false }, { five: true, one: true }, { five: false, one: false }, { five: false, one: false }, { five: false, one: false }]),
+     J(run(() => [M.said(left(20, 240000)), M.said(left(20, 30000)), M.said(null)])));
+}
+
+head('the page\'s names are the calls into this');
+{
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const { blankComments } = require('./_source.js');
+  const page = blankComments(require('fs').readFileSync(require('path').join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => page.split(t).length - 1;
+  const lines = ['function mockSizes(){ return MockExam.sizes(mockAvail()); }', 'function mockSize(){ return MockExam.size(mockAvail(),_mockCfg.n); }',
+    'function mockStartText(){ return MockExam.startText(mockSize(),_mockCfg.sec); }', 'function mockClockText(r){ return MockExam.clockText(r); }',
+    'function mockPaceText(r){ return MockExam.paceText(r); }', 'function mockCellLabel(c){ return MockExam.cellLabel(c); }', 'function mockSaidNow(){ return MockExam.said(S.mock); }'];
+  const missing = lines.filter(l => n(l) !== 1);
+  ok('each of the seven is one line handing over what the page holds, and is defined once', missing.length === 0
+     && ['mockSizes', 'mockSize', 'mockStartText', 'mockClockText', 'mockPaceText', 'mockCellLabel', 'mockSaidNow'].every(x => n('function ' + x + '(') === 1), missing.join(' | ') || 'all seven');
+  ok('and the page keeps no second copy of the words', n('Behind pace · aim for question') === 0 && n('-question block · ') === 0 && n("', not answered'") === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

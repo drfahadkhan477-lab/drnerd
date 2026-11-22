@@ -5570,12 +5570,10 @@ S.mock=mockLoad(); S.mockLast=mockLoadLast(); S.mockView='q';
 /* What the Study card is set to start. Not saved: a block is chosen each time, from the last choice this visit. */
 let _mockCfg={n:40,sec:MockExam.DEFAULT_PACE,ch:''}, _mockArm=false, _mockArmTimer=null;
 function mockAvail(){ return POOL.filter(q=>!_mockCfg.ch||q.ch===_mockCfg.ch).length; }
-function mockSizes(){ const a=mockAvail(), s=MockExam.SIZES.filter(n=>n<=a); return s.length?s:[a]; }
-function mockSize(){ const s=mockSizes(); return s.includes(_mockCfg.n)?_mockCfg.n:(s.filter(x=>x<=_mockCfg.n).pop()||s[0]); }
-function mockStartText(){
-  const n=mockSize(), t=_mockCfg.sec?MockExam.fmtClock(n*_mockCfg.sec*1000,'down')+' on the clock':'no time limit';
-  return `Start a ${n}-question block · ${t}`;
-}
+/* What a block of this card's choice would be, and says it will be: src/core/mockexam.js. */
+function mockSizes(){ return MockExam.sizes(mockAvail()); }
+function mockSize(){ return MockExam.size(mockAvail(),_mockCfg.n); }
+function mockStartText(){ return MockExam.startText(mockSize(),_mockCfg.sec); }
 function setMockCfg(k,v){
   if(k==='n'&&Number.isInteger(+v)&&+v>0) _mockCfg.n=+v;
   else if(k==='sec'&&(+v===0||MockExam.PACES.includes(+v))) _mockCfg.sec=+v;
@@ -5589,12 +5587,10 @@ function setMockCfg(k,v){
 }
 
 function mockQ(){ const r=S.mock; return r?QBYID[r.ids[r.i]]||null:null; }
-function mockClockText(r){ const rem=MockExam.remainingMs(r); return rem==null?MockExam.fmtClock(r.elapsedMs):MockExam.fmtClock(rem,'down'); }
-function mockPaceText(r){
-  const p=MockExam.pace(r); if(!p) return '';
-  return p.status==='ahead'?'Ahead of pace':p.status==='behind'?'Behind pace · aim for question '+p.expected:'On pace';
-}
-function mockCellLabel(c){ return 'Question '+c.n+(c.answered?', answered':', not answered')+(c.flagged?', flagged':'')+(c.current?', current':''); }
+/* What the block's screen says of its clock, its pace and each cell of its grid: src/core/mockexam.js. */
+function mockClockText(r){ return MockExam.clockText(r); }
+function mockPaceText(r){ return MockExam.paceText(r); }
+function mockCellLabel(c){ return MockExam.cellLabel(c); }
 
 function startMock(){
   if(S.mock){ resumeMock(); return; }
@@ -5631,7 +5627,7 @@ function discardMock(){
 let _mockTimer=null, _mockBeat=0, _mockSaid={five:false,one:false}, _mockApex=null;
 /* What has been said for the clock as it stands. A block taken up again at 2:20 is past the five-minute mark, and
    saying "five minutes left" now would be wrong, every time it was left and come back to. */
-function mockSaidNow(){ const u=S.mock?MockExam.urgency(S.mock):'none'; return {five:u==='low'||u==='critical',one:u==='critical'}; }
+function mockSaidNow(){ return MockExam.said(S.mock); }
 /* Taking up a question as new: no verdict left in the live region from a quiz answer (a screen reader can still read it),
    and no figure left enlarged from the question before. The kept figure is dropped too, or it would come back enlarged. */
 function mockFresh(){ clearAnnounce(); S.zoomed=-1; figCache={id:null,node:null}; }
