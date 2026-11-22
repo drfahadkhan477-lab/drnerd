@@ -229,6 +229,11 @@ head('and a failing step cannot put its output in either place');
     new Function('module', 'fs', 'path', 'ROOT',
       m[0] + '\nmodule.exports = { safeDetail, SHAPES, isSuiteName };')(mod, fs, path, ROOT);
     const { safeDetail, isSuiteName } = mod.exports;
+    const failedPwa = safeDetail('  0 checks across 0 suites in 0.0 min\n  all green   —   test on chromium\n  pwa: 140 checks, all green\n  shell total 940 KB\n  pwa FAILED\n', 'exit 1', true);
+    ok('a failing split stage never calls its empty registry all green', !/all green|0 checks across 0 suites/.test(failedPwa) && /pwa failed/.test(failedPwa), failedPwa);
+    const green = safeDetail('  10 checks across 1 suites in 0.1 min\n  all green   —   test on chromium\n', '', false);
+    ok('a successful measured registry can still report all green', /10 checks across 1 suites/.test(green) && /all green/.test(green), green);
+
     ok('the allowlist is the registry verify.js runs', isSuiteName('csp') && isSuiteName('render'));
     ok('and a word that is not a suite is not one', !isSuiteName('dyspnea') && !isSuiteName('man'));
 

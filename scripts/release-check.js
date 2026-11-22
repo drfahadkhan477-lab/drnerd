@@ -176,7 +176,7 @@ function isSuiteName(n) {
 
 const SHAPES = [
   [/\b(\d+) checks across (\d+) suites in ([\d.]+) min\b/,
-   m => `${m[1]} checks across ${m[2]} suites in ${m[3]} min`],
+   m => +m[2] > 0 ? `${m[1]} checks across ${m[2]} suites in ${m[3]} min` : null],
   /* THE CAPTURE IS DELIBERATELY WIDE AND THE FILTER DOES THE WORK. It was the
      other way round first — the class was [a-z0-9,\s-]+, which silently made
      the token filter below unreachable, because every token it could ever see
@@ -191,19 +191,22 @@ const SHAPES = [
      const names = m[2].split(/[,\s]+/).filter(isSuiteName).slice(0, 12);
      return names.length ? `${m[1]} failing: ${names.join(', ')}` : `${m[1]} failing`;
    }],
-  [/\ball green\b/, () => 'all green'],
-  [/\b(\d+) checks, all green\b/, m => `${m[1]} checks, all green`],
+  [/\ball green\b/, () => 'all green', true],
+  [/\b(\d+) checks, all green\b/, m => `${m[1]} checks, all green`, true],
   [/\b(\d+) passed, (\d+) failed\b/, m => `${m[1]} passed, ${m[2]} failed`],
   [/\bshell total\s+([\d.]+)\s*([kKmM]?B)\b/, m => `shell total ${m[1]} ${m[2]}`],
   [/\b(\d+) file\(s\) checked, nothing licensed\b/, m => `${m[1]} files checked, nothing licensed`],
   [/\bwrote\s+(\d+)\s+figures?\b/, m => `wrote ${m[1]} figures`],
 ];
 
-function safeDetail(out, fallback) {
+function safeDetail(out, fallback, failed = false) {
   const found = [];
-  for (const [re, render] of SHAPES) {
+  if (failed && /\bpwa FAILED\b/.test(String(out || ''))) found.push('pwa failed');
+  for (const [re, render, successOnly] of SHAPES) {
+    if (failed && successOnly) continue;
     const m = re.exec(String(out || ''));
-    if (m && found.length < 3) found.push(render(m));
+    const detail = m && render(m);
+    if (detail && found.length < 3) found.push(detail);
   }
   return found.length ? found.join(' | ') : fallback;
 }
@@ -261,7 +264,7 @@ for (const step of STEPS) {
       const out = (r.stdout || '') + (r.stderr || '');
       if (r.status !== 0) {
         record(step, 'FAIL',
-          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`),
+          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`, true),
           (Date.now() - t0) / 1000);
         continue;
       }
