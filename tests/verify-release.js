@@ -46,10 +46,8 @@ head('the verifier can preserve its existing record');
   const { blankComments } = require('./_source.js');
   const source = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8'));
   const start = source.indexOf('function writeStats(pwaCount) {');
-  const end = source.indexOf('/* Written before the pass/fail gate', start);
-  // blankComments removes the next comment, so use the stable following function marker instead.
-  const actualEnd = end < 0 ? source.indexOf('function writeFailLog(', start) : end;
-  const code = source.slice(start, actualEnd);
+  const end = source.indexOf('function writeFailLog(', start);
+  const code = start >= 0 && end > start ? source.slice(start, end) : '';
   const run = disabled => {
     let writes = 0;
     const ctx = { flag: name => name === '--no-record' && disabled, TARGET_IS_URL: false, SYNTHETIC: false,
