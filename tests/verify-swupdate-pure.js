@@ -192,8 +192,6 @@ head('(d) an update must not cost the figures already on the device');
      /const SHELL\s*=\s*'accsap-shell-'\s*\+\s*SHELL_V;/.test(SW));
   ok('and the content cache from CONTENT_V',
      /const CONTENT\s*=\s*'accsap-content-'\s*\+\s*CONTENT_V;/.test(SW));
-  ok('and activate deletes everything that is neither',
-     /ks\.filter\(k => k !== SHELL && k !== CONTENT\)/.test(SW));
 }
 
 head('(e) the first install is not an update');
@@ -341,13 +339,16 @@ head('(d), driven: a code deploy keeps the content cache, a content deploy renam
     ok('a code-only deploy keeps the content cache\'s name', v('A') === v('B'), `${v('A')} / ${v('B')}`);
     ok('a content deploy renames it', v('A') !== v('C'));
 
-    /* The device has A's two caches when B arrives, or when C does. */
-    const device = [A.names.SHELL, A.names.CONTENT];
+    /* The device has A's two caches and another app's cache on the origin. */
+    const unrelated = 'another-app-offline';
+    const device = [A.names.SHELL, A.names.CONTENT, unrelated];
     const afterB = (await deploy(B.sw, device)).kept, afterC = (await deploy(C.sw, device)).kept;
     ok('so the figures a fellow downloaded survive a code deploy', afterB.includes(A.names.CONTENT), afterB.join(', '));
     ok('while the old shell is deleted', !afterB.includes(A.names.SHELL), afterB.join(', '));
     ok('and a content deploy deletes the old bank rather than serving it forever',
        !afterC.includes(A.names.CONTENT), afterC.join(', '));
+    ok('both kinds of deploy preserve the unrelated app cache',
+       afterB.includes(unrelated) && afterC.includes(unrelated));
 
     /* THE REST OF dist/content/, which only a whole build-pwa run writes: a
        folder in its shape, changed one file at a time. */

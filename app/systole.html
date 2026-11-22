@@ -484,9 +484,11 @@ function loadSeen(k,d){
   return v==null?d:v;
 }
 function saveJSON(k,v){
-  if(!Store.set(k,v)) warnStorage();
+  const saved=Store.set(k,v);
+  if(!saved) warnStorage();
   /* Only the bytes this save wrote are seen. Another window may have replaced them before a read-back. */
   else if(k in SEEN){ try{ SEEN[k]=JSON.stringify(v); }catch(_){} }
+  return saved;
 }
 let storageWarned=false;
 function warnStorage(){
@@ -525,7 +527,7 @@ const INK_IDLE_MS=900, INK_MAX_MS=10000;
 let inkDirtyAt=0, inkTimer=null;
 function saveInkNow(){
   if(inkTimer){ clearTimeout(inkTimer); inkTimer=null; }
-  inkDirtyAt=0; saveJSON(INK_KEY,INK);
+  inkDirtyAt=0; return saveJSON(INK_KEY,INK);
 }
 function saveInkSoon(){
   if(!Store.isHydrated()){ saveInkNow(); return; }
@@ -1221,26 +1223,27 @@ function importMarkup(trigger=document.activeElement){
         const progress=validateAnnotationBackup(d);
         if(!(await storeReadyOrNull())){ toast('Storage is not responding, so nothing was restored. Reload and try again.'); return; }
         const assetsStored=d.assets==null||await RefAssets.restoreBackup(d.assets);
-        if(d.ink)  { INK=d.ink;   saveInkNow(); }
-        if(d.notes){ NOTES=d.notes; saveJSON(NOTE_KEY,NOTES); }
-        if(d.refs&&typeof REF!=='undefined'){ REF=d.refs; saveJSON('accsap12.ref',REF);
+        const writes=[];
+        if(d.ink)  { INK=d.ink; writes.push(saveInkNow()); }
+        if(d.notes){ NOTES=d.notes; writes.push(saveJSON(NOTE_KEY,NOTES)); }
+        if(d.refs&&typeof REF!=='undefined'){ REF=d.refs; writes.push(saveJSON('accsap12.ref',REF));
           if(typeof invalidateIndex==='function')invalidateIndex(); }
-        if(d.log&&Array.isArray(d.log)){ LOG=d.log; saveJSON(LOG_KEY,LOG); }
+        if(d.log&&Array.isArray(d.log)){ LOG=d.log; writes.push(saveJSON(LOG_KEY,LOG)); }
         /* Every other line here updates the live variable as well as the
            store; this one only wrote, so a restored backup's conversations
            did not appear until the app was next launched. */
-        if(d.chat){ CHATS=d.chat; saveJSON('accsap12.chat',CHATS); }
+        if(d.chat){ CHATS=d.chat; writes.push(saveJSON('accsap12.chat',CHATS)); }
         if(d.stats){
           Object.assign(S,progress);
           FOREIGN={}; for(const k of Object.keys(d.stats)) if(!SCHEMA_KEYS.includes(k)) FOREIGN[k]=d.stats[k];
           /* The record kept is the backup's, as it is. A backup with no flagged list says nothing of the flags made since, and a
              reload must not lose them, so they go into it; with none made there is nothing to add. */
-          saveJSON('accsap12.v2',d.stats.flagged!=null||!S.flagged.size?d.stats:Object.assign({},d.stats,{flagged:[...S.flagged]}));
+          writes.push(saveJSON('accsap12.v2',d.stats.flagged!=null||!S.flagged.size?d.stats:Object.assign({},d.stats,{flagged:[...S.flagged]})));
           applyTheme();
         }
-        if(d.mem&&typeof Memory!=='undefined') Memory.replaceAll(d.mem);
+        if(d.mem&&typeof Memory!=='undefined') writes.push(Memory.replaceAll(d.mem));
         const writesStored=await Promise.race([Store.flush(),new Promise(resolve=>setTimeout(()=>resolve(false),STORE_WAIT_MS))]);
-        toast(!writesStored?'Annotations restored for this visit, but storage did not confirm every change. Keep the backup and retry before closing.'
+        toast(!writesStored||writes.includes(false)?'Annotations restored for this visit, but storage did not confirm every change. Keep the backup and retry before closing.'
           :assetsStored?'Annotations restored.':'Annotations restored for this visit, but the images could not be saved. Export a backup before closing.'); render();
       }catch(e){ toast('That file could not be read.'); }
       finally{backupBusy=false;}
