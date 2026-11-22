@@ -14,6 +14,10 @@
                                                         what they did on the question in front of Apex
      digest({ log, missed, byId, limit, now, grounded, cap })   their recent misses, one per question, with what each was
                                                         (cap: characters of rows to give; a row is never over the default)
+     lastAnswer(log, id)                                the latest row of the log that answered question id
+     standingBlock(lines)                               standing()'s lines as the block the prompt carries, or ''
+     didBlock(line, grounded)                           answerLine()'s line as the block the prompt carries, or ''
+       These three were the page's lastAnswerRow(), apexStanding() and the end of apexDid() (docs/ROADMAP.md, E1).
 
    THE RULES, because each is a way the tutor is told something untrue:
 
@@ -279,6 +283,25 @@ function digest(o) {
   } catch (_) { return none; }
 }
 
-root.ApexSignals = { standing, answerLine, digest, clip, ago, letterOf, ANSWER_MODES, MAX_LIMIT, CAP_CHARS };
+/* The latest answer logged for a question: a self-rating is not an answer (rule 4's "latest answer"). */
+function lastAnswer(log, id) {
+  const rows = Array.isArray(log) ? log : [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r && r.q === id && ANSWER_MODES.indexOf(r.m) >= 0) return r;
+  }
+  return null;
+}
+/* The words round the lines, as the prompt has always carried them. They tell the model what the lines are, so a
+   signal is used to choose what to press on and not read back as a report. */
+function standingBlock(lines) {
+  return Array.isArray(lines) && lines.length ? `\n\nHOW THE FELLOW ANSWERS (from their own review log: signals, not scores. Use them to choose what to press on; do not read them back as a report):\n${lines.join('\n')}` : '';
+}
+/* Grounded mode is not told whether the answer was right (rule 2), so it is not told to correct a wrong one either. */
+function didBlock(line, grounded) {
+  return line ? `\n\nWHAT THE FELLOW DID ON THIS ITEM (their own answer; engage with it${grounded ? '' : '. A wrong answer given with high confidence is the most valuable thing to correct'}):\n${line}` : '';
+}
+
+root.ApexSignals = { lastAnswer, standingBlock, didBlock, standing, answerLine, digest, clip, ago, letterOf, ANSWER_MODES, MAX_LIMIT, CAP_CHARS };
 
 })(typeof window !== 'undefined' ? window : this);

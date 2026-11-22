@@ -317,6 +317,10 @@ Then the mock exam's words and sizes: `mockSizes()`, `mockSize()`,
 `mockSaidNow()` are `MockExam.sizes`, `size`, `startText`, `clockText`,
 `paceText`, `cellLabel` and `said`, handed what they read of the page and held
 by `verify-mockexam-pure`.
+Then the words round what Apex is told of how the fellow answers:
+`lastAnswerRow()`, `apexStanding()` and the end of `apexDid()` are
+`ApexSignals.lastAnswer`, `standingBlock` and `didBlock`, held by
+`verify-apexsignals-pure`; the page keeps the guards and what it reads.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -3504,20 +3504,9 @@ function apexStandingLines(){
     return ApexSignals.standing({log:LOG,mocks:S.mocks,flagged:flaggedQs().length,daysLeft:examDaysLeft(),now:Date.now()});
   }catch(_){ return []; }
 }
-function apexStanding(){
-  try{
-    const lines=apexStandingLines();
-    return lines.length?`\n\nHOW THE FELLOW ANSWERS (from their own review log: signals, not scores. Use them to choose what to press on; do not read them back as a report):\n${lines.join('\n')}`:'';
-  }catch(_){ return ''; }
-}
-/* The latest answer logged for a question: a self-rating is not an answer. */
-function lastAnswerRow(id){
-  for(let i=LOG.length-1;i>=0;i--){
-    const r=LOG[i];
-    if(r&&r.q===id&&ApexSignals.ANSWER_MODES.indexOf(r.m)>=0) return r;
-  }
-  return null;
-}
+/* The block round those lines, and the latest answer to a question, are src/core/apexsignals.js's. */
+function apexStanding(){ try{ return ApexSignals.standingBlock(apexStandingLines()); }catch(_){ return ''; } }
+function lastAnswerRow(id){ return ApexSignals.lastAnswer(LOG,id); }
 /* What the fellow did on the question open now, once it is answered. Grounded mode is told the choice, the confidence and the time
    and never whether it was right (src/core/apexsignals.js, rule 2). */
 function apexDid(q){
@@ -3526,7 +3515,7 @@ function apexDid(q){
     const a=S.answers[S.qIdx]||{}, row=lastAnswerRow(q.id);
     const line=ApexSignals.answerLine({pick:S.selected,ok:S.selected===q.ci,cf:a.cf,why:row&&row.why,ms:row&&row.ms,
       flagged:S.flagged.has(q.id),grounded:AI_GROUNDED,letters:q.o.map(o=>o.l)});
-    return line?`\n\nWHAT THE FELLOW DID ON THIS ITEM (their own answer; engage with it${AI_GROUNDED?'':'. A wrong answer given with high confidence is the most valuable thing to correct'}):\n${line}`:'';
+    return ApexSignals.didBlock(line,AI_GROUNDED);
   }catch(_){ return ''; }
 }
 function aiCtx(q){
