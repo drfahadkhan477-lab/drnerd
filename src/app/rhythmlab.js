@@ -101,6 +101,11 @@ function screenHtml(p){
       </div>
       <button class="btn sb-back" data-action="goHome">${icon('arrow-left','icon-sm')} Home</button>
     </div>
+    <nav class="lab-sections" aria-label="Rhythm Lab sections">
+      <a href="#labRhythm">Rhythm</a><a href="#labLoop">Loop</a>
+    </nav>
+    <section id="labRhythm" aria-labelledby="labRhythmHeading">
+    <h2 class="lab-section-heading" id="labRhythmHeading">Rhythm</h2>
     <div class="lab-monitor">
       <canvas id="labCanvas" aria-label="Live electrocardiogram trace"></canvas>
       <div class="lab-readout">
@@ -113,8 +118,12 @@ function screenHtml(p){
       `<button class="chip${k===labKind?' hot':''}" data-action="setLab" data-kind="${k}">${e(RHYTHMS[k].name)}</button>`).join('')}</div>
     <div class="ref-hint" style="margin-top:12px">Traces are generated from waveform models, not recordings —
       shapes are schematic and meant for pattern recognition, not measurement.</div>
-    ${buildPhysio()}
     ${buildTwelveLead()}
+    </section>
+    <section id="labLoop" aria-labelledby="labLoopHeading">
+    <h2 class="lab-section-heading" id="labLoopHeading">Loop</h2>
+    ${buildPhysio()}
+    </section>
   </div>`;
 }
 

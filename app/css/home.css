@@ -926,6 +926,7 @@ html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(
 #app[data-screen="home"] #homePage0 .hero-greet{display:block;margin:0 0 10px;max-width:none;font-size:var(--t-tiny);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--teal-ink)}
 #app[data-screen="home"] #homePage0 .hero-h1{display:block;margin:0 0 14px;font-family:'DM Serif Display',Georgia,serif;font-weight:400;
   font-size:clamp(44px,3.2rem + 1.4vw,68px);line-height:1;letter-spacing:-.02em;color:var(--text)}
+#app[data-screen="home"] #homePage0 .hero-owner{margin:0 0 10px;font-size:var(--t-meta);line-height:1.4;color:var(--muted)}
 #app[data-screen="home"] #homePage0 .hero-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 12px;max-width:none}
 #app[data-screen="home"] #homePage0 .hero-line .hl-item{display:inline;min-height:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;
   font-size:var(--t-body);color:var(--muted)}

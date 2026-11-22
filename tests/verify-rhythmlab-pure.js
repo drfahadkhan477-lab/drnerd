@@ -85,8 +85,11 @@ head('the monitor, and a chip for every rhythm');
   ok('the Home button names the goHome action', vt.includes('<button class="btn sb-back" data-action="goHome">[icon arrow-left icon-sm] Home</button>'));
   ok('the monitor has one canvas for the page to draw into, and says the traces are models, not recordings',
      times(vt, '<canvas id="labCanvas" aria-label="Live electrocardiogram trace"></canvas>') === 1 && vt.includes('Traces are generated from waveform models, not recordings'));
-  ok('the cycle panel and the 12-lead panel follow, once each, in that order',
-     times(vt, 'class="panel physio-panel"') === 1 && times(vt, 'class="panel twelve-panel"') === 1 && vt.indexOf('lab-chips') < vt.indexOf('physio-panel') && vt.indexOf('physio-panel') < vt.indexOf('twelve-panel'));
+  ok('the Rhythm section contains the trace and 12-lead, followed by the Loop section with the cycle',
+     vt.includes('href="#labRhythm"') && vt.includes('href="#labLoop"') &&
+     times(vt, 'class="panel physio-panel"') === 1 && times(vt, 'class="panel twelve-panel"') === 1 &&
+     vt.indexOf('id="labRhythm"') < vt.indexOf('lab-chips') && vt.indexOf('lab-chips') < vt.indexOf('twelve-panel') &&
+     vt.indexOf('twelve-panel') < vt.indexOf('id="labLoop"') && vt.indexOf('id="labLoop"') < vt.indexOf('physio-panel'));
   const p = page({ labKind: 'afib', physioView: 'pv', twelveLead: 'V1' });
   ok('and they are the panels the two panel functions give for the same page', !draw(p).startsWith('THREW') && draw(p).includes(draw(p, 'physioHtml')) && draw(p).includes(draw(p, 'twelveHtml')) && draw(p, 'physioHtml') !== draw(p, 'twelveHtml'));
 }
@@ -201,8 +204,9 @@ head('the page hands over what it has, and keeps what is chosen');
   /* physioModel is the seventh: the note that says the cycle is a teaching model. The page does not look it up;
      tests/verify-physio.js reads it there. */
   const MOUNTED = ['labCanvas', 'leadCard', 'physioCanvas', 'physioNote', 'physioPhase', 'twelveCanvas'];
-  ok('the six elements the page\'s mounts look up by id are in the markup under those names, and it names no other but physioModel',
-     J(ids) === J(MOUNTED.concat('physioModel').sort()) && MOUNTED.every(lookedUp) && !lookedUp('physioModel'),
+  const sectionIds = ['labRhythm', 'labRhythmHeading', 'labLoop', 'labLoopHeading'];
+  ok('the mounted elements and the section links have their distinct ids',
+     J(ids) === J(MOUNTED.concat('physioModel', sectionIds).sort()) && MOUNTED.every(lookedUp) && !lookedUp('physioModel'),
      ids.map(i => i + (lookedUp(i) ? '' : ' (not looked up)')).join(' '));
   const wig = draw(page({ physioView: 'wiggers' }));
   const datas = [...new Set([...(all + wig).matchAll(/\b(data-physio-[a-z]+)\b/g)].map(m => m[1]))].sort();
