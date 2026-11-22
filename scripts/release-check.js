@@ -91,18 +91,18 @@ const STEPS = [
      in verify.js, so naming it here is the whole fix; verify-release drives
      the gate with the variable set and checks the command each step shows. */
   { id: 'chromium',  what: 'the full suite, on chromium',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'chromium']], after: 'build', needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'chromium', '--no-record']], after: 'build', needs: () => fs.existsSync(BUILD) },
   /* Chromium already measured the standalone registry above. --only pwa
      still builds and measures the split artifacts, Worker and cache phases;
      it does not replay the standalone suites before those phases. */
   { id: 'pwa',       what: 'the split build, Worker and offline cache over http',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--only', 'pwa', '--pwa', '--engine', 'chromium']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--only', 'pwa', '--pwa', '--engine', 'chromium', '--no-record']], after: 'pwabuild', needs: () => fs.existsSync(DIST) },
   /* WebKit is the ACTUAL TARGET — the app is used on an iPad — so it is on by
      default and skipping it costs you the CERTIFIED line rather than passing
      quietly. It is also the engine where the 42 MB single file takes ~100s to
      parse before a line of app code runs, which is why the boot waits matter. */
   { id: 'webkit',    what: 'the full suite, on webkit — the engine the app actually runs on',
-    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'webkit']], after: 'build', needs: () => fs.existsSync(BUILD) },
+    cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'webkit', '--no-record']], after: 'build', needs: () => fs.existsSync(BUILD) },
 ];
 
 /* What a step would run, for the dry run to say. The source is shown as a
@@ -176,7 +176,7 @@ function isSuiteName(n) {
 
 const SHAPES = [
   [/\b(\d+) checks across (\d+) suites in ([\d.]+) min\b/,
-   m => `${m[1]} checks across ${m[2]} suites in ${m[3]} min`],
+   m => +m[2] > 0 ? `${m[1]} checks across ${m[2]} suites in ${m[3]} min` : null],
   /* THE CAPTURE IS DELIBERATELY WIDE AND THE FILTER DOES THE WORK. It was the
      other way round first — the class was [a-z0-9,\s-]+, which silently made
      the token filter below unreachable, because every token it could ever see
@@ -191,19 +191,22 @@ const SHAPES = [
      const names = m[2].split(/[,\s]+/).filter(isSuiteName).slice(0, 12);
      return names.length ? `${m[1]} failing: ${names.join(', ')}` : `${m[1]} failing`;
    }],
-  [/\ball green\b/, () => 'all green'],
-  [/\b(\d+) checks, all green\b/, m => `${m[1]} checks, all green`],
+  [/\ball green\b/, () => 'all green', true],
+  [/\b(\d+) checks, all green\b/, m => `${m[1]} checks, all green`, true],
   [/\b(\d+) passed, (\d+) failed\b/, m => `${m[1]} passed, ${m[2]} failed`],
   [/\bshell total\s+([\d.]+)\s*([kKmM]?B)\b/, m => `shell total ${m[1]} ${m[2]}`],
   [/\b(\d+) file\(s\) checked, nothing licensed\b/, m => `${m[1]} files checked, nothing licensed`],
   [/\bwrote\s+(\d+)\s+figures?\b/, m => `wrote ${m[1]} figures`],
 ];
 
-function safeDetail(out, fallback) {
+function safeDetail(out, fallback, failed = false) {
   const found = [];
-  for (const [re, render] of SHAPES) {
+  if (failed && /\bpwa FAILED\b/.test(String(out || ''))) found.push('pwa failed');
+  for (const [re, render, successOnly] of SHAPES) {
+    if (failed && successOnly) continue;
     const m = re.exec(String(out || ''));
-    if (m && found.length < 3) found.push(render(m));
+    const detail = m && render(m);
+    if (detail && found.length < 3) found.push(detail);
   }
   return found.length ? found.join(' | ') : fallback;
 }
@@ -261,7 +264,7 @@ for (const step of STEPS) {
       const out = (r.stdout || '') + (r.stderr || '');
       if (r.status !== 0) {
         record(step, 'FAIL',
-          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`),
+          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`, true),
           (Date.now() - t0) / 1000);
         continue;
       }
