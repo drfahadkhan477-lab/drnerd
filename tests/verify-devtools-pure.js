@@ -52,9 +52,17 @@ const node = (args, env) => spawnSync(process.execPath, args, { cwd: ROOT, encod
     let threw = false; try { replaceWhole(asDir, 'zqlicensed'); } catch (_) { threw = true; }
     /* A write that fails after the file exists (a full disk): the partial file goes. */
     const realWrite = fs.writeFileSync;
-    fs.writeFileSync = (f, b) => { realWrite(f, String(b).slice(0, 3)); throw new Error('ENOSPC: no space left'); };
+    let privateStaging = false;
+    fs.writeFileSync = (f, b) => {
+      const dir = path.dirname(f);
+      privateStaging = dir !== TMP && path.dirname(dir) === TMP
+        && (process.platform === 'win32' || (fs.statSync(dir).mode & 0o077) === 0);
+      realWrite(f, String(b).slice(0, 3));
+      throw new Error('ENOSPC: no space left');
+    };
     let threwW = false; try { replaceWhole(path.join(TMP, 'full-disk.html'), 'zqlicensed bytes'); } catch (_) { threwW = true; }
     fs.writeFileSync = realWrite;
+    ok('unfinished output is staged in its own private directory beside the destination', privateStaging);
     ok('a write that fails part-way leaves no partial copy either', threwW && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
     ok('and when it cannot be, no copy of it is left beside the destination', threw && !fs.readdirSync(TMP).some(f => /\.tmp-/.test(f)), fs.readdirSync(TMP).filter(f => /\.tmp-/.test(f)).join(', ') || 'none');
   }

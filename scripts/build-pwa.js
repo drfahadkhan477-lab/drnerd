@@ -1426,7 +1426,7 @@ const SHELL   = 'accsap-shell-'   + SHELL_V;
    changed with the scope. It used to be FIGS and only /content/figures/ was
    routed into it; refs-images.json (14.4 MB) and refs-seed.json (0.7 MB) are
    fetched at runtime like any other same-origin URL and so fell through to the
-   SHELL bucket. activate() deletes every cache that is not the CURRENT shell,
+   SHELL bucket. activate() deletes obsolete Systole shell caches,
    and SHELL_V is a digest of the shell code — so a CSS tweak with no content
    change at all evicted 15.1 MB, and the next launch had to pull it down again
    before reference figures worked offline. Keyed by CONTENT_V, these now
@@ -1483,8 +1483,10 @@ self.addEventListener('install', e => {
   })());
 });
 self.addEventListener('activate', e => {
+  // Cache Storage is shared across the origin, including other apps.
+  const owned = k => /^(accsap-shell-|accsap-content-|accsap-figs-)/.test(k);
   e.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k !== SHELL && k !== CONTENT).map(k => caches.delete(k))))
+    .then(ks => Promise.all(ks.filter(k => owned(k) && k !== SHELL && k !== CONTENT).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {

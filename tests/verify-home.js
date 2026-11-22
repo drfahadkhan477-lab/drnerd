@@ -736,7 +736,14 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       await page.evaluate(() => goHome());
       await onScreen(page, 'home', { marker: '#homePage2' });
       await page.evaluate(n => homeGo(n), n);
-      await page.waitForFunction(n => homePage === n, n, { timeout: 8000, polling: 40 }).catch(() => {});
+      // homeGo marks the destination immediately. A scroll frame can make
+      // it inert again until the pager reaches it, which drops keyboard focus.
+      await settled(page, n => {
+        const pager = document.getElementById('homePager');
+        const panel = document.getElementById('homePage' + n);
+        return !!pager?.clientWidth && !!panel && !panel.inert && homePage === n &&
+          !homeTween && Math.abs(pager.scrollLeft - n * pager.clientWidth) <= 1;
+      }, { arg: n, timeout: 8000, label: 'the Home pager to settle on page ' + n });
       await quiet(page);
     };
     /* A button low on a page is scrolled to first, as a reader scrolls to it, and the page let settle: the pages sit in a

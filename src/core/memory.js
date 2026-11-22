@@ -76,7 +76,7 @@ function order(a, b) {
   return (b.seq || 0) - (a.seq || 0) || (b.created || 0) - (a.created || 0);
 }
 function persist() {
-  if (typeof saveJSON === 'function') saveJSON(MEM_KEY, MEM);
+  if (typeof saveJSON === 'function') return saveJSON(MEM_KEY, MEM);
 }
 
 /* Compared for duplicates, not displayed: case, punctuation and spacing all
@@ -165,7 +165,7 @@ function replaceAll(list) {
   MEM = Array.isArray(list) ? list.filter(m => m && typeof m.text === 'string') : [];
   seq = MEM.reduce((n, m) => Math.max(n, m.seq || 0), 0);
   prune();
-  persist();
+  return persist();
 }
 
 /* The block handed to the model. Empty store means empty string, same rule

@@ -202,8 +202,10 @@ async function missingData(page, key) {
     await targetPage.waitForFunction(() => !backupBusy, null, { timeout: 15000 });
     const restored = await targetPage.locator('#toast').textContent();
     const missing = await missingData(targetPage, key);
+    const assetStore = await targetPage.evaluate(() => RefAssets.openInfo());
     ok('the correct passphrase restores ink, notes, images, reviews, progress, chat and memory now',
-      restored === 'Annotations restored.' && !missing.length, [restored, ...missing].join(' | '));
+      restored === 'Annotations restored.' && !missing.length,
+      [restored, ...missing, JSON.stringify(assetStore)].join(' | '));
     await targetPage.reload();
     await booted(targetPage);
     await hydrate(targetPage);
@@ -211,6 +213,28 @@ async function missingData(page, key) {
     ok('restored data survives a reload', !missingAfterReload.length, missingAfterReload.join(', '));
 
     await progress(targetPage);
+    section = 'restore with local storage failure';
+    for (const key of ['accsap12.ref', 'accsap12.v2', 'accsap12.mem']) {
+      await selectFile(targetPage, first.text);
+      await targetPage.evaluate(refusedKey => {
+        const setItem = Storage.prototype.setItem;
+        window.restoreWriteRefused = false;
+        Storage.prototype.setItem = function (key, value) {
+          if (key !== refusedKey) return setItem.call(this, key, value);
+          window.restoreWriteRefused = true;
+          throw new DOMException('Storage is full', 'QuotaExceededError');
+        };
+      }, key);
+      const partial = await unlock(targetPage, passphrase);
+      const refused = await targetPage.evaluate(() => window.restoreWriteRefused);
+      ok('restore reports an unconfirmed save when local storage refuses ' + key,
+        refused && partial.includes('storage did not confirm every change'), partial);
+      await targetPage.reload();
+      await booted(targetPage);
+      await hydrate(targetPage);
+      await progress(targetPage);
+    }
+
     section = 'legacy passphrase dialog';
     await targetPage.evaluate(() => { HTMLDialogElement.prototype.showModal = undefined; });
     await exportButton(targetPage).click();

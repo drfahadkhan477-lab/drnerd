@@ -6,7 +6,7 @@
  *
  * WHAT THIS IS ABOUT. The service worker keys two caches: the shell by a digest
  * of the shell code, the content by a digest of the content. activate() deletes
- * every cache that is not one of the two current ones. That arrangement is only
+ * old Systole caches. That arrangement is only
  * correct if each file is in the bucket that matches what actually invalidates
  * it — and refs-images.json (14.4 MB) and refs-seed.json (0.7 MB) were in
  * neither, because only /content/figures/ was routed to the content bucket and
@@ -24,13 +24,14 @@
  * shell digests and the same content digest, an install between them, and an
  * eviction pass. Reconstructing that in Playwright would be a test of the
  * reconstruction. What is actually being asserted is a routing rule and a
- * whitelist, both of which are decidable from the worker's own source — so the
- * source is what is read, and the sizes are measured from the files on disk so
+ * whitelist. The source is read for routing, and activation runs against a
+ * stand-in cache store. Sizes are measured from the files on disk so
  * the number in the failure message is the real cost, not a remembered one.
  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const vm = require('node:vm');
 
 /* scripts/verify.js hands every suite the single-file build's path, which this
    one has no use for — its subject is the split build's worker. A directory is
@@ -70,11 +71,6 @@ ok('every /content/ URL goes to the content cache',
    && /caches\.open\(CONTENT\)/.test(sw));
 ok('and the routing is not narrowed back to figures alone',
    !/url\.pathname\.includes\('\/content\/figures\/'\)\s*\)\s*\{[\s\S]{0,80}caches\.open\(/.test(sw));
-
-head('what survives an eviction pass');
-const act = /ks\.filter\(k => k !== SHELL && k !== CONTENT\)/.test(sw);
-ok('activate keeps the current shell AND the current content', act,
-   act ? '' : 'the whitelist does not name CONTENT');
 
 head('install puts each precached file in the bucket that matches it');
 ok('install opens both caches', /caches\.open\(SHELL\)/.test(sw) && /caches\.open\(CONTENT\)/.test(sw));
@@ -123,5 +119,33 @@ ok('and they are not named in PRECACHE, so they are fetched at runtime',
    !/PRECACHE[^\]]*refs-images/.test(sw),
    'they reach the cache through the fetch handler, which is why its routing decides their bucket');
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+async function checkActivation() {
+  head('what survives an eviction pass');
+  const handlers = new Map();
+  const outdated = ['accsap-shell-old', 'accsap-content-old', 'accsap-figs-old'];
+  const names = new Set([...outdated, 'another-app-offline']);
+  let claimed = false;
+  const context = vm.createContext({
+    self: {
+      addEventListener: (name, handler) => handlers.set(name, handler),
+      clients: { claim: async () => { claimed = true; } },
+    },
+    caches: {
+      keys: async () => [...names],
+      delete: async name => names.delete(name),
+    },
+  });
+  const current = vm.runInContext(sw + '\n;[SHELL, CONTENT]', context);
+  for (const name of current) names.add(name);
+  let activated;
+  handlers.get('activate')({ waitUntil: work => { activated = work; } });
+  await activated;
+  ok('activate keeps both current buckets and claims clients', claimed && current.every(name => names.has(name)));
+  ok('activate clears old Systole shell, content and figure buckets', outdated.every(name => !names.has(name)));
+  ok('activate leaves an unrelated app cache on the same origin intact', names.has('another-app-offline'));
+}
+
+checkActivation().catch(error => ok('activate completes', false, error.message)).then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exitCode = failed ? 1 : 0;
+});
