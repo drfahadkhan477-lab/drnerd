@@ -75,6 +75,11 @@ head('and does not, when it is no longer that deck');
   ok('the pool is not the deck\'s: more questions than it holds', safely(() => R.restore(rec(), POOL.concat([{ id: 'q5' }]))) === null);
   ok('it sits on its last question, answered: a finished deck nobody cleared', safely(() => R.restore(rec({ i: 3, answers: { 3: { selected: 2 } } }), POOL)) === null);
   ok('its place is outside the deck', safely(() => R.restore(rec({ i: 4 }), POOL)) === null && safely(() => R.restore(rec({ i: -1 }), POOL)) === null);
+  /* A restored backup's deck is any list of strings, and the pool was read through a plain object: a saved "toString"
+     or "constructor" found what every object inherits, and a function was dealt as a question. Four saved ids over a
+     pool of four, one of them a name every object has: no deck. */
+  const inherited = ['toString', 'constructor', '__proto__', 'valueOf'].map(id => safely(() => R.restore(rec({ ids: ['q3', 'q1', id, 'q2'] }), POOL)));
+  ok('an id every object inherits is no question of the pool, and the deck is not dealt', inherited.every(r => r === null), inherited.map(r => r === null ? 'null' : (r && r.deck ? r.deck.map(q => typeof q === 'function' ? 'FUNCTION' : (q && q.id) || typeof q).join(',') : String(r))).join(' | '));
   ok('it is no record, or one without questions', [null, undefined, {}, { ids: [] }, { ids: 'q1' }].every(x => safely(() => R.restore(x, POOL)) === null));
 }
 

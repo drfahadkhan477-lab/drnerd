@@ -52,7 +52,8 @@ function keep(resume,k,entry){
        caller computed, so a chapter's record can never be dealt into "all". */
 function restore(rec,qs){
   if(!rec||!Array.isArray(rec.ids)||!rec.ids.length) return null;
-  const have={}; qs.forEach(q=>{ have[q.id]=q; });
+  /* No prototype: a saved "toString" or "constructor" (a restored backup's ids are any strings) is no question. */
+  const have=Object.create(null); qs.forEach(q=>{ have[q.id]=q; });
   const deck=[]; for(const id of rec.ids){ const q=have[id]; if(!q) return null; deck.push(q); }
   if(deck.length!==qs.length) return null;
   const i=rec.i|0;
