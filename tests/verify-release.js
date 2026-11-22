@@ -40,6 +40,30 @@ const run = (...args) => {
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
 };
 
+head('the verifier can preserve its existing record');
+{
+  const vm = require('vm');
+  const { blankComments } = require('./_source.js');
+  const source = blankComments(fs.readFileSync(path.join(ROOT, 'scripts', 'verify.js'), 'utf8'));
+  const start = source.indexOf('function writeStats(pwaCount) {');
+  const end = source.indexOf('/* Written before the pass/fail gate', start);
+  // blankComments removes the next comment, so use the stable following function marker instead.
+  const actualEnd = end < 0 ? source.indexOf('function writeFailLog(', start) : end;
+  const code = source.slice(start, actualEnd);
+  const run = disabled => {
+    let writes = 0;
+    const ctx = { flag: name => name === '--no-record' && disabled, TARGET_IS_URL: false, SYNTHETIC: false,
+      ENGINE: 'chromium', DEFAULT_ENGINE: 'chromium', ROOT: '/tmp', path, process,
+      fs: { readFileSync: () => '{}', writeFileSync: () => { writes++; } },
+      mergeRecord: () => ({ record: {} }), results: [], SUITES: [], JOBS: 1, STARTED_ON: 'test', console: { log() {} } };
+    try { vm.runInNewContext(code + '\nwriteStats();', ctx); return writes; } catch (_) { return -1; }
+  };
+  ok('a no-record run never writes the existing record', run(true) === 0);
+  ok('an ordinary complete run can still write its record', run(false) === 1);
+  const list = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), '--no-record', '--list'], { encoding: 'utf8' });
+  ok('the verifier accepts no-record as a command-line flag', list.status === 0);
+}
+
 head('a run that measured nothing says so');
 {
   const r = run('--dry-run');
@@ -133,6 +157,7 @@ head('a step that says chromium runs on chromium, whatever the shell has set');
   ok('the split-build step runs PWA phases without repeating the standalone registry',
      pwaCommand.includes('--pwa') && pwaCommand[pwaCommand.indexOf('--only') + 1] === 'pwa'
      && !cmdOf('chromium')?.includes('--only') && !cmdOf('webkit')?.includes('--only'));
+  for (const id of ['chromium', 'pwa', 'webkit']) ok(`the ${id} step keeps the recorded counts unchanged`, !!cmdOf(id) && cmdOf(id).includes('--no-record'));
   for (const [id, want] of [['chromium', 'chromium'], ['pwa', 'chromium'], ['webkit', 'webkit']]) {
     const argv = cmdOf(id);
     ok(`the ${id} step shows the command it would run`, !!argv && /verify\.js$/.test(argv[1] || ''),
