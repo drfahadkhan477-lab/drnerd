@@ -3301,14 +3301,9 @@ function apexHosted(){
    headers are built by src/core/apexwire.js; the two addresses are the page's. */
 function gemUrl(op,model,key,page){ return ApexWire.gemini.url(ENDPOINT.gemini,APEX_API,op,model,key,page); }
 function gemHeaders(key,post){ return ApexWire.gemini.headers(key,post); }
-/* Cloudflare Access answers a lapsed session with 200 OK and a sign-in page.
-   Checked before anything reads the body, because apiError() parses it as JSON
-   and would report the login page as an empty error. */
-function apexSessionLapsed(r){
-  if(!r) return false;
-  const ct=(r.headers&&r.headers.get('content-type')||'').toLowerCase();
-  return ct.indexOf('text/html')===0;
-}
+/* Whether a reply is Access's sign-in page rather than what was asked for is src/core/accessgate.js. */
+@@SLOT[src:src/core/accessgate.js]@@
+function apexSessionLapsed(r){ return AccessGate.lapsed(r); }
 const APEX_LAPSED='Your sign-in has expired. Tap Sign in again at the top, then ask once more.';
 
 /* ══════════ a lapsed sign-in is said, and can be renewed ══════════
@@ -3330,7 +3325,7 @@ function signinLapsed(){
   if(navigator.onLine===false||Date.now()-signinAsked<30000) return Promise.resolve(false);
   signinAsked=Date.now();
   return fetch('manifest.webmanifest?signin=probe',{cache:'no-store',redirect:'manual',credentials:'same-origin'})
-    .then(r=>{ const lapsed=r.type==='opaqueredirect'||(r.status>=300&&r.status<400)||apexSessionLapsed(r);
+    .then(r=>{ const lapsed=AccessGate.probeLapsed(r);
       if(lapsed) showSigninBar(); return lapsed; },()=>false);
 }
 function showSigninBar(){
@@ -6553,21 +6548,8 @@ function offlineFigures(){
   return out;
 }
 let offlineJob={have:0,total:0,bad:0,busy:false,stop:false,counted:false};
-/* IS THIS ACTUALLY A FIGURE? Behind an authenticating proxy — Cloudflare
-   Access, an SSO gateway, a captive portal on hospital wifi — an expired
-   session does not answer with an error. It answers 200 OK with a login page.
-   r.ok is true, the fetch resolves, and without this check the downloader
-   would count four hundred sign-in forms as four hundred figures and cache
-   every one of them, leaving the fellow with a bank of broken images and a
-   progress bar that said everything was fine.
-
-   The content type is the whole test: a figure is an image and a login page is
-   not, whatever the status code says. */
-function offlineIsImage(res){
-  if(!res||!res.ok) return false;
-  const ct=(res.headers.get('content-type')||'').toLowerCase();
-  return ct.indexOf('image/')===0;
-}
+/* A cached or fetched reply is a figure only when it is an image: a 200 sign-in page is not (src/core/accessgate.js). */
+function offlineIsImage(res){ return AccessGate.isImage(res); }
 /* Something that is not a figure must not be left in the cache pretending to
    be one, or every later survey counts it as present. The worker's fetch
    handler has already stored it by the time we can look, so it is hunted down

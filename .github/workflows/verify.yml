@@ -197,6 +197,8 @@ jobs:
         run: node tests/verify-resume-pure.js
       - name: one press zooms 1.4 times about the middle, held between fitted and the most allowed, Fit goes back, and the readout and the zoomed mark keep with the level (18 checks)
         run: node tests/verify-figzoom-pure.js
+      - name: an expired sign-in's HTML page is told from data, the sign-in probe from the manifest it asked for, and a figure from anything that is not an ok image (12 checks)
+        run: node tests/verify-accessgate-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
       - name: an imported file becomes notes, its front matter read and never a note, one note per heading outside a fenced block, and an image link finds its figure only where the match is unique (30 checks)

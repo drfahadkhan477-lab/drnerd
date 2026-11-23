@@ -342,6 +342,9 @@ of `S`.
 Then the figure viewer's zoom row: `FIG_STEP`, `figZoomBy()`, `figFit()`,
 `figPct()` and `figSyncZoom()` are `src/ui/figzoom.js`'s `FigZoom` (held by
 `verify-figzoom-pure`); the page keeps each name as one line into it.
+Then the sign-in page told from a reply: `apexSessionLapsed()`, `offlineIsImage()`
+and the test inside `signinLapsed()` are `src/core/accessgate.js`'s `AccessGate`
+(held by `verify-accessgate-pure`).
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

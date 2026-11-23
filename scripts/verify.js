@@ -304,6 +304,9 @@ const SUITES = [
      nothing of its own, moved to src/core/refimport.js. */
   /* What a saved progress record may hold (docs/ROADMAP.md, E1): the rules a restore, an export and a record from
      another window go through, moved to src/core/progressdata.js. */
+  /* A reply told from the sign-in page an expired session gets instead (docs/ROADMAP.md, E1): moved to
+     src/core/accessgate.js. */
+  ['accessgate-pure', 'an HTML reply where data was asked for is a lapsed session; the sign-in probe is lapsed on an opaque redirect, a 3xx or the sign-in page; a figure is an ok reply with an image type, never a 200 sign-in page, an octet-stream or nothing cached'],
   /* The figure viewer's zoom row (docs/ROADMAP.md, E1): + and −, Fit and the readout, moved to src/ui/figzoom.js. */
   ['figzoom-pure', 'one press is 1.4 times; + and − zoom about the middle, held between fitted and the most allowed, and Fit goes back; the readout is times the fitted size and the viewer is marked zoomed exactly while it is over 100; no viewer or slide is nothing to do'],
   /* A practice deck put down and taken up again (docs/ROADMAP.md, E1): which decks are kept, how many, and when a kept
@@ -598,8 +601,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure; and resuming a deck: resume-pure; and the figure viewer's zoom row: figzoom-pure. */
-const PENDING_RECORD = ['figzoom-pure', 'resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure; and resuming a deck: resume-pure; and the figure viewer's zoom row: figzoom-pure; and the sign-in page told from a reply: accessgate-pure. */
+const PENDING_RECORD = ['accessgate-pure', 'figzoom-pure', 'resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in
