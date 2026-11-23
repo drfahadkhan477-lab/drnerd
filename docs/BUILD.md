@@ -694,6 +694,17 @@ both browser groups. PR updates cancel older runs for that PR. A newer push
 to master can replace a pending run while the active run continues. The
 workflow uses read-only repository permissions.
 
+#### A manual run and master's push runs
+
+The workflow's concurrency group names the event as well as the branch. A
+manual run on `master` asks for the self-hosted runner in its `full` job, and
+with no runner online that job waits in the queue for up to 24 hours, holding
+its run open. While the group was the branch alone, every push to `master` in
+that time waited behind it and was replaced, unstarted, by the next push: from
+a manual run on 22 November 2026 until the next day, no merge to `master` ran
+CI. With the event in the group, a waiting manual run holds only other manual
+runs. `verify-cichanges-pure` evaluates the group for each event.
+
 For a pull request changing only `tests/verify-reflist.js`, the synthetic
 Chromium and WebKit matrices each run that suite in one shard. The existing
 split-build and public-browser jobs still run. A shared helper, a second file,
@@ -1024,8 +1035,9 @@ was every browser suite, which is why "CSP has never met the real app" was
 true for weeks.
 
 The `full` job in `.github/workflows/verify.yml` closes that, by running on
-your own machine. It is opt-in: with no runner registered it never starts, and
-nothing else changes.
+your own machine. It is opt-in: with no runner registered it never starts. A
+manual run still queues that job, for up to 24 hours, so cancel the run if no
+runner will come (see [A manual run and master's push runs](#a-manual-run-and-masters-push-runs)).
 
 ### Registering it
 

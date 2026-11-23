@@ -247,5 +247,24 @@ head('targeted standalone test selection fails closed');
   }
 }
 
+head('a manual run never holds master\'s push runs');
+{
+  /* A manual run's `full` job waits up to a day for the self-hosted runner, holding its run open. While the
+     workflow's group was the branch alone, every push to master meanwhile waited behind it and was replaced,
+     unstarted, by the next (docs/BUILD.md#a-manual-run-and-masters-push-runs). The group is read from the
+     workflow with comments blanked and evaluated for each event; an expression this cannot evaluate fails. */
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'), 'utf8').replace(/(^|\s)#.*$/gm, '$1');
+  const block = /^concurrency:\n((?:[ \t]+.*\n)+)/m.exec(wf);
+  const group = block && /^[ \t]+group:[ \t]*(.+?)[ \t]*$/m.exec(block[1]);
+  const evaluate = (event, ref) => group && group[1].replace(/\$\{\{\s*([^}]*?)\s*\}\}/g, (_, x) =>
+    ({ 'github.workflow': 'verify', 'github.ref': ref, 'github.event_name': event })[x] ?? `<${x}?>`);
+  const at = { push: evaluate('push', 'refs/heads/master'), manual: evaluate('workflow_dispatch', 'refs/heads/master'),
+    push2: evaluate('push', 'refs/heads/master'), pr: evaluate('pull_request', 'refs/pull/1/merge'), pr2: evaluate('pull_request', 'refs/pull/2/merge') };
+  ok('the workflow has one top-level concurrency group, and every expression in it is one this reads',
+    !!group && Object.values(at).every(g => !/<.*\?>/.test(g)), group ? group[1] : 'no group');
+  ok('a manual run on master is not in the group of master\'s push runs', !!group && at.manual !== at.push, JSON.stringify(at));
+  ok('master\'s push runs still share one group, and each pull request has its own', !!group && at.push === at.push2 && at.pr !== at.pr2 && at.pr !== at.push);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
