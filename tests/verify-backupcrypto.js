@@ -134,7 +134,19 @@ async function missingData(page, key) {
     const message = await exportDialog.getByRole('status').textContent();
     ok('the export uses masked entry and rejects mismatched passphrases',
       message.includes('do not match') && await exportDialog.locator('[type="password"]').count() === 2 && downloads === 0);
-    await exportDialog.getByRole('button', { name: 'Cancel' }).click();
+    /* A new file needs twelve characters (docs/ROADMAP.md, E7): eleven, matching their confirmation, are refused with the
+       reason, and no file is made. */
+    await exportDialog.locator('[name="passphrase"]').fill('elevenchars');
+    await exportDialog.getByLabel('Confirm passphrase').fill('elevenchars');
+    await exportDialog.getByRole('button', { name: 'Download encrypted file' }).click();
+    /* Read while the dialog is still open: an export that took the short passphrase closes it, and that is the failure. */
+    const stillOpen = await exportDialog.isVisible();
+    const short = stillOpen ? await exportDialog.getByRole('status').textContent({ timeout: 5000 }).catch(() => null) : null;
+    const hint = stillOpen ? await exportDialog.locator('p').first().textContent({ timeout: 5000 }).catch(() => null) : null;
+    ok('the export refuses a passphrase under twelve characters, says why, and makes no file',
+      stillOpen && short === 'Use at least 12 characters.' && downloads === 0 && /at least 12 characters/.test(hint || ''),
+      stillOpen ? JSON.stringify({ short, downloads }) : 'the dialog closed: the short passphrase was taken');
+    if (stillOpen) await exportDialog.getByRole('button', { name: 'Cancel' }).click();
     await source.waitForFunction(() => !backupBusy);
     ok('cancelling export creates no file or pending confirmation', downloads === 0 && await source.evaluate(() => pendingBackupSave === null));
 

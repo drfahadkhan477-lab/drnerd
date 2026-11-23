@@ -195,6 +195,8 @@ jobs:
         run: node tests/verify-accessgate-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
+      - name: an encrypted backup is the five fields of its envelope, opened only at its fixed cost with its format and version as additional data, refusing what is damaged, the same letters open it however they were typed, and a new one needs twelve characters (24 checks)
+        run: node tests/verify-backupcrypto-pure.js
       - name: an imported file becomes notes, its front matter read and never a note, one note per heading outside a fenced block, and an image link finds its figure only where the match is unique (30 checks)
         run: node tests/verify-refimport-pure.js
       - name: a review session is every due card then new questions across chapters up to its size, and an interval is said in days, weeks or months (42 checks)

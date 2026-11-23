@@ -1060,7 +1060,7 @@ function requestBackupPassphrase(encrypt,trigger){
   dialog.setAttribute('aria-labelledby','backupPassphraseTitle');
   dialog.innerHTML=`<form method="dialog">
     <h2 id="backupPassphraseTitle">${action}</h2>
-    ${encrypt?'<p>Choose a long, unique passphrase and keep it somewhere safe. You will need it to restore this file.</p>':'<p>Enter the passphrase used to export this file.</p>'}
+    ${encrypt?'<p>Choose a unique passphrase of at least '+BackupCrypto.MIN_PASSPHRASE+' characters and keep it somewhere safe. You will need it to restore this file.</p>':'<p>Enter the passphrase used to export this file.</p>'}
     <label>Passphrase<input name="passphrase" type="password" autocomplete="${encrypt?'new-password':'current-password'}" required></label>
     ${encrypt?'<label>Confirm passphrase<input name="confirmation" type="password" autocomplete="new-password" required></label>':''}
     <p role="status"></p>
@@ -1101,6 +1101,12 @@ function requestBackupPassphrase(encrypt,trigger){
     form.onsubmit=event=>{
       event.preventDefault();
       const value=form.elements.passphrase.value;
+      /* A new file needs the length BackupCrypto asks of it; a restore asks none, so an older file opens with its own. */
+      if(encrypt&&!BackupCrypto.longEnough(value)){
+        form.querySelector('[role="status"]').textContent='Use at least '+BackupCrypto.MIN_PASSPHRASE+' characters.';
+        form.elements.passphrase.focus();
+        return;
+      }
       if(encrypt&&value!==form.elements.confirmation.value){
         form.querySelector('[role="status"]').textContent='The passphrases do not match.';
         form.elements.confirmation.focus();
