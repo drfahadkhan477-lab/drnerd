@@ -15,9 +15,12 @@
  * test) and tests/verify-stats.js read, and a shard is a choice of which of
  * those steps to run, never a second copy of them.
  *
- * The suites are the reusable workflow's steps. WebKit weights come from
- * public Actions step timings. Chromium weights come from tests/test-stats.json,
- * written only by full green runs.
+ * The suites are the reusable workflow's steps. Both engines' weights come
+ * from public Actions step timings (scripts/webkit-ci-timings.json,
+ * scripts/chromium-ci-timings.json). Chromium's came from tests/test-stats.json
+ * until 23 November 2026: the record times the laptop, not GitHub's runner, and
+ * its third shard was the slowest in 40 of 57 runs (docs/ROADMAP.md, E4). A job
+ * with no timings file falls back to the record.
  * Longest first, each to the shard with the least time so far, ties to the
  * lower shard and then by name, so every shard of a run computes the same
  * split. A suite the record has not timed yet weighs the median of those it
@@ -29,7 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { browserShardBody, readShardWorkflow } = require('./test-public.js');
-const webkitTimings = require('./webkit-ci-timings.json');
+const CI_TIMINGS = [require('./webkit-ci-timings.json'), require('./chromium-ci-timings.json')];
 
 const ROOT = path.join(__dirname, '..');
 
@@ -61,7 +64,7 @@ function assign(names, seconds, of) {
 /* shard is 1-based, as the workflow's matrix counts it. */
 function shardOf(yml, stats, job, shard, of, shardsYml, selected = 'all') {
   if (!(Number.isInteger(shard) && shard >= 1 && shard <= of)) throw new Error(`shard ${shard} is not one of 1..${of}`);
-  const seconds = job === webkitTimings.job ? webkitTimings.seconds : stats?.seconds || {};
+  const seconds = CI_TIMINGS.find(t => t.job === job)?.seconds || stats?.seconds || {};
   const available = jobSuites(yml, job, shardsYml);
   if (selected !== 'all' && !available.includes(selected)) throw new Error(`unknown selected suite ${selected} for ${job}`);
   if (selected !== 'all' && of !== 1) throw new Error('a selected suite requires exactly one shard');

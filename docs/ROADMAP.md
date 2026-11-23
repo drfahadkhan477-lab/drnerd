@@ -527,6 +527,18 @@ shard still varies across runs, so collect more data before retuning.
 [#406 run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44862935819),
 [#408 run](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/44866313083).
 
+*Measured 23 November 2026, both engines:* the 60 most recent successful Verify
+runs, from 21 to 23 November. A run counts for an engine when all four of its
+shards passed on the first attempt: 55 runs for WebKit and 57 for Chromium.
+WebKit stays as it is. Its slowest shard ran a median 1.13 times the mean
+shard, and fresh step medians would leave the slowest shard's step time where
+it is. Chromium was weighed by `tests/test-stats.json`, the laptop's times.
+Its third shard was the slowest in 40 of the 57 runs, at a median 1.37 times
+the mean shard. Chromium is now weighed by the median step times of those 57
+runs (`scripts/chromium-ci-timings.json`), which predicts the slowest shard's
+step time falling from 13.07 to 9.28 minutes. The next measurement should
+check that prediction on runs made after the change.
+
 **E5 — Measure battery on the iPad, then set a frame budget.** The discovery doc
 showed the container cannot measure it. Add a hidden diagnostics line that counts
 frames drawn per second per canvas, note the iPad's battery percentage before and

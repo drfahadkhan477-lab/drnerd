@@ -35,6 +35,10 @@ const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'verify.yml'
 const shardYml = readShardWorkflow(ROOT).replace(/(^|\s)#.*$/gm, '$1');
 const stats = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'test-stats.json'), 'utf8'));
 const webkitTimings = require('../scripts/webkit-ci-timings.json');
+const chromiumTimings = require('../scripts/chromium-ci-timings.json');
+/* Read here from the files, not from shard.js, so a shard.js that weighs a job by the wrong table splits it
+   differently from what this expects. */
+const CI_SECONDS = { 'synthetic-webkit': webkitTimings.seconds, 'synthetic-browser': chromiumTimings.seconds };
 const SHARDED = ['synthetic-browser', 'synthetic-webkit'];
 const PIN = /@[0-9a-f]{40}\b/;
 
@@ -120,7 +124,14 @@ for (const job of SHARDED) {
   ok(`${job}: no shard builds the app again; each downloads the one synthetic-build made`,
      !/\bnode scripts\/(synthetic-export|assemble-app)\.js/.test(body) &&
      /uses: actions\/download-artifact@[0-9a-f]{40}[ \t]*\n\s+with:\n\s+name: synthetic-build\n\s+path: build\/synthetic\n/.test(body));
-  const seconds = job === 'synthetic-webkit' ? webkitTimings.seconds : stats.seconds;
+  const seconds = CI_SECONDS[job];
+  const timings = [webkitTimings, chromiumTimings].find(t => t.job === job);
+  const untimed = all.filter(n => typeof seconds[n.replace(/^verify-/, '')] !== 'number');
+  /* A suite added since its file was taken is weighed as the median (shard.js), so an untimed one is named
+     here, not failed: the file can only time a step after CI has run it. */
+  ok(`${job}: is weighed by its own public CI timings, which name the runs they came from`,
+     !!timings && Array.isArray(timings.runIds) && timings.runIds.length > 0 && timings.runIds.every(Number.isInteger) && Object.keys(seconds || {}).length > 0,
+     `${Object.keys(seconds || {}).length} suites from ${timings ? timings.runIds.length : 0} runs` + (untimed.length ? '; untimed, so weighed as the median: ' + untimed.join(', ') : ''));
   const load = split.map(s => s.reduce((t, n) => t + (seconds[n.replace(/^verify-/, '')] || 0), 0));
   const total = load.reduce((a, b) => a + b, 0), longest = Math.max(...all.map(n => seconds[n.replace(/^verify-/, '')] || 0));
   ok(`${job}: no shard holds more than its share plus one suite`, Math.max(...load) <= total / load.length + longest,
@@ -188,7 +199,7 @@ head('the scripts, as the workflow runs them');
     const out = path.join(tmp, 'out');
     const mismatches = [];
     for (const job of SHARDED) {
-      const seconds = job === 'synthetic-webkit' ? webkitTimings.seconds : stats.seconds;
+      const seconds = CI_SECONDS[job];
       const expected = assign(jobSuites(yml, job, shardYml), seconds, 4);
       for (const [index, suites] of expected.entries()) {
         fs.writeFileSync(out, '');

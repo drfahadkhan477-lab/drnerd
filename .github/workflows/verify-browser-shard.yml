@@ -70,7 +70,7 @@ jobs:
       - id: shard
         env:
           SYSTOLE_CI_SELECTED: ${{ inputs.selected }}
-        name: which of the job's suites this shard runs, by the record's times
+        name: which of the job's suites this shard runs, by public CI step times
         run: node scripts/shard.js ${{ inputs.job }} ${{ inputs.shard }} ${{ inputs.of }} --github-output
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-stage0,') }}
         name: the single-file build is stable and works offline (29 checks)

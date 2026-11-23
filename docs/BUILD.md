@@ -784,10 +784,12 @@ The synthetic app runs in four shards per engine. Both callers in
 `verify.yml` use `verify-browser-shard.yml` and download the single artifact
 made by `synthetic-build`. The reusable workflow defines each suite as an
 individually named step, so GitHub exposes suite timing and failure details.
-`scripts/shard.js` weights Chromium suites with the suite record and WebKit
-suites with `scripts/webkit-ci-timings.json`. The WebKit file lists the public
-GitHub Actions runs behind its median successful step durations. An untimed
-suite gets the median weight of the timed suites in that engine's list.
+`scripts/shard.js` weights Chromium suites with `scripts/chromium-ci-timings.json`
+and WebKit suites with `scripts/webkit-ci-timings.json`. Each file lists the
+public GitHub Actions runs behind its median successful step durations. An
+untimed suite gets the median weight of the timed suites in that engine's list.
+Chromium used the suite record until the record's laptop times were measured
+against GitHub's runner (`docs/ROADMAP.md`, E4).
 `npm test` reads the Chromium list for its synthetic suites and runs them
 in the engine selected locally.
 
