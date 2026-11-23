@@ -133,6 +133,26 @@ head('the 12-lead panel');
   ok('and a note that names it, through e(), and says why it is not drawn', vt.includes('<div class="twelve-none">') && vt.includes('<b>E(Ventricular tachycardia)</b> is shown on the single-lead trace above') && vt.includes('which teaches the wrong pattern'));
 }
 
+head('a lead\'s card');
+{
+  /* A Leads12 of the test's own, so every card below is written out by hand. */
+  const LEADS = { LEADS: [{ id: 'V1', territory: 'Septal', artery: 'LAD <septal>', sees: 'the septum', look: 'rSR\' & ST' }, { id: 'II', territory: 'Inferior', artery: 'RCA', sees: 'the inferior wall', look: 'P waves' }] };
+  const card = (id, leads) => { try { return String(L.leadCardHtml(id, { Leads12: leads, e: s => 'E(' + s + ')' })); } catch (err) { return 'THREW ' + err.message; } };
+  ok('a lead is its name, territory and artery, then what it sees and what to look for, each through e()',
+     card('V1', LEADS) === '<div class="lead-head"><span class="lead-id">E(V1)</span>\n      <span class="lead-terr">E(Septal)</span>\n      <span class="lead-art">E(LAD <septal>)</span></div>\n'
+       + '    <div class="lead-sees">E(the septum)</div>\n    <div class="lead-look">E(rSR\' & ST)</div>', card('V1', LEADS));
+  ok('the lead asked for, not the first', card('II', LEADS).includes('<span class="lead-id">E(II)</span>') && !card('II', LEADS).includes('V1'), card('II', LEADS).slice(0, 60));
+  ok('before a lead is chosen, a prompt to tap one', [null, undefined, ''].every(id => card(id, LEADS) === '<div class="lead-empty">Tap a lead above.</div>'), card(null, LEADS));
+  ok('a lead Leads12 does not have, or no Leads12 at all, is no card', card('V7', LEADS) === '' && card('v1', LEADS) === '' && card('V1', undefined) === '' && card(null, undefined) === '',
+     [card('V7', LEADS), card('V1', undefined)].map(J).join(' '));
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const pg = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => pg.split(t).length - 1;
+  ok('the page\'s leadCardHtml() is one line handing over Leads12 and e, and the page keeps no card of its own',
+     n("function leadCardHtml(id){ return RhythmLabScreen.leadCardHtml(id,{Leads12:typeof Leads12!=='undefined'?Leads12:undefined,e}); }") === 1 && n('function leadCardHtml(') === 1
+     && n('<span class="lead-terr">') === 0 && n('Tap a lead above.') === 0);
+}
+
 head('it reads what it is given, and changes nothing');
 {
   const read = new Set(), wrote = [];
@@ -222,7 +242,7 @@ head('the page hands over what it has, and keeps what is chosen');
   const whole = (from, to) => { const a = shell.indexOf(from); if (a < 0 || shell.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = shell.indexOf(to, a); return raw.slice(a, b + to.length); };
   const file = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
-    whole('const PHYSIO_LESIONS=[', '];'), whole('let physioLesion=', '})();'), whole('const LEAD12_MAP={', '};'), whole('let physioPlaying=null;', '\n'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n}')].join('\n');
+    whole('const PHYSIO_LESIONS=[', '];'), whole('let physioLesion=', '})();'), whole('const LEAD12_MAP={', '};'), whole('let physioPlaying=null;', '\n'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n')].join('\n');
   const world = (state, opts) => {
     const ctx = { RHYTHMS: { sinus: { name: 'Sinus <rhythm>', hr: 68, desc: 'Normal & regular' }, vt: { name: 'VT', hr: 180, desc: 'Fast' } }, RHYTHM_KEYS: ['sinus', 'vt'] };
     ctx.window = ctx; if (opts && opts.reduce !== undefined) ctx.matchMedia = () => ({ matches: opts.reduce });
