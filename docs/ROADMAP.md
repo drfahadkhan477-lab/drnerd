@@ -554,8 +554,10 @@ accented letters typed as one code point or as a letter and a combining mark mad
 different keys; it is now keyed in its NFC form (RFC 8265), and a restore also
 tries the decomposed form and the passphrase as given, so files made before still
 open. `verify-backupcrypto-pure` holds the envelope in Node against PBKDF2 and
-AES-GCM written again with `node:crypto`. *Open:* the export accepts a passphrase
-of any length; a minimum is the owner's call.
+AES-GCM written again with `node:crypto`. A new file needs a passphrase of at
+least 12 characters, counted in its NFC form (the owner's choice); the export
+dialog says so and refuses a shorter one, and a restore asks no length, so files
+made before still open.
 
 ## 3. Design, themes and UI
 

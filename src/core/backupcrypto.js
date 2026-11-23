@@ -62,7 +62,17 @@ function candidates(passphrase) {
   return [...new Set([raw.normalize('NFC'), raw.normalize('NFD'), raw])];
 }
 
+/* A new file needs a passphrase of at least this many characters, counted as code points of its NFC form, so an accented
+   letter or an emoji is one character however it was typed or stored (the owner's rule, docs/ROADMAP.md, E7). The cost
+   above slows each guess; the length is what makes the guesses many. A restore asks no length: a file made before the
+   rule opens with its own passphrase. */
+const MIN_PASSPHRASE = 12;
+function longEnough(passphrase) {
+  return [...normalized(passphrase)].length >= MIN_PASSPHRASE;
+}
+
 async function encrypt(text, passphrase) {
+  if (!longEnough(passphrase)) throw new Error('Passphrase too short.');
   const salt = root.crypto.getRandomValues(new Uint8Array(16));
   const iv = root.crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(normalized(passphrase), salt, 'encrypt');
@@ -88,5 +98,5 @@ async function decrypt(file, passphrase) {
   throw failure;
 }
 
-root.BackupCrypto = { available, isEncrypted, encrypt, decrypt };
+root.BackupCrypto = { available, isEncrypted, encrypt, decrypt, longEnough, MIN_PASSPHRASE };
 })(typeof window !== 'undefined' ? window : globalThis);

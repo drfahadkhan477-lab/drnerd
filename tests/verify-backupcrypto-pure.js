@@ -18,7 +18,9 @@
  *     an unknown format or version are each refused;
  *   - a passphrase is keyed in its NFC form, so one typed as a letter and a combining mark opens a file made from the
  *     same letters typed as one code point, and the other way; and a file keyed with the passphrase as typed, as files
- *     were before, opens from either form.
+ *     were before, opens from either form;
+ *   - a new file needs a passphrase of twelve characters, counted as code points of its NFC form (an emoji, two UTF-16
+ *     units, is one; a letter and its combining mark are one), while a file made with a shorter one still opens.
  */
 'use strict';
 const nodeCrypto = require('node:crypto');
@@ -107,6 +109,22 @@ const attempt = async (f, pass) => { try { return { text: await B.decrypt(f, pas
     ok('a file keyed with the decomposed form as typed opens from either form', (await attempt(oldTwo, TWO)).text === PAYLOAD && (await attempt(oldTwo, ONE)).text === PAYLOAD);
     ok('and one keyed with the composed form as typed, from either form', (await attempt(oldOne, ONE)).text === PAYLOAD && (await attempt(oldOne, TWO)).text === PAYLOAD);
     ok('a different word is still refused', !!(await attempt(fromOne, 'cafe creme 2026')).error);
+  }
+
+  head('a new file needs twelve characters; a file opens with its own');
+  {
+    const made = async p => { try { await B.encrypt(PAYLOAD, p); return 'made'; } catch (e) { return e.message; } };
+    ok('the minimum is twelve', B.MIN_PASSPHRASE === 12);
+    ok('eleven characters are refused before any key is made, twelve are taken', (await made('elevenchars')) === 'Passphrase too short.' && (await made('twelve chars')) === 'made',
+       (await made('elevenchars')) + ' | ' + (await made('twelve chars')));
+    /* Eleven waves: 22 UTF-16 units, eleven characters. Three "café" typed with combining marks: fifteen code points as
+       typed, twelve in NFC; without the last "é" (an "e" and its mark), eleven. */
+    const WAVES = '\u{1F30A}'.repeat(11), CAFES = 'cafe\u0301'.repeat(3);
+    ok('characters are counted, not UTF-16 units: eleven emoji are refused', WAVES.length === 22 && (await made(WAVES)) === 'Passphrase too short.' && (await made(WAVES + 'x')) === 'made');
+    ok('and counted in the NFC form: three "café" typed with combining marks are twelve', [...CAFES].length === 15 && (await made(CAFES)) === 'made' && (await made(CAFES.slice(0, -2))) === 'Passphrase too short.');
+    ok('longEnough() says the same as the export does', B.longEnough('twelve chars') && !B.longEnough('elevenchars') && !B.longEnough(WAVES) && B.longEnough(CAFES));
+    const old = sealHere(PAYLOAD, 'short');
+    ok('a file made before the rule, with a five-letter passphrase, still opens with it', (await attempt(old, 'short')).text === PAYLOAD);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
