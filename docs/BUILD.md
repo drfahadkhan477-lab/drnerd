@@ -126,6 +126,29 @@ where it was. It finds the export the way you give it: a path, `SYSTOLE_SRC`,
 or the one `.html` file in `source/`. With none it refuses and says why, and
 CI's `build-guard` job holds it to that.
 
+### Which build is this
+
+Every build names its release, in the build output, in the stamp inside the
+file, and in the release gate's report. For example:
+
+    Systole 1.0.0 (build 441), 2026-11-23, commit 6ac385532b28
+
+The parts are:
+
+- **The version** is `package.json`'s. Raise it by hand at a milestone: the
+  minor number for a feature set, the major one for a break in saved data.
+- **The build** is the number of the last pull request merged into this
+  commit's line of master. Every merge raises it, so a higher build is a later
+  app. A build made from commits after that merge says how many
+  (`build 441, 2 commits after it`). Uncommitted changes say so too.
+- **The release**, written the SemVer way, is `1.0.0+441`, `1.0.0+441.2` or
+  `1.0.0+441.2.dirty`. With no merged pull request in reach, as in CI's test
+  merge of a pull request, the release is `1.0.0+dev` rather than a guess.
+- **The date** is the commit's, not the clock's, so one commit always stamps
+  the same bytes.
+- **The digest** (`digest f7ba2cfd2f0cbeaa`) still identifies the exact file,
+  and the release does not change it.
+
 **Where to edit**: `app/systole.html`, the stylesheet pieces in `app/css/`, `src/` and
 `assets/`. `scripts/carve.js` moves a range of lines out of
 `app/systole.html` into a file of its own, leaving a slot token, and keeps the

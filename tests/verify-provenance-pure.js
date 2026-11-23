@@ -332,6 +332,55 @@ head('the single file says which commit made it, too');
   }
 }
 
+head('a release a person can follow: the version and the last merged pull request');
+{
+  /* The digest says which file; it cannot say which is newer. The release does (scripts/stamp.js, release()). */
+  const { buildOf, release, stampBuffer, STAMP_RE } = require(path.join(ROOT, 'scripts', 'stamp.js'));
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok('the build is the newest merged pull request in the first-parent history, and what came after it',
+     same(buildOf(['Merge pull request #441 from a/b', 'Merge pull request #440 from a/c']), { pr: 441, ahead: 0 }) &&
+     same(buildOf(['fix a typo', 'add a check', 'Merge pull request #441 from a/b']), { pr: 441, ahead: 2 }),
+     JSON.stringify(buildOf(['fix a typo', 'add a check', 'Merge pull request #441 from a/b'])));
+  ok('and with no merged pull request in reach there is no number, rather than a wrong one',
+     same(buildOf(['Merge 1a2b into 3c4d', 'start']), { pr: null, ahead: 2 }) && same(buildOf([]), { pr: null, ahead: 0 }) &&
+     buildOf(['Merge pull request from a/b']).pr === null && buildOf(['Revert "Merge pull request #12 from a/b"']).pr === null);
+  const doc = Buffer.from('<html><head><title>x</title></head><body>b</body></html>');
+  const withRelease = stampBuffer(doc, 'abc123def456', '1.0.0+441.2');
+  const text = withRelease.out.toString('latin1');
+  ok('the stamp carries the release after the commit', /<!-- systole-build [0-9a-f]{16} commit abc123def456 release 1\.0\.0\+441\.2 -->\n<\/head>/.test(text), text.slice(0, 120));
+  ok('and the release changes neither the digest nor the rest of the document',
+     withRelease.digest === stampBuffer(doc, 'abc123def456').digest && text.replace(STAMP_RE, '') === doc.toString('latin1'));
+  ok('the assembler strips a stamp with a release and one written before releases existed',
+     (text.match(STAMP_RE) || []).length === 1 && (stampBuffer(doc, 'abc123def456').out.toString('latin1').match(STAMP_RE) || []).length === 1);
+  let refused = '';
+  try { stampBuffer(doc, 'abc', '1.0.0+441 -->'); } catch (e) { refused = e.message; }
+  ok('a release that could close the comment is refused', /not a release/.test(refused), refused || 'stamped anyway');
+  {
+    /* A throwaway repository: a merged pull request, a commit after it, then a change not committed. */
+    const { execFileSync } = require('child_process');
+    const repo = fs.mkdtempSync(path.join(require('os').tmpdir(), 'release-git-'));
+    const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: repo, stdio: 'ignore' });
+    try {
+      fs.writeFileSync(path.join(repo, 'package.json'), '{"version":"1.4.0"}');
+      git('init', '-q', '-b', 'master'); git('add', '-A'); git('commit', '-q', '-m', 'start');
+      git('checkout', '-q', '-b', 'feature'); fs.writeFileSync(path.join(repo, 'a'), '1'); git('add', 'a'); git('commit', '-q', '-m', 'work');
+      git('checkout', '-q', 'master'); git('merge', '-q', '--no-ff', 'feature', '-m', 'Merge pull request #57 from me/feature');
+      const merged = release(repo);
+      fs.writeFileSync(path.join(repo, 'b'), '1'); git('add', 'b'); git('commit', '-q', '-m', 'after');
+      const after = release(repo);
+      fs.writeFileSync(path.join(repo, 'b'), '2');
+      const dirty = release(repo);
+      ok('at the merge it is the version and that pull request',
+         merged.semver === '1.4.0+57' && /^Systole 1\.4\.0 \(build 57\), \d{4}-\d{2}-\d{2}, commit [0-9a-f]{12}$/.test(merged.text), merged.text);
+      ok('a commit after it counts after a dot, and uncommitted changes are marked',
+         after.semver === '1.4.0+57.1' && dirty.semver === '1.4.0+57.1.dirty' && /with uncommitted changes/.test(dirty.text), `${after.semver} / ${dirty.semver}`);
+      ok('the date is the commit\'s, so the same commit gives the same release', release(repo).text === dirty.text && after.date === merged.date);
+    } finally { fs.rmSync(repo, { recursive: true, force: true }); }
+  }
+  ok('outside a checkout it says so: a development build of the version package.json names',
+     release(require('os').tmpdir()).semver === '0.0.0+dev');
+}
+
 head('the built artifacts are checked where only a build can check them');
 {
   /* WHAT THIS FILE CANNOT DO, said once rather than implied. Everything above
