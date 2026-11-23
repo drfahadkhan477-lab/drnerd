@@ -187,6 +187,14 @@ jobs:
         run: node tests/verify-terms-pure.js
       - name: a pearl's measurements are marked after escaping and never inside an entity, and its chapter is the bank's whose name its note holds (19 checks)
         run: node tests/verify-pearl-pure.js
+      - name: a fence is made from random bytes and kept for a request, a note cannot forge one, and every block of a request is on its fence (22 checks)
+        run: node tests/verify-fence-pure.js
+      - name: every theme is one the app can draw, a saved choice is its theme or Auto, and the script before paint draws each as the table says (20 checks)
+        run: node tests/verify-themes-pure.js
+      - name: the build's notes reach a device and are kept up to date, and a note the fellow wrote or edited is never touched (19 checks)
+        run: node tests/verify-refseed-pure.js
+      - name: only an all deck is kept, twelve at most, and a kept deck comes back as it was or not at all (20 checks)
+        run: node tests/verify-resume-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
       - name: an imported file becomes notes, its front matter read and never a note, one note per heading outside a fenced block, and an image link finds its figure only where the match is unique (30 checks)

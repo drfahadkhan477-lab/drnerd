@@ -1286,55 +1286,17 @@ const REF_PEARLS = /*REF_PEARLS_START*/@@SLOT[payload:REF_PEARLS]@@/*REF_PEARLS_
  * Now the stored value is a hash of the seed itself. Change the corpus and it
  * changes, so the sync runs. Change nothing and it does not. */
 const REF_SEED_KEY = 'accsap12.refseed';
-/* FNV-1a, 32-bit. Small, dependency-free, and only ever compared against
-   itself — this is change detection, not cryptography. */
-function refHash(s){
-  let h=0x811c9dc5;
-  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); }
-  return (h>>>0).toString(36);
-}
-/* Sync, not merely seed — while still never clobbering your own writing:
-     · a note you wrote yourself is never touched;
-     · a seeded note you have since edited is left alone, detected by its body
-       no longer hashing to what was written when it was seeded;
-     · an untouched seeded note is brought up to date, which is what lets a
-       corpus change — new figures, a corrected trial number — actually reach
-       a device seeded months ago;
-     · a seeded note you deleted comes back only when the corpus itself
-       changes, which is the price of not keeping a tombstone for every title
-       ever shipped. */
+/* The hash and the sync's rules are src/core/refseed.js's; the page keeps what it reads and writes: the stored version,
+   the save and the index. */
+@@SLOT[src:src/core/refseed.js]@@
+function refHash(s){ return RefSeed.hash(s); }
 function refSeedApply(cur, seed){
   try{
-    /* The split build empties REF_SEED and fetches it instead, so an empty
-       seed means "not here yet" — never "seeded, nothing to do". Marking the
-       key now would permanently block the fetched copy from ever landing. */
-    if(!seed || !seed.length) return cur;
-    const version = refHash(JSON.stringify(seed));
-    if(localStorage.getItem(REF_SEED_KEY) === version) return cur;
-    const byTitle = Object.create(null);
-    for(const r of cur) byTitle[r.title] = r;
-    let added=0, updated=0;
-    for(const s of seed){
-      const r = byTitle[s.title];
-      if(!r){
-        cur.push({ id:'seed'+(added++).toString(36)+Math.random().toString(36).slice(2,6),
-                   title:s.title, body:s.body, tags:s.tags, source:s.source,
-                   ts:Date.now(), seed:true, seedHash:refHash(s.body||'') });
-        continue;
-      }
-      if(!r.seed) continue;                       // yours, not ours — hands off
-      /* Notes seeded before seedHash existed carry no fingerprint, so an edit
-         cannot be told from an original. They are adopted rather than frozen:
-         they were machine-written and are almost certainly untouched, and
-         freezing them would mean the devices that most need this fix are the
-         only ones it never reaches. */
-      if(r.seedHash !== undefined && r.seedHash !== refHash(r.body||'')) continue;
-      if(r.body !== s.body || r.tags !== s.tags || r.source !== s.source) updated++;
-      r.body = s.body; r.tags = s.tags; r.source = s.source;
-      r.seedHash = refHash(s.body||'');
-    }
-    localStorage.setItem(REF_SEED_KEY, version);
-    if(added || updated){
+    const r=RefSeed.apply(cur,seed,{stored:()=>localStorage.getItem(REF_SEED_KEY),now:Date.now(),
+      id:n=>'seed'+n.toString(36)+Math.random().toString(36).slice(2,6)});
+    if(!r) return cur;
+    localStorage.setItem(REF_SEED_KEY, r.version);
+    if(r.added || r.updated){
       saveJSON(REF_KEY, cur);
       if(typeof invalidateIndex === 'function') invalidateIndex();
     }
@@ -1567,43 +1529,12 @@ function systemPrompt(){ return AI_GROUNDED ? SYSTEM+GROUNDED : SYSTEM; }
    The nonce is what makes it unforgeable: it is new for every request, so a
    note written yesterday cannot contain today's closing fence. Stripping
    lookalikes from the body as well means it cannot be hit by accident either. */
-let refFenceId=null;
-function refFence(){
-  if(!refFenceId){
-    /* padStart is not decoration. A byte's base36 is one character below 36 and
-       two above it, so six raw bytes produced anywhere from six to twelve
-       characters — a fence whose LENGTH leaked how lucky the draw was, and
-       occasionally only 30 bits of it. Two characters per byte, always. */
-    const b=(typeof crypto!=='undefined'&&crypto.getRandomValues)
-      ? Array.from(crypto.getRandomValues(new Uint8Array(6)))
-      : Array.from({length:6},()=>Math.floor(Math.random()*256));
-    refFenceId=b.map(n=>(n%1296).toString(36).padStart(2,'0')).join('').slice(0,12).toUpperCase();
-  }
-  return refFenceId;
-}
-/* A new fence for every turn: a nonce that never changes is a nonce that can
-   eventually be learned and written into a note. */
-function refFenceRoll(){ refFenceId=null; return refFence(); }
-/* Nothing inside a fence may contain something that looks like a fence. */
-function refSafe(s){
-  /* Narrow on purpose. An earlier version collapsed any run of three angle
-     brackets, which quietly rewrote "LVEDP >>> RVEDP" in a haemodynamics note.
-     What has to go is fence-SHAPED text: a whole forged delimiter, half of one
-     sitting against a word, and a bare block id that could be cited as if it
-     named a real block. Ordinary comparisons are left exactly as written. */
-  return String(s==null?'':s)
-    .replace(/<<<\/?[^\n>]{0,64}>>>/g,'[fence removed]')
-    .replace(/<{3,}([\/\w])/g,'--$1')
-    .replace(/([\/\w])>{3,}/g,'$1--')
-    .replace(/\b(?:NOTE|MEMORY)-[A-Za-z0-9]{6,}\b/g,'[block id removed]');
-}
-function refBlock(label,head,body){
-  const F=refFence();
-  return `<<<${label}-${F}>>>
-${head}
-${refSafe(body)}
-<<</${label}-${F}>>>`;
-}
+/* The fence round each block, its nonce, and what is taken out of a note so it cannot forge one: src/core/fence.js. */
+@@SLOT[src:src/core/fence.js]@@
+function refFence(){ return Fence.current(); }
+function refFenceRoll(){ return Fence.roll(); }
+function refSafe(s){ return Fence.safe(s); }
+function refBlock(label,head,body){ return Fence.block(label,head,body); }
 function groundedContext(userText,q,limit=6,budget=CTX_BUDGET*3){
   const hits=search((userText+' ').repeat(3)+(q?clip(q.s,160):''),{kind:'r',limit});
   if(!hits.length){
@@ -4495,27 +4426,11 @@ document.addEventListener('visibilitychange',()=>{
    a palette (which recolours the core tokens). 'auto' follows the system.
    The swatch is the two colours the eye reads first: the ground, and the
    accent laid over it. */
-const THEMES=[
-  {id:'auto',     name:'Auto',      group:'light', mode:'auto',  palette:null,        bg:'#EFF3F8',ac:'#0284C7',bar:'#0A1628'},
-  {id:'daylight', name:'Daylight',  group:'light', mode:'light', palette:null,        bg:'#EFF3F8',ac:'#0284C7',bar:'#0F1E3D'},
-  {id:'slate',    name:'Slate',     group:'light', mode:'light', palette:'slate',     bg:'#EDF0F6',ac:'#6366F1',bar:'#0F1E3D'},
-  {id:'parchment',name:'Parchment', group:'light', mode:'light', palette:'parchment', bg:'#F3ECDD',ac:'#0E7C86',bar:'#0F1E3D'},
-  {id:'midnight', name:'Midnight',  group:'dark',  mode:'dark',  palette:null,        bg:'#0A1628',ac:'#0EA5E9',bar:'#0A1628'},
-  {id:'nocturne', name:'Nocturne',  group:'dark',  mode:'dark',  palette:'nocturne',  bg:'#0E0B1A',ac:'#A78BFA',bar:'#0E0B1A'},
-  {id:'cathlab',  name:'Cath Lab',  group:'dark',  mode:'dark',  palette:'cathlab',   bg:'#120C07',ac:'#F59E0B',bar:'#120C07'},
-  {id:'monitor',  name:'Monitor',   group:'dark',  mode:'dark',  palette:'monitor',   bg:'#08110D',ac:'#2DD4BF',bar:'#08110D'},
-  {id:'contrast', name:'Contrast',  group:'dark',  mode:'dark',  palette:'contrast',  bg:'#060606',ac:'#38BDF8',bar:'#060606'},
-];
-const THEME_BY_ID=Object.fromEntries(THEMES.map(t=>[t.id,t]));
-/* Old saved values (auto/light/dark) are still valid ids, except the bare
-   'dark' which is now 'midnight' and 'light' which is now 'daylight'. */
-function themeDef(){ return THEME_BY_ID[S.theme]||THEME_BY_ID[{dark:'midnight',light:'daylight'}[S.theme]]||THEME_BY_ID.auto; }
-function themeIsDark(t){
-  t=t||themeDef();
-  if(t.mode==='dark')return true;
-  if(t.mode==='light')return false;
-  return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
-}
+/* The themes, and which one a saved choice is: src/core/themes.js. The page keeps the names. */
+@@SLOT[src:src/core/themes.js]@@
+const THEMES=Themes.LIST, THEME_BY_ID=Themes.byId;
+function themeDef(){ return Themes.def(S.theme); }
+function themeIsDark(t){ return Themes.isDark(t||themeDef(),()=>!!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)); }
 function applyTheme(){
   const h=document.documentElement, t=themeDef();
   if(t.mode==='auto')h.removeAttribute('data-theme'); else h.setAttribute('data-theme',t.mode);
@@ -4542,12 +4457,7 @@ function notifyThemeRenderers(){
   if(typeof twelve!=='undefined'&&twelve) twelve.setDark(d);
   if(typeof physio!=='undefined'&&physio) physio.setDark(d);
 }
-/* True only while the chosen theme has no opinion of its own. Every other
-   theme is a decision, and a decision is not revisited because the sun set. */
-function themeFollowsSystem(){
-  const t=themeDef();
-  return !t || t.mode==='auto';
-}
+function themeFollowsSystem(){ return Themes.followsSystem(themeDef()); }
 /* Everything setTheme does except the two things that would be wrong here:
    it does not save (nothing was chosen) and it does not close the menu
    (nothing was opened). */
@@ -4577,10 +4487,7 @@ function setTheme(id){
 }
 /* Kept so anything still calling it (or a keyboard shortcut) advances sensibly
    through the presets rather than throwing. */
-function cycleTheme(){
-  const i=THEMES.findIndex(t=>t.id===themeDef().id);
-  setTheme(THEMES[(i+1)%THEMES.length].id);
-}
+function cycleTheme(){ setTheme(Themes.next(themeDef().id)); }
 /* ── reading size ──
    How large the question, its options, the explanation and Apex's thread are drawn (app/css/ipad.css). Kept on the device and
    not in the saved record or a backup: the iPad and the phone that share one want different sizes. Standard is no attribute
@@ -4844,19 +4751,10 @@ if(typeof ResizeObserver!=='undefined'&&document.getElementById('app'))new Resiz
 function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
 /* ── navigation ── */
-/* ONLY PRACTICE DECKS HAVE A KEY. Returning null is how the three functions
-   below all decline at once: a mode with no key is a mode that never saves,
-   never restores and never needs clearing. 'due' is recomputed from the FSRS
-   schedule every time it is asked for and 'missed' shrinks as you improve, so
-   for both of them a remembered deck is a stale deck. */
-function resumeKey(ch,mode){
-  if(mode!=='all') return null;
-  return 'all|'+(ch||'*');
-}
-/* Twelve decks is more than anyone has half-finished at once, and it bounds
-   what this can cost in a store that is already carrying the FSRS cards for
-   the whole bank. Oldest touched goes first. */
-const RESUME_MAX=12;
+/* Which deck is kept, how many, and when a kept one can be dealt again: src/core/resume.js. The page keeps what it
+   reads and writes of S. */
+@@SLOT[src:src/core/resume.js]@@
+function resumeKey(ch,mode){ return Resume.key(ch,mode); }
 /* WRITING THE RECORD AND WRITING THE STORE ARE SEPARATE, because selectOpt
    already calls save() and a second write per answer would be pure waste.
    recordResume() updates S.resume and stops; saveResume() does both, for the
@@ -4864,13 +4762,8 @@ const RESUME_MAX=12;
 function recordResume(){
   const key=resumeKey(S.chapter,S.mode);
   if(!key||S.screen!=='quiz'||!S.questions.length) return false;
-  S.resume[key]={ids:S.questions.map(q=>q.id), i:S.qIdx,
-    answers:S.answers, correct:S.quizCorrect, total:S.quizTotal, ts:Date.now()};
-  const keys=Object.keys(S.resume);
-  if(keys.length>RESUME_MAX){
-    keys.sort((a,b)=>(S.resume[a].ts||0)-(S.resume[b].ts||0));
-    while(keys.length>RESUME_MAX) delete S.resume[keys.shift()];
-  }
+  Resume.keep(S.resume,key,{ids:S.questions.map(q=>q.id), i:S.qIdx,
+    answers:S.answers, correct:S.quizCorrect, total:S.quizTotal, ts:Date.now()});
   return true;
 }
 function saveResume(){ if(recordResume()) save(); }
@@ -4878,35 +4771,7 @@ function clearResume(ch,mode){
   const key=resumeKey(ch,mode);
   if(key&&S.resume[key]){ delete S.resume[key]; save(); }
 }
-/* Rebuilds the deck in its saved order, or returns null and lets the caller
-   shuffle a fresh one. Every reason to decline is a reason the saved record no
-   longer describes a deck this build can deal:
-
-     · the bank moved under it — a reseed can retire an id, so ids are resolved
-       through the pool that actually exists and a record that loses any of
-       them is dropped rather than silently dealt short;
-     · it was finished — a record sitting on the last question with that
-       question answered is a completed deck nobody cleared, and resuming onto
-       it would show one question and end;
-     · it is not this deck — the saved ids are checked against the pool the
-       caller computed, so a chapter's record can never be dealt into "all". */
-function restoreDeck(qs,key){
-  const rec=key&&S.resume[key];
-  if(!rec||!Array.isArray(rec.ids)||!rec.ids.length) return null;
-  const have={}; qs.forEach(q=>{ have[q.id]=q; });
-  const deck=[]; for(const id of rec.ids){ const q=have[id]; if(!q) return null; deck.push(q); }
-  if(deck.length!==qs.length) return null;
-  const i=rec.i|0;
-  /* QUESTION ONE IS A PLACE TOO (28 October 2026, reported from the app: open a chapter, answer the first question or
-     only read it, go back, open the chapter again, and it was a freshly shuffled deck). This declined every record at
-     index 0 as "nothing done", and the deck dealt on entry was never written until the first answer or Next, so
-     leaving from the first question always lost it. The record is written as the deck is dealt (startQuiz), and index
-     0 is a place like any other. */
-  if(!(i>=0&&i<deck.length)) return null;
-  const answers=(rec.answers&&typeof rec.answers==='object')?rec.answers:{};
-  if(i===deck.length-1&&answers[i]&&answers[i].selected!=null) return null;
-  return {deck,i,answers,correct:rec.correct|0,total:rec.total|0};
-}
+function restoreDeck(qs,key){ return Resume.restore(key&&S.resume[key],qs); }
 /* ── "I have N minutes" — src/core/studyplan.js chooses what, in what order and why (due first, most
    forgotten first; then the weaker chapters; then new). It runs as a review session (mode 'due'), so a
    card rated here moves its schedule exactly as in the review queue. ── */

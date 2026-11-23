@@ -324,6 +324,21 @@ Then the words round what Apex is told of how the fellow answers:
 Then the pearl's card: `PEARL_NUM` with `pearlMark()`, and `pearlChapter()`,
 are `Pearl.mark` and `Pearl.chapterOf` (held by `verify-pearl-pure`);
 `pearlLadder()`, which draws, and `pearlFigureKey()`, a key handler, stay.
+Then the fence round the fellow's material in what Apex is sent: the nonce
+(`refFenceId`), `refFence()`, `refFenceRoll()`, `refSafe()` and `refBlock()` are
+`src/core/fence.js`'s `Fence` (held by `verify-fence-pure`, and in a browser by
+`verify-boundary`).
+Then the themes: `THEMES`, `THEME_BY_ID`, `themeDef()`, `themeIsDark()`,
+`themeFollowsSystem()` and the step in `cycleTheme()` are `src/core/themes.js`'s
+`Themes`; `verify-themes-pure` also holds the script that adopts the saved theme
+before paint to the table, and `verify-stats` counts the palettes there.
+Then the notes seeding: `refHash()` and the rules inside `refSeedApply()` are
+`src/core/refseed.js`'s `RefSeed` (held by `verify-refseed-pure`); the page keeps
+the stored version, the save and the index.
+Then resuming a deck: `resumeKey()`, `RESUME_MAX`, the trimming in
+`recordResume()` and the rules of `restoreDeck()` are `src/core/resume.js`'s
+`Resume` (held by `verify-resume-pure`); the page keeps what it reads and writes
+of `S`.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
