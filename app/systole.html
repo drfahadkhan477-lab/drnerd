@@ -3461,10 +3461,9 @@ function chatFor(q){ const k=q?q.id:'_general'; return CHATS[k]||(CHATS[k]=[]); 
    the sentence you were part-way through typing, the place you had scrolled
    to, and keyboard focus while reading. Without them, working through a long
    answer while Apex used a tool meant losing them, several times per question. */
-const APEX_STICK=40;         // px of slack — "at the bottom" is not an exact number
-function apexAtBottom(el){
-  return !el || (el.scrollHeight - el.scrollTop - el.clientHeight) < APEX_STICK;
-}
+/* Whether you are at the bottom, staying there as a reply arrives, and going back to your place are
+   src/app/apexpanel.js's; what is read of the panel and put back into it stays here. */
+function apexAtBottom(el){ return ApexPanel.atBottom(el); }
 function apexPanelState(){
   const ta=document.getElementById('aiIn'), body=document.getElementById('aiBody');
   return { text: ta?ta.value:'', start: ta?ta.selectionStart:0, end: ta?ta.selectionEnd:0,
@@ -3482,19 +3481,12 @@ function apexPanelRestore(st){
     ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,120)+'px';
     if(st.focus){ try{ ta.focus(); ta.setSelectionRange(st.start,st.end); }catch(_){} }
   }
-  /* Only when it differs. Writing scrollTop is a no-op in principle when the
-     value is unchanged, but on iOS writing it AT ALL during a momentum scroll
-     stops the momentum — and this runs on every rebuild, which is after every
-     tool step. */
   if(body){
     if(st.reading){ try{body.focus({preventScroll:true});}catch(_){body.focus();} }
-    const want = st.pinned ? body.scrollHeight : st.top;
-    if(Math.abs(body.scrollTop - want) > 1) body.scrollTop = want;
+    ApexPanel.keepPlace(body,st);
   }
 }
-/* Used by every streaming tick as well: a reply arriving is not a reason to
-   move someone who is reading something further up. */
-function apexStick(body){ if(body && apexAtBottom(body)) body.scrollTop=body.scrollHeight; }
+function apexStick(body){ ApexPanel.stick(body); }
 
 function apexLocalAction(action){
   if(aiBusy||apexAway()) return;

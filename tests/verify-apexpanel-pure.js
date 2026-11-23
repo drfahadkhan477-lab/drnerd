@@ -143,6 +143,37 @@ head('the prompts, the box and what it is powered by');
   ok('in that order: the conversation, what it drew on, the figures, the prompts, the box', ['id="aiBody"', 'data-apex-sources', 'id="aiFigWrap"', 'id="aiChips"', 'id="aiIn"', 'id="aiSend"', 'class="ai-powered"'].every((t, i, a) => i === 0 || p.indexOf(a[i - 1]) < p.indexOf(t)) && p.endsWith('</div></div>'));
 }
 
+head('the place you had scrolled to');
+{
+  /* A conversation 1000 tall in a box 300 high: scrolled to 700 it is at its end. Every write to its scrollTop is
+     counted, since on iOS a write during a momentum scroll stops it. */
+  const box = top => { const b = { scrollHeight: 1000, clientHeight: 300, writes: 0, _t: top };
+    Object.defineProperty(b, 'scrollTop', { get() { return this._t; }, set(v) { this.writes++; this._t = v; } }); return b; };
+  const A = M;
+  const safely = fn => { try { return fn(); } catch (err) { return 'THREW ' + err.message; } };
+  ok('the slack is 40px', A.STICK === 40, String(A.STICK));
+  ok('at the bottom is within 40px of the end, not 40 itself: 700, 680 and 661 are; 660 and 0 are not', [700, 680, 661].every(t => A.atBottom(box(t)) === true) && [660, 0].every(t => A.atBottom(box(t)) === false),
+     [700, 680, 661, 660, 0].map(t => t + ':' + A.atBottom(box(t))).join(' '));
+  ok('and no element counts as at the bottom', A.atBottom(null) === true && A.atBottom(undefined) === true);
+  const near = box(680), up = box(100);
+  safely(() => A.stick(near)); safely(() => A.stick(up));
+  ok('a reply arriving keeps you at the end if you were near it, and leaves you where you are if you were reading further up',
+     near.scrollTop === 1000 && up.scrollTop === 100 && up.writes === 0, near.scrollTop + ' / ' + up.scrollTop + ' (' + up.writes + ' writes)');
+  ok('and with no conversation it is nothing to do', safely(() => A.stick(null)) === undefined);
+  const pinned = box(400), back = box(100), same = box(250), oneOff = box(251), twoOff = box(252);
+  safely(() => A.keepPlace(pinned, { pinned: true, top: 400 })); safely(() => A.keepPlace(back, { pinned: false, top: 250 }));
+  [same, oneOff, twoOff].forEach(b => safely(() => A.keepPlace(b, { pinned: false, top: 250 })));
+  ok('after a rebuild: the end if you were at it, else the place you were', pinned.scrollTop === 1000 && back.scrollTop === 250, pinned.scrollTop + ' / ' + back.scrollTop);
+  ok('and nothing written when you are there already, or a pixel off', same.writes === 0 && oneOff.writes === 0 && oneOff.scrollTop === 251 && twoOff.writes === 1 && twoOff.scrollTop === 250,
+     [same.writes, oneOff.writes, twoOff.writes].join(' writes, ') + ' writes');
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const pg = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => pg.split(t).length - 1;
+  ok('the page\'s apexAtBottom() and apexStick() are one line each, apexPanelRestore() puts you back through keepPlace(), and the page keeps no copy',
+     n('function apexAtBottom(el){ return ApexPanel.atBottom(el); }') === 1 && n('function apexStick(body){ ApexPanel.stick(body); }') === 1 && n('ApexPanel.keepPlace(body,st);') === 1
+     && n('APEX_STICK') === 0 && n('body.scrollTop = want') === 0 && n('body.scrollTop=body.scrollHeight') === 0);
+}
+
 head('it reads what it is given and changes nothing');
 const KIT_READS = new Set();
 {
