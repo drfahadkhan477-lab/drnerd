@@ -195,6 +195,10 @@ jobs:
         run: node tests/verify-refseed-pure.js
       - name: only an all deck is kept, twelve at most, and a kept deck comes back as it was or not at all (20 checks)
         run: node tests/verify-resume-pure.js
+      - name: one press zooms 1.4 times about the middle, held between fitted and the most allowed, Fit goes back, and the readout and the zoomed mark keep with the level (18 checks)
+        run: node tests/verify-figzoom-pure.js
+      - name: an expired sign-in's HTML page is told from data, the sign-in probe from the manifest it asked for, and a figure from anything that is not an ok image (12 checks)
+        run: node tests/verify-accessgate-pure.js
       - name: a progress record the app wrote is restored as it was, one it never wrote is refused whole before anything is taken, and an export leaves out what a restore would refuse (22 checks)
         run: node tests/verify-progressdata-pure.js
       - name: an imported file becomes notes, its front matter read and never a note, one note per heading outside a fenced block, and an image link finds its figure only where the match is unique (30 checks)
@@ -225,7 +229,7 @@ jobs:
         run: node tests/verify-study-pure.js
       - name: the reference library shows a page of notes and a pager, one note on its own, and the form as editing needs it, the page's line draws it through its own refCard(), and its buttons name actions where they had inline handlers (38 checks)
         run: node tests/verify-refs-pure.js
-      - name: the question screen shows the question before and after answering, the reveal, how sure and why missed, the review ratings with when each card comes back over the real FSRS, and its buttons name actions where they had inline handlers (67 checks)
+      - name: the question screen shows the question before and after answering, the reveal, how sure and why missed, the review ratings with when each card comes back over the real FSRS, the question's figures as cards with the one enlarged, and its buttons name actions where they had inline handlers (77 checks)
         run: node tests/verify-quiz-pure.js
       - name: a mock block shows the question, clock, pace, flag and grid, paused or not, and the summary before handing in, the page's line draws a block over the real MockExam, and its buttons name actions where they had inline handlers (51 checks)
         run: node tests/verify-mock-pure.js

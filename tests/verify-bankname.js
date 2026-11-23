@@ -149,6 +149,11 @@ async function screens(page) {
       for (const q of ALL_Q) {
         q.s = fixture.s; q.ex = fixture.ex; q.ci = fixture.ci; q.ch = 'Reviewed chapter';
         q.o = fixture.o.map(o => { const copy = { ...o }; delete copy.p; return copy; });
+        /* A content flag is a fact about ACCSAP 12's own questions (scripts/content-flags.js), which the assembler
+           applies to that bank alone, so a question relabelled as another bank's carries none. Left in place, the
+           shuffled deck decided this check: the four flagged questions of the 227 name ACCSAP, and one dealt first
+           failed it (CI, 23 November 2026). */
+        delete q.flag;
       }
       CHAPTERS.splice(0, CHAPTERS.length, 'Reviewed chapter');
       REF = [{ id: 'tested-study-note', title: 'Reviewed study note',

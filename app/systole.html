@@ -426,33 +426,6 @@ function feedbackBlip(host,ok){
     setTimeout(()=>cv.remove(),420); }, ok?1500:1200);
 }
 
-/* ── anatomical heart that beats in time, with conduction highlighting ── */
-function heartSVG(id){
-  return `<svg class="heart-svg" id="${id||''}" viewBox="0 0 120 120" fill="none" aria-hidden="true">
-    <defs>
-      <linearGradient id="hgA" x1="0" y1="0" x2="0.6" y2="1">
-        <stop offset="0%" stop-color="#F87171"/><stop offset="60%" stop-color="#DC2626"/>
-        <stop offset="100%" stop-color="#7F1D1D"/>
-      </linearGradient>
-      <filter id="hglow" x="-40%" y="-40%" width="180%" height="180%">
-        <feGaussianBlur stdDeviation="3.2" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-    </defs>
-    <g class="h-beat" filter="url(#hglow)">
-      <path d="M60 104 C30 80 12 62 12 42 C12 26 24 16 37 16 C47 16 55 22 60 31
-               C65 22 73 16 83 16 C96 16 108 26 108 42 C108 62 90 80 60 104 Z"
-            fill="url(#hgA)"/>
-      <path class="h-vessel" d="M60 31 C58 42 56 52 60 64 M44 34 C46 46 50 54 58 60"
-            stroke="rgba(255,255,255,.30)" stroke-width="2" stroke-linecap="round"/>
-      <circle class="h-sa" cx="40" cy="34" r="3.4" fill="#FDE047"/>
-      <circle class="h-av" cx="58" cy="55" r="3" fill="#FDE047"/>
-      <path class="h-his" d="M58 58 L58 70 M58 70 L48 80 M58 70 L70 80"
-            stroke="#FDE047" stroke-width="2" stroke-linecap="round" opacity=".75"/>
-    </g>
-  </svg>`;
-}
-
 @@SLOT[src:src/core/store.js]@@
 /* ══════════ Apple-Pencil annotation · sticky notes · local persistence ══════════ */
 'use strict';
@@ -2546,29 +2519,13 @@ function figMeasure(it){
     im.src=it.src;
   });
 }
-/* The readout and the + − buttons speak in "times the fitted size", as the
-   old viewer did: fitted is 100%, one press of + is 140%. */
-const FIG_STEP=1.4;
-function figZoomBy(ps,k){
-  const s=ps&&ps.currSlide; if(!s||!s.isZoomable()) return;
-  const lv=Math.min(s.zoomLevels.max,Math.max(s.zoomLevels.initial,s.currZoomLevel*k));
-  s.zoomTo(lv,{x:ps.viewportSize.x/2,y:ps.viewportSize.y/2},220);
-  figSyncZoom(ps);
-}
-function figFit(ps){ const s=ps&&ps.currSlide; if(s){ s.zoomTo(s.zoomLevels.initial,undefined,220); figSyncZoom(ps); } }
-function figPct(ps){
-  const s=ps&&ps.currSlide;
-  return s&&s.zoomLevels.initial?Math.round(s.currZoomLevel/s.zoomLevels.initial*100):100;
-}
-/* zoomTo sets the zoom level synchronously. Keep our controls in that same
-   state, rather than waiting for the next frame (which can be delayed in
-   WebKit). Gesture updates still use PhotoSwipe's zoomPanUpdate event. */
-function figSyncZoom(ps){
-  const root=ps&&ps.element; if(!root) return;
-  const pct=figPct(ps), el=root.querySelector('.pswp__figv-pct');
-  if(el) el.textContent=pct+'%';
-  root.classList.toggle('figv-zoomed',pct>100);
-}
+/* The zoom row of the figure viewer (+ and −, Fit, the readout) is src/ui/figzoom.js. */
+@@SLOT[src:src/ui/figzoom.js]@@
+const FIG_STEP=FigZoom.STEP;
+function figZoomBy(ps,k){ FigZoom.by(ps,k); }
+function figFit(ps){ FigZoom.fit(ps); }
+function figPct(ps){ return FigZoom.pct(ps); }
+function figSyncZoom(ps){ FigZoom.sync(ps); }
 function openFigure(src,caption,source){
   if(!src) return Promise.resolve(null);
   return openFigures([{src,caption,source}],0);
@@ -3317,14 +3274,9 @@ function apexHosted(){
    headers are built by src/core/apexwire.js; the two addresses are the page's. */
 function gemUrl(op,model,key,page){ return ApexWire.gemini.url(ENDPOINT.gemini,APEX_API,op,model,key,page); }
 function gemHeaders(key,post){ return ApexWire.gemini.headers(key,post); }
-/* Cloudflare Access answers a lapsed session with 200 OK and a sign-in page.
-   Checked before anything reads the body, because apiError() parses it as JSON
-   and would report the login page as an empty error. */
-function apexSessionLapsed(r){
-  if(!r) return false;
-  const ct=(r.headers&&r.headers.get('content-type')||'').toLowerCase();
-  return ct.indexOf('text/html')===0;
-}
+/* Whether a reply is Access's sign-in page rather than what was asked for is src/core/accessgate.js. */
+@@SLOT[src:src/core/accessgate.js]@@
+function apexSessionLapsed(r){ return AccessGate.lapsed(r); }
 const APEX_LAPSED='Your sign-in has expired. Tap Sign in again at the top, then ask once more.';
 
 /* ══════════ a lapsed sign-in is said, and can be renewed ══════════
@@ -3346,7 +3298,7 @@ function signinLapsed(){
   if(navigator.onLine===false||Date.now()-signinAsked<30000) return Promise.resolve(false);
   signinAsked=Date.now();
   return fetch('manifest.webmanifest?signin=probe',{cache:'no-store',redirect:'manual',credentials:'same-origin'})
-    .then(r=>{ const lapsed=r.type==='opaqueredirect'||(r.status>=300&&r.status<400)||apexSessionLapsed(r);
+    .then(r=>{ const lapsed=AccessGate.probeLapsed(r);
       if(lapsed) showSigninBar(); return lapsed; },()=>false);
 }
 function showSigninBar(){
@@ -4059,10 +4011,6 @@ single word NOTHING.`, 220);
   }catch(_){ /* a broken summariser must never break the results screen */ }
 }
 
-function toOpenAITools(tools){
-  return tools.map(t=>({type:'function',
-    function:{name:t.name,description:t.description,parameters:t.input_schema}}));
-}
 // Session-only: never persist additional private content or credentials.
 const apexExplanationCache=new Map();
 async function explanationKey(body){
@@ -4796,10 +4744,6 @@ function topicRunsNow(){
     catch(_){ _runs=[]; }   // a card that cannot be worked out is no card, not a broken screen
   }
   return _runs;
-}
-function runLabel(r){
-  const words=r.shared.slice(0,3).join(' · ');
-  return (CH_SHORT[r.ch]||r.ch)+(words?' — '+words:'');
 }
 function startRun(i){
   const r=_runsShown[i]; if(!r) return;
@@ -5677,31 +5621,9 @@ function toggleZoom(i){
 }
 
 /* ── figures ── */
-function figLabel(q,i,n){
-  if(q.imgopt && n===q.o.length) return q.o[i].t;          // "ECG A", "PV loop B" …
-  return n>1 ? 'Figure '+(i+1) : 'Figure';
-}
-function buildFigures(q){
-  const src=IMGS[q.id];
-  if(!q.img||!src||!src.length) return '';
-  const n=src.length;
-  return src.map((u,i)=>{
-    const on=S.zoomed===i;
-    /* The full-screen button sits beside the card, not in it: the card is itself a button, and a control
-       inside a control is one a screen reader cannot reach (axe: nested-interactive). */
-    return `<div class="fig-slot"><div class="fig-card${on?' zoomed':''}" data-fig="${i}" role="button" tabindex="0"
-        aria-label="${e(figLabel(q,i,n))} — tap to ${on?'shrink':'enlarge'}">
-      <img class="fig-img" src="${u}" alt="${e(figLabel(q,i,n))} for question ${S.screen==='mock'&&S.mock?S.mock.i+1:q.n}"
-        decoding="async" loading="eager"
-        style="transform:${on?'scale(1.8) translateY(10%)':'scale(1)'};transform-origin:center top">
-      <div class="fig-label"><span>\uD83D\uDCCA ${e(figLabel(q,i,n))}</span>
-        <span class="fig-zoom-hint">${on?'Tap to shrink':'Tap to enlarge'}</span></div>
-    </div>
-      <button class="fig-full" type="button" aria-label="Open ${e(figLabel(q,i,n))} full screen"
-        data-action="openQuestionFigures" data-qid="${e(q.id)}" data-i="${i}">${icon('expand','icon-sm')}</button>
-    </div>`;
-  }).join('');
-}
+/* What a figure is called, and the question's figures as cards, are src/app/quiz.js's. */
+function figLabel(q,i,n){ return QuizScreen.figLabel(q,i,n); }
+function buildFigures(q){ return QuizScreen.figuresHtml(q,IMGS[q.id],{zoomed:S.zoomed,num:S.screen==='mock'&&S.mock?S.mock.i+1:q.n},{e,icon}); }
 
 /* ── render ── */
 let figCache={id:null,node:null};
@@ -6569,21 +6491,8 @@ function offlineFigures(){
   return out;
 }
 let offlineJob={have:0,total:0,bad:0,busy:false,stop:false,counted:false};
-/* IS THIS ACTUALLY A FIGURE? Behind an authenticating proxy — Cloudflare
-   Access, an SSO gateway, a captive portal on hospital wifi — an expired
-   session does not answer with an error. It answers 200 OK with a login page.
-   r.ok is true, the fetch resolves, and without this check the downloader
-   would count four hundred sign-in forms as four hundred figures and cache
-   every one of them, leaving the fellow with a bank of broken images and a
-   progress bar that said everything was fine.
-
-   The content type is the whole test: a figure is an image and a login page is
-   not, whatever the status code says. */
-function offlineIsImage(res){
-  if(!res||!res.ok) return false;
-  const ct=(res.headers.get('content-type')||'').toLowerCase();
-  return ct.indexOf('image/')===0;
-}
+/* A cached or fetched reply is a figure only when it is an image: a 200 sign-in page is not (src/core/accessgate.js). */
+function offlineIsImage(res){ return AccessGate.isImage(res); }
 /* Something that is not a figure must not be left in the cache pretending to
    be one, or every later survey counts it as present. The worker's fetch
    handler has already stored it by the time we can look, so it is hunted down
