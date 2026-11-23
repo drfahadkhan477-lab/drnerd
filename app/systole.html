@@ -2132,16 +2132,8 @@ const LEAD12_MAP={sinus:'sinus',brady:'brady',tachy:'tachy',afib:'afib',flutter:
   rbbb:'rbbb',lbbb:'lbbb',hyperk:'hyperk',longqt:'longqt',stemi:'stemi_ant',
   pericarditis:'pericarditis'};
 let twelve=null, twelveLead=null;
-function leadCardHtml(id){
-  if(typeof Leads12==='undefined') return '';
-  if(!id) return `<div class="lead-empty">Tap a lead above.</div>`;
-  const L=Leads12.LEADS.find(l=>l.id===id); if(!L) return '';
-  return `<div class="lead-head"><span class="lead-id">${e(L.id)}</span>
-      <span class="lead-terr">${e(L.territory)}</span>
-      <span class="lead-art">${e(L.artery)}</span></div>
-    <div class="lead-sees">${e(L.sees)}</div>
-    <div class="lead-look">${e(L.look)}</div>`;
-}
+/* A lead's card is src/app/rhythmlab.js's; mountTwelve() redraws it here when a lead is tapped. */
+function leadCardHtml(id){ return RhythmLabScreen.leadCardHtml(id,{Leads12:typeof Leads12!=='undefined'?Leads12:undefined,e}); }
 function mountTwelve(){
   const cv=document.getElementById('twelveCanvas');
   if(!cv||typeof ECG12==='undefined'){ twelve=null; return; }

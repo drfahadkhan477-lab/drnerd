@@ -127,5 +127,21 @@ function screenHtml(p){
   </div>`;
 }
 
-root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml };
+/* ── a lead's card ──
+   It was the page's leadCardHtml(), which keeps its name as one line handing over Leads12 and e: the 12-lead screen
+   draws it for the lead selected, and mountTwelve() draws it again when a lead is tapped. Nothing without Leads12, a
+   prompt to tap one before a lead is chosen, and nothing for an id Leads12 does not have. */
+function leadCardHtml(id,kit){
+  const {Leads12,e}=kit;
+  if(!Leads12) return '';
+  if(!id) return `<div class="lead-empty">Tap a lead above.</div>`;
+  const L=Leads12.LEADS.find(l=>l.id===id); if(!L) return '';
+  return `<div class="lead-head"><span class="lead-id">${e(L.id)}</span>
+      <span class="lead-terr">${e(L.territory)}</span>
+      <span class="lead-art">${e(L.artery)}</span></div>
+    <div class="lead-sees">${e(L.sees)}</div>
+    <div class="lead-look">${e(L.look)}</div>`;
+}
+
+root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml };
 })(typeof window !== 'undefined' ? window : this);
