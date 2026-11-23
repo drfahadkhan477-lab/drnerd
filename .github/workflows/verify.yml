@@ -252,6 +252,8 @@ jobs:
         run: node tests/verify-hover-pure.js
       - name: every var() with no fallback in the stylesheets the pages ship names a custom property something defines (13 checks)
         run: node tests/verify-cssvars-pure.js
+      - name: the header's capsule shows where it should, lights the right section, is no tab bar, and the page keeps it in step (17 checks)
+        run: node tests/verify-gnav-pure.js
       - name: every CSS feature the stylesheets use is in the table of what iPadOS 13.4 reads, and one that is newer has the fallback its row says (142 checks)
         run: node tests/verify-floor-css-pure.js
       - name: no native dialog arrives unmeant, and an icon is not a name (18 checks)

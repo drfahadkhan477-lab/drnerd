@@ -1,0 +1,34 @@
+/* ═══════════ The header's capsule: Home, Brain, Labs, Chapters (src/app/gnav.js; docs/UI-REVAMP.md, C) ═══════════
+   It sits in the header band, so it is drawn on whatever the bar is: the navy bar of the study screens, or Home's own bar on
+   Brain and Labs. Its ground and rim are the bar's own text colour at low strength (currentColor), which reads on both, and
+   it has no blur of its own: the bar under it is already blurred and nearly opaque. The lit item is a capsule that slides
+   (gnavSync moves it by transform from where it last stood) with the accent's glow; its words are the bar's text colour in
+   full, so contrast is the bar's own. Below 700px there is no room for it, and gnavSync does not show it. Under reduced
+   motion the lit capsule jumps instead of sliding. High contrast drops the tints and keeps a plain outline. */
+.gnav{position:relative;display:flex;align-items:center;flex:none;margin:0 16px;padding:3px;border-radius:999px;
+  background:rgba(127,127,127,.12);border:1px solid rgba(127,127,127,.24);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.gnav{background:color-mix(in srgb,currentColor 8%,transparent);border:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+@supports not (color:color-mix(in srgb,red,blue)){.gnav{background:rgba(127,127,127,.12);border:1px solid rgba(127,127,127,.24)}}
+.gnav[hidden]{display:none}
+.gnav-it{position:relative;z-index:1;display:flex;align-items:center;height:44px;padding:0 14px;border:0;border-radius:999px;
+  background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;cursor:pointer}
+.gnav-it .icon{margin-right:6px}
+.gnav.compact .gnav-it{padding:0 13px}
+.gnav.compact .gnav-it .icon{margin-right:0}
+.gnav.compact .gnav-it span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.gnav-it:focus-visible{outline:2px solid #38BDF8;outline-offset:1px}
+@media(hover:hover){.gnav-it:hover{background:rgba(127,127,127,.14)}}
+.gnav-ind{position:absolute;z-index:0;top:3px;left:0;width:0;height:44px;border-radius:999px;pointer-events:none;opacity:0;
+  background:rgba(14,165,233,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 0 0 1px rgba(14,165,233,.5),0 6px 18px -6px rgba(14,165,233,.6);
+  transition:transform .42s var(--spring),width .42s var(--spring),opacity .2s var(--ease)}
+.gnav-ind.on{opacity:1}
+html[data-palette="contrast"] .gnav{background:transparent;border:1px solid currentColor;box-shadow:none}
+html[data-palette="contrast"] .gnav-ind{background:transparent;box-shadow:0 0 0 2px currentColor}
+@media(prefers-reduced-motion:reduce){.gnav-ind{transition:none}}
+
+/* With the capsule up, Home's header (on Brain and Labs) folds its wide search pill into a button like the others, and
+   drops the gutter its brand kept for the rail that is gone (measured: it was the difference between the capsule fitting
+   with its words and not at 1024px). Home's first page has no capsule and keeps both. */
+body.has-gnav .nav .atlas-search{min-width:0;width:36px;padding:0;gap:0}
+body.has-gnav .nav .atlas-search span{display:none}
+body.has-gnav.on-home .nav{padding-left:max(20px,var(--sal))}
