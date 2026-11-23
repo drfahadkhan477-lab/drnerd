@@ -204,6 +204,67 @@ head('the report is written, and is safe to share');
   ok('and the leak guard refuses it, so it cannot be committed', guard.status === 1);
 }
 
+head('a failed browser step names which of its suites pass alone, and still fails');
+{
+  /* The gate of 23 November 2026 failed twelve suites and said nothing about why; the triage was done by hand
+     (scripts/release-check.js, failingSuites). Lifted out as safeDetail is below: a real failure needs a build. */
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'release-check.js'), 'utf8');
+  const m = src.match(/let SUITE_NAMES = null;[\s\S]*?\nfunction aloneSummary[\s\S]*?\n\}/);
+  ok('failingSuites and aloneSummary are where the test expects them', !!m);
+  if (m) {
+    const mod = {};
+    new Function('module', 'fs', 'path', 'ROOT', m[0] + '\nmodule.exports = { failingSuites, aloneSummary, aloneArgs };')(mod, fs, path, ROOT);
+    const { failingSuites, aloneSummary, aloneArgs } = mod.exports;
+    const got = failingSuites('  9175 checks across 195 suites in 79.2 min\n  3 suites failing: pearl, settings, dyspnea\n');
+    ok('the suites to rerun are the failing ones verify.js names, through the same allowlist',
+       JSON.stringify(got) === '["pearl","settings"]', JSON.stringify(got));
+    ok('and a run that names none reruns none', failingSuites('Error: expected true\n  FAIL  a label').length === 0 && failingSuites(null).length === 0);
+    const line = aloneSummary([{ name: 'pearl', passed: true }, { name: 'settings', passed: false }, { name: 'quiznav', passed: true }]);
+    ok('the step\'s line says how many passed alone, and which failed alone too',
+       line === 'rerun alone: 2 of 3 passed (pearl, quiznav); still failing alone: settings', line);
+    ok('and says nothing when nothing was rerun', aloneSummary([]) === '');
+    /* The rerun's own command, given to verify.js itself: a placeholder build and a pure suite, so it is quick,
+       and bounded, because a command that lost --only would run every suite against the placeholder. Nothing
+       here claims the rerun leaves the record alone: verify.js writes it only from a run of every suite, so a
+       one-suite run cannot write it with or without --no-record, and dropping the flag was seen to fail nothing. */
+    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'alone-'));
+    try {
+      const build = path.join(tmp, 'b.html'), json = path.join(tmp, 'r.json');
+      fs.writeFileSync(build, '<html></html>');
+      const r = spawnSync(process.execPath, [...aloneArgs('fsrs', 'webkit', build), '--report-json', json], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
+      const rep = fs.existsSync(json) ? JSON.parse(fs.readFileSync(json, 'utf8')) : {};
+      ok('the rerun runs that one suite, and on that engine',
+         r.status === 0 && rep.selected === 1 && rep.ran === 1 && rep.engine === 'webkit' && (rep.suites || []).map(x => x.suite).join() === 'fsrs',
+         JSON.stringify({ status: r.status, selected: rep.selected, ran: rep.ran, engine: rep.engine, suites: (rep.suites || []).map(x => x.suite) }));
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  }
+  /* The rerun certifies nothing: in the branch for a failed step, every record() is a FAIL, whatever the
+     reruns found. Read with comments blanked, so this sentence cannot satisfy it. */
+  const { blankComments } = require('./_source.js');
+  const code = blankComments(src);
+  const at = code.indexOf('if (r.status !== 0) {');
+  const block = at >= 0 ? code.slice(at, code.indexOf('\n        continue;\n      }', at)) : '';
+  const records = [...block.matchAll(/record\(step,\s*'([A-Z]+)'/g)].map(x => x[1]);
+  ok('a step whose suites all pass alone is still recorded as FAIL', records.length > 0 && records.every(s => s === 'FAIL') && /aloneSummary\(/.test(block),
+     records.join(', ') || 'no record() in the failed branch');
+}
+
+head('the report says where it ran');
+{
+  const env = { ...process.env, SYSTOLE_JOBS: 'auto' };
+  spawnSync(process.execPath, [GATE, '--dry-run'], { cwd: ROOT, encoding: 'utf8', env });
+  const md = fs.existsSync(REPORT) ? fs.readFileSync(REPORT, 'utf8') : '';
+  ok('it names the platform, the cores and the memory', new RegExp(`machine\\s+${require('os').platform()} \\S+, ${require('os').cpus().length} cores, \\d+ GB`).test(md),
+     (md.match(/machine.*$/m) || ['no machine line'])[0]);
+  ok('and whether the suites shared the machine', /suites with SYSTOLE_JOBS=auto/.test(md));
+  spawnSync(process.execPath, [GATE, '--dry-run'], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SYSTOLE_JOBS: '3 && echo leaked' } });
+  const odd = fs.existsSync(REPORT) ? fs.readFileSync(REPORT, 'utf8') : '';
+  ok('a SYSTOLE_JOBS that is not a count is not copied into the report', /not a count/.test(odd) && !/leaked/.test(odd));
+  const { SYSTOLE_JOBS, ...plain } = process.env;
+  spawnSync(process.execPath, [GATE, '--dry-run'], { cwd: ROOT, encoding: 'utf8', env: plain });
+  ok('and with none set it says one at a time', /suites one at a time/.test(fs.existsSync(REPORT) ? fs.readFileSync(REPORT, 'utf8') : ''));
+}
+
 head('and a failing step cannot put its output in either place');
 {
   /* THE PROMISE IN THE FOOTER, ENFORCED. The report ends by claiming "no
