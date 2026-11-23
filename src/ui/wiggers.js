@@ -1017,6 +1017,17 @@ function mount(canvas, opts) {
     return canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr);
   }
 
+  /* NOT DRAWN WHERE IT CANNOT BE SEEN (roadmap E5). On the Lab at iPad size the diagram sits below the fold, and it drew every frame
+     there, a Wiggers view at about three milliseconds a draw, sixty times a second, for a canvas nobody had scrolled to
+     (tests/verify-frames.js, counted by src/core/framemeter.js). Out of view, the loop keeps its clock, so the beat is where it
+     should be when the canvas comes back, and draws nothing, nor calls onFrame, whose caption is out of view with it. A browser
+     without IntersectionObserver keeps drawing, as before. */
+  let inView = true, seen = null;
+  if (typeof root.IntersectionObserver === 'function') {
+    seen = new root.IntersectionObserver(es => { for (const e of es) inView = e.isIntersecting; });
+    seen.observe(canvas);
+  }
+
   function tick(now) {
     S.raf = root.requestAnimationFrame(tick);
     if (!S.last) S.last = now;
@@ -1030,6 +1041,7 @@ function mount(canvas, opts) {
       S.t = Ph.wrap(S.t + dt / (secs() * (S.slow || 1)));
       moved = true;
     }
+    if (!inView) return;
     if (!moved && !resized()) return;
     draw();
     if (S.onFrame) S.onFrame(S.t);
@@ -1085,6 +1097,7 @@ function mount(canvas, opts) {
        does not care whether its target is still in the document. */
     destroy() {
       if (S.raf) { root.cancelAnimationFrame(S.raf); S.raf = 0; }
+      if (seen) { seen.disconnect(); seen = null; }
       S.onFrame = null; S.src = null;
       canvas.onpointerdown = canvas.onpointermove = canvas.onpointerup = canvas.onpointercancel = null;
       return null;

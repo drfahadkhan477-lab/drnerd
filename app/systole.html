@@ -208,6 +208,8 @@ function icon(name, cls){
   return `<svg class="icon${cls?' '+cls:''}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 }
 
+/* ═══════════ frames per canvas, counted only for #frames — see src/core/framemeter.js ═══════════ */
+@@SLOT[src:src/core/framemeter.js]@@
 /* ═══════════ Heart3D + Apex — embedded, see src/core/heart3d.js and src/ui/apex.js ═══════════ */
 @@SLOT[src:src/core/heart3d.js]@@
 @@SLOT[src:src/ui/apex.js]@@
@@ -336,6 +338,14 @@ class ECGMonitor{
       grid:false,lineWidth:2,amp:52},opts||{});
     this.t=0; this.state={}; this.raf=null; this.last=null; this.pts=[];
     this.dead=false;
+    /* NOT DRAWN WHERE IT CANNOT BE SEEN (roadmap E5). The Lab's monitor kept sweeping, sixty frames a second, once the reader
+       had scrolled down to the cardiac-cycle diagram (tests/verify-frames.js). Out of view the sweep waits where it is and
+       draws nothing; it goes on from there when the canvas is back. Without IntersectionObserver it draws as before. */
+    this.inView=true; this.seen=null;
+    if(typeof IntersectionObserver==='function'){
+      this.seen=new IntersectionObserver(es=>{ for(const e of es) this.inView=e.isIntersecting; });
+      this.seen.observe(canvas);
+    }
     this.fit();
   }
   fit(){
@@ -356,6 +366,7 @@ class ECGMonitor{
       if(this.dead) return;
       if(this.last===null) this.last=now;
       let dt=now-this.last; this.last=now;
+      if(!this.inView){ this.raf=requestAnimationFrame(loop); return; }
       if(dt>80) dt=80;                                  // ignore tab-away jumps
       this.t+=dt;
       this.step(dt);
@@ -364,7 +375,7 @@ class ECGMonitor{
     this.raf=requestAnimationFrame(loop);
   }
   stop(){ if(this.raf) cancelAnimationFrame(this.raf); this.raf=null; this.last=null; }
-  destroy(){ this.stop(); this.dead=true; }
+  destroy(){ this.stop(); this.dead=true; if(this.seen){ this.seen.disconnect(); this.seen=null; } }
   step(dt){
     if(!this.w) { this.fit(); if(!this.w) return; }
     const pxPerMs=this.o.speed;
@@ -7315,8 +7326,44 @@ async function openSelfTest(){
   } finally { stRunning=false; }
 }
 
+/* ══════════ frames per canvas (#frames) — roadmap E5 ══════════
+   One line at the foot of the screen: how many frames each canvas drew in the
+   last second, and how many were drawn off screen or behind a hidden page.
+   Read it beside the iPad's battery percentage before and after a real session.
+   On for this tab until the line is tapped, so a reload mid-session keeps it;
+   the meter it installs (src/core/framemeter.js) stays until the page closes.
+   The line itself costs a timer once a second, which is said rather than hidden. */
+let framesTimer=null;
+function openFrames(){
+  const meter=FrameMeter.install(window);
+  try{ sessionStorage.setItem('systole.frames','1'); }catch(_){}
+  let el=document.getElementById('framesLine');
+  if(!el){
+    el=document.createElement('button'); el.id='framesLine'; el.type='button';
+    el.setAttribute('aria-label','Frames per canvas. Tap to close.');
+    el.addEventListener('click',closeFrames);
+    document.body.appendChild(el);
+  }
+  const tick=()=>{ el.textContent=meter.line(); };
+  tick(); clearInterval(framesTimer); framesTimer=setInterval(tick,1000);
+}
+function closeFrames(){
+  clearInterval(framesTimer); framesTimer=null;
+  const el=document.getElementById('framesLine'); if(el) el.remove();
+  try{ sessionStorage.removeItem('systole.frames'); }catch(_){}
+  if(location.hash==='#frames'){
+    try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
+  }
+}
+function framesWanted(){
+  if(location.hash==='#frames') return true;
+  try{ return sessionStorage.getItem('systole.frames')==='1'; }catch(_){ return false; }
+}
+
 (function boot(){
   dismissSplash();
+  if(framesWanted()) openFrames();
+  window.addEventListener('hashchange',()=>{ if(location.hash==='#frames') openFrames(); });
   if(location.hash==='#selftest') setTimeout(openSelfTest,600);
   window.addEventListener('hashchange',()=>{ if(location.hash==='#selftest') openSelfTest(); });
   mountFabAvatar();
