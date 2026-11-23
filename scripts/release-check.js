@@ -4,6 +4,7 @@
  *
  *   node scripts/release-check.js <source.html>
  *   node scripts/release-check.js <source.html> --skip webkit,figreview
+ *   node scripts/release-check.js <source.html> --no-alone   # a failed browser step's suites are not rerun alone
  *   node scripts/release-check.js --dry-run            # exercise the gate itself
  *
  * WHY THIS EXISTS, in the words of the audit that asked for it: a green GitHub
@@ -55,6 +56,8 @@ const has = f => argv.includes(f);
 const opt = (f, d = '') => { const i = argv.indexOf(f); return i < 0 ? d : (argv[i + 1] || d); };
 const SKIP = new Set(opt('--skip').split(',').map(s => s.trim()).filter(Boolean));
 const SRC = argv.find(a => !a.startsWith('--') && argv[argv.indexOf(a) - 1] !== '--skip');
+/* --no-alone: do not rerun a failed browser step's suites one by one (see ALONE below). */
+const ALONE_ON = !has('--no-alone');
 
 if (!DRY && !SRC) {
   console.error('usage: node scripts/release-check.js <source.html> [--skip webkit,figreview]');
@@ -90,7 +93,7 @@ const STEPS = [
      verdict said CERTIFIED (found by review). The flag wins over the variable
      in verify.js, so naming it here is the whole fix; verify-release drives
      the gate with the variable set and checks the command each step shows. */
-  { id: 'chromium',  what: 'the full suite, on chromium',
+  { id: 'chromium',  what: 'the full suite, on chromium', alone: 'chromium',
     cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'chromium', '--no-record']], after: 'build', needs: () => fs.existsSync(BUILD) },
   /* Chromium already measured the standalone registry above. --only pwa
      still builds and measures the split artifacts, Worker and cache phases;
@@ -101,7 +104,7 @@ const STEPS = [
      default and skipping it costs you the CERTIFIED line rather than passing
      quietly. It is also the engine where the 42 MB single file takes ~100s to
      parse before a line of app code runs, which is why the boot waits matter. */
-  { id: 'webkit',    what: 'the full suite, on webkit — the engine the app actually runs on',
+  { id: 'webkit',    what: 'the full suite, on webkit — the engine the app actually runs on', alone: 'webkit',
     cmd: ['node', ['scripts/verify.js', () => BUILD, '--engine', 'webkit', '--no-record']], after: 'build', needs: () => fs.existsSync(BUILD) },
 ];
 
@@ -174,6 +177,9 @@ function isSuiteName(n) {
   return SUITE_NAMES.has(n);
 }
 
+const FAILING_RE = /\b(\d+) suites? failing:\s*(.+)$/m;
+const namesIn = list => list.split(/[,\s]+/).filter(isSuiteName).slice(0, 12);
+
 const SHAPES = [
   [/\b(\d+) checks across (\d+) suites in ([\d.]+) min\b/,
    m => +m[2] > 0 ? `${m[1]} checks across ${m[2]} suites in ${m[3]} min` : null],
@@ -186,9 +192,9 @@ const SHAPES = [
      it fails a test. Bounded as well as filtered: a suite id is short and
      there are never many, so prose cannot arrive as a long list of very short
      lowercase words. */
-  [/\b(\d+) suites? failing:\s*(.+)$/m,
+  [FAILING_RE,
    m => {
-     const names = m[2].split(/[,\s]+/).filter(isSuiteName).slice(0, 12);
+     const names = namesIn(m[2]);
      return names.length ? `${m[1]} failing: ${names.join(', ')}` : `${m[1]} failing`;
    }],
   [/\ball green\b/, () => 'all green', true],
@@ -209,6 +215,39 @@ function safeDetail(out, fallback, failed = false) {
     if (detail && found.length < 3) found.push(detail);
   }
   return found.length ? found.join(' | ') : fallback;
+}
+
+/* ── a failed browser step, its suites rerun alone ────────────────────────────
+   THE GATE OF 23 NOVEMBER 2026 failed nine Chromium suites and three WebKit
+   ones and could say nothing more. By hand afterwards: settings failed alone as
+   well, at a ten-second load wait (fixed in #443); pearl passed alone, its
+   failure a render wait under load; and the other seven passed alone on a
+   synthetic build padded to the real one's 98 MB, with and without three cores
+   kept busy. Which of those two kinds a failure is decides what to do next,
+   and only the machine with the export can tell. So after a browser step
+   fails, each suite it names is run again by itself, on the same build and
+   engine, and the step's line says which passed.
+
+   IT CERTIFIES NOTHING. The step stays FAILED and so does the verdict: a suite
+   that fails in the full run and passes alone still failed, and says the suite
+   depends on the conditions of the run, which is a defect of the suite or of
+   the run, not a pass. The names are the allowlisted ones safeDetail already
+   emits, so nothing else reaches the report. */
+function failingSuites(out) {
+  const m = FAILING_RE.exec(String(out || ''));
+  return m ? namesIn(m[2]) : [];
+}
+/* The rerun: that suite only, on that engine, on the same build, writing no record. */
+function aloneArgs(name, engine, build) {
+  return ['scripts/verify.js', build, '--only', name, '--engine', engine, '--no-record'];
+}
+function aloneSummary(alone) {
+  if (!alone.length) return '';
+  const passedAlone = alone.filter(a => a.passed).map(a => a.name);
+  const failedAlone = alone.filter(a => !a.passed).map(a => a.name);
+  return `rerun alone: ${passedAlone.length} of ${alone.length} passed` +
+    (passedAlone.length ? ` (${passedAlone.join(', ')})` : '') +
+    (failedAlone.length ? `; still failing alone: ${failedAlone.join(', ')}` : '');
 }
 
 const results = [];
@@ -263,9 +302,18 @@ for (const step of STEPS) {
       const r = spawnSync(bin, real, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       const out = (r.stdout || '') + (r.stderr || '');
       if (r.status !== 0) {
-        record(step, 'FAIL',
-          safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`, true),
-          (Date.now() - t0) / 1000);
+        let detail = safeDetail(out, `exit ${r.status === null ? 'signal ' + r.signal : r.status} — full output in tests/last-run.log on this machine`, true);
+        const names = step.alone ? failingSuites(out) : [];
+        if (names.length && ALONE_ON) {
+          console.log(`  … ${step.id} failed; running its ${names.length} failing suite${names.length === 1 ? '' : 's'} again, each alone`);
+          const alone = names.map(name => {
+            const a = spawnSync('node', aloneArgs(name, step.alone, BUILD),
+              { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+            return { name, passed: a.status === 0 };
+          });
+          detail += ' | ' + aloneSummary(alone);
+        } else if (names.length) detail += ' | not rerun alone (--no-alone)';
+        record(step, 'FAIL', detail, (Date.now() - t0) / 1000);
         continue;
       }
       detail = safeDetail(out, '');
@@ -322,6 +370,12 @@ const lines = [];
 lines.push(`# Release check — ${verdict}`, '');
 lines.push(`    when      ${new Date().toISOString()}`);
 lines.push(`    release   ${require('./stamp.js').release(ROOT).text}`);
+/* Where it ran, because a failure that only the full run shows depends on it.
+   SYSTOLE_JOBS is shown only as a count or auto, never as whatever text it holds. */
+const envJobs = process.env.SYSTOLE_JOBS;
+const jobsWord = !envJobs ? 'one at a time' : /^(\d{1,2}|auto)$/.test(envJobs) ? `with SYSTOLE_JOBS=${envJobs}` : 'with SYSTOLE_JOBS set to something that is not a count';
+lines.push(`    machine   ${require('os').platform()} ${require('os').arch()}, ${require('os').cpus().length} cores, ` +
+  `${Math.round(require('os').totalmem() / 2 ** 30)} GB; suites ${jobsWord}`);
 lines.push(`    commit    ${git.commit} on ${git.branch}${git.dirty ? '  (UNCOMMITTED CHANGES — this is not a reproducible artifact)' : ''}`);
 if (!DRY && SRC) lines.push(`    source    ${path.basename(SRC)}  sha256:${fileDigest(SRC)}`);
 lines.push(`    build     ${fileDigest(BUILD) ? 'sha256:' + fileDigest(BUILD) : 'not produced'}`);

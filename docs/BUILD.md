@@ -231,6 +231,7 @@ where that step's header explained a decision at length; read it with
 ```bash
 npm run release -- path/to/ACCSAP_export.html          # or: npm run release-check
 npm run release -- path/to/export.html --skip webkit   # costs you the certificate
+npm run release -- path/to/export.html --no-alone      # a failed browser step's suites are not rerun
 npm run release -- --dry-run                           # exercise the gate itself
 ```
 
@@ -250,6 +251,19 @@ outcomes rather than two:
 
 A skip is never folded into a pass. Skipping WebKit — the engine the app is
 actually used on — costs you the certificate rather than passing quietly.
+
+When the Chromium or WebKit step fails, the gate runs each suite it names
+again, alone, on the same build and engine. Then the step's line says which
+passed alone:
+
+    rerun alone: 7 of 9 passed (pearl, quiznav, …); still failing alone: settings
+
+A suite that fails alone too has a defect you can reproduce on its own. A
+suite that passes alone failed because of the full run's conditions, such as a
+busy machine or a suite before it. The step stays failed either way, and so
+does the verdict. The report's `machine` line gives the platform, the cores,
+the memory, and whether suites shared the machine (`SYSTOLE_JOBS`).
+`--no-alone` skips the reruns.
 
 It writes `build/release-report.md`: the commit, the source digest, a SHA-256
 of the single file and a content-addressed root over every file in `dist/`, so
