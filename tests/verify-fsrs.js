@@ -521,23 +521,82 @@ head('exam retention and deadlines across a change of clocks');
   const close = F.update(null, 4, day, undefined, plus(day, 30));
   ok('the retention target shortens an uncapped interval without changing learned stability',
     close.stability === far.stability && close.ivl === F.ivl(far.stability, targets[2]) && close.ivl < far.ivl && far.ivl < 29);
+  /* Every card a review can leave, against exams on either side of the DST
+     change (US clocks moved on 2026-03-08; CI runs this file again under
+     America/New_York). Unnamed, so no fuzz: the interval a card would have
+     had without a deadline is then F.ivl at the exam's retention, and Again
+     is held to the card's own interval before it. */
+  const before = n => { let k = 0; while (plus('2026-01-01', k) !== day) k++; return plus('2026-01-01', k - n); };
+  const results = [];
+  for (const examDate of ['2026-03-10', '2026-03-20', '2026-04-06']) {
+    const e = F.examWindow(day, examDate);
+    for (const stability of [0.5, 2, 5, 12, 25, 40, 70, 150, 500])
+      for (const elapsed of [1, 3, 10, 30]) for (const g of [1, 2, 3, 4]) {
+        const card = { difficulty: 5, stability, ivl: Math.max(1, Math.round(stability)), reps: 3, last: before(elapsed) };
+        const u = F.update(card, g, day, undefined, examDate);
+        const own = g === 1 ? Math.min(F.ivl(u.stability, e.retention), card.ivl) : F.ivl(u.stability, e.retention);
+        results.push({ e, u, own, holds: F.retrievability(u.stability, e.days) >= 0.95 });
+      }
+  }
+  const pulled = results.filter(r => !r.holds && r.own >= r.e.days);
+  const kept = results.filter(r => r.holds && r.own >= r.e.days);
+  ok('no review leaves a card past the eve when its recall would fall under 95% by the exam',
+    results.every(r => r.holds || r.u.due <= r.e.eve), String(results.filter(r => !r.holds && r.u.due > r.e.eve).length));
+  ok('a card brought forward is due on the eve itself, across DST', pulled.length > 0 && pulled.every(r => r.u.due === r.e.eve),
+    `${pulled.length} brought forward, ${pulled.filter(r => r.u.due !== r.e.eve).length} not on the eve`);
+  ok('a card whose recall holds keeps the interval it would have had', kept.length > 0 && kept.every(r => r.u.ivl === r.own),
+    `${kept.length} kept, ${kept.filter(r => r.u.ivl !== r.own).length} shortened`);
   const mature = { difficulty: 5, stability: 500, ivl: 500, due: '2027-07-01', last: '2026-03-01' };
-  ok('after fuzz every grade of a mature card lands by the eve across DST', [1,2,3,4].every(g =>
-    F.update(mature, g, day, 'A', '2026-03-10').due === '2026-03-09'));
-  const eve = F.update(mature, 4, '2026-03-09', 'A', '2026-03-10');
-  const examDay = F.update(eve, 4, '2026-03-10', 'A', '2026-03-10');
-  ok('a review on the eve lands on the exam and a review on exam day leaves the queue',
-    eve.ivl === 1 && eve.due === '2026-03-10' && examDay.due > '2026-03-10');
+  const weak = { difficulty: 5, stability: 15, ivl: 500, due: '2027-07-01', last: '2026-03-01' };
+  const eveAgain = F.update({ difficulty: 5, stability: 1, ivl: 1, reps: 1, last: '2026-03-08' }, 1, '2026-03-09', 'A', '2026-03-10');
+  const eveEasy = F.update(mature, 4, '2026-03-09', 'A', '2026-03-10');
+  const examDay = F.update(eveEasy, 4, '2026-03-10', 'A', '2026-03-10');
+  ok('a lapse on the eve lands on the exam, a held card does not, and a review on exam day leaves the queue',
+    eveAgain.due === '2026-03-10' && eveEasy.due > '2026-03-10' && examDay.due > '2026-03-10');
   ok('a past or invalid date gives the ordinary schedule', ['2026-03-01','2026-02-30','oops'].every(d =>
     JSON.stringify(F.update(null, 4, day, undefined, d)) === JSON.stringify(far)));
   const e = F.examWindow(day, '2026-03-10');
   ok('old schedules follow a moved or cleared exam without any write to the card',
-    F.scheduledDue(mature, e) === '2026-03-09' &&
-    F.scheduledDue(mature, F.examWindow(day,'2026-03-15')) === '2026-03-14' &&
-    F.scheduledDue(mature, null) === '2027-07-01' && mature.ivl === 500);
+    F.scheduledDue(weak, e) === '2026-03-09' &&
+    F.scheduledDue(weak, F.examWindow(day,'2026-03-15')) === '2026-03-14' &&
+    F.scheduledDue(weak, null) === '2027-07-01' && weak.ivl === 500);
+  ok('an old card whose recall holds to the exam is not brought forward',
+    F.scheduledDue(mature, e) === '2027-07-01' && F.scheduledDue(mature, F.examWindow(day,'2026-03-15')) === '2027-07-01');
+  ok('a card the deadline cannot judge keeps it', F.scheduledDue({ due: '2027-07-01', last: '2026-03-01' }, e) === '2026-03-09' &&
+    F.scheduledDue({ due: '2027-07-01', stability: 500 }, e) === '2026-03-09' &&
+    F.scheduledDue({ due: '2027-07-01', stability: 500, last: 'oops' }, e) === '2026-03-09');
   ok('the deadline never postpones an earlier review, invents a missing due day, or repeats an exam-day review',
     F.scheduledDue({due:day}, e) === day && F.scheduledDue({},e) === null &&
     F.scheduledDue(examDay,e) === examDay.due);
+}
+
+head('a deck studied to the exam');
+{
+  /* Ten new cards a day for sixty days, every due card reviewed, recalled with
+     the chance the model gives it, and no study on exam day itself. The eve
+     must not become the whole deck, the days after the exam must not inherit
+     it, and the exam must find each card either reviewed since the eve or
+     still at 95%. */
+  const R = rng(7), start = '2026-01-01', eveDay = plus(start, 119), examDate = plus(start, 120), cards = {}, load = [];
+  for (let n = 0; n < 135; n++) {
+    const today = plus(start, n), exam = F.examWindow(today, examDate);
+    const due = Object.keys(cards).filter(id => F.isDue(cards[id], today, exam));
+    load.push(due.length);
+    if (today === examDate) continue;
+    for (const id of due) {
+      const r = F.retrievability(cards[id].stability, F.daysBetween(cards[id].last, today));
+      cards[id] = F.update(cards[id], R() < r ? 3 : 1, today, id, examDate);
+    }
+    if (n < 60) for (let k = 0; k < 10; k++) cards[`q${n}_${k}`] = F.update(null, R() < 0.7 ? 3 : 1, today, `q${n}_${k}`, examDate);
+    if (today === eveDay) var atExam = Object.values(cards).map(c => ({ last: c.last,
+      r: F.retrievability(c.stability, F.daysBetween(c.last, examDate)) }));
+  }
+  const deck = Object.keys(cards).length, eve = load[119], after = [load[120], load[121]];
+  ok('the eve holds less than half the deck', eve < deck / 2, `${eve} of ${deck}`);
+  ok('exam day and the day after each hold under a tenth of it', after.every(n => n < deck / 10), `${after.join(' and ')} of ${deck}`);
+  ok('every card meets the exam reviewed on the eve or still at 95%',
+    atExam.length === deck && atExam.every(c => c.last >= eveDay || c.r >= 0.95),
+    String(atExam.filter(c => c.last < eveDay && c.r < 0.95).length));
 }
 
 head('the scheduler says which scheduler it is');

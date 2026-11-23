@@ -74,7 +74,11 @@ const FSRS_FACTOR = Math.pow(0.9, 1 / FSRS_DECAY) - 1;   // ≈0.234568, tuned s
    card has reached it, and the next review reschedules any that did. */
 /* 3: exam-aware retention and deadlines. Older cards keep their stored state;
    readers apply the deadline until the next real review writes a schedule. */
-const SCHEDULER_VERSION = 3;
+/* 4: the deadline only for a card that needs it (see `needsDeadline`). A card
+   stamped 3 may have been saved due on the eve although its recall would have
+   held; it comes up once, early, and its next review writes an ordinary
+   schedule, so it is left as it is. */
+const SCHEDULER_VERSION = 4;
 const BASE_RETENTION = 0.90, EXAM_RETENTION = 0.95, RAMP_DAYS = 60;
 
 /* And the forcing function, because a version somebody has to remember to
@@ -252,13 +256,30 @@ function examWindow(today, examDate) {
     retention: BASE_RETENTION + fraction * (EXAM_RETENTION - BASE_RETENTION) };
 }
 
+/* THE DEADLINE IS FOR A CARD THAT NEEDS IT. A card whose own schedule ends past
+   the exam, but whose recall on exam day stays at or above EXAM_RETENTION, is
+   left on that schedule: seeing it on the eve buys almost nothing. Applied to
+   every card, the deadline put the whole deck in the eve's queue, again on exam
+   day, and again the day after from the saved dates (verify-fsrs simulates a
+   deck to the exam and reads all three). A card with no usable stability or day
+   of last review cannot be judged, so it keeps the deadline (retrievability is
+   0 for a stability that is not a positive number). */
+function needsDeadline(stability, last, examDate) {
+  if (typeof last !== 'string' || !isoToLocalDate(last)) return true;
+  return fsrsRetrievability(stability, daysBetween(last, examDate)) < EXAM_RETENTION;
+}
+
 /* A date can be set, moved or cleared long after the card was scheduled.
    Apply its deadline on read, without changing the card or its model state. */
 function scheduledDue(card, exam) {
   if (!card || typeof card.due !== 'string') return null;
-  if (!exam || card.last >= exam.examDate) return card.due;
-  const deadline = card.last >= exam.eve ? exam.examDate : exam.eve;
-  return card.due < deadline ? card.due : deadline;
+  /* A last day that is not a date ('oops' sorts after every digit) says
+     nothing about when the card was reviewed, so it cannot excuse the card. */
+  const last = typeof card.last === 'string' && isoToLocalDate(card.last) ? card.last : null;
+  if (!exam || (last && last >= exam.examDate)) return card.due;
+  const deadline = last && last >= exam.eve ? exam.examDate : exam.eve;
+  if (card.due < deadline || !needsDeadline(card.stability, card.last, exam.examDate)) return card.due;
+  return deadline;
 }
 
 function isDue(card, today, exam) {
@@ -373,7 +394,7 @@ function fsrsUpdate(card, rating, today, id, examDate) {
   let ivl = fsrsFuzz(fsrsIvl(stability, exam && exam.days > 0 ? exam.retention : BASE_RETENTION), Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
     rating === 1 || id === undefined || id === null || id === '' ? null : `${id}:${reps}:${lapses}`);
   if (rating === 1 && prev && card && Number.isInteger(card.ivl) && card.ivl >= 1) ivl = Math.min(ivl, card.ivl);
-  if (exam && exam.days > 0) ivl = Math.min(ivl, Math.max(1, exam.days - 1));
+  if (exam && exam.days > 0 && ivl >= exam.days && needsDeadline(stability, now, examDate)) ivl = Math.min(ivl, Math.max(1, exam.days - 1));
   /* setDate() rolls months and years for us and steps whole calendar days, so
      a DST boundary inside the interval does not shift the due date — which
      adding ivl * 86400000 milliseconds would. */
@@ -399,7 +420,7 @@ function fsrsFirstRating(ok, cf) {
 root.FSRS = {
   update: fsrsUpdate, firstRating: fsrsFirstRating, retrievability: fsrsRetrievability, seed: fsrsSeed,
   initStability: fsrsInitStability, initDifficulty: fsrsInitDifficulty,
-  examWindow, scheduledDue, isDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO, addDays,
+  examWindow, needsDeadline, scheduledDue, isDue, intervalModifier, ivl: fsrsIvl, fuzz: fsrsFuzz, FUZZ_RANGES: FSRS_FUZZ_RANGES, daysBetween, todayISO, isoToLocalDate, localDateToISO, addDays,
   W: FSRS_W, DECAY: FSRS_DECAY, FACTOR: FSRS_FACTOR, MAX_IVL: FSRS_MAX_IVL,
   SCHEDULER_VERSION, paramsFingerprint: fsrsParamsFingerprint,
 };

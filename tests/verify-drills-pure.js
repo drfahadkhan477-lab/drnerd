@@ -286,7 +286,12 @@ head('what the Lab remembers');
   const pick = D.next({items:examItems,cards:old.cards,today:eve,examDate});
   ok('the Lab counts and deals a stored card by exam eve', old.cards['exam-item'].due > eve &&
     P.summary(old,examItems,eve,examDate).due === 1 && pick.item.id === 'exam-item' && pick.reason === 'due');
-  ok('a Lab grade on the eve writes an exam-day card', P.record(old,{id:'exam-item',correct:true,today:eve,examDate}).cards['exam-item'].due === examDate);
+  /* S2: the deadline is for a card whose recall would fall short by the exam. A miss on the eve does; a right
+     answer here does not, so it keeps its own day, at the exam's 95% and so sooner than without the exam. */
+  const onEve = (correct, withExam) => P.record(old,{id:'exam-item',correct,today:eve,examDate:withExam?examDate:undefined}).cards['exam-item'];
+  const miss = onEve(false, true), hit = onEve(true, true), plain = onEve(true, false);
+  ok('a Lab grade on the eve keeps to the exam: a miss lands on exam day, a held answer after it at the exam\'s retention',
+    miss.due === examDate && hit.due > examDate && hit.ivl < plain.ivl, JSON.stringify({ miss: miss.due, hit: hit.ivl, plain: plain.ivl }));
   ok('a second answer to the same item reviews its card rather than starting over', P.record(s, { id: 'as', correct: true, today: day(3) }).cards.as.reps === s.cards.as.reps + 1);
   ok('an answer with no id, or none that makes sense, changes nothing', JSON.stringify(P.record(s, { correct: true, today: T0 })) === before && JSON.stringify(P.record(s, null)) === before && JSON.stringify(P.record(s, { id: 5 })) === before);
   ok('and an unreadable date falls back to today instead of writing garbage', Object.keys(P.record(P.empty(), { id: 'x', correct: true, today: 'soon' }).days).every(d => /^\d{4}-\d{2}-\d{2}$/.test(d)));

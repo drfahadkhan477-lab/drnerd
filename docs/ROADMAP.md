@@ -708,8 +708,8 @@ Hard; otherwise Good; never Easy). A card that exists is still moved by the
 review queue alone, and the mock exam and its review schedule nothing.
 `FSRS.firstRating` (verify-fsrs), the app (verify-stage0, verify-stage2).
 
-**S2 — Schedule toward the exam.** With an exam date set: no interval ends past
-the exam, so each card is seen once more before it; target retention rises as
+**S2 — Schedule toward the exam.** With an exam date set: no card whose recall
+would fall under 95% by the exam is scheduled past it; target retention rises as
 the date nears, which needs the general interval formula, because `fsrs.js`
 equates interval with stability only at 90%; and the final fortnight orders by
 lowest retrievability weighted by chapter. Bump `SCHEDULER_VERSION`, and compare
@@ -717,13 +717,24 @@ with ts-fsrs at the same requested retention in the oracle suite. *Opus*, with
 *Fable* reviewing the mathematics.
 
 The S2 policy keeps 90% retention until 60 days out, then raises it
-linearly to 95% on the eve. Leave room for a review on the eve; a card rated
-that day may come due on exam day. From exam day onward, a new rating starts
+linearly to 95% on the eve. A card whose own schedule ends past the exam is
+brought to the eve only if its recall on exam day would fall under 95%; one
+whose recall holds keeps its day. A card rated on the eve whose recall would
+still fall short comes due on exam day. From exam day onward, a new rating starts
 an ordinary interval. Bring existing cards into the pre-exam queue without
 rewriting their saved dates when the fellow changes or clears the exam date.
 Quiz, review and Practice Lab ratings use the same deadline.
 In the last 14 days rank due bank cards by estimated chance of forgetting times
 chapter share, with equal shares until a matching owner blueprint is supplied.
+
+*Reviewed.* The interval formula, the retention ramp and the final fortnight's
+ranking match FSRS-5 and ts-fsrs (verify-oracle, verify-fsrs). The review found
+that bringing every card to the eve put the whole deck in the eve's queue, again
+on exam day, and again the day after from the saved dates. The owner chose to
+bring forward only the cards that need it (`FSRS.needsDeadline`,
+`SCHEDULER_VERSION` 4). verify-fsrs studies a deck to the exam: the eve holds
+less than half of it, exam day and the day after under a tenth each, and every
+card meets the exam reviewed on the eve or still at 95%.
 
 **S3 — Weights fitted to the fellow.** `fsrs.js` runs FSRS-5's population weights
 and is already built for a change (`SCHEDULER_VERSION`, the parameter
