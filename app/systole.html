@@ -2546,29 +2546,13 @@ function figMeasure(it){
     im.src=it.src;
   });
 }
-/* The readout and the + − buttons speak in "times the fitted size", as the
-   old viewer did: fitted is 100%, one press of + is 140%. */
-const FIG_STEP=1.4;
-function figZoomBy(ps,k){
-  const s=ps&&ps.currSlide; if(!s||!s.isZoomable()) return;
-  const lv=Math.min(s.zoomLevels.max,Math.max(s.zoomLevels.initial,s.currZoomLevel*k));
-  s.zoomTo(lv,{x:ps.viewportSize.x/2,y:ps.viewportSize.y/2},220);
-  figSyncZoom(ps);
-}
-function figFit(ps){ const s=ps&&ps.currSlide; if(s){ s.zoomTo(s.zoomLevels.initial,undefined,220); figSyncZoom(ps); } }
-function figPct(ps){
-  const s=ps&&ps.currSlide;
-  return s&&s.zoomLevels.initial?Math.round(s.currZoomLevel/s.zoomLevels.initial*100):100;
-}
-/* zoomTo sets the zoom level synchronously. Keep our controls in that same
-   state, rather than waiting for the next frame (which can be delayed in
-   WebKit). Gesture updates still use PhotoSwipe's zoomPanUpdate event. */
-function figSyncZoom(ps){
-  const root=ps&&ps.element; if(!root) return;
-  const pct=figPct(ps), el=root.querySelector('.pswp__figv-pct');
-  if(el) el.textContent=pct+'%';
-  root.classList.toggle('figv-zoomed',pct>100);
-}
+/* The zoom row of the figure viewer (+ and −, Fit, the readout) is src/ui/figzoom.js. */
+@@SLOT[src:src/ui/figzoom.js]@@
+const FIG_STEP=FigZoom.STEP;
+function figZoomBy(ps,k){ FigZoom.by(ps,k); }
+function figFit(ps){ FigZoom.fit(ps); }
+function figPct(ps){ return FigZoom.pct(ps); }
+function figSyncZoom(ps){ FigZoom.sync(ps); }
 function openFigure(src,caption,source){
   if(!src) return Promise.resolve(null);
   return openFigures([{src,caption,source}],0);

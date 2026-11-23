@@ -339,6 +339,9 @@ Then resuming a deck: `resumeKey()`, `RESUME_MAX`, the trimming in
 `recordResume()` and the rules of `restoreDeck()` are `src/core/resume.js`'s
 `Resume` (held by `verify-resume-pure`); the page keeps what it reads and writes
 of `S`.
+Then the figure viewer's zoom row: `FIG_STEP`, `figZoomBy()`, `figFit()`,
+`figPct()` and `figSyncZoom()` are `src/ui/figzoom.js`'s `FigZoom` (held by
+`verify-figzoom-pure`); the page keeps each name as one line into it.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
