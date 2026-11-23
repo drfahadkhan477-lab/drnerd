@@ -5882,7 +5882,7 @@ function buildNav(){
     </div>
     ${GNav.gnavHtml(S.screen,typeof homePage==='number'?homePage:0,{icon})}
     <div class="nav-right">
-      ${p!==null?`<div class="score-pill">
+      ${p!==null?`<div class="score-pill" role="img" aria-label="This session: ${S.sessionCorrect} of ${S.sessionTotal} correct, ${p}%" title="This session: ${S.sessionCorrect} of ${S.sessionTotal} correct">
         <span class="score-dot" style="background:${col};box-shadow:0 0 6px ${col}"></span>
         <span>${S.sessionCorrect}/${S.sessionTotal}</span>
         <span style="opacity:.6">·</span>

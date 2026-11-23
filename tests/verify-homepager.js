@@ -97,6 +97,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   /* Every card's white type sits on its own gradient: a card with none is white on the page (Sessions shipped so). */
   const bare = await page.evaluate(() => [...document.querySelectorAll('.lab-card')].filter(c => getComputedStyle(c).backgroundImage === 'none').map(c => c.className));
   ok('every Labs card is painted with its own gradient', bare.length === 0 && parts.labs.length === 4, bare.join(' · '));
+  /* docs/UI-REVAMP.md, D: High contrast draws each card as its plain card with a strong edge, not the four literal gradients. */
+  const hc = await page.evaluate(async () => { const was = themeDef().id; setTheme('contrast');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const cards = [...document.querySelectorAll('.lab-card')].map(c => { const s = getComputedStyle(c); return { img: s.backgroundImage.slice(0, 20), edge: parseFloat(s.borderTopWidth) }; });
+    setTheme(was); return cards; });
+  ok('in High contrast every Labs card is the palette\'s plain card, with an edge of 2px or more', hc.length === 4 && hc.every(c => c.img === 'none' && c.edge >= 2), JSON.stringify(hc));
   ok('and under them the study tools, Chapters first', parts.after && parts.labDoors[0] === 'Chapters' && ['Search', 'Progress', 'Notes', 'Memory', 'Annotations'].every(d => parts.labDoors.includes(d)),
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 

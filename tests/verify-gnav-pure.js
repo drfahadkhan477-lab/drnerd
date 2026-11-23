@@ -77,6 +77,8 @@ head('the page\'s side');
   ok('ACTIONS names gnavGo, with the destination from the button', /gnavGo:el=>gnavGo\(el\.dataset\.go\)/.test(code));
   const fn = (code.match(/function gnavGo\(k\)\{[\s\S]*?\n\}/) || [''])[0];
   ok('gnavGo: Chapters opens Chapters; Home, Brain and Labs glide the pager there, or open Home on that page', /if\(k==='chapters'\)\{ goStudy\(\); return; \}/.test(fn) && /\{home:0,brain:1,labs:2\}\[k\]/.test(fn) && /if\(S\.screen==='home'\) homeGo\(p\); else \{ homePage=p; goHome\(\); \}/.test(fn), fn.replace(/\s+/g, ' ').slice(0, 200));
+  ok('the session score beside it is spoken as what it is, not as bare numbers (docs/UI-REVAMP.md, D)',
+     /<div class="score-pill" role="img" aria-label="This session: \$\{S\.sessionCorrect\} of \$\{S\.sessionTotal\} correct, \$\{p\}%"/.test(code));
   ok('gnavSync shows it only where the module says and only from 700px, and folds Home\'s search while it is up', /GNav\.gnavShown\(S\.screen,page,!!S\.focusMode\)&&!\(window\.matchMedia&&matchMedia\('\(max-width:699px\)'\)\.matches\)/.test(code) && /classList\.toggle\('has-gnav',want\)/.test(code));
 }
 
