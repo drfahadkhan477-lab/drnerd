@@ -587,6 +587,31 @@ after a real session, and confirm every canvas stops when off screen or when the
 page is hidden (several already do). A likely policy: one live animation on Home
 at a time. *Sonnet.*
 
+*Started 23 November 2026: the measuring.* `src/core/framemeter.js`
+counts the frames each canvas draws by wrapping the 2D and WebGL draw calls.
+One frame is counted per canvas, however many calls it takes. It also counts
+what was drawn off screen, or behind a hidden page outside an animation frame.
+`#frames` shows its line (`docs/IPAD.md`, "Measuring battery").
+`verify-framemeter-pure` holds the counting. `verify-frames` holds the app to
+three rules: nothing draws outside an animation frame behind a hidden page;
+the home screen's canvases stop when it is hidden; and no canvas draws off
+screen once a move has settled.
+
+The rules found two canvases drawing what nobody could see, both on the Lab:
+- the cardiac-cycle diagram, below the fold at iPad size, drew every frame;
+- the rhythm monitor kept drawing once the reader had scrolled past it.
+
+Both now skip drawing while out of view (an IntersectionObserver in
+`src/ui/wiggers.js` and in the shell's `ECGMonitor`), and both draw again
+when scrolled back.
+
+One finding is left to the budget. The Apex button's beating heart is the one
+loop that runs on every screen (`verify-loops`). It drew on every frame on
+each screen measured, apart from Home's first page. There, every canvas shared
+the slow software WebGL frames this container draws, so that page shows
+nothing about the device. The battery readings decide whether
+that is worth a budget. Still to come: those readings, then the policy.
+
 **E6 — Sync, only if two devices are really used.** The sync weeks in
 `docs/BUILD-PLAN.html` were never built. If wanted: the review log append-only,
 cards last-write-wins per field, encrypted on the device, stored in the same
