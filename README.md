@@ -33,7 +33,11 @@ node scripts/verify.js --engine webkit              # the engine an iPad runs
 
 **The question bank is licensed content and is not in this repository.** It
 stays on your own devices; `source/`, `build/`, `content/` and `dist/` are all
-gitignored.
+gitignored. The exception is Apex. When you ask it about a question, the
+question's stem, options and figures go to Google's Gemini API, and in open
+mode its commentary and answer key go too. That is under the free tier's
+terms, which let Google use what is sent to improve its products
+(`docs/ROADMAP.md`, F9).
 
 [![verify](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml/badge.svg)](https://github.com/drfahadkhan477-lab/drnerd/actions/workflows/verify.yml)
 

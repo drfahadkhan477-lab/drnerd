@@ -155,6 +155,41 @@ have historically allowed use for product improvement; paid tiers generally have
 not). Choose a paid tier or a provider whose terms exclude training, or make
 grounded mode the default. The owner's decision; no code until it is made.
 
+*Decided 23 November 2026: the free Gemini tier, and bank content keeps
+being sent.* What the decision rests on:
+
+- **What Apex sends.** Both modes send the current question's stem and
+  options, and its figures (`Vision.withFigures`, for `gemini`). Open mode
+  also sends the official commentary, the keyed option and the share of
+  candidates who chose each option. Both send retrieved reference notes and
+  their figures, and the fellow's own notes, profile, memory and misses. So
+  grounded mode never kept the bank on the device: it withholds the answer,
+  not the question.
+- **Google's terms** ([Gemini API Additional Terms](https://aistudio.google.com/docs/terms),
+  effective 23 March 2026). The Unpaid Services may use what is sent "to
+  provide, improve, and develop" Google's products and machine-learning
+  technologies, and human reviewers may read it after it is disconnected
+  from the account. The terms say not to send sensitive, confidential or
+  personal information. The Paid Services (a Cloud project with an active
+  billing account) do not use it to improve products. They log it "for a
+  limited period of time", for abuse detection and legal disclosure. Paid
+  treatment for unpaid use applies only in the EEA, Switzerland and the UK.
+- **ACC's terms** (the [Registered User Agreement](https://www.acc.org/footer-pages/registered-user-agreement)
+  and [Terms of Service](https://www.acc.org/footer-pages/terms-and-conditions),
+  both effective 16 October 2018). The licence is personal and
+  non-commercial. The agreement forbids content being transmitted,
+  reproduced or distributed. Neither page names AI, machine learning or
+  third-party processors, so sending a question to a provider for personal
+  study is a question the terms do not settle. No separate ACCSAP licence
+  was found.
+
+The owner accepted both: Google's use of what Apex sends, and the licence
+question. A1 is therefore not set off by F9. Changing the tier needs no code:
+an active billing account on the Cloud project behind the Worker's
+`GEMINI_API_KEY`. The docs that said the bank stays on the owner's devices
+now say what Apex sends (`README.md`, `docs/IPAD.md`,
+`docs/REFERENCE-GUIDE.md`).
+
 ## 2. Engineering
 
 **E1 — Move the app out of the shell, one module at a time.** Target: the shell

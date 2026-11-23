@@ -293,6 +293,8 @@ Every route above hosts the bank somewhere — on your laptop, or on
 Cloudflare's storage behind Access. There is a fourth arrangement where the
 host carries **no licensed content at all**: the app is deployed as code, and
 the bank lives only in the iPad's own storage, imported once from Files.
+The host is all this covers. Apex still sends the question you ask it about to
+Google's Gemini API (`docs/ROADMAP.md`, F9).
 
 On the laptop, after the usual build and extract:
 
