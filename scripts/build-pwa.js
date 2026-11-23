@@ -1692,6 +1692,7 @@ console.log(`  shell transferred    ${kb(shellWire)} gzipped   (the budget: 288 
 console.log(`  content/             ${mb(contentManifest.figureBytes)} of figures + questions.json`);
 console.log(`  content/splash-heart ${splashAssets.map(([n,b])=>`${n} ${(b.length/1024).toFixed(0)}KB`).join(', ')}`);
 console.log(`  largest file         ${hostCheck.largest.rel} ${(hostCheck.largest.bytes / 1e6).toFixed(2)} MB   (the host's ceiling: 25.00 MB, decimal)`);
+console.log(`  release              ${require('./stamp.js').release(ROOT).text}`);
 console.log(`  build                ${BUILD_ID}   from commit ${COMMIT}`);
 console.log(`\n  written to           ${DIST}`);
 /* Icons are drawn by a headless browser, which lives in the global node_modules

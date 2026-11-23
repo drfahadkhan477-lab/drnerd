@@ -321,6 +321,7 @@ const tree = DRY ? null : treeDigest(DIST);
 const lines = [];
 lines.push(`# Release check — ${verdict}`, '');
 lines.push(`    when      ${new Date().toISOString()}`);
+lines.push(`    release   ${require('./stamp.js').release(ROOT).text}`);
 lines.push(`    commit    ${git.commit} on ${git.branch}${git.dirty ? '  (UNCOMMITTED CHANGES — this is not a reproducible artifact)' : ''}`);
 if (!DRY && SRC) lines.push(`    source    ${path.basename(SRC)}  sha256:${fileDigest(SRC)}`);
 lines.push(`    build     ${fileDigest(BUILD) ? 'sha256:' + fileDigest(BUILD) : 'not produced'}`);

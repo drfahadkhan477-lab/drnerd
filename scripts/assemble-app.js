@@ -51,7 +51,7 @@ const { buildRefSeed, REFS_DIR } = require('./ref-seed.js');
 const { buildRefImages, IMAGES_DIR } = require('./ref-images.js');
 const { bake } = require('./heart-bake.js');
 const { bakePearls } = require('./pearl-bake.js');
-const { gitCommit, stampBuffer, STAMP_RE } = require('./stamp.js');
+const { gitCommit, stampBuffer, STAMP_RE, release } = require('./stamp.js');
 const { replaceWhole } = require('./atomic.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -207,11 +207,12 @@ function unstampShell(shell) {
   return shell.replace(STAMP_RE, '');
 }
 
-/* assembleApp({ shell, resolve, commit }) → { unstamped, out, digest } (Buffers) */
-function assembleApp({ shell, resolve, commit = gitCommit() }) {
+/* assembleApp({ shell, resolve, commit, semver }) → { unstamped, out, digest } (Buffers).
+   semver is the release for the stamp (stamp.js's release()); left out, the stamp names none. */
+function assembleApp({ shell, resolve, commit = gitCommit(), semver }) {
   const html = Slots.assemble(unstampShell(shell), resolve);
   const unstamped = Buffer.from(html, 'utf8');
-  const { out, digest } = stampBuffer(unstamped, commit);
+  const { out, digest } = stampBuffer(unstamped, commit, semver);
   return { unstamped, out, digest };
 }
 
@@ -253,7 +254,8 @@ if (require.main === module) (async () => {
     const shellFile = opt('--shell') || path.join(ROOT, 'app', 'systole.html');
     const out = opt('--out') || path.join(ROOT, 'build', 'systole.assembled.html');
     const bank = isBankSource(source) ? await readBank(source) : null;
-    const r = assembleApp({ shell: fs.readFileSync(shellFile, 'utf8'), resolve: producers({
+    const rel = release();
+    const r = assembleApp({ shell: fs.readFileSync(shellFile, 'utf8'), commit: rel.commit, semver: rel.semver, resolve: producers({
       exportHtml: bank ? null : fs.readFileSync(source, 'utf8'), bank,
       refsDir: opt('--refs') ? path.resolve(opt('--refs')) : undefined,
       imagesDir: opt('--ref-images') ? path.resolve(opt('--ref-images')) : undefined,
@@ -262,7 +264,7 @@ if (require.main === module) (async () => {
     /* Whole or not at all: a write that fails part-way (a full disk) must not
        leave a broken app where the previous working one was. */
     replaceWhole(out, r.out);
-    console.log(`assembled → ${path.relative(ROOT, out)}  (${(r.out.length / 1e6).toFixed(2)} MB, build ${r.digest})` +
+    console.log(`${rel.text}\nassembled → ${path.relative(ROOT, out)}  (${(r.out.length / 1e6).toFixed(2)} MB, release ${rel.semver}, digest ${r.digest})` +
       (bank ? `\n  from the bank in ${path.relative(ROOT, source) || '.'}: ${bankOf(bank.manifest).name}, ${bank.questions.length} questions, ${bank.figures.size} figures` +
               (isAccsap(bankOf(bank.manifest)) ? '' : '; no ACCSAP correction or flag applies to it') : ''));
     const cmp = opt('--compare');
