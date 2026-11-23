@@ -241,7 +241,7 @@ function labsHtml(S, CHAPTERS, dueN, kit){
         <span class="lab-go" aria-hidden="true">Open ${icon('arrow-right','icon-sm')}</span>
       </button>
     </div>
-    <h3 class="page-h3">Study tools</h3>
+    <h2 class="page-h3">Study tools</h2>
     <div class="door-row lab-doors">
       <button class="door door-wide" data-action="goStudy">
         <span class="door-ic">${icon("book")}</span>
@@ -313,7 +313,7 @@ function brainHtml(S, CHAPTERS, CH_COLORS, dueN, seenN, covered, masteryPct, tod
         ${dueN?`<div class="brain-actions"><button class="brain-go primary" data-action="startDue">${icon('repeat','icon-sm')} Review ${dueN} due</button></div>`:''}
       </div>
     </div>
-    <h3 class="page-h3">Chapters</h3>
+    <h2 class="page-h3">Chapters</h2>
     <div class="brain-chs">${rows}</div>`;
 }
 
