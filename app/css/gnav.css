@@ -32,3 +32,20 @@ html[data-palette="contrast"] .gnav-ind{background:transparent;box-shadow:0 0 0 
 body.has-gnav .nav .atlas-search{min-width:0;width:36px;padding:0;gap:0}
 body.has-gnav .nav .atlas-search span{display:none}
 body.has-gnav.on-home .nav{padding-left:max(20px,var(--sal))}
+
+/* ── Apex, the orb (docs/UI-REVAMP.md, C) ──
+   The floating button keeps its place, its height and every rule that hides it; what changes is its edge. A ring in the
+   iridescent hues runs round it, drawn as a second background clipped to the border box under the button's own ground
+   clipped to the padding box (no mask, no pseudo-element: ::after is the glass sheen's), and a soft violet glow sits
+   under its elevation. The ring stands still: turning it would need @property, which Safari reads from 16.4 only, and the
+   sheen already moves when it is pressed. High contrast drops the ring and the glow. */
+.ai-fab{border:2px solid transparent;
+  background:linear-gradient(135deg,var(--navy3),color-mix(in srgb,var(--teal) 55%,var(--navy3))) padding-box,
+    conic-gradient(from 210deg,#38BDF8,#A78BFA,#F472B6,#FBBF24,#5EEAD4,#38BDF8) border-box;
+  box-shadow:var(--e3),0 0 22px -6px rgba(167,139,250,.65)}
+@supports not (color:color-mix(in srgb,red,blue)){.ai-fab{border:2px solid transparent;
+  background:linear-gradient(135deg,var(--navy3),var(--navy3)) padding-box,
+    conic-gradient(from 210deg,#38BDF8,#A78BFA,#F472B6,#FBBF24,#5EEAD4,#38BDF8) border-box;
+  box-shadow:var(--e3),0 0 22px -6px rgba(167,139,250,.65)}}
+@media(hover:hover){.ai-fab:hover{box-shadow:var(--e4),0 0 28px -6px rgba(167,139,250,.8)}}
+html[data-palette="contrast"] .ai-fab{border:2px solid currentColor;background:var(--navy3);box-shadow:var(--e3)}
