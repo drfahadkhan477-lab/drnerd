@@ -6374,17 +6374,8 @@ let pearlPicked=null, pearlSkips=0;
    wavefront belong on one line, and a diagram stacked underneath reads as a
    second, unrelated thing. */
 /* As a note's figure: the caption is the image's alt, and the copy shown under it is hidden from a screen reader. */
-function pearlFigureKey(ev,figure){
-  if(ev.altKey||ev.ctrlKey||ev.metaKey) return;
-  if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();ev.stopImmediatePropagation();figure.click();return;}
-  if(figure.scrollHeight<=figure.clientHeight) return;
-  const next=ev.key==='Home'?0:ev.key==='End'?figure.scrollHeight:
-    ev.key==='ArrowDown'?figure.scrollTop+40:ev.key==='ArrowUp'?figure.scrollTop-40:
-    ev.key==='PageDown'?figure.scrollTop+figure.clientHeight:ev.key==='PageUp'?figure.scrollTop-figure.clientHeight:null;
-  if(next===null) return;
-  ev.preventDefault();ev.stopPropagation();figure.scrollTop=next;
-
-}
+/* A key on the pearl's figure, and the steps of a pearl, are src/app/home.js's. */
+function pearlFigureKey(ev,figure){ HomeScreen.figureKey(ev,figure); }
 function pearlFigure(p){
   if(!p||!p.figKey) return '';
   const src=(typeof refImgSrc==='function')?refImgSrc(p.figKey):'';
@@ -6415,19 +6406,7 @@ function pearlMark(escaped){ return Pearl.mark(escaped); }
 /* Each step wears the name Pearl.lesson gives it from its own words (Mechanism, Cause, Result, Treatment, Key number…),
    with an icon, in its family's colour (Pearl.FAMILY), so the shape of the argument is seen before a word is read. The
    label is text, not only colour. */
-const PEARL_KINDS={'Key point':icon('target','icon-sm'),'Finding':icon('stethoscope','icon-sm'),'Key number':icon('bar-chart','icon-sm'),'Key fact':icon('check-circle','icon-sm'),
-  'Typical':icon('repeat','icon-sm'),'Mechanism':icon('settings','icon-sm'),'Cause':icon('zap','icon-sm'),'Result':icon('arrow-right','icon-sm'),'Condition':icon('flag','icon-sm'),'Treatment':icon('heart-pulse','icon-sm'),
-  'Contrast':icon('layers','icon-sm'),'Risk':icon('trending-up','icon-sm'),'Caveat':icon('alert','icon-sm'),'Avoid':icon('x-circle','icon-sm')};
-function pearlLadder(p){
-  let steps=[];
-  try{ steps=(typeof Pearl!=='undefined')?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
-  if(steps.length<2) return `<p class="pearl-body pearl-in">${pearlMark(e(p.text))}</p>`;
-  return `<ol class="pearl-steps pearl-in">${steps.map((s,i)=>{
-    const label=PEARL_KINDS[s.label]?s.label:(i?'Key fact':'Key point');
-    return `<li class="pearl-step" data-kind="${Pearl.FAMILY[label]}" data-label="${e(label)}" style="--i:${i}"><span class="pearl-n">${i+1}</span>
-      <span class="pearl-txt"><span class="pearl-role">${PEARL_KINDS[label]}${e(label)}</span>
-      ${s.lead?`<em class="pearl-lead">${e(s.lead)}</em> `:''}${pearlMark(e(s.text))}</span></li>`; }).join('')}</ol>`;
-}
+function pearlLadder(p){ return HomeScreen.pearlLadderHtml(p,{Pearl:typeof Pearl!=='undefined'?Pearl:null,e,icon}); }
 function pearlOpen(){ if(pearlCurrent)goRefs(pearlCurrent.id); }
 function pearlNext(auto){
   const all=pearlAll();

@@ -336,6 +336,53 @@ const BK_READS = new Set(), BS_READS = new Set(), ART_READS = new Set(), INFO_RE
      && run(() => M.brainInfoHtml(deep({ brainArtL: { sig: 'x', L: fz }, brainSel: 0, BRAIN_STATE_LABEL: LABEL, e: s => 'E(' + s + ')', icon: (n, c) => '[icon ' + n + (c ? ' ' + c : '') + ']' }))).includes('recall 91% today'));
 }
 
+head('the pearl\'s steps, and a key on its figure');
+{
+  /* A Pearl of the test's own: lesson() hands back the steps written here, so what each step becomes is worked out by
+     hand (the harness below draws a real pearl through the real Pearl). */
+  const P = (steps, throws) => ({ lesson: t => { if (throws) throw new Error('no'); return steps; }, FAMILY: { 'Key point': 'core', 'Key fact': 'core', Cause: 'why', Avoid: 'act' }, mark: x => 'MARK(' + x + ')' });
+  const kit = (pearl) => ({ Pearl: pearl, e: x => 'E(' + x + ')', icon: (n, c) => '[icon ' + n + ' ' + c + ']' });
+  const L = (steps, throws) => run(() => M.pearlLadderHtml({ text: 'the text' }, kit(P(steps, throws))));
+  ok('fewer than two steps, or none it could find, is the statement as written, its numbers marked',
+     L([]) === '<p class="pearl-body pearl-in">MARK(E(the text))</p>' && L([{ label: 'Cause', text: 'one' }]) === L([]) && L(null, true) === L([]), L([]));
+  const two = L([{ label: 'Cause', lead: 'Why:', text: 'stiff LV' }, { label: 'Avoid', text: 'nitrates' }]);
+  const li = two.split('<li ').slice(1);
+  ok('two or more are a numbered list, each step in its family with its name', /^<ol class="pearl-steps pearl-in">/.test(two) && li.length === 2
+     && /^class="pearl-step" data-kind="why" data-label="E\(Cause\)" style="--i:0"><span class="pearl-n">1<\/span>/.test(li[0])
+     && /^class="pearl-step" data-kind="act" data-label="E\(Avoid\)" style="--i:1"><span class="pearl-n">2<\/span>/.test(li[1]), li.map(t => t.slice(0, 90)).join(' | '));
+  ok('each says what it is with its icon, then its lead if it has one, then its words with their numbers marked',
+     li[0].includes('<span class="pearl-role">[icon zap icon-sm]E(Cause)</span>') && li[0].includes('<em class="pearl-lead">E(Why:)</em> MARK(E(stiff LV))')
+     && li[1].includes('<span class="pearl-role">[icon x-circle icon-sm]E(Avoid)</span>') && !li[1].includes('pearl-lead') && li[1].includes('MARK(E(nitrates))'), li[0].slice(90, 260));
+  const odd = L([{ label: 'Whatever', text: 'a' }, { label: '', text: 'b' }, { text: 'c' }]).split('<li ').slice(1);
+  ok('a step with a name it has no icon for is the key point when first, and a key fact after',
+     odd.length === 3 && odd[0].includes('data-label="E(Key point)"') && odd[0].includes('[icon target icon-sm]') && odd[1].includes('data-label="E(Key fact)"') && odd[2].includes('[icon check-circle icon-sm]'),
+     odd.map(t => (t.match(/data-label="[^"]*"/) || [''])[0]).join(' '));
+
+  /* A figure 300 high showing 120 down a picture 900 tall, unless short: then the picture fits. */
+  const press = (key, mods, short) => {
+    const log = [], ev = Object.assign({ key, preventDefault: () => log.push('prevent'), stopPropagation: () => log.push('stop'), stopImmediatePropagation: () => log.push('stop all') }, mods);
+    const fig = { scrollHeight: short ? 200 : 900, clientHeight: 300, scrollTop: 120, click: () => log.push('click') };
+    const r = run(() => M.figureKey(ev, fig));
+    return r.startsWith('THREW') ? r : log.join(',') + ' @' + fig.scrollTop;
+  };
+  ok('Enter or Space opens it, as a tap does, and goes no further', press('Enter') === 'prevent,stop all,click @120' && press(' ') === 'prevent,stop all,click @120' && press('Enter', {}, true) === 'prevent,stop all,click @120', press('Enter'));
+  ok('a tall figure scrolls: Home to the top, End to the bottom, an arrow 40, a page its own height',
+     ['Home', 'End', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].map(k => press(k)).join(' ') === 'prevent,stop @0 prevent,stop @900 prevent,stop @160 prevent,stop @80 prevent,stop @420 prevent,stop @-180',
+     ['Home', 'End', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].map(k => press(k)).join(' '));
+  ok('one that fits, or any other key, is left to the browser', press('ArrowDown', {}, true) === ' @120' && press('PageDown', {}, true) === ' @120' && press('a') === ' @120' && press('Tab') === ' @120',
+     [press('ArrowDown', {}, true), press('a')].join(' | '));
+  ok('and a key held with Alt, Ctrl or Cmd is left to the browser, even Enter', [{ altKey: true }, { ctrlKey: true }, { metaKey: true }].every(m => press('Enter', m) === ' @120' && press('End', m) === ' @120'));
+
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const pg = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => pg.split(t).length - 1;
+  const lines = ["function pearlLadder(p){ return HomeScreen.pearlLadderHtml(p,{Pearl:typeof Pearl!=='undefined'?Pearl:null,e,icon}); }",
+    'function pearlFigureKey(ev,figure){ HomeScreen.figureKey(ev,figure); }'];
+  ok('the page\'s pearlLadder() and pearlFigureKey() are one line each, and the page keeps no table of kinds',
+     lines.every(l => n(l) === 1) && n('function pearlLadder(') === 1 && n('function pearlFigureKey(') === 1 && n('PEARL_KINDS') === 0 && n("'Key point':icon(") === 0,
+     lines.filter(l => n(l) !== 1).join(' | ') || 'both');
+}
+
 head('the page hands the module what it has, and keeps what the markup names');
 {
   const raw = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
@@ -471,7 +518,7 @@ head('the page hands the module what it has, and keeps what the markup names');
      none, then for someone new. */
   const hparts = [read('src/core/pearl.js'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chIcon(ch,cls){', '\n'),
     whole('let pearlCache=null,', '\n'), whole('function greet(){', '\n}'), whole('function pearlAll(){', '\n}'), whole('function pearlNow(){', '\n}'), whole('let pearlPicked=null,', '\n'), whole('function pearlFigure(p){', '\n}'),
-    whole('function pearlChapter(p){', '\n'), whole('function pearlEmblem(p){', '\n}'), whole('function pearlMark(escaped){', '\n'), whole('const PEARL_KINDS=', '};'), whole('function pearlLadder(p){', '\n}'),
+    whole('function pearlChapter(p){', '\n'), whole('function pearlEmblem(p){', '\n}'), whole('function pearlMark(escaped){', '\n'), whole('function pearlLadder(p){', '\n'),
     whole('function helloSeen(){', '\n}'), whole('function showHello(){', '\n}'), read('src/app/home.js'), whole('function buildHome(){', '\n}')].join('\n');
   const store = {};
   const hctx = { CHAPTERS: ['Valves & more', 'Rhythm'], CH_ICONS: {}, POOL: [{ id: 'v1', ch: 'Valves & more' }, { id: 'r1', ch: 'Rhythm' }], TOTAL_Q: 2, LOG: [],

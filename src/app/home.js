@@ -372,5 +372,42 @@ function brainInfoHtml(kit){
     <button class="brain-go primary" data-action="startChapter" data-ch="${e(x.docId)}">${icon('play','icon-sm')} Practise this chapter</button>`;
 }
 
-root.HomeScreen = { homeHtml, labsHtml, brainHtml, brainArtHtml, brainInfoHtml };
+/* ── the pearl's figure and steps ──
+   They were the page's pearlFigureKey(), PEARL_KINDS and pearlLadder(), which keep their names (the ladder as one line
+   handing over Pearl, e and icon). */
+
+/* As a note's figure: Enter or Space opens it, as a tap does, and the arrows, Page Up and Down, Home and End scroll a
+   figure taller than its box. A key held with Alt, Ctrl or Cmd is left to the browser. */
+function figureKey(ev,figure){
+  if(ev.altKey||ev.ctrlKey||ev.metaKey) return;
+  if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();ev.stopImmediatePropagation();figure.click();return;}
+  if(figure.scrollHeight<=figure.clientHeight) return;
+  const next=ev.key==='Home'?0:ev.key==='End'?figure.scrollHeight:
+    ev.key==='ArrowDown'?figure.scrollTop+40:ev.key==='ArrowUp'?figure.scrollTop-40:
+    ev.key==='PageDown'?figure.scrollTop+figure.clientHeight:ev.key==='PageUp'?figure.scrollTop-figure.clientHeight:null;
+  if(next===null) return;
+  ev.preventDefault();ev.stopPropagation();figure.scrollTop=next;
+}
+/* Each step wears the name Pearl.lesson gives it from its own words (Mechanism, Cause, Result, Treatment, Key number…),
+   with an icon, in its family's colour (Pearl.FAMILY), so the shape of the argument is seen before a word is read. The
+   label is text, not only colour. */
+/* A table of the page's icons, made when a ladder is drawn: the module loads before there is an icon() to call. Each
+   name is written in its call, so tests/verify-icons-pure.js reads every one against the sprite. */
+const PEARL_KINDS=icon=>({'Key point':icon('target','icon-sm'),'Finding':icon('stethoscope','icon-sm'),'Key number':icon('bar-chart','icon-sm'),'Key fact':icon('check-circle','icon-sm'),
+  'Typical':icon('repeat','icon-sm'),'Mechanism':icon('settings','icon-sm'),'Cause':icon('zap','icon-sm'),'Result':icon('arrow-right','icon-sm'),'Condition':icon('flag','icon-sm'),'Treatment':icon('heart-pulse','icon-sm'),
+  'Contrast':icon('layers','icon-sm'),'Risk':icon('trending-up','icon-sm'),'Caveat':icon('alert','icon-sm'),'Avoid':icon('x-circle','icon-sm')});
+function pearlLadderHtml(p,kit){
+  const {Pearl,e,icon}=kit;
+  let steps=[];
+  try{ steps=Pearl?Pearl.lesson(p.text):[]; }catch(_){ steps=[]; }
+  if(steps.length<2) return `<p class="pearl-body pearl-in">${Pearl.mark(e(p.text))}</p>`;
+  const KINDS=PEARL_KINDS(icon);
+  return `<ol class="pearl-steps pearl-in">${steps.map((s,i)=>{
+    const label=KINDS[s.label]?s.label:(i?'Key fact':'Key point');
+    return `<li class="pearl-step" data-kind="${Pearl.FAMILY[label]}" data-label="${e(label)}" style="--i:${i}"><span class="pearl-n">${i+1}</span>
+      <span class="pearl-txt"><span class="pearl-role">${KINDS[label]}${e(label)}</span>
+      ${s.lead?`<em class="pearl-lead">${e(s.lead)}</em> `:''}${Pearl.mark(e(s.text))}</span></li>`; }).join('')}</ol>`;
+}
+
+root.HomeScreen = { homeHtml, labsHtml, brainHtml, brainArtHtml, brainInfoHtml, pearlLadderHtml, figureKey };
 })(typeof window !== 'undefined' ? window : this);
