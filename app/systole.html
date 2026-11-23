@@ -426,33 +426,6 @@ function feedbackBlip(host,ok){
     setTimeout(()=>cv.remove(),420); }, ok?1500:1200);
 }
 
-/* ── anatomical heart that beats in time, with conduction highlighting ── */
-function heartSVG(id){
-  return `<svg class="heart-svg" id="${id||''}" viewBox="0 0 120 120" fill="none" aria-hidden="true">
-    <defs>
-      <linearGradient id="hgA" x1="0" y1="0" x2="0.6" y2="1">
-        <stop offset="0%" stop-color="#F87171"/><stop offset="60%" stop-color="#DC2626"/>
-        <stop offset="100%" stop-color="#7F1D1D"/>
-      </linearGradient>
-      <filter id="hglow" x="-40%" y="-40%" width="180%" height="180%">
-        <feGaussianBlur stdDeviation="3.2" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-    </defs>
-    <g class="h-beat" filter="url(#hglow)">
-      <path d="M60 104 C30 80 12 62 12 42 C12 26 24 16 37 16 C47 16 55 22 60 31
-               C65 22 73 16 83 16 C96 16 108 26 108 42 C108 62 90 80 60 104 Z"
-            fill="url(#hgA)"/>
-      <path class="h-vessel" d="M60 31 C58 42 56 52 60 64 M44 34 C46 46 50 54 58 60"
-            stroke="rgba(255,255,255,.30)" stroke-width="2" stroke-linecap="round"/>
-      <circle class="h-sa" cx="40" cy="34" r="3.4" fill="#FDE047"/>
-      <circle class="h-av" cx="58" cy="55" r="3" fill="#FDE047"/>
-      <path class="h-his" d="M58 58 L58 70 M58 70 L48 80 M58 70 L70 80"
-            stroke="#FDE047" stroke-width="2" stroke-linecap="round" opacity=".75"/>
-    </g>
-  </svg>`;
-}
-
 @@SLOT[src:src/core/store.js]@@
 /* ══════════ Apple-Pencil annotation · sticky notes · local persistence ══════════ */
 'use strict';
@@ -4038,10 +4011,6 @@ single word NOTHING.`, 220);
   }catch(_){ /* a broken summariser must never break the results screen */ }
 }
 
-function toOpenAITools(tools){
-  return tools.map(t=>({type:'function',
-    function:{name:t.name,description:t.description,parameters:t.input_schema}}));
-}
 // Session-only: never persist additional private content or credentials.
 const apexExplanationCache=new Map();
 async function explanationKey(body){
@@ -4775,10 +4744,6 @@ function topicRunsNow(){
     catch(_){ _runs=[]; }   // a card that cannot be worked out is no card, not a broken screen
   }
   return _runs;
-}
-function runLabel(r){
-  const words=r.shared.slice(0,3).join(' · ');
-  return (CH_SHORT[r.ch]||r.ch)+(words?' — '+words:'');
 }
 function startRun(i){
   const r=_runsShown[i]; if(!r) return;
