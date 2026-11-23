@@ -80,8 +80,6 @@ head('the reader, on small stylesheets');
 
 /* Undefined when this suite was written (and its reader found every one of them), each with what it costs. */
 const KNOWN = {
-  '--font-serif': '.hero-h1 and .stats-title (cardiac.css): the font-family is void; the Progress title falls back to the body face',
-  '--fg': '.q-restart:hover (home-quiz.css): colour and border fall back to the inherited text colour',
   '--card2': '.pearl-emblem (home.css): the radial ground is void; only its background-color paints',
   '--ground': '.echo-phase-controls button, .echo-flow-branches p (nav.css): no background paints',
 };
