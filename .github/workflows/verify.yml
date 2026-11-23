@@ -10,8 +10,9 @@ on:
 permissions:
   contents: read
 
+# The event is in the group: ../../docs/BUILD.md#a-manual-run-and-masters-push-runs.
 concurrency:
-  group: verify-${{ github.workflow }}-${{ github.ref }}
+  group: verify-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Keep the required check names in ../../docs/BUILD.md#public-ci.
