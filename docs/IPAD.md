@@ -339,6 +339,34 @@ Fonts, the question bank and the figures are separate cacheable files rather
 than base64 inside the HTML — 250 KB of typeface alone that Safari no longer
 has to parse before it can draw anything.
 
+## Measuring battery: the #frames line
+
+Roadmap E5 sets a frame budget from what a real session costs the battery, and
+only the iPad can measure that. Open the app in Safari with `#frames` at the
+end of its address. A line at the foot of the screen then shows:
+
+- how many frames each canvas drew in the last second, busiest first;
+- how many frames were drawn off screen, or while the page was hidden, since
+  the line was opened.
+
+It stays on for that tab through reloads, until you tap it. It adds one
+update a second to what the page does.
+
+For one reading:
+
+1. Charge the iPad to a known level, close other apps, and note the
+   percentage and the time.
+2. Open the app with `#frames`, and study as you normally would for a
+   session of 30 minutes or more.
+3. Note the percentage and the time again, and which screens you spent the
+   session on.
+4. Note what the line said on each screen, especially any canvas drawing at
+   60 frames a second.
+
+Then do one session without `#frames`, so the line's own cost can be told
+apart. `tests/verify-frames.js` holds the app to drawing nothing off screen
+or behind a hidden page. The line is how the iPad shows what it does draw.
+
 ## Known limits, stated plainly
 
 - **Not verified on real Safari.** The suites run against Chromium; WebKit is
