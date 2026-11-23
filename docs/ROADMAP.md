@@ -386,6 +386,9 @@ Then the question's figures: `figLabel()` and `buildFigures()` are `src/app/quiz
 Then the pearl's steps and its figure's keys: `PEARL_KINDS`, `pearlLadder()` and
 `pearlFigureKey()` are `src/app/home.js`'s `HomeScreen.pearlLadderHtml` and `figureKey`
 (held by `verify-homescreen-pure`).
+Then a lead's card in the Rhythm Lab: `leadCardHtml()` is `src/app/rhythmlab.js`'s
+`RhythmLabScreen.leadCardHtml` (held by `verify-rhythmlab-pure`); `LEAD12_MAP` and
+`mountTwelve()` stay the page's.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
