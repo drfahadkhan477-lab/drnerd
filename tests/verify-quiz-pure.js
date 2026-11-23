@@ -19,6 +19,9 @@
  *   - the review ratings, each with when the card would come back, until the card is rated;
  *   - the actions: home, back, flag, next or skip, and "View Results" at the end; the keys or a tap;
  *   - that it reads the names of the state and the kit it is given, and changes nothing;
+ *   - the question's figures: what each is called, a card for each in order with its picture, the one enlarged and
+ *     only it marked and scaled, the number the reader sees, the full-screen button beside the card and not in it,
+ *     none for a question without one; and the page's figLabel() and buildFigures() as one line each;
  *   - the page's one line, its handlers and ids, and that line over the page's own helpers, RATINGS and
  *     fsrsPreview() and the real Calib, FSRS and ReviewQueue.
  */
@@ -179,6 +182,41 @@ const KIT_READS = new Set(), S_READS = new Set();
   const deep = o => { if (o && typeof o === 'object' && !(o instanceof Set)) { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.screenHtml(deep(state({ answered: true, selected: 0, answers: { 0: { cf: 2 } } })), deep([{ q: 'q1', why: 'gap' }]), deep({ Rhythm: '#112233' }), deep(kitOf())));
   ok('given everything frozen, it draws the same screen', !frozen.startsWith('THREW') && frozen === draw({ answered: true, selected: 0, answers: { 0: { cf: 2 } } }, {}, [{ q: 'q1', why: 'gap' }]), frozen.slice(0, 60));
+}
+
+head('the question\'s figures');
+{
+  const K = kitOf();
+  const F = (q, src, at) => run(() => M.figuresHtml(q, src, at, { e: K.e, icon: K.icon }));
+  const L = (q, i, n) => run(() => M.figLabel(q, i, n));
+  const panels = question('qp', { img: 1, imgopt: 1, o: [{ l: 'A', t: 'ECG A' }, { l: 'B', t: 'ECG B' }] });
+  ok('a figure per labelled option is called by the option: "ECG A", "ECG B"', L(panels, 0, 2) === 'ECG A' && L(panels, 1, 2) === 'ECG B', L(panels, 0, 2) + ' / ' + L(panels, 1, 2));
+  ok('otherwise one figure is "Figure", and of several each is numbered from 1', L(panels, 0, 3) === 'Figure 1' && L(panels, 2, 3) === 'Figure 3' && L(panels, 0, 1) === 'Figure'
+     && L(question('q9'), 1, 2) === 'Figure 2', [L(panels, 0, 3), L(panels, 0, 1), L(question('q9'), 1, 2)].join(' / '));
+  const q = question('q1', { img: 1 });
+  ok('a question without a figure, or whose figures are not on the device, has none', F(question('q1'), ['f1'], { zoomed: -1, num: 7 }) === '' && F(q, undefined, { zoomed: -1, num: 7 }) === '' && F(q, [], { zoomed: -1, num: 7 }) === '');
+  const two = F(q, ['u0', 'u1'], { zoomed: -1, num: 7 });
+  const slots = two.split('<div class="fig-slot">').slice(1);
+  ok('each picture is a card in a slot of its own, in order', slots.length === 2 && g1(slots[0], /data-fig="(\d+)"/) === '0' && g1(slots[1], /data-fig="(\d+)"/) === '1'
+     && g1(slots[0], /<img class="fig-img" src="([^"]*)"/) === 'u0' && g1(slots[1], /<img class="fig-img" src="([^"]*)"/) === 'u1', slots.length + ' slots');
+  ok('the card says what it is and that a tap enlarges it, and its picture whose question it is', g1(slots[0], /role="button" tabindex="0"\s+aria-label="([^"]*)"/) === 'E(Figure 1) — tap to enlarge'
+     && g1(slots[1], /alt="([^"]*)"/) === 'E(Figure 2) for question 7' && times(slots[0], 'Tap to enlarge') === 1 && times(slots[0], '📊 E(Figure 1)') === 1, g1(slots[1], /alt="([^"]*)"/));
+  ok('beside the card, not inside it, a button opens it full screen', /<\/div>\s*<button class="fig-full" type="button" aria-label="Open E\(Figure 1\) full screen"\s+data-action="openQuestionFigures" data-qid="E\(q1\)" data-i="0">\[icon expand icon-sm\]<\/button>\s*<\/div>$/.test(slots[0])
+     && slots.every(t => { const pre = t.slice(0, t.indexOf('<button class="fig-full"')); return times(pre, '<div') === times(pre, '</div>'); }), slots[0].slice(-170));
+  const z = F(q, ['u0', 'u1'], { zoomed: 1, num: 7 }).split('<div class="fig-slot">').slice(1);
+  ok('the one enlarged, and only it, is marked, scaled, and says a tap shrinks it', z.length === 2 && !/fig-card zoomed/.test(z[0]) && /fig-card zoomed/.test(z[1])
+     && /transform:scale\(1\);/.test(z[0]) && /transform:scale\(1\.8\) translateY\(10%\);/.test(z[1]) && /tap to shrink/.test(z[1]) && /Tap to shrink/.test(z[1]) && /Tap to enlarge/.test(z[0]),
+     z.map(t => (t.match(/transform:[^;]*/) || [''])[0]).join(' | '));
+  const lab = F(panels, ['p0', 'p1'], { zoomed: -1, num: 9 });
+  ok('a labelled panel is called by its option everywhere, and the number is the one the reader sees', times(lab, 'E(ECG B)') === 4 && times(lab, 'E(Figure') === 0 && times(lab, 'for question 9') === 2, times(lab, 'E(ECG B)') + ' uses');
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const page = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => page.split(t).length - 1;
+  const lines = ['function figLabel(q,i,n){ return QuizScreen.figLabel(q,i,n); }',
+    "function buildFigures(q){ return QuizScreen.figuresHtml(q,IMGS[q.id],{zoomed:S.zoomed,num:S.screen==='mock'&&S.mock?S.mock.i+1:q.n},{e,icon}); }"];
+  ok('the page\'s figLabel() and buildFigures() are one line each, handing over the pictures, the one enlarged and the number shown',
+     lines.every(l => n(l) === 1) && n('function figLabel(') === 1 && n('function buildFigures(') === 1, lines.filter(l => n(l) !== 1).join(' | ') || 'both');
+  ok('and the page keeps no copy of the cards', n('data-action="openQuestionFigures" data-qid=') === 0 && n("'Figure '+(i+1)") === 0);
 }
 
 head('the page hands the module what it has, and keeps what the markup names');

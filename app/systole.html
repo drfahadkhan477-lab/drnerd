@@ -5621,31 +5621,9 @@ function toggleZoom(i){
 }
 
 /* ── figures ── */
-function figLabel(q,i,n){
-  if(q.imgopt && n===q.o.length) return q.o[i].t;          // "ECG A", "PV loop B" …
-  return n>1 ? 'Figure '+(i+1) : 'Figure';
-}
-function buildFigures(q){
-  const src=IMGS[q.id];
-  if(!q.img||!src||!src.length) return '';
-  const n=src.length;
-  return src.map((u,i)=>{
-    const on=S.zoomed===i;
-    /* The full-screen button sits beside the card, not in it: the card is itself a button, and a control
-       inside a control is one a screen reader cannot reach (axe: nested-interactive). */
-    return `<div class="fig-slot"><div class="fig-card${on?' zoomed':''}" data-fig="${i}" role="button" tabindex="0"
-        aria-label="${e(figLabel(q,i,n))} — tap to ${on?'shrink':'enlarge'}">
-      <img class="fig-img" src="${u}" alt="${e(figLabel(q,i,n))} for question ${S.screen==='mock'&&S.mock?S.mock.i+1:q.n}"
-        decoding="async" loading="eager"
-        style="transform:${on?'scale(1.8) translateY(10%)':'scale(1)'};transform-origin:center top">
-      <div class="fig-label"><span>\uD83D\uDCCA ${e(figLabel(q,i,n))}</span>
-        <span class="fig-zoom-hint">${on?'Tap to shrink':'Tap to enlarge'}</span></div>
-    </div>
-      <button class="fig-full" type="button" aria-label="Open ${e(figLabel(q,i,n))} full screen"
-        data-action="openQuestionFigures" data-qid="${e(q.id)}" data-i="${i}">${icon('expand','icon-sm')}</button>
-    </div>`;
-  }).join('');
-}
+/* What a figure is called, and the question's figures as cards, are src/app/quiz.js's. */
+function figLabel(q,i,n){ return QuizScreen.figLabel(q,i,n); }
+function buildFigures(q){ return QuizScreen.figuresHtml(q,IMGS[q.id],{zoomed:S.zoomed,num:S.screen==='mock'&&S.mock?S.mock.i+1:q.n},{e,icon}); }
 
 /* ── render ── */
 let figCache={id:null,node:null};

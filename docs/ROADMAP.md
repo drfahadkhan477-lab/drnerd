@@ -345,6 +345,9 @@ Then the figure viewer's zoom row: `FIG_STEP`, `figZoomBy()`, `figFit()`,
 Then the sign-in page told from a reply: `apexSessionLapsed()`, `offlineIsImage()`
 and the test inside `signinLapsed()` are `src/core/accessgate.js`'s `AccessGate`
 (held by `verify-accessgate-pure`).
+Then the question's figures: `figLabel()` and `buildFigures()` are `src/app/quiz.js`'s
+`QuizScreen.figLabel` and `figuresHtml` (held by `verify-quiz-pure`); the page keeps
+`toggleZoom()`, which turns a card in place.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -8,6 +8,10 @@
      screenHtml(S, LOG, CH_COLORS, kit)   the screen's markup, as a string
      cfRowHtml(S, kit)                    "How sure?" before answering, or nothing once answered
      missRowHtml(S, LOG, kit, wasCorrect) "Why did you miss it?" after a miss, or nothing after a right answer
+     figLabel(q, i, n)                    what the i-th of a question's n figures is called
+     figuresHtml(q, src, at, kit)         the question's figures as cards, or nothing for a question without one:
+                                          src its pictures' addresses, at {zoomed, num} the one enlarged and the
+                                          number the reader sees, kit {e, icon}
 
        S           the page's state. Read, never changed: questions, qIdx, selected, answered, answers, mode,
                    flagged, srs, resumed, quizCorrect, quizTotal
@@ -192,5 +196,34 @@ function screenHtml(S, LOG, CH_COLORS, kit){
   </div>`;
 }
 
-root.QuizScreen = { screenHtml, cfRowHtml: cfRow, missRowHtml: missRow };
+/* ── the question's figures ──
+   They were the page's figLabel() and buildFigures(), which keep their names as one line each; the page still
+   fills the figure zone with them after the layout is decided, and toggleZoom() still turns a card in place. */
+function figLabel(q,i,n){
+  if(q.imgopt && n===q.o.length) return q.o[i].t;          // "ECG A", "PV loop B" …
+  return n>1 ? 'Figure '+(i+1) : 'Figure';
+}
+function figuresHtml(q,src,at,kit){
+  const {e,icon}=kit;
+  if(!q.img||!src||!src.length) return '';
+  const n=src.length;
+  return src.map((u,i)=>{
+    const on=at.zoomed===i;
+    /* The full-screen button sits beside the card, not in it: the card is itself a button, and a control
+       inside a control is one a screen reader cannot reach (axe: nested-interactive). */
+    return `<div class="fig-slot"><div class="fig-card${on?' zoomed':''}" data-fig="${i}" role="button" tabindex="0"
+        aria-label="${e(figLabel(q,i,n))} — tap to ${on?'shrink':'enlarge'}">
+      <img class="fig-img" src="${u}" alt="${e(figLabel(q,i,n))} for question ${at.num}"
+        decoding="async" loading="eager"
+        style="transform:${on?'scale(1.8) translateY(10%)':'scale(1)'};transform-origin:center top">
+      <div class="fig-label"><span>\uD83D\uDCCA ${e(figLabel(q,i,n))}</span>
+        <span class="fig-zoom-hint">${on?'Tap to shrink':'Tap to enlarge'}</span></div>
+    </div>
+      <button class="fig-full" type="button" aria-label="Open ${e(figLabel(q,i,n))} full screen"
+        data-action="openQuestionFigures" data-qid="${e(q.id)}" data-i="${i}">${icon('expand','icon-sm')}</button>
+    </div>`;
+  }).join('');
+}
+
+root.QuizScreen = { screenHtml, cfRowHtml: cfRow, missRowHtml: missRow, figLabel, figuresHtml };
 })(typeof window !== 'undefined' ? window : this);
