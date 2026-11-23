@@ -544,6 +544,18 @@ licensing boundary); *Opus* to build it.
 **E7 — An encrypted backup.** A backup holds chats, notes and memory. Offer a
 passphrase option (WebCrypto AES-GCM with a PBKDF2-derived key) beside the plain
 export. *Sonnet*, with *Opus* reviewing the cryptography.
+*Done:* `src/core/backupcrypto.js` (#411) seals the plain export's JSON with
+AES-GCM-256 under a PBKDF2-SHA-256 key at a cost fixed in code, a fresh salt and IV
+per file, and the format and version as additional data; restore checks the
+envelope and the payload before it writes anything, and `verify-backupcrypto`
+drives export and restore through Progress in both engines. *Reviewed:* the
+primitives and parameters hold. A passphrase was keyed as typed, so the same
+accented letters typed as one code point or as a letter and a combining mark made
+different keys; it is now keyed in its NFC form (RFC 8265), and a restore also
+tries the decomposed form and the passphrase as given, so files made before still
+open. `verify-backupcrypto-pure` holds the envelope in Node against PBKDF2 and
+AES-GCM written again with `node:crypto`. *Open:* the export accepts a passphrase
+of any length; a minimum is the owner's call.
 
 ## 3. Design, themes and UI
 
