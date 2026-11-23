@@ -239,6 +239,8 @@ const palettes = css => {
   const VPS = { portrait: [834, 1194], landscape: [1194, 834], narrow: [507, 1000] };
   const STATES = [
     { name: 'home', key: 'home', go: () => goHome(), marker: '.hero-h1', vps: ['portrait', 'landscape'] },
+    /* The Labs page: its study tools are drawn with color-mix() and its companions (docs/UI-REVAMP.md, B). */
+    { name: 'labs', key: 'home', go: () => { goHome(); homeGo(2, false); }, marker: '#homePage2 .lab-doors', vps: ['portrait', 'landscape'] },
     { name: 'study', key: 'study', go: () => goStudy(), marker: '#planCard', vps: ['portrait'] },
     { name: 'stats', key: 'stats', go: () => goStats(), vps: ['portrait', 'narrow'] },
     { name: 'quiz', key: 'quiz', go: () => { startAdhocQuiz(POOL.filter(q => q.o.length >= 4 && !q.imgopt).slice(0, 4), null); }, marker: '.q-card', vps: ['portrait'] },

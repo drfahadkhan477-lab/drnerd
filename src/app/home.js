@@ -245,13 +245,13 @@ function labsHtml(S, CHAPTERS, dueN, kit){
     <div class="door-row lab-doors">
       <button class="door door-wide" data-action="goStudy">
         <span class="door-ic">${icon("book")}</span>
-        <span class="door-txt"><b>Chapters</b><i>${`${CHAPTERS.length} chapters · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
+        <span class="door-txt"><b>Chapters</b><i>${`${CHAPTERS.length} chapter${CHAPTERS.length===1?'':'s'} · ${dueN?`${dueN} due for review`:`${TOTAL_Q} questions`}`}</i></span>
         <span class="door-go">${icon('arrow-right','icon-sm')}</span>
       </button>
-      <button class="door" data-action="openSearch"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
       <button class="door" data-action="goStats"><span class="door-ic">${icon("trending-up")}</span><span class="door-txt"><b>Progress</b><i>chapter by chapter</i></span></button>
-      <button class="door" data-action="goRefs"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} references`:'your references'}</i></span></button>
-      <button class="door" data-action="goMemory"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} things Apex knows`:'what Apex knows'}</i></span></button>
+      <button class="door" data-action="openSearch"><span class="door-ic">${icon("search")}</span><span class="door-txt"><b>Search</b><i>the whole bank</i></span></button>
+      <button class="door" data-action="goRefs"><span class="door-ic">${icon('folder')}</span><span class="door-txt"><b>Notes</b><i>${typeof REF!=='undefined'&&REF.length?`${REF.length} reference${REF.length===1?'':'s'}`:'your references'}</i></span></button>
+      <button class="door" data-action="goMemory"><span class="door-ic">${icon('pin')}</span><span class="door-txt"><b>Memory</b><i>${typeof Memory!=='undefined'&&Memory.count()?`${Memory.count()} thing${Memory.count()===1?'':'s'} Apex knows`:'what Apex knows'}</i></span></button>
       <button class="door" data-action="goAnnotations"><span class="door-ic">${icon('highlighter')}</span><span class="door-txt"><b>Annotations</b><i>flags and notes</i></span></button>
     </div>`;
 }

@@ -43,6 +43,8 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-prac
 /* [name, how the app opens it, what is done on it once it is up, the screen it must be on] */
 const SCREENS = [
   ['home', () => { goHome(); }, null, 'home'],
+  /* The Labs page: the lab cards and the study tools (docs/UI-REVAMP.md, B), which no screen here opened before. */
+  ['the Labs page', () => { goHome(); homeGo(2, false); }, null, 'home'],
   ['Study', () => { goStudy(); }, null, 'study'],
   ['a quiz with a figure', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, null, 'quiz'],
   ['the same question, answered wrong', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); },

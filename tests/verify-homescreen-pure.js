@@ -82,17 +82,17 @@ head('the study tools');
   /* From where the row opens to the page's end: one div opened and closed, so the doors are inside it. */
   const row = html.slice(html.indexOf('<div class="door-row lab-doors">'));
   ok('under their heading, after the labs, and all in their row, which ends the page', html.indexOf('<h3 class="page-h3">Study tools</h3>') > html.indexOf('lab-sessions') && html.indexOf('<div class="door-row lab-doors">') > html.indexOf('Study tools') && html.endsWith('</button>\n    </div>') && doors(row).length === 6 && times(row, '<div') === 1 && times(row, '</div>') === 1, doors(row).length + ' doors in a row of ' + times(row, '<div') + ' div');
-  ok('six doors and no seventh button, in order: Chapters, the wide one, then Search, Progress, Notes, Memory, Annotations', times(html, '<button class="door') === 6 && J(d.map(x => [x[0], x[3]])) === J([['door door-wide', 'Chapters'], ['door', 'Search'], ['door', 'Progress'], ['door', 'Notes'], ['door', 'Memory'], ['door', 'Annotations']]), J(d.map(x => [x[0], x[3]])));
-  ok('each opens its own tool, and no other, by its action', J(d.map(x => x[1])) === J(['goStudy', 'openSearch', 'goStats', 'goRefs', 'goMemory', 'goAnnotations']), J(d.map(x => x[1])));
-  ok('each with its own icon', J(d.map(x => x[2])) === J(['[icon book]', '[icon search]', '[icon trending-up]', '[icon folder]', '[icon pin]', '[icon highlighter]']), J(d.map(x => x[2])));
+  ok('six doors and no seventh button, in order: Chapters, the wide one, then Progress, Search, Notes, Memory, Annotations (the order the bento shows them, so the keyboard goes the way the eye does)', times(html, '<button class="door') === 6 && J(d.map(x => [x[0], x[3]])) === J([['door door-wide', 'Chapters'], ['door', 'Progress'], ['door', 'Search'], ['door', 'Notes'], ['door', 'Memory'], ['door', 'Annotations']]), J(d.map(x => [x[0], x[3]])));
+  ok('each opens its own tool, and no other, by its action', J(d.map(x => x[1])) === J(['goStudy', 'goStats', 'openSearch', 'goRefs', 'goMemory', 'goAnnotations']), J(d.map(x => x[1])));
+  ok('each with its own icon', J(d.map(x => x[2])) === J(['[icon book]', '[icon trending-up]', '[icon search]', '[icon folder]', '[icon pin]', '[icon highlighter]']), J(d.map(x => x[2])));
   ok('Chapters says how many chapters and how many cards are due', d.length === 6 && d[0][4] === '3 chapters · 7 due for review', (d[0] || [])[4]);
-  ok('or, with none due, how many questions the bank has', (doors(labs({}, 0))[0] || [])[4] === '3 chapters · 50 questions' && (doors(labs({}, 0, { TOTAL_Q: 9 }, ['Only']))[0] || [])[4] === '1 chapters · 9 questions', (doors(labs({}, 0))[0] || [])[4]);
-  ok('Search, Progress and Annotations say what they are', J([d[1], d[2], d[5]].map(x => (x || [])[4])) === J(['the whole bank', 'chapter by chapter', 'flags and notes']));
+  ok('or, with none due, how many questions the bank has', (doors(labs({}, 0))[0] || [])[4] === '3 chapters · 50 questions' && (doors(labs({}, 0, { TOTAL_Q: 9 }, ['Only']))[0] || [])[4] === '1 chapter · 9 questions', (doors(labs({}, 0))[0] || [])[4]);
+  ok('Search, Progress and Annotations say what they are', J([d[2], d[1], d[5]].map(x => (x || [])[4])) === J(['the whole bank', 'chapter by chapter', 'flags and notes']));
   const notes = (ref) => (doors(labs({}, 7, { REF: ref }))[3] || [])[4];
-  ok('Notes says how many references there are', notes([{}, {}, {}, {}]) === '4 references' && notes([{}]) === '1 references', notes([{}, {}, {}, {}]));
+  ok('Notes says how many references there are', notes([{}, {}, {}, {}]) === '4 references' && notes([{}]) === '1 reference', notes([{}, {}, {}, {}]));
   ok('or "your references" with none, and where the app has no notes at all', notes([]) === 'your references' && notes(undefined) === 'your references', notes([]) + ' | ' + notes(undefined));
   const memory = mem => (doors(labs({}, 7, { Memory: mem }))[4] || [])[4];
-  ok('Memory says how many things Apex knows', memory({ count: () => 6 }) === '6 things Apex knows', memory({ count: () => 6 }));
+  ok('Memory says how many things Apex knows', memory({ count: () => 6 }) === '6 things Apex knows' && memory({ count: () => 1 }) === '1 thing Apex knows', memory({ count: () => 6 }) + ' | ' + memory({ count: () => 1 }));
   ok('or "what Apex knows" with none, and where its memory is not loaded', memory({ count: () => 0 }) === 'what Apex knows' && memory(undefined) === 'what Apex knows', memory({ count: () => 0 }) + ' | ' + memory(undefined));
   ok('the notes\' count and the memory\'s are each their own', (doors(labs({}, 7, { REF: [{}, {}], Memory: { count: () => 9 } })) || []).slice(3, 5).map(x => x[4]).join(' | ') === '2 references | 9 things Apex knows');
 }
@@ -434,7 +434,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const bare = String(ask('buildLabs(3)'));
   /* With the page's icons a door holds an svg, so what each says is read from its text alone. */
   const says = h => [...h.matchAll(/<span class="door-txt"><b>([^<]*)<\/b><i>([^<]*)<\/i>/g)].map(m => m[2]);
-  ok('the page\'s own line draws the Labs page in an app with no notes and no memory, without reading either', loaded === 'loaded' && J(says(bare)) === J(['2 chapters · 3 due for review', 'the whole bank', 'chapter by chapter', 'your references', 'what Apex knows', 'flags and notes']), String(loaded).slice(0, 60) + ' · ' + J(says(bare)));
+  ok('the page\'s own line draws the Labs page in an app with no notes and no memory, without reading either', loaded === 'loaded' && J(says(bare)) === J(['2 chapters · 3 due for review', 'chapter by chapter', 'the whole bank', 'your references', 'what Apex knows', 'flags and notes']), String(loaded).slice(0, 60) + ' · ' + J(says(bare)));
   ok('with the page\'s own icons: eighteen of them and the two traces drawn on the cards, twenty svgs', times(bare, 'class="lab-card') === 4 && times(bare, '<svg') === 20 && !bare.includes('[icon') && !bare.includes('undefined'), times(bare, 'class="lab-card') + ' cards, ' + times(bare, '<svg') + ' svgs');
   ask('REF=[{},{},{}]; Memory={count:()=>2}; S.mock={ids:["a"]}');
   const full = String(ask('buildLabs(0)'));
@@ -521,7 +521,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const fire = (type, h) => { tcalls.length = 0; controls(h).forEach(el => { const ev = { type, target: el }; tctx.__ev = ev; tctx.listeners.filter(l => l[0] === type).forEach(l => l[1](ev)); }); return tcalls.slice(); };
   const labTaps = fire('click', full);
   ok('tapped, the Labs page: each lab, then each tool, each its own function',
-     J(labTaps) === J(['goLab', 'goEcho', 'goPractice', 'goSessions', 'goStudy', 'openSearch', 'goStats', 'goRefs', 'goMemory', 'goAnnotations']), J(labTaps));
+     J(labTaps) === J(['goLab', 'goEcho', 'goPractice', 'goSessions', 'goStudy', 'goStats', 'openSearch', 'goRefs', 'goMemory', 'goAnnotations']), J(labTaps));
   const brainTaps = fire('click', bpage);
   ok('tapped, the Brain page: the brain handed the click, the chosen neuron\'s chapter, the review, and each chapter\'s row, each by its own name',
      J(brainTaps) === J(['brainTap ["the event"]', 'startQuiz ["Valves & more"]', 'startQuiz [null,"due"]', 'startQuiz ["Valves & more"]', 'startQuiz ["Rhythm"]', 'startQuiz ["Empty"]']), J(brainTaps));

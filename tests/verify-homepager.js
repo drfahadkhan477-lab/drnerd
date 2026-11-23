@@ -134,6 +134,32 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       ok(`${size.width}×${size.height}: active landing page ${i} has one H1`,headings===1,String(headings));
     }
   }
+
+  head('the study tools: a bento with no empty cell, solid tiles, and the keyboard going the way the eye does');
+  /* docs/UI-REVAMP.md, B. The six doors were a full row and a 3 + 2 grid, which left the last cell of the last row empty, under
+     Apex. Now Chapters and Progress share the first row and the four utilities the second; on a phone, two by two. Measured on
+     the tiles themselves: a row is full when its tiles reach both edges of the grid with no gap wider than the grid's own. */
+  for (const size of [{width:1180,height:820},{width:834,height:1194},{width:1024,height:768},{width:390,height:844}]) {
+    await page.setViewportSize(size);
+    await page.evaluate(()=>homeGo(2,false)); await still('the Labs page');
+    const t = await page.evaluate(() => {
+      const grid = document.querySelector('#homePage2 .lab-doors'), g = grid.getBoundingClientRect(), gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+      const tiles = [...grid.querySelectorAll('.door')].map(d => { const r = d.getBoundingClientRect(), s = getComputedStyle(d);
+        return { name: d.querySelector('.door-txt b').textContent.trim(), top: Math.round(r.top), left: r.left, right: r.right, w: r.width, h: r.height,
+          blur: (s.backdropFilter && s.backdropFilter !== 'none') || (s.webkitBackdropFilter && s.webkitBackdropFilter !== 'none') }; });
+      const rows = [...new Set(tiles.map(x => x.top))].sort((a, b) => a - b).map(top => tiles.filter(x => x.top === top).sort((a, b) => a.left - b.left));
+      const full = rows.map(r => Math.abs(r[0].left - g.left) <= 1 && Math.abs(r[r.length - 1].right - g.right) <= 1 && r.every((x, i) => i === 0 || x.left - r[i - 1].right <= gap + 1));
+      const visual = rows.flat().map(x => x.name);
+      return { n: tiles.length, rows: rows.map(r => r.map(x => x.name).join('+')), full, visual, dom: tiles.map(x => x.name),
+        small: tiles.filter(x => x.h < 88 || x.w < 44).map(x => `${x.name} ${Math.round(x.w)}x${Math.round(x.h)}`), blurred: tiles.filter(x => x.blur).map(x => x.name) };
+    });
+    const at = `${size.width}×${size.height}`;
+    ok(`${at}: six study tools in ${size.width < 700 ? 'four rows' : 'two rows'}, Chapters and Progress first`, t.n === 6 && t.rows.length === (size.width < 700 ? 4 : 2) && t.visual[0] === 'Chapters' && t.visual[1] === 'Progress', JSON.stringify(t.rows));
+    ok(`${at}: and every row is full, so no cell is left empty`, t.full.length > 0 && t.full.every(Boolean), JSON.stringify({ rows: t.rows, full: t.full }));
+    ok(`${at}: each tile at least 88px tall, a target well past 44px`, t.small.length === 0, t.small.join(', '));
+    ok(`${at}: no tile is blurred: they are content, not navigation`, t.blurred.length === 0, t.blurred.join(', '));
+    ok(`${at}: and the keyboard meets them in the order the eye does`, JSON.stringify(t.dom) === JSON.stringify(t.visual), JSON.stringify({ dom: t.dom, visual: t.visual }));
+  }
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after tablet sizes');
   // The pearl and live heart are already visible.

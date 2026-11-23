@@ -246,13 +246,14 @@ onDeath(() => ({ section, checks: passed + failed, errors,
   ok('the doors are a row on the Labs page, under the labs', homeShape.doors >= 5, String(homeShape.doors));
   const firstDoor = await page.evaluate(() => {
     const d = document.querySelector('#homePage2 .door-row .door');
-    return { wide: d.classList.contains('door-wide'),
-             widerThanNext: d.getBoundingClientRect().width >
-                            document.querySelectorAll('#homePage2 .door-row .door')[1].getBoundingClientRect().width };
+    /* The bento gives Chapters and Progress the first row, a tile as wide as two each, so Chapters is as wide as the widest,
+       not wider than the next (docs/UI-REVAMP.md, B). */
+    const w = d.getBoundingClientRect().width, rest = [...document.querySelectorAll('#homePage2 .door-row .door')].slice(1).map(e => e.getBoundingClientRect().width);
+    return { wide: d.classList.contains('door-wide'), w: Math.round(w), widest: rest.length === 5 && rest.every(x => w >= x - 0.5) && rest.some(x => w > x + 0.5) };
   });
-  ok('Chapters is the first door, and the widest',
-     homeShape.labels[0] === 'Chapters' && firstDoor.wide && firstDoor.widerThanNext,
-     homeShape.labels.join(', '));
+  ok('Chapters is the first door, and the widest: none is wider, and the utilities are narrower',
+     homeShape.labels[0] === 'Chapters' && firstDoor.wide && firstDoor.widest,
+     homeShape.labels.join(', ') + ' · ' + JSON.stringify(firstDoor));
   ok('the study material is NOT on the home screen any more',
      !homeShape.rail && !homeShape.feed && homeShape.tiles === 0,
      `rail ${homeShape.rail}, feed ${homeShape.feed}, ${homeShape.tiles} tiles`);

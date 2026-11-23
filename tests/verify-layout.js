@@ -58,7 +58,7 @@ const FRAMES = [
   ['iPhone portrait', 390, 844],
   ['desktop', 1440, 900],
 ];
-const SCREENS = ['home', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'quizflag', 'annotations', 'echo', 'mock', 'mockreport'];
+const SCREENS = ['home', 'labs', 'stats', 'lab', 'refs', 'memory', 'study', 'search', 'quiz', 'quizflag', 'annotations', 'echo', 'mock', 'mockreport'];
 
 /* Enough of a reply to overflow any panel, so "does it scroll" is a real
    question rather than one the fixture answers for us. */
@@ -120,7 +120,9 @@ const sse = text => [
   const sweep = screens => page.evaluate(async screens => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const go = {
-      home: () => goHome(), stats: () => goStats(), lab: () => goLab(), refs: () => goRefs(),
+      home: () => goHome(), stats: () => goStats(),
+      /* The Labs page of Home's pager, with the study tools under the labs (docs/UI-REVAMP.md, B). */
+      labs: () => { goHome(); homeGo(2, false); }, lab: () => goLab(), refs: () => goRefs(),
       memory: () => goMemory(), study: () => goStudy(), search: () => openSearch(),
       quiz: () => (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'),
       /* The quiz with its question flagged (the badge beside the stem, the button pressed), and the list of what has been
