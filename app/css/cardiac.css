@@ -149,7 +149,7 @@
    a theme token for the mix, so the same ground in the same theme, without the
    tint or the glow. None of them applies where color-mix() is read. */
 @supports not (color:color-mix(in srgb,red,blue)){.hero-greet{color:var(--hero-accent)}}
-.hero-h1{font-family:var(--font-serif);font-size:48px;line-height:1;color:#fff;
+.hero-h1{font-family:var(--font-display);font-size:48px;line-height:1;color:#fff;
   margin-top:0;font-weight:400;
   letter-spacing:-.02em;margin-bottom:12px;animation:riseIn .55s var(--glide) .05s both}
 .hero-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
@@ -913,7 +913,7 @@ html[data-palette="contrast"] .door{background:var(--card)}
 /* ── stats ── */
 .stats-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:14px 0 12px}
 .stats-head .btn{flex:0 0 auto;white-space:nowrap}
-.stats-title{font-family:var(--font-serif);font-size:28px;letter-spacing:-.02em}
+.stats-title{font-family:var(--font-display);font-size:28px;letter-spacing:-.02em}
 .stats-sub{font-size:13px;color:var(--muted);margin-top:2px}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
 .stat-tile{background:var(--white);border:1.5px solid var(--border2);border-radius:15px;

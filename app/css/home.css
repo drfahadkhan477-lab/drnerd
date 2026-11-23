@@ -884,24 +884,18 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
    foot, glass, as it does on a phone, with Apex beside it), the pearl's heading small and its reading buttons gone, and
    the whole screen glass and alive. Loaded last, so it is what holds for Home.
 
-   Glass is a translucent ground, a light rim and a soft shadow over a slowly drifting aurora. Its tint is the theme's
-   own --teal and --hp-b, laid down by a pseudo-element's opacity rather than by color-mix(), so every palette keeps its
-   colours and the Safari floor needs no fallback. Every movement stops for prefers-reduced-motion and for the
-   heart's own pause (.atlas-paused). */
+   Glass is a translucent ground, a light rim and a soft shadow (the aurora once meant to lie under it is gone: see below).
+   Every movement stops for prefers-reduced-motion and for the heart's own pause (.atlas-paused). */
 #homePages{--gl-bg:rgba(255,255,255,.62);--gl-edge:rgba(255,255,255,.75);--gl-hi:rgba(255,255,255,.55);
   --gl-drop:0 22px 50px -30px rgba(15,40,70,.45);position:relative;isolation:isolate;overflow:hidden}
 html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}
 @media(prefers-color-scheme:dark){html:not([data-theme="light"]) #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}}
 
-/* The aurora: three soft fields of the theme's colours, behind everything, and still. It drifted once, and every frame of
-   the drift was a new backdrop for each glass surface over it to blur again (the hero, the pearl, the doors, Apex): on an
-   iPad that was the Home screen's frame budget. Still, the blur is drawn once; what moves now moves on top of the glass,
-   not under it (verify-homepager). */
-#homePages::before{content:'';position:absolute;z-index:-1;top:-20%;left:-20%;width:140%;height:140%;pointer-events:none;
-  background:radial-gradient(32% 28% at 18% 22%,var(--teal) 0,transparent 70%),
-    radial-gradient(30% 26% at 82% 30%,var(--hp-b) 0,transparent 70%),
-    radial-gradient(38% 30% at 45% 88%,var(--teal2) 0,transparent 72%);
-  opacity:.2}
+/* There was an aurora here: three soft fields of the theme's colours on #homePages::before. One named --hp-b, which went
+   with the pages' tab bar in e924a3d, so from then on its background was void and it painted nothing. Given its colour
+   back (UI revamp T1.2), it lowered the hero's greeting to 3.9-4.2:1 in Nocturne and a door's caption to 4.47:1 on a dark
+   device (verify-contrast), so it is gone rather than restored, and Home draws as it did. Anything put back here has to
+   stand still (verify-homepager: nothing animates under the glass) and clear verify-contrast in every theme. */
 .home-pager{position:relative;z-index:1}
 
 /* The cards, glass. */

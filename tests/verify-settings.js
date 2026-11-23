@@ -12,7 +12,11 @@ let browser;
 const negative=process.env.NEGATIVE_CHECK||'';
 (async()=>{
  browser=await launch();const page=watch(await browser.newPage({viewport:{width:1194,height:834}}),events,'settings');
- page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
+ /* Ten seconds is for a control to answer. Loading the app is not that: the build from the licensed bank is
+    about 98 MB, and the private gate of 23 November 2026 failed this suite at its first goto under the ten
+    seconds, then passed it alone with the load wait every other suite gives (200 s). The page load is a
+    precondition, so navigation gets that wait and everything else keeps ten seconds. */
+ page.setDefaultTimeout(10000);page.setDefaultNavigationTimeout(200000);page.on('pageerror',e=>errors.push(e.message));
 
  const ok=(name,value)=>{console.log((value?'PASS ':'FAIL ')+name);value?passed++:failed++;};
  // Capture live nodes rather than HTML: restoring a deliberately broken control

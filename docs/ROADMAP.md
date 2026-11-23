@@ -448,6 +448,11 @@ works with no violation, and that an injected `onclick`, inline script and
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
 the browser shards as one reusable workflow. Keep every job's `name:` text exactly
 as it is: branch protection matches on it (`AGENTS.md`). *Opus.*
+*Done:* `verify.yml` and `verify-browser-shard.yml` keep only short notes, each
+linking to the `docs/BUILD.md` section that holds its reasoning ("Public CI",
+"The leak guard reads every commit a run adds", "The public-browser job",
+"Browser shards"), and both browser matrices call the one reusable shard
+workflow. No job's `name:` changed.
 
 **E4 — A budget for the checks on the checks.** The suite cache, input tracing,
 records and stats are now a codebase of their own. Before adding another
@@ -542,8 +547,26 @@ licensing boundary); *Opus* to build it.
 **E7 — An encrypted backup.** A backup holds chats, notes and memory. Offer a
 passphrase option (WebCrypto AES-GCM with a PBKDF2-derived key) beside the plain
 export. *Sonnet*, with *Opus* reviewing the cryptography.
+*Done:* `src/core/backupcrypto.js` (#411) seals the plain export's JSON with
+AES-GCM-256 under a PBKDF2-SHA-256 key at a cost fixed in code, a fresh salt and IV
+per file, and the format and version as additional data; restore checks the
+envelope and the payload before it writes anything, and `verify-backupcrypto`
+drives export and restore through Progress in both engines. *Reviewed:* the
+primitives and parameters hold. A passphrase was keyed as typed, so the same
+accented letters typed as one code point or as a letter and a combining mark made
+different keys; it is now keyed in its NFC form (RFC 8265), and a restore also
+tries the decomposed form and the passphrase as given, so files made before still
+open. `verify-backupcrypto-pure` holds the envelope in Node against PBKDF2 and
+AES-GCM written again with `node:crypto`. A new file needs a passphrase of at
+least 12 characters, counted in its NFC form (the owner's choice); the export
+dialog says so and refuses a shorter one, and a restore asks no length, so files
+made before still open.
 
 ## 3. Design, themes and UI
+
+*Planned (November 2026):* [UI-REVAMP.md](UI-REVAMP.md) takes D1's first slice (one glass token set, a
+lint for CSS variables used but never defined), the Labs page's Study Tools, and D5's navigation question (a glass
+capsule in the header band on inner screens; Apex stays a floating button). Each of its tasks names a model and effort.
 
 **D1 — One design language.** Decide whether the inner screens adopt Quiet Atlas
 or are deliberately different, then make it so: (a) collect the tokens, which are
@@ -688,8 +711,8 @@ Hard; otherwise Good; never Easy). A card that exists is still moved by the
 review queue alone, and the mock exam and its review schedule nothing.
 `FSRS.firstRating` (verify-fsrs), the app (verify-stage0, verify-stage2).
 
-**S2 — Schedule toward the exam.** With an exam date set: no interval ends past
-the exam, so each card is seen once more before it; target retention rises as
+**S2 — Schedule toward the exam.** With an exam date set: no card whose recall
+would fall under 95% by the exam is scheduled past it; target retention rises as
 the date nears, which needs the general interval formula, because `fsrs.js`
 equates interval with stability only at 90%; and the final fortnight orders by
 lowest retrievability weighted by chapter. Bump `SCHEDULER_VERSION`, and compare
@@ -697,13 +720,24 @@ with ts-fsrs at the same requested retention in the oracle suite. *Opus*, with
 *Fable* reviewing the mathematics.
 
 The S2 policy keeps 90% retention until 60 days out, then raises it
-linearly to 95% on the eve. Leave room for a review on the eve; a card rated
-that day may come due on exam day. From exam day onward, a new rating starts
+linearly to 95% on the eve. A card whose own schedule ends past the exam is
+brought to the eve only if its recall on exam day would fall under 95%; one
+whose recall holds keeps its day. A card rated on the eve whose recall would
+still fall short comes due on exam day. From exam day onward, a new rating starts
 an ordinary interval. Bring existing cards into the pre-exam queue without
 rewriting their saved dates when the fellow changes or clears the exam date.
 Quiz, review and Practice Lab ratings use the same deadline.
 In the last 14 days rank due bank cards by estimated chance of forgetting times
 chapter share, with equal shares until a matching owner blueprint is supplied.
+
+*Reviewed.* The interval formula, the retention ramp and the final fortnight's
+ranking match FSRS-5 and ts-fsrs (verify-oracle, verify-fsrs). The review found
+that bringing every card to the eve put the whole deck in the eve's queue, again
+on exam day, and again the day after from the saved dates. The owner chose to
+bring forward only the cards that need it (`FSRS.needsDeadline`,
+`SCHEDULER_VERSION` 4). verify-fsrs studies a deck to the exam: the eve holds
+less than half of it, exam day and the day after under a tenth each, and every
+card meets the exam reviewed on the eve or still at 95%.
 
 **S3 — Weights fitted to the fellow.** `fsrs.js` runs FSRS-5's population weights
 and is already built for a change (`SCHEDULER_VERSION`, the parameter

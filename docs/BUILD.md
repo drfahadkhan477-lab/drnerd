@@ -682,7 +682,7 @@ checks over HTTP. Those extra synthetic split-build checks have their own
 results. The published count uses the split build measured from the licensed
 bank, and synthetic runs cannot write the recorded counts.
 
-`syntax` parses source and lists suites. `logic` runs the 113 suites that are pure Node
+`syntax` parses source and lists suites. `logic` runs the 115 suites that are pure Node
 and repeats them under `TZ=America/New_York` to catch local date and DST bugs.
 Its leak guard checks every incoming commit because a file added and then
 deleted still enters Git history. `build-guard` checks that a licensed build
@@ -693,6 +693,17 @@ are known to be outside their inputs. A master push or manual run exercises
 both browser groups. PR updates cancel older runs for that PR. A newer push
 to master can replace a pending run while the active run continues. The
 workflow uses read-only repository permissions.
+
+#### A manual run and master's push runs
+
+The workflow's concurrency group names the event as well as the branch. A
+manual run on `master` asks for the self-hosted runner in its `full` job, and
+with no runner online that job waits in the queue for up to 24 hours, holding
+its run open. While the group was the branch alone, every push to `master` in
+that time waited behind it and was replaced, unstarted, by the next push: from
+a manual run on 22 November 2026 until the next day, no merge to `master` ran
+CI. With the event in the group, a waiting manual run holds only other manual
+runs. `verify-cichanges-pure` evaluates the group for each event.
 
 For a pull request changing only `tests/verify-reflist.js`, the synthetic
 Chromium and WebKit matrices each run that suite in one shard. The existing
@@ -714,6 +725,51 @@ job's `name:` in `verify.yml`. `browser-done` accepts a skip only when the
 change classifier explicitly selected it. Requiring the individual shard
 checks would leave a skipped PR waiting for expanded check names. The
 required names are checked by `verify-shard-pure`.
+
+#### The leak guard reads every commit a run adds
+
+The `logic` job's first step reads every blob each new commit adds, not only the
+tree that is checked out. `verify-leakguard` reads the commit's files, and a
+licensed file added in one commit of a pull request and deleted in a later one
+is not among them, yet merging the pull request would put it in master's
+history all the same. So the step reads a pull request's own commits (its merge
+ref's second parent, less its first), or what a push to master brought; a push
+with no earlier master to stand on reads every commit no other branch already
+holds, and a manual run adds no commits. The checkout fetches the whole history
+for this. `verify-leakguard` holds that the job keeps that range and that depth.
+
+#### The public-browser job
+
+Two suites drive a browser on pages they write themselves, so they need
+neither the export nor the synthetic build: `verify-bankstore` (the code-only
+deploy's loader, on an invented package) and `verify-suitecache` (what the
+result cache learns of a page a browser loads from disk). The job ran the
+Memorizer's browser suites too until Memorizer moved to its own repository
+(`drfahadkhan477-lab/Memorizer`); it was `memorizer-browser`.
+
+It runs in WebKit as well as Chromium, because the device this is for is an
+iPad and an iPad is WebKit. Every suite launches through `tests/_engine.js`,
+so the engine is `SYSTOLE_ENGINE` and nothing else differs between the two
+matrix entries. `fail-fast` is off, so a failure in one engine does not cancel
+the other, and each suite runs even when the one before it failed
+(`!cancelled()`), so one run shows every failure on an engine; the job is
+still red. Firefox is no longer run here, to save a runner on every push; it
+is still an engine (`--engine firefox`) for a run by hand. Playwright's WebKit
+on Linux is WebKitGTK, not Safari on iPadOS: it shares the engine, the
+JavaScript core and IndexedDB, which is what these suites exercise, and is no
+substitute for opening the app on the iPad.
+
+The job is skipped only when the `changes` job says the pull request cannot
+reach it. Its condition is `!= 'false'` rather than `== 'true'`, so a
+`changes` job that failed, and wrote nothing, runs it rather than skipping it.
+
+It runs in the Playwright image that matches `package-lock.json`, pinned by a
+digest checked against Microsoft's registry; update the two together. The
+image already holds the browsers and their system packages, which avoids the
+runner's slow APT mirror. The container runs as the user that owns GitHub's
+mounted Home: Firefox, when it ran here, refused a root process using someone
+else's Home, and with one owner for the process and the directory it can run
+here again unchanged.
 
 ### Browser shards
 
@@ -938,7 +994,7 @@ src/core/     heart3d · physio · leads12 · fsrs · vision · profile · rhyth
 src/ui/       wiggers · ecg12 · apex · pencil · heroRhythm · echo
 app/          systole.html · css/*.css          (the app, payloads as slots)
 scripts/      assemble-app · verify · build-pwa · serve · shots
-tests/        158 suites · 113 need no browser · + pwa
+tests/        158 suites · 115 need no browser · + pwa
 docs/         BUILD · BUILD-PLAN · REFERENCE-GUIDE · reference-examples/
 ```
 
@@ -979,8 +1035,9 @@ was every browser suite, which is why "CSP has never met the real app" was
 true for weeks.
 
 The `full` job in `.github/workflows/verify.yml` closes that, by running on
-your own machine. It is opt-in: with no runner registered it never starts, and
-nothing else changes.
+your own machine. It is opt-in: with no runner registered it never starts. A
+manual run still queues that job, for up to 24 hours, so cancel the run if no
+runner will come (see [A manual run and master's push runs](#a-manual-run-and-masters-push-runs)).
 
 ### Registering it
 

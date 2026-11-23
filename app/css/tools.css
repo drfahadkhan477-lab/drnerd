@@ -1,0 +1,45 @@
+/* ═══════════ Study Tools on the Labs page: a two-row bento (docs/UI-REVAMP.md, B) ═══════════
+   The six doors were a full-width Chapters row over a 3 + 2 grid of identical tiles, which left an empty cell under the Apex
+   button and made the most-used tools the dimmest things on the page. Now Chapters and Progress take the first row, the four
+   utilities the second, and no width leaves a cell empty (verify-homepager reads every row). Loaded after home.css and scoped to
+   #homePage2 .lab-doors, so it is what holds there and nowhere else: the .door rules in cardiac.css and nav.css still serve every
+   other door.
+   Each tile is solid, not blurred: the tools are content, not navigation, the page they sit on is a backdrop root while the pager
+   glides, and six blurred tiles were six compositing layers over a flat ground. Each tool has its own hue, a wash on the tile and
+   a tint on its icon; the words keep the theme's text colours, which is what verify-contrast reads. Two rows of 88px are no taller
+   than the three rows they replace, so the page still fits the screens verify-homepager pins. High contrast keeps every tile
+   solid and plain, as it keeps every other control. */
+#homePage2 .lab-doors{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(min-width:700px){#homePage2 .lab-doors{grid-template-columns:repeat(4,minmax(0,1fr))}}
+#homePage2 .lab-doors .door{--tool:var(--accent);--tool-ink:var(--teal-ink);grid-column:auto;min-height:88px;padding:14px 16px;gap:14px;
+  border-radius:20px;border:1px solid var(--border2);background:var(--card);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:inset 0 1px 0 var(--gl-rim),0 16px 30px -24px rgba(3,12,24,.45);
+  transition:transform .3s var(--spring),box-shadow .3s var(--ease),border-color .3s var(--ease)}
+#homePage2 .lab-doors .door-wide,#homePage2 .lab-doors .door[data-action="goStats"]{grid-column:span 2}
+#homePage2 .lab-doors .door[data-action="goStats"]{--tool:var(--success);--tool-ink:var(--green-ink)}
+#homePage2 .lab-doors .door[data-action="openSearch"]{--tool:var(--accent-2);--tool-ink:var(--teal-ink)}
+#homePage2 .lab-doors .door[data-action="goRefs"]{--tool:var(--warning);--tool-ink:var(--amber-ink)}
+#homePage2 .lab-doors .door[data-action="goMemory"]{--tool:var(--purple);--tool-ink:var(--purple)}
+#homePage2 .lab-doors .door[data-action="goAnnotations"]{--tool:var(--danger);--tool-ink:var(--red-ink)}
+
+/* The wash and the rim take the tool's hue. */
+#homePage2 .lab-doors .door{border-color:color-mix(in srgb,var(--tool) 24%,var(--border2));
+  background:linear-gradient(160deg,color-mix(in srgb,var(--tool) 9%,var(--card)),var(--card) 70%)}
+@supports not (color:color-mix(in srgb,red,blue)){#homePage2 .lab-doors .door{border-color:var(--border2);background:var(--card)}}
+#homePage2 .lab-doors .door-ic{padding:10px;border-radius:13px;color:var(--tool-ink);border:0;
+  background:color-mix(in srgb,var(--tool) 15%,transparent);box-shadow:inset 0 1px 0 var(--gl-rim)}
+/* Before Safari 16.2 every tool's icon is the theme's one ink on the one pale tint: the fallback names only tokens set on :root. */
+@supports not (color:color-mix(in srgb,red,blue)){#homePage2 .lab-doors .door-ic{padding:10px;border-radius:13px;color:var(--teal-ink);border:0;background:var(--teal4);box-shadow:inset 0 1px 0 var(--gl-rim)}}
+#homePage2 .lab-doors .door-ic .icon{width:20px;height:20px}
+
+/* The words: a title and a line under it. Chapters' line says what is due, so it is in the text colour, not the muted one. */
+#homePage2 .lab-doors .door-txt{gap:3px}
+#homePage2 .lab-doors .door-txt b{font-size:16px;font-weight:650}
+#homePage2 .lab-doors .door-txt i{font-size:13px}
+#homePage2 .lab-doors .door-wide .door-txt i{color:var(--text)}
+
+#homePage2 .lab-doors .door:active{transform:scale(.97)}
+@media(hover:hover){#homePage2 .lab-doors .door:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 var(--gl-rim),0 20px 36px -22px rgba(3,12,24,.5)}}
+html[data-palette="contrast"] #homePage2 .lab-doors .door{background:var(--card);border-color:var(--border)}
+@media(prefers-reduced-motion:reduce){#homePage2 .lab-doors .door{transition:none}#homePage2 .lab-doors .door:active{transform:none}}

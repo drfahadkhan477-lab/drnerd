@@ -136,10 +136,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   head('a stored deck when an exam is brought forward');
   const tomorrow = await inDays(1), yesterday = await inDays(-1), later = await inDays(90);
   const ids = await page.evaluate(({tomorrow,yesterday,later}) => {
-    const a=POOL[0], b=POOL.find(q=>q.ch!==a.ch);
+    const a=POOL[0], b=POOL.find(q=>q.ch!==a.ch), c=POOL.find(q=>q!==a&&q!==b);
     S.srs={};
     S.srs[a.id]={due:later,last:yesterday,stability:1,difficulty:5,ivl:90};
     S.srs[b.id]={due:later,last:yesterday,stability:3,difficulty:5,ivl:90};
+    /* Its recall holds past the exam, so the deadline leaves it where it is. */
+    S.srs[c.id]={due:later,last:yesterday,stability:500,difficulty:5,ivl:90};
     Blueprint.weights={[a.ch]:1,[b.ch]:10};
     setExamDate(tomorrow);
     return [b.id,a.id];
@@ -148,20 +150,27 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     due:dueQuestions().map(q=>q.id), plan:planNow(5).items.slice(0,2).map(q=>q.id),
     today:forecast7()[0].n, raw:Object.values(S.srs).map(c=>c.due)
   }));
-  ok('old cards appear in the exam-eve queue, plan and forecast while retaining their saved dates',
+  ok('old cards whose recall would fall short appear in the exam-eve queue, plan and forecast, and one whose recall holds does not, all keeping their saved dates',
     JSON.stringify(deck.due)===JSON.stringify(ids) && JSON.stringify(deck.plan)===JSON.stringify(ids) &&
     deck.today===2 && deck.raw.every(d=>d===later), JSON.stringify(deck));
   await page.evaluate(() => startQuiz(null,'due'));
   await onScreen(page,'quiz',{marker:'.q-card'});
   ok('starting the actual review preserves weighted risk order ahead of new cards',
     JSON.stringify(await page.evaluate(()=>S.questions.slice(0,2).map(q=>q.id)))===JSON.stringify(ids));
+  /* The card as it stood, and what Easy gives it with the exam and without:
+     the exam's 95% shortens the interval, and its recall holds to the exam,
+     so the deadline does not pull it to exam day. */
+  const easyFor = await page.evaluate(id => { const c = S.srs[id], t = todayISO();
+    const exam = FSRS.update(c, 4, t, id, S.examDate), none = FSRS.update(c, 4, t, id, null);
+    return { words: fmtInterval(exam.ivl), due: exam.due, ivl: exam.ivl, none: none.ivl }; }, ids[0]);
   await page.evaluate(()=>selectOpt(S.questions[S.qIdx].ci));
   const easy=page.locator('.rate-btn[data-grade="4"]');
   await easy.waitFor();
-  ok('the Easy rating previews the exam-day deadline', (await easy.locator('.rate-sched').innerText())==='tomorrow');
+  ok('the Easy rating previews the interval at the exam\'s retention', easyFor.ivl < easyFor.none &&
+    (await easy.locator('.rate-sched').innerText())===easyFor.words, JSON.stringify(easyFor));
   await easy.click();
   const stored = await page.evaluate(id => JSON.parse(localStorage.getItem(KEY)).srs[id], ids[0]);
-  ok('tapping Easy saves the previewed day and the new scheduler version', stored.due===tomorrow && stored.ivl===1 && stored.sv===3);
+  ok('tapping Easy saves the previewed day and the new scheduler version', stored.due===easyFor.due && stored.ivl===easyFor.ivl && stored.sv===4);
   const practice = await page.evaluate(() => {
     const q=POOL.find(q=>!S.srs[q.id]);
     S.flagged=new Set([q.id]);
@@ -169,14 +178,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     selectOpt(q.ci);
     return S.srs[q.id];
   });
-  ok('a first correct quiz answer also schedules by the exam', practice && practice.ivl===1 && practice.due===tomorrow);
+  const atExam = await page.evaluate(c => c ? [FSRS.ivl(c.stability, 0.95), FSRS.ivl(c.stability, 0.9)] : [], practice);
+  ok('a first correct quiz answer also schedules by the exam\'s retention', !!practice && practice.ivl===atExam[0] && atExam[0]<atExam[1],
+    JSON.stringify({ ivl: practice && practice.ivl, atExam }));
   await page.evaluate(()=>goPractice());
   await onScreen(page,'practice',{marker:'#plabRoot [data-kind="tracings"]'});
   await page.click('#plabRoot [data-kind="tracings"]');
   const labId = await page.evaluate(()=>window.__lab.state().item);
   await page.click(`.plab-option[data-id="${labId}"]`);
   const labCard = await page.evaluate(id=>JSON.parse(localStorage.getItem(LabProgress.KEY)).cards[id],labId);
-  ok('a correct Practice Lab answer saves its card for exam day', labCard.ivl===1 && labCard.due===tomorrow);
+  const labAtExam = await page.evaluate(c => c ? [FSRS.ivl(c.stability, 0.95), FSRS.ivl(c.stability, 0.9)] : [], labCard);
+  ok('a correct Practice Lab answer saves its card at the exam\'s retention', !!labCard && labCard.ivl===labAtExam[0] && labAtExam[0]<labAtExam[1],
+    JSON.stringify({ ivl: labCard && labCard.ivl, labAtExam }));
   await page.evaluate(()=>setExamDate(''));
   ok('clearing the exam restores the old due date for the card still to review',
     await page.evaluate(({id,later})=>S.srs[id].due===later && !dueQuestions().some(q=>q.id===id), {id:ids[1],later}));
