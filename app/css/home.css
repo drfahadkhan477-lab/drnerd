@@ -887,11 +887,13 @@ body.on-home .nav-sub{font-family:Georgia,serif;font-style:italic;text-transform
    Glass is a translucent ground, a light rim and a soft shadow over a slowly drifting aurora. Its tint is the theme's
    own --teal and --hp-b, laid down by a pseudo-element's opacity rather than by color-mix(), so every palette keeps its
    colours and the Safari floor needs no fallback. Every movement stops for prefers-reduced-motion and for the
-   heart's own pause (.atlas-paused). */
-#homePages{--gl-bg:rgba(255,255,255,.62);--gl-edge:rgba(255,255,255,.75);--gl-hi:rgba(255,255,255,.55);
+   heart's own pause (.atlas-paused).
+   --hp-b, the aurora's violet, went with the pages' tab bar in e924a3d and left the aurora's background void, so it painted
+   nothing; it is back here with the values it had (verify-cssvars-pure). */
+#homePages{--hp-b:#7C3AED;--gl-bg:rgba(255,255,255,.62);--gl-edge:rgba(255,255,255,.75);--gl-hi:rgba(255,255,255,.55);
   --gl-drop:0 22px 50px -30px rgba(15,40,70,.45);position:relative;isolation:isolate;overflow:hidden}
-html[data-theme="dark"] #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}
-@media(prefers-color-scheme:dark){html:not([data-theme="light"]) #homePages{--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}}
+html[data-theme="dark"] #homePages{--hp-b:#A78BFA;--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}
+@media(prefers-color-scheme:dark){html:not([data-theme="light"]) #homePages{--hp-b:#A78BFA;--gl-bg:rgba(255,255,255,.05);--gl-edge:rgba(255,255,255,.13);--gl-hi:rgba(255,255,255,.09);--gl-drop:0 26px 60px -30px rgba(0,0,0,.7)}}
 
 /* The aurora: three soft fields of the theme's colours, behind everything, and still. It drifted once, and every frame of
    the drift was a new backdrop for each glass surface over it to blur again (the hero, the pearl, the doors, Apex): on an
