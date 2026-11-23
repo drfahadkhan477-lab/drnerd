@@ -223,8 +223,10 @@ In that mode:
 
 - Apex answers **only** from your notes and cites each by title and source.
 - The **ACC answer key for the current question is withheld from it** — it can
-  see the stem and the options, but not the explanation, so it cannot quietly
-  teach from the answer key and call it your notes.
+  see the stem, the options and the question's figures, but not the
+  explanation, so it cannot quietly teach from the answer key and call it your
+  notes. Those are still sent to the provider, as your notes are: grounded
+  mode limits what Apex may use, not what leaves the device (`docs/ROADMAP.md`, F9).
 - If your notes don't cover something, it says *"Your notes do not cover this"*
   and offers to answer from its own knowledge only if you ask.
 
