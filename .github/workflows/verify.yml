@@ -51,13 +51,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-      # NOT ONLY THE TREE THAT IS CHECKED OUT. verify-leakguard below reads
-      # this commit's files; a licensed file added in one commit of a pull
-      # request and deleted in a later one is not among them, and merging the
-      # pull request would put it in master's history all the same. This
-      # reads every blob each new commit adds: a pull request's own commits
-      # (its merge ref's second parent, less its first), or what a push to
-      # master brought. A manual run adds no commits.
+      # Why every commit, not the tree: ../../docs/BUILD.md#the-leak-guard-reads-every-commit-a-run-adds.
       - name: nothing licensed in any commit this run adds
         env:
           EVENT: ${{ github.event_name }}
@@ -305,45 +299,17 @@ jobs:
         if: ${{ !cancelled() }}
         run: TZ=America/New_York node scripts/test-public.js --pure
 
-  # ── the browser suites that need no build ──────────────────────────────────
-  #
-  # Two suites that drive a browser on pages they write themselves, so they
-  # need neither the export nor the synthetic build: verify-bankstore (the
-  # code-only deploy's loader, on an invented package) and verify-suitecache
-  # (what the result cache learns of a page a browser loads from disk). This
-  # job ran the Memorizer's browser suites too until Memorizer moved to its
-  # own repository (drfahadkhan477-lab/Memorizer); it was memorizer-browser.
-  #
-  # IN WEBKIT TOO, because the device this is for is an iPad and an iPad is
-  # WebKit. Every suite here launches through tests/_engine.js, so the engine
-  # is SYSTOLE_ENGINE and nothing else changes between the two entries.
-  # fail-fast is off: an engine failure must not cancel
-  # the other engine. Firefox is no longer run here, to save a runner on every
-  # push; it is still an engine (`--engine firefox`, SYSTOLE_ENGINE=firefox)
-  # for a run by hand. Each
-  # suite runs even when the one before it failed (!cancelled()), so one run
-  # shows every failure on an engine, not only the first; the job is still red.
-  #
-  # Playwright's WebKit on Linux is WebKitGTK, not Safari on iPadOS. It shares
-  # the engine, the JavaScript core and IndexedDB, which is what these suites
-  # exercise; it is not a substitute for opening the app on the iPad.
+  # The browser suites that need no build: ../../docs/BUILD.md#the-public-browser-job.
   public-browser:
     name: public-browser — the code-only deploy and the result cache, in ${{ matrix.label }}
-    # Skipped only when the `changes` job (at the end of this file) says the
-    # pull request cannot reach it. `!= 'false'` rather than `== 'true'`, so a
-    # `changes` job that failed, and wrote nothing, runs this rather than
-    # skipping it.
+    # Fails open on a failed `changes` job: ../../docs/BUILD.md#the-public-browser-job.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.public != 'false' }}
     runs-on: ubuntu-latest
-    # This image matches package-lock.json. Its digest is verified against
-    # Microsoft's registry; update it together with the Playwright version.
-    # Browser/system packages are already present, avoiding the runner's slow APT mirror.
+    # Pinned to package-lock.json's Playwright: ../../docs/BUILD.md#the-public-browser-job.
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
-      # GitHub's mounted Home belongs to UID 1001. Firefox, when it ran here,
-      # refused a root process using someone else's Home; the process and the
-      # directory keep one owner, so it can run here again unchanged.
+      # Runs as the owner of GitHub's mounted Home: ../../docs/BUILD.md#the-public-browser-job.
       options: --user 1001 --ipc=host
     timeout-minutes: 45
     strategy:

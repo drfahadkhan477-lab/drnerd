@@ -445,6 +445,11 @@ works with no violation, and that an injected `onclick`, inline script and
 comments. Move it to `docs/BUILD.md` under anchors the YAML links to, and express
 the browser shards as one reusable workflow. Keep every job's `name:` text exactly
 as it is: branch protection matches on it (`AGENTS.md`). *Opus.*
+*Done:* `verify.yml` and `verify-browser-shard.yml` keep only short notes, each
+linking to the `docs/BUILD.md` section that holds its reasoning ("Public CI",
+"The leak guard reads every commit a run adds", "The public-browser job",
+"Browser shards"), and both browser matrices call the one reusable shard
+workflow. No job's `name:` changed.
 
 **E4 — A budget for the checks on the checks.** The suite cache, input tracing,
 records and stats are now a codebase of their own. Before adding another

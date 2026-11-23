@@ -715,6 +715,51 @@ change classifier explicitly selected it. Requiring the individual shard
 checks would leave a skipped PR waiting for expanded check names. The
 required names are checked by `verify-shard-pure`.
 
+#### The leak guard reads every commit a run adds
+
+The `logic` job's first step reads every blob each new commit adds, not only the
+tree that is checked out. `verify-leakguard` reads the commit's files, and a
+licensed file added in one commit of a pull request and deleted in a later one
+is not among them, yet merging the pull request would put it in master's
+history all the same. So the step reads a pull request's own commits (its merge
+ref's second parent, less its first), or what a push to master brought; a push
+with no earlier master to stand on reads every commit no other branch already
+holds, and a manual run adds no commits. The checkout fetches the whole history
+for this. `verify-leakguard` holds that the job keeps that range and that depth.
+
+#### The public-browser job
+
+Two suites drive a browser on pages they write themselves, so they need
+neither the export nor the synthetic build: `verify-bankstore` (the code-only
+deploy's loader, on an invented package) and `verify-suitecache` (what the
+result cache learns of a page a browser loads from disk). The job ran the
+Memorizer's browser suites too until Memorizer moved to its own repository
+(`drfahadkhan477-lab/Memorizer`); it was `memorizer-browser`.
+
+It runs in WebKit as well as Chromium, because the device this is for is an
+iPad and an iPad is WebKit. Every suite launches through `tests/_engine.js`,
+so the engine is `SYSTOLE_ENGINE` and nothing else differs between the two
+matrix entries. `fail-fast` is off, so a failure in one engine does not cancel
+the other, and each suite runs even when the one before it failed
+(`!cancelled()`), so one run shows every failure on an engine; the job is
+still red. Firefox is no longer run here, to save a runner on every push; it
+is still an engine (`--engine firefox`) for a run by hand. Playwright's WebKit
+on Linux is WebKitGTK, not Safari on iPadOS: it shares the engine, the
+JavaScript core and IndexedDB, which is what these suites exercise, and is no
+substitute for opening the app on the iPad.
+
+The job is skipped only when the `changes` job says the pull request cannot
+reach it. Its condition is `!= 'false'` rather than `== 'true'`, so a
+`changes` job that failed, and wrote nothing, runs it rather than skipping it.
+
+It runs in the Playwright image that matches `package-lock.json`, pinned by a
+digest checked against Microsoft's registry; update the two together. The
+image already holds the browsers and their system packages, which avoids the
+runner's slow APT mirror. The container runs as the user that owns GitHub's
+mounted Home: Firefox, when it ran here, refused a root process using someone
+else's Home, and with one owner for the process and the directory it can run
+here again unchanged.
+
 ### Browser shards
 
 Every suite launches through `tests/_engine.js`, so the engine is a flag:
