@@ -10,6 +10,8 @@
 - **Guards**: contrast by pixels, a ceiling on blurred surfaces, the Safari-13.4 CSS floor and the 288 KiB shell budget, each new check seen to fail first.
 - **First step**: a clickable preview on invented content that you open on the iPad, before any app code changes. Every task below names its model and effort.
 
+**Baseline measured (T0.1)**: `docs/validation/ui-revamp-baseline.json`, written by `tools/ui-baseline.js` on a synthetic build in Chromium.
+
 ## Context
 
 The owner shared five screenshots: four Code XR "glassy UI" reels (Glassy Navbar V10, Liquid-glass Hero, Glassy Navigation Tabs V5,
@@ -95,8 +97,8 @@ behind it.
    `aspect-ratio`, `translate` or `:has`; decorative wrappers `pointer-events:none`. Verified by `verify-floor-css-pure` and `verify-floor`.
 2. **Every `:hover` inside `@media (hover:hover)`** (`verify-hover-pure`, `verify-taps`); `pointer:coarse` and `any-hover` are not allowed guards.
 3. **Shell budget** gzip(index.html) + gzip(app.js) < 288 KiB (`tests/verify-pwa.js:181`). This plan is estimated at +2 to 2.5 KiB gzipped (4
-   pessimistic; CSS compresses about 0.24, JS about 0.3). Headroom is unknown (287,785 B was measured before a markup removal) and the cap is
-   owner-approved, so it is not raised. Offsets: merge the three `.door` layers (about 0.5 KB); delete the aurora gradient if you choose to drop it
+   pessimistic; CSS compresses about 0.24, JS about 0.3). T0.1 measured 278,756 B on the synthetic build, about 15.8 KiB under the cap
+   (the real build may differ); the cap is owner-approved, so it is not raised. Offsets: merge the three `.door` layers (about 0.5 KB); delete the aurora gradient if you choose to drop it
    (about 0.2 KB); trim the `.door` entries at `nav.css:156-176` only together with `verify-glass`, which pins them.
 4. **Pinned tests.** `verify-homescreen-pure` pins the Labs markup by regex; `verify-homepager` requires every landing page to fit at 1180x820,
    834x1194 and 1024x768 and zero `.home-tabs` / `[role=tab]`; `verify-taps`; `verify-contrast` (Labs text against real pixels, 12 theme states);
@@ -166,7 +168,8 @@ toolbar. So:
 - **Width is the risk.** The header is `max-width: --measure` (780/900/960 px) with 20 px padding; the brand takes about 165 px and the right-hand buttons 130-330 px.
   Brain and Labs wear Home's header, whose search is a wide pill (`min-width: 280px` from 1000 px), so the centre is smallest there; `body.has-gnav` can collapse that
   pill to an icon. T0.1 measures the free centre per screen at 744, 820, 1024 and 1180 px, with and without the session pill, and `verify-gnav` hit-tests that the
-  capsule never overlaps the brand or the buttons.
+  capsule never overlaps the brand or the buttons. Measured in T0.1: inner screens leave 379-799 px free at 744-1180 px wide; Brain and Labs leave 223-427 px, and only
+  111-315 px with the session score showing (tightest at 744 and 1024 wide), so there the search pill must collapse or the capsule go icon-only.
 - **Look (Hybrid).** A translucent capsule on the bar with no backdrop-filter of its own (the bar is already 92% opaque and blurred): tinted fill, 1 px rim, inner top
   highlight. The active item is a sliding capsule (`transform`, `--spring`) with an accent glow; you pick the indicator variant from the V5 reel (dot, spotlight, bulge
   outline) in the preview. The bulge outline is the costly one (an inline SVG path, probably a floor-table row); the preview prices all three. It must read on both
@@ -207,7 +210,7 @@ check whose FAIL evidence matters (the default for real work).
 | T0.0 | Save this plan as `docs/UI-REVAMP.md` (line references dated to commit `16911e7`; no counts a suite would have to guard), link it from `docs/ROADMAP.md` D1/D5, open a draft PR (WORK-MAP: claim work early), read PR #435 | Haiku · low | Doc and lookup work |
 | T0.1 | Baseline on a synthetic build. "Before" captures of Home, Brain, Labs, Chapters at 1180x820, 834x1194, 1024x768, 744 and a phone, dark and light. Numbers: free centre width of the header per inner screen at 744, 820, 1024 and 1180 px with and without the session pill; `#navbar` z-index against `#ai`, `#peek` and Settings; Labs and Brain slack (`clientHeight - scrollHeight`) at the three pinned sizes plus 744; per inner screen, its scroll container, fixed or sticky nodes within 80 px of the top and bottom, and animations or canvases under the header; the Apex button's rect per screen; `verify-pwa`'s byte count (split build); visible `backdrop-filter` count per screen; whether `--hp-b` and `--font-serif` really change pixels | Sonnet · medium | Scripted, clearly specified |
 | T0.2 | Interpret T0.1, then build a clickable preview on invented content: Study Tools bento (caption vs badge), the capsule in the header band and, for comparison, the floating-below variant, three indicator variants, the restyled Apex orb; dark and light; iPad portrait and landscape. Published as a private artifact to open on the iPad (it renders in WebKit) | Opus · high | Interpreting measurements plus visual judgement from screenshots (roadmap: D1 decisions) |
-| T0.3 | You pick: capsule placement and indicator variant, tile hues, caption or badge, whether Home's aurora is restored or dropped (`--hp-b`), whether Home's "Systole" and the Progress title become serif (`--font-serif`), capsule hidden in reading screens | You | A decision, not a task |
+| T0.3 | You pick: capsule placement and indicator variant, tile hues, caption or badge, whether Home's aurora is restored or dropped (`--hp-b`), whether the Progress title becomes serif (`--font-serif`), capsule hidden in reading screens | You | A decision, not a task |
 
 ### Phase 1: tokens and two latent bugs
 
@@ -215,7 +218,7 @@ check whose FAIL evidence matters (the default for real work).
 |---|---|---|---|
 | T1.1 | The pure lint "every `var(--x)` resolves", allowlist seeded with the two known cases; inject-and-restore evidence | Opus · high | Check design where "prove it fails" matters |
 | T1.2 | `--hp-b`: define it or delete the dead gradient, as you decided in T0.3 (defining it paints an aurora on Home); own PR, before/after captures, contrast re-run | Sonnet · medium | Small change after a decision |
-| T1.3 | `--font-serif`: define it or switch the two rules to `--font-display`, as decided (it would switch the Home hero heading `.hero-h1` and `.stats-title` from DM Sans to DM Serif; T0.1 confirms); own PR, before/after captures | Sonnet · medium | Same |
+| T1.3 | `--font-serif`: define it or switch the two rules to `--font-display`, as decided (T0.1 measured: only the Progress screen's `.stats-title` changes, from DM Sans to DM Serif; the Home hero heading already computes to DM Serif through another rule); own PR, before/after captures | Sonnet · medium | Same |
 | T1.4 | Token map: inventory `--gl-*`, `--card-glass`, `--glass`, `--lab-*`; names, tiers, the `--gl-edge` collision; a table in the PR | Opus · high | Roadmap D1 decisions row |
 | T1.5 | Move tokens into `glass.css` with aliases for today's names, no visual change; before/after captures; `verify-glass`, `home`, `homepager`, `theme`, `tokens`, `contrast`, `floor`, `ipad-pure` | Sonnet · medium | Roadmap D1 token moves row |
 
@@ -311,8 +314,8 @@ new `tests/verify-gnav.js`, a pure gnav suite and the var-resolves lint · `scri
 - **Header width**: the capsule only fits where the header's free centre allows; T0.1 measures it, and below 700 px v1 shows nothing. Brain and Labs (Home's header) are the tightest.
 - **Placement deviates from "floating"**: the default is a capsule in the header band for the reasons in C; the preview shows both so you can overrule.
 - **Tiles without blur** deviate from "frosted tiles": deliberate (content layer, six fewer blurred surfaces), and flagged in the preview.
-- **Shell budget**: about 7 KiB of headroom at best, unknown until T0.1; offsets listed in the constraints; the cap is not raised.
-- **Both undefined variables change pixels**: restoring Home's aurora and a serif "Systole" are visible changes on Home; they are your decisions (T0.3) and separate PRs.
+- **Shell budget**: T0.1 measured about 15.8 KiB of headroom on the synthetic build (the real build may differ); offsets listed in the constraints; the cap is not raised.
+- **Both undefined variables change pixels**: restoring Home's aurora changes Home, and `--font-serif` changes the Progress title; they are your decisions (T0.3) and separate PRs.
 - **WebKit is CI-only here**: expect one or two CI round trips; real-iPad confirmation is yours.
 - **Building can substitute for studying** (the discovery doc's primary risk): do T5.8 early, and use the preview as the thing to try in a real session.
 
