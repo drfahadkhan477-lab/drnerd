@@ -96,7 +96,7 @@ html [data-home="focus"] .story-rail{display:none}
 .q-restart{font-size:var(--t-tiny);font-weight:600;color:var(--muted);background:none;
   border:1px solid var(--border);border-radius:999px;padding:3px 10px;cursor:pointer;
   margin-left:8px;line-height:1.4}
-@media (hover:hover){.q-restart:hover{color:var(--fg);border-color:var(--fg)}}
+@media (hover:hover){.q-restart:hover{color:var(--text);border-color:var(--text)}}
 .prog-track{height:4px;background:var(--border);border-radius:3px;overflow:hidden}
 .prog-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--teal),var(--teal2));
   transform-origin:left center;transition:transform .4s var(--ease)}
