@@ -348,6 +348,9 @@ and the test inside `signinLapsed()` are `src/core/accessgate.js`'s `AccessGate`
 Then the question's figures: `figLabel()` and `buildFigures()` are `src/app/quiz.js`'s
 `QuizScreen.figLabel` and `figuresHtml` (held by `verify-quiz-pure`); the page keeps
 `toggleZoom()`, which turns a card in place.
+Then the pearl's steps and its figure's keys: `PEARL_KINDS`, `pearlLadder()` and
+`pearlFigureKey()` are `src/app/home.js`'s `HomeScreen.pearlLadderHtml` and `figureKey`
+(held by `verify-homescreen-pure`).
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
