@@ -219,6 +219,25 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     toggleAI();
     return seen;
   });
+  /* The floating button's mark was mounted, and meant to follow Apex (#308), but nothing ever set its state: it stayed
+     idle through every answer. It follows apexSetState() now, and keeps the state once the panel is closed. */
+  const fab = await page.evaluate(() => {
+    const mounted = !!fabAvatar && !!document.getElementById('apexFabAvatar');
+    if (!mounted) return { mounted };
+    const open = [];
+    toggleAI();
+    for (const s of ['thinking', 'tool', 'speaking', 'idle']) { apexSetState(s); open.push(fabAvatar.state()); }
+    toggleAI();
+    const shut = [];
+    for (const s of ['thinking', 'speaking', 'idle']) { apexSetState(s); shut.push(fabAvatar.state() + (apexAv ? '' : ' (no panel mark)')); }
+    return { mounted, open, shut };
+  });
+  ok('the floating button\'s mark is mounted (precondition)', fab.mounted);
+  ok('and walks the same states as the panel\'s, with the panel open and after it is closed',
+     JSON.stringify(fab.open) === JSON.stringify(['thinking', 'tool', 'speaking', 'idle'])
+     && fab.shut && fab.shut.length === 3 && fab.shut[0].startsWith('thinking') && fab.shut[1].startsWith('speaking') && fab.shut[2].startsWith('idle'),
+     JSON.stringify(fab));
+
   ok('avatar walks thinking → tool → speaking → idle',
      streamStates[0] === 'thinking' && streamStates[1] === 'thinking' &&
      streamStates[2] === 'tool' && streamStates[3] === 'speaking' && streamStates[4] === 'idle',

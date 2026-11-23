@@ -3558,7 +3558,9 @@ function mountApexAvatar(){
   if(!cv) return;
   apexAv=Apex.avatar(cv, { state: aiBusy?'thinking':'idle' });
 }
-function apexSetState(s){ if(apexAv) apexAv.setState(s); }
+/* The panel's mark and the floating button's run the same states, so the button still says Apex is thinking, working
+   or speaking once the panel is closed. ApexTurn.run() always ends on 'idle', in its finally, so neither is left mid-state. */
+function apexSetState(s){ if(apexAv) apexAv.setState(s); if(fabAvatar) fabAvatar.setState(s); }
 function apexPulse(n){ if(apexAv) apexAv.pulse(n); }
 /* A quiet signal that the figures went with the question — and, on a
    text-only provider, that they did not. */
@@ -7105,11 +7107,6 @@ function mountFabAvatar(){
   /* It should feel alive to the touch, not just animate at you. */
   fab.addEventListener('pointerenter',()=>fabAvatar&&fabAvatar.pulse(2));
   fab.addEventListener('pointerdown', ()=>fabAvatar&&fabAvatar.pulse(4));
-}
-/* Keep the mark in step with what Apex is actually doing. */
-function setApexState(s){
-  if(fabAvatar) fabAvatar.setState(s);
-  if(typeof apexAvatar!=='undefined'&&apexAvatar) apexAvatar.setState(s);
 }
 function dismissSplash(){
   const sp=document.getElementById('splash');
