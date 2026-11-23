@@ -1,0 +1,687 @@
+{
+ "what": "UI revamp T0.1 baseline (docs/UI-REVAMP.md): measured, not a suite pass",
+ "source": "commit 556a856, synthetic build (scripts/synthetic-export.js + assemble-app.js), no licensed content",
+ "engine": "chromium (Playwright 1.63, cloud container); WebKit not installed here",
+ "tool": "node tools/ui-baseline.js <build> <out>",
+ "measuredAt": "2026-11-23T16:52:46.729Z",
+ "theme": "midnight unless stated",
+ "headerFreeCentrePx": {
+  "1180x820": {
+   "brain": 427,
+   "labs": 427,
+   "home": 427,
+   "study": 799,
+   "search": 799,
+   "stats": 799,
+   "refs": 799,
+   "memory": 799,
+   "annotations": 799,
+   "lab": 799,
+   "echo": 799,
+   "practice": 799,
+   "sessions": 799,
+   "notesearch": 799
+  },
+  "834x1194": {
+   "brain": 297,
+   "labs": 297,
+   "home": 297,
+   "study": 453,
+   "search": 453,
+   "stats": 453,
+   "refs": 453,
+   "memory": 453,
+   "annotations": 453,
+   "lab": 453,
+   "echo": 453,
+   "practice": 453,
+   "sessions": 453,
+   "notesearch": 453
+  },
+  "1024x768": {
+   "brain": 271,
+   "labs": 271,
+   "home": 271,
+   "study": 643,
+   "search": 643,
+   "stats": 643,
+   "refs": 643,
+   "memory": 643,
+   "annotations": 643,
+   "lab": 643,
+   "echo": 643,
+   "practice": 643,
+   "sessions": 643,
+   "notesearch": 643
+  },
+  "744x1133": {
+   "brain": 223,
+   "labs": 223,
+   "home": 223,
+   "study": 379,
+   "search": 379,
+   "stats": 379,
+   "refs": 379,
+   "memory": 379,
+   "annotations": 379,
+   "lab": 379,
+   "echo": 379,
+   "practice": 379,
+   "sessions": 379,
+   "notesearch": 379
+  },
+  "390x844": {
+   "brain": 73,
+   "labs": 73,
+   "home": 73,
+   "study": 25,
+   "search": 25,
+   "stats": 25,
+   "refs": 25,
+   "memory": 25,
+   "annotations": 25,
+   "lab": 25,
+   "echo": 25,
+   "practice": 25,
+   "sessions": 25,
+   "notesearch": 25
+  }
+ },
+ "headerFreeCentreWithSessionScorePx": {
+  "1180x820": {
+   "labs": 315,
+   "study": 687,
+   "stats": 687
+  },
+  "834x1194": {
+   "labs": 185,
+   "study": 341,
+   "stats": 341
+  },
+  "1024x768": {
+   "labs": 159,
+   "study": 531,
+   "stats": 531
+  },
+  "744x1133": {
+   "labs": 111,
+   "study": 267,
+   "stats": 267
+  },
+  "390x844": {
+   "labs": 0,
+   "study": 0,
+   "stats": 0
+  }
+ },
+ "landingSlackPx": {
+  "1180x820": {
+   "brain": 0,
+   "labs": 0
+  },
+  "834x1194": {
+   "brain": 0,
+   "labs": 0
+  },
+  "1024x768": {
+   "brain": 0,
+   "labs": 0
+  },
+  "744x1133": {
+   "brain": 0,
+   "labs": 0
+  },
+  "390x844": {
+   "brain": -1127,
+   "labs": -757
+  }
+ },
+ "visibleBackdropFilterCount": {
+  "1180x820": {
+   "brain": 6,
+   "labs": 12,
+   "home": 9,
+   "study": 7,
+   "search": 6,
+   "stats": 9,
+   "refs": 7,
+   "memory": 6,
+   "annotations": 6,
+   "lab": 6,
+   "echo": 7,
+   "practice": 4,
+   "sessions": 7,
+   "notesearch": 4
+  },
+  "834x1194": {
+   "brain": 6,
+   "labs": 12,
+   "home": 9,
+   "study": 9,
+   "search": 6,
+   "stats": 9,
+   "refs": 7,
+   "memory": 6,
+   "annotations": 6,
+   "lab": 6,
+   "echo": 7,
+   "practice": 4,
+   "sessions": 7,
+   "notesearch": 4
+  },
+  "1024x768": {
+   "brain": 6,
+   "labs": 12,
+   "home": 9,
+   "study": 7,
+   "search": 6,
+   "stats": 9,
+   "refs": 7,
+   "memory": 6,
+   "annotations": 6,
+   "lab": 6,
+   "echo": 7,
+   "practice": 4,
+   "sessions": 7,
+   "notesearch": 4
+  },
+  "744x1133": {
+   "brain": 6,
+   "labs": 12,
+   "home": 9,
+   "study": 8,
+   "search": 6,
+   "stats": 9,
+   "refs": 7,
+   "memory": 6,
+   "annotations": 6,
+   "lab": 6,
+   "echo": 7,
+   "practice": 4,
+   "sessions": 7,
+   "notesearch": 4
+  },
+  "390x844": {
+   "brain": 6,
+   "labs": 6,
+   "home": 7,
+   "study": 7,
+   "search": 6,
+   "stats": 5,
+   "refs": 7,
+   "memory": 6,
+   "annotations": 6,
+   "lab": 6,
+   "echo": 7,
+   "practice": 4,
+   "sessions": 7,
+   "notesearch": 4
+  }
+ },
+ "apexButtonRect_l_t_w_h": {
+  "1180x820": {
+   "brain": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "labs": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "home": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "study": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "search": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "stats": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "refs": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "memory": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "annotations": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "lab": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "echo": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "practice": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "sessions": [
+    1066,
+    756,
+    100,
+    50
+   ],
+   "notesearch": [
+    1066,
+    756,
+    100,
+    50
+   ]
+  },
+  "834x1194": {
+   "brain": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "labs": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "home": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "study": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "search": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "stats": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "refs": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "memory": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "annotations": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "lab": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "echo": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "practice": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "sessions": [
+    720,
+    1130,
+    100,
+    50
+   ],
+   "notesearch": [
+    720,
+    1130,
+    100,
+    50
+   ]
+  },
+  "1024x768": {
+   "brain": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "labs": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "home": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "study": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "search": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "stats": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "refs": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "memory": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "annotations": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "lab": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "echo": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "practice": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "sessions": [
+    910,
+    704,
+    100,
+    50
+   ],
+   "notesearch": [
+    910,
+    704,
+    100,
+    50
+   ]
+  },
+  "744x1133": {
+   "brain": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "labs": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "home": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "study": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "search": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "stats": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "refs": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "memory": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "annotations": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "lab": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "echo": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "practice": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "sessions": [
+    630,
+    1069,
+    100,
+    50
+   ],
+   "notesearch": [
+    630,
+    1069,
+    100,
+    50
+   ]
+  },
+  "390x844": {
+   "brain": [
+    326,
+    780,
+    50,
+    50
+   ],
+   "labs": [
+    326,
+    780,
+    50,
+    50
+   ],
+   "home": [
+    326,
+    780,
+    50,
+    50
+   ],
+   "study": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "search": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "stats": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "refs": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "memory": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "annotations": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "lab": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "echo": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "practice": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "sessions": [
+    276,
+    780,
+    100,
+    50
+   ],
+   "notesearch": [
+    276,
+    780,
+    100,
+    50
+   ]
+  }
+ },
+ "zIndex": {
+  "navbar": "100",
+  "ai": "1",
+  "peek": "auto",
+  "aiFab": "70",
+  "rail": "60",
+  "settings": null
+ },
+ "undefinedVariables": {
+  "auroraBackgroundImage": "none",
+  "heroH1Font": "\"DM Serif Display\", Georgia, serif",
+  "heroH1Visible": true,
+  "homeAuroraWhenDefined": "radial-gradient(32% 28% at 18% 22%, rgb(2, 132, 199) 0px, rg",
+  "homeScreenshotChangedWhenDefined": true,
+  "statsTitleFont": "\"DM Sans\", system-ui, sans-serif"
+ },
+ "shellGzipBytes": {
+  "indexHtml": 61634,
+  "appJs": 217122,
+  "total": 278756,
+  "cap": 294912,
+  "headroom": 16156,
+  "note": "gzip level 6 of dist/index.html + dist/app.js from scripts/build-pwa.js on the synthetic build; the real build may differ"
+ },
+ "readings": [
+  "Inner screens leave 379-799 px free in the header at 744-1180 px wide; the capsule fits there.",
+  "Brain and Labs wear Home header: 223-427 px free, 111-315 px with the session score showing; tightest at 744 and 1024 wide.",
+  "Below 700 px (390 wide) 0-73 px free: no capsule on phones, as planned.",
+  "Labs shows 12 blurred surfaces, the most of any screen measured (6-9 elsewhere).",
+  "--hp-b undefined: the Home aurora computes to none; defining it paints it and changes Home pixels.",
+  "--font-serif undefined: .stats-title falls back to DM Sans; the Home hero heading already computes to DM Serif Display through another rule, so only the Progress title would change.",
+  "Landing pages Brain and Labs report 0 slack at the three pinned iPad sizes: they fit, and this reading cannot say how much room is left.",
+  "No canvas sits under the header at rest on any screen measured."
+ ]
+}

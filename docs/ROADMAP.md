@@ -561,6 +561,10 @@ made before still open.
 
 ## 3. Design, themes and UI
 
+*Planned (November 2026):* [UI-REVAMP.md](UI-REVAMP.md) takes D1's first slice (one glass token set, a
+lint for CSS variables used but never defined), the Labs page's Study Tools, and D5's navigation question (a glass
+capsule in the header band on inner screens; Apex stays a floating button). Each of its tasks names a model and effort.
+
 **D1 — One design language.** Decide whether the inner screens adopt Quiet Atlas
 or are deliberately different, then make it so: (a) collect the tokens, which are
 declared across `base.css`, `themes.css`, `figures.css`, `tablet.css`,
