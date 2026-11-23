@@ -29,7 +29,8 @@
 @supports not (color:color-mix(in srgb,red,blue)){#homePage2 .lab-doors .door{border-color:var(--border2);background:var(--card)}}
 #homePage2 .lab-doors .door-ic{padding:10px;border-radius:13px;color:var(--tool-ink);border:0;
   background:color-mix(in srgb,var(--tool) 15%,transparent);box-shadow:inset 0 1px 0 var(--gl-rim)}
-@supports not (color:color-mix(in srgb,red,blue)){#homePage2 .lab-doors .door-ic{padding:10px;border-radius:13px;color:var(--tool-ink);border:0;background:var(--teal4);box-shadow:inset 0 1px 0 var(--gl-rim)}}
+/* Before Safari 16.2 every tool's icon is the theme's one ink on the one pale tint: the fallback names only tokens set on :root. */
+@supports not (color:color-mix(in srgb,red,blue)){#homePage2 .lab-doors .door-ic{padding:10px;border-radius:13px;color:var(--teal-ink);border:0;background:var(--teal4);box-shadow:inset 0 1px 0 var(--gl-rim)}}
 #homePage2 .lab-doors .door-ic .icon{width:20px;height:20px}
 
 /* The words: a title and a line under it. Chapters' line says what is due, so it is in the text colour, not the muted one. */
