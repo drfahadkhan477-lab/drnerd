@@ -389,6 +389,13 @@ Then the pearl's steps and its figure's keys: `PEARL_KINDS`, `pearlLadder()` and
 Then a lead's card in the Rhythm Lab: `leadCardHtml()` is `src/app/rhythmlab.js`'s
 `RhythmLabScreen.leadCardHtml` (held by `verify-rhythmlab-pure`); `LEAD12_MAP` and
 `mountTwelve()` stay the page's.
+Then the place you had scrolled to in the Apex panel: `APEX_STICK`, `apexAtBottom()`,
+`apexStick()` and the place `apexPanelRestore()` puts the conversation back to are
+`src/app/apexpanel.js`'s `ApexPanel.STICK`, `atBottom`, `stick` and `keepPlace` (held by
+`verify-apexpanel-pure`).
+Then which figures open together: `FIG_GROUP`, `figFromEl()` and the gathering in
+`openFigureFrom()` are `src/ui/figzoom.js`'s `FigZoom.GROUP`, `item` and `gather` (held by
+`verify-figzoom-pure`); `openFigures()` stays the page's.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

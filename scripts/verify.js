@@ -310,7 +310,7 @@ const SUITES = [
      src/core/accessgate.js. */
   ['accessgate-pure', 'an HTML reply where data was asked for is a lapsed session; the sign-in probe is lapsed on an opaque redirect, a 3xx or the sign-in page; a figure is an ok reply with an image type, never a 200 sign-in page, an octet-stream or nothing cached'],
   /* The figure viewer's zoom row (docs/ROADMAP.md, E1): + and −, Fit and the readout, moved to src/ui/figzoom.js. */
-  ['figzoom-pure', 'one press is 1.4 times; + and − zoom about the middle, held between fitted and the most allowed, and Fit goes back; the readout is times the fitted size and the viewer is marked zoomed exactly while it is over 100; no viewer or slide is nothing to do'],
+  ['figzoom-pure', 'a figure is its picture, caption and source, and opens with the others of its group in order at its own place, or alone; one press is 1.4 times; + and − zoom about the middle, held between fitted and the most allowed, and Fit goes back; the readout is times the fitted size and the viewer is marked zoomed exactly while it is over 100; no viewer or slide is nothing to do'],
   /* A practice deck put down and taken up again (docs/ROADMAP.md, E1): which decks are kept, how many, and when a kept
      one can be dealt again, moved to src/core/resume.js. */
   ['resume-pure', 'only an "all" deck is kept, twelve at most and the oldest touched first out; a kept deck comes back in its order at its place, question one included, and not when the bank lost a question, the pool is another deck, or it was finished'],
@@ -401,7 +401,7 @@ const SUITES = [
   /* Last of the screens table: the Apex panel's markup, in src/app/apexpanel.js. buildAI() stays the page's, because
      it reads what was being typed and where the panel was scrolled, puts the markup in, wires the chat and the avatar,
      and keeps the figures' memo; the module is handed that memo's answer and the head already drawn. */
-  ['apexpanel-pure', 'the Apex panel shows its head with what Apex answers from or about and its four buttons, the setup where there is no key to call with, the thread with each reply as it went or what Apex can do, the dots while a reply is written, what the reply drew on for this thread only, the figures from those notes open or shut, the prompts that apply, the box, Send or Stop and what it is powered by; each part reads only what it draws with and changes nothing, and the page\'s lines draw it over its own helpers, prompts, providers and markdown, finding the figures once per reply'],
+  ['apexpanel-pure', 'the Apex panel shows its head with what Apex answers from or about and its four buttons, the setup where there is no key to call with, the thread with each reply as it went or what Apex can do, the dots while a reply is written, what the reply drew on for this thread only, the figures from those notes open or shut, the prompts that apply, the box, Send or Stop and what it is powered by; each part reads only what it draws with and changes nothing, and the page\'s lines draw it over its own helpers, prompts, providers and markdown, finding the figures once per reply, and keeps the place the reader had scrolled to, writing it only when it changes'],
   /* The 12-lead's paper. verify-leads covers the morphology and reaches ECG12
      in three of its checks; what a fellow MEASURES on — a millimetre, a big
      square, 0.04 s — had nothing on it, and needed a browser to reach. */
