@@ -410,6 +410,10 @@ Then its handlers: `setLab()`, `setPhysioSlow()`, `physioIsPlaying()`, `setPhysi
 the three taps `mountPhysio()` wrote inline (a lesion, a view, an intervention) are
 `RhythmLabScreen`'s, handed `LAB` and `LAB_ENV`, what they use of the page; the four names stay
 as one line each, and the mount still gives each chip its listener.
+Then the beat and the painter: `physioCycle()`, `physioRef()`, `physioApplyLesion()`,
+`physioPhaseNow()` and `paintPhysioNote()` are `RhythmLabScreen`'s `cycle`, `ref`,
+`applyLesion`, `phaseNow` and `paintNote`; the circulation engine's load stays the page's,
+lent as `LAB_ENV.loadCirculation`, since the Practice Lab and the Home hero share it.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

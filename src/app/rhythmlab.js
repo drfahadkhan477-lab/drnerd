@@ -23,8 +23,9 @@
        leadCardHtml            the page's card for a lead, which the page also redraws when a lead is tapped
        e, icon                 the page's helpers
 
-   Nothing here is changed, and nothing is drawn: this is markup with three empty canvases in it. The
-   page's mountLab() draws into them after the screen is in the document, and keeps what is chosen.
+   The three builders change nothing and draw nothing: they return markup with three empty canvases in it.
+   The page's mountLab() draws into them after the screen is in the document. What is chosen is kept in
+   state() below, and changed by the handlers below it.
 
    WHAT THE SCREEN SAYS:
 
@@ -302,6 +303,66 @@ function chooseIv(st,b,env){
   st.notePhase=''; env.paintNote();
 }
 
+/* ── the beat handed to the diagram, and the caption painted ──
+   They were the page's physioCycle(), physioRef(), physioApplyLesion(), physioPhaseNow() and paintPhysioNote(); the
+   page keeps each name as one line. Besides what the handlers above use, they use of the page:
+
+     env.doc.getElementById(id)      the caption and the phase pill
+     env.Physio()                    src/core/physio.js, for the phase where the diagram cannot say it
+     env.Circulation()               src/core/circulation.js, or nothing until it is there
+     env.loadCirculation(then)       where the split build lifted the engine out, starts loading it if no load is under
+                                     way, and calls then() once it is in; the page keeps the load, which its other
+                                     users of the engine share
+     env.noteHtml()                  the caption's markup (noteHtml() above, handed what the panel chose)
+     env.VIEWS                       the views, for the pill's name outside Wiggers
+
+     cycle(st, id, env)      the beat to draw for a lesion; for Normal, in the PV loop, the chosen intervention's
+                             (Circulation.INTERVENTIONS); null without the engine, when physio.js draws, or where it
+                             throws. Circulation keeps each beat it has run
+     ref(env)                the normal beat, that the others are measured against (the PV loop's dashed loop, the
+                             coronary glow's scale); null likewise
+     applyLesion(st, env)    the chosen lesion's beat handed to the diagram, with the normal one; without the engine,
+                             physio.js's own, and the engine asked for, to hand it over when it is there
+     phaseNow(st, env)       the phase the Wiggers view is in now: the diagram's, or Physio's at the diagram's time
+     paintNote(st, env)      the caption and the pill painted; in Wiggers only when the phase has turned over */
+function cycle(st,id,env){
+  const C=env.Circulation(); if(!C) return null;
+  try{
+    if(id!=='normal') return C.cycle(id);
+    const iv=st.view==='pv'&&C.INTERVENTIONS&&C.INTERVENTIONS[st.iv];
+    return C.cycle(iv||'normal');
+  }catch(_){ return null; }
+}
+function ref(env){
+  const C=env.Circulation(); if(!C) return null;
+  try{ return C.cycle('normal'); }catch(_){ return null; }
+}
+function applyLesion(st,env){
+  if(!st.physio) return;
+  if(!env.Circulation()){
+    env.loadCirculation(()=>{ env.applyLesion(); st.notePhase=''; env.paintNote(); });
+    st.physio.setCycle(null);
+    return;
+  }
+  st.physio.setCycle(cycle(st,st.lesion,env),ref(env));
+}
+function phaseNow(st,env){ return st.physio&&st.physio.phaseNow?st.physio.phaseNow():env.Physio().phaseAt(st.physio?st.physio.time():0); }
+function paintNote(st,env){
+  const el=env.doc.getElementById('physioNote'); if(!el) return;
+  /* Repainting a paragraph sixty times a second is wasteful and makes the text
+     unselectable, so only when the phase actually changes. */
+  if(st.view==='wiggers'){
+    const id=phaseNow(st,env).id;
+    if(id===st.notePhase) return;
+    st.notePhase=id;
+  }
+  el.innerHTML=env.noteHtml();
+  const pill=env.doc.getElementById('physioPhase');
+  if(pill) pill.textContent = st.view==='wiggers'
+    ? phaseNow(st,env).name : env.VIEWS.find(x=>x[0]===st.view)[1];
+}
+
 root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state, noteHtml,
-  isPlaying, setPlaying, setSlow, setKind, chooseLesion, chooseView, chooseIv };
+  isPlaying, setPlaying, setSlow, setKind, chooseLesion, chooseView, chooseIv,
+  cycle, ref, applyLesion, phaseNow, paintNote };
 })(typeof window !== 'undefined' ? window : this);

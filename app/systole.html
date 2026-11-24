@@ -1819,40 +1819,15 @@ const PHYSIO_LESION_NOTE={
   hfpef:'A stiff LV: a normal ejection fraction, filled only at a high pressure.',
   tamponade:'Fluid in the pericardium: the chambers are squeezed and fill at equal, high pressures. Breathing is held still here; the pulsus is a breath-to-breath finding.',
   constriction:'A small, rigid pericardium: filling stops abruptly once it is full, the dip and plateau, at equal, high pressures.'};
-/* The beat to draw: a lesion's, or Normal's, which in the PV loop is the chosen intervention's
-   (Circulation.INTERVENTIONS); null until the engine is there, when physio.js draws. Circulation keeps each beat
-   it has run. The normal beat is what the others are measured against: the PV loop's dashed loop, the coronary
-   glow's scale. */
-function physioCycle(id){
-  if(typeof Circulation==='undefined') return null;
-  try{
-    if(id!=='normal') return Circulation.cycle(id);
-    const iv=physioView==='pv'&&Circulation.INTERVENTIONS&&Circulation.INTERVENTIONS[physioIv];
-    return Circulation.cycle(iv||'normal');
-  }catch(_){ return null; }
-}
-function physioRef(){
-  if(typeof Circulation==='undefined') return null;
-  try{ return Circulation.cycle('normal'); }catch(_){ return null; }
-}
-/* Hands the live diagram the chosen beat. The split build lifts the engine into vendor/ and leaves CIRC_SRC
-   naming the file (scripts/build-pwa.js, 3.747): the panel's first drawing loads it, Normal included, and physio.js
-   draws until it is there. A failed load is not remembered, and leaves physio.js drawing. */
+/* The beat handed to the diagram is src/app/rhythmlab.js's (RhythmLabScreen.cycle, ref and applyLesion); these are the
+   page's names for it. The split build lifts the circulation engine into vendor/ and leaves CIRC_SRC naming the file
+   (scripts/build-pwa.js, 3.747): the panel's first drawing loads it (LAB_ENV.loadCirculation, below), Normal included,
+   and physio.js draws until it is there. circLibP is the load under way, shared with the Practice Lab and the Home hero;
+   a failed load is not remembered, and leaves physio.js drawing. */
 let circLibP=null;
-function physioApplyLesion(){
-  if(!physio) return;
-  if(typeof Circulation==='undefined'){
-    if(window.CIRC_SRC&&!circLibP){
-      const s=document.createElement('script'); s.src=window.CIRC_SRC;
-      circLibP=new Promise(res=>{ s.onload=()=>{ res(); physioApplyLesion(); __physioNotePhase=''; paintPhysioNote(); };
-        s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
-      document.head.appendChild(s);
-    }
-    physio.setCycle(null);
-    return;
-  }
-  physio.setCycle(physioCycle(physioLesion),physioRef());
-}
+function physioCycle(id){ return RhythmLabScreen.cycle(LAB,id,LAB_ENV); }
+function physioRef(){ return RhythmLabScreen.ref(LAB_ENV); }
+function physioApplyLesion(){ RhythmLabScreen.applyLesion(LAB,LAB_ENV); }
 /* Half real time by default. A whole cycle then takes about 1.8 seconds, which
    is long enough to follow the cursor through isovolumic contraction — 50ms in
    life — and short enough that the loop still reads as a loop. */
@@ -1869,12 +1844,22 @@ Object.defineProperties(window,{labMon:labView('mon'),labKind:labView('kind'),ph
   physioIv:labView('iv'),physioCanvasEl:labView('canvas'),physioLesion:labView('lesion'),physioSlow:labView('slow'),
   physioPlaying:labView('playing'),twelve:labView('twelve'),twelveLead:labView('lead'),
   __physioNoteAt:labView('noteAt'),__physioNotePhase:labView('notePhase')});
-/* What the lab's handlers (src/app/rhythmlab.js) use of the page: the document, the store, whether motion is reduced
-   (asked each time), the rhythms' table, the screen's draw, and what the mounts below still own. */
-const LAB_ENV={doc:{querySelectorAll:q=>document.querySelectorAll(q)},
+/* What the lab's functions in src/app/rhythmlab.js use of the page: the document, the store, whether motion is reduced
+   (asked each time), the rhythms' table, the screen's draw, the page's names for the lesion's beat and the caption,
+   Physio, the circulation engine once it is there and its load, the caption's markup and the views. */
+const LAB_ENV={doc:{querySelectorAll:q=>document.querySelectorAll(q),getElementById:id=>document.getElementById(id)},
   store:{getItem:k=>localStorage.getItem(k),setItem:(k,v)=>localStorage.setItem(k,v)},
   reducedMotion:()=>!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches),
-  RHYTHMS, render:()=>render(), applyLesion:()=>physioApplyLesion(), paintNote:()=>paintPhysioNote()};
+  RHYTHMS, render:()=>render(), applyLesion:()=>physioApplyLesion(), paintNote:()=>paintPhysioNote(),
+  Physio:()=>Physio, Circulation:()=>typeof Circulation!=='undefined'?Circulation:undefined,
+  loadCirculation:then=>{
+    if(window.CIRC_SRC&&!circLibP){
+      const s=document.createElement('script'); s.src=window.CIRC_SRC;
+      circLibP=new Promise(res=>{ s.onload=()=>{ res(); then(); }; s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
+      document.head.appendChild(s);
+    }
+  },
+  noteHtml:()=>physioNoteHtml(), VIEWS:PHYSIO_VIEWS};
 function setPhysioSlow(n){ RhythmLabScreen.setSlow(LAB,n,LAB_ENV); }
 /* Playing or paused. Unset until the screen first needs it, then decided by the device: with Reduce Motion on, the cycle starts paused, a still
    diagram that can be dragged and played; without it, playing. After that the Play/Pause chip decides, for the visit. */
@@ -1899,8 +1884,8 @@ function loadWiggers(){
   }
   return wigLibP;
 }
-/* The phase the Wiggers view is in now, from the beat it draws. */
-function physioPhaseNow(){ return physio&&physio.phaseNow?physio.phaseNow():Physio.phaseAt(physio?physio.time():0); }
+/* The phase the Wiggers view is in now, from the beat it draws (RhythmLabScreen.phaseNow). */
+function physioPhaseNow(){ return RhythmLabScreen.phaseNow(LAB,LAB_ENV); }
 function mountPhysio(){
   const cv=document.getElementById('physioCanvas');
   if(!cv||typeof Wiggers==='undefined'){
@@ -1957,20 +1942,8 @@ function mountPhysio(){
   paintPhysioNote();
   requestAnimationFrame(()=>physio&&physio.draw());
 }
-function paintPhysioNote(){
-  const el=document.getElementById('physioNote'); if(!el) return;
-  /* Repainting a paragraph sixty times a second is wasteful and makes the text
-     unselectable, so only when the phase actually changes. */
-  if(physioView==='wiggers'){
-    const id=physioPhaseNow().id;
-    if(id===__physioNotePhase) return;
-    __physioNotePhase=id;
-  }
-  el.innerHTML=physioNoteHtml();
-  const pill=document.getElementById('physioPhase');
-  if(pill) pill.textContent = physioView==='wiggers'
-    ? physioPhaseNow().name : PHYSIO_VIEWS.find(x=>x[0]===physioView)[1];
-}
+/* The caption and the phase pill, painted (RhythmLabScreen.paintNote): in Wiggers only when the phase turns over. */
+function paintPhysioNote(){ RhythmLabScreen.paintNote(LAB,LAB_ENV); }
 
 /* Which of the lab's 27 rhythms have a genuinely modelled vector sequence.
    Anything else gets an honest note instead of a normal-looking 12-lead with

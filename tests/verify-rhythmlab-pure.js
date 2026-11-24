@@ -22,11 +22,17 @@
  *     by the device once and then kept; Play and Pause, a speed, a rhythm, a lesion, a view and an intervention
  *     are each kept, remembered under their key where they were, handed to the diagram, their chip alone marked,
  *     and the screen or the caption drawn again, in the order the page did it; and they touch nothing else;
+ *   - the beat handed to the diagram: a lesion's, or Normal's, which in the PV loop is the intervention's, or none
+ *     without the engine; the engine asked for while it is not there; the phase, the diagram's or Physio's at its
+ *     time; and the caption painted in Wiggers only when the phase turns over, in any other view each time;
  *   - the page: its line, the slot, that the two panel builders are no longer the page's, the two handlers,
  *     that every element the page's mounts look up is in the markup under that name, that what is chosen
  *     is still the page's, and the page's own line over its own constants, helpers, Physio and Leads12; that the
  *     page's four handler names are one line each into the module, that mountPhysio() hands its chips to them,
- *     and, called through those lines, that LAB_ENV reaches the page's document, store, draw and two mounts.
+ *     and, called through those lines, that LAB_ENV reaches the page's document, store, draw and two mounts;
+ *     that the lesion's beat, the phase and the caption's painter are one line each into the module, and, called
+ *     through them, that the circulation engine is asked for once while it loads, and asked again after a load
+ *     that failed.
  *
  * Not held here: what the titles of the half and quarter speed chips say. They read "${label} of real
  * time", the name where the label was meant; that is the page's as it was before the screen moved, and it
@@ -370,6 +376,80 @@ head('what a tap on the cycle panel does, and a rhythm chip');
   ok('the handlers reach the page only through what they are handed', part.length > 0 && seen.length === 0, part ? (seen.join(' ') || 'none of the page\'s names') : 'handlers not found');
 }
 
+head('the beat handed to the diagram, and the caption painted');
+{
+  /* A stand-in page again: a diagram that says what beat it was handed, an engine that names the beat it ran, a caption
+     and a pill that keep what was written into them, and a loader that keeps what it was asked to call. */
+  const PH = [{ id: 'ivc', name: 'Isovolumic contraction' }, { id: 'ej', name: 'Ejection' }];
+  const rig = (st0, o = {}) => {
+    const log = [], els = {};
+    if (!o.noNote) els.physioNote = { innerHTML: '-' };
+    if (!o.noPill) els.physioPhase = { textContent: '-' };
+    const physio = o.noPhysio ? null : { setCycle: (c, r) => log.push('setCycle ' + c + ' ' + r), time: () => (o.t == null ? 0.2 : o.t) };
+    if (physio && o.phase != null) physio.phaseNow = () => PH[o.phase];
+    let C = o.noEngine ? undefined : { cycle: id => { if (o.throws) throw new Error('no beat'); return 'beat(' + id + ')'; }, INTERVENTIONS: o.noIvs ? undefined : { ino: 'inotrope' } };
+    const st = Object.assign({ physio, view: 'wiggers', iv: 'base', lesion: 'normal', notePhase: '' }, st0);
+    const later = [];
+    const env = {
+      doc: { getElementById: id => els[id] || null, querySelectorAll: () => [] },
+      Physio: () => ({ phaseAt: t => PH[t > 0.5 ? 1 : 0] }), Circulation: () => C,
+      loadCirculation: then => { log.push('load'); later.push(then); },
+      noteHtml: () => { log.push('noteHtml'); return 'NOTE ' + st.view; }, VIEWS: [['wiggers', 'Wiggers'], ['pv', 'PV loop'], ['flow', 'Flow']],
+      applyLesion: () => { log.push('applyLesion'); L.applyLesion(st, env); }, paintNote: () => { log.push('paintNote "' + st.notePhase + '"'); },
+    };
+    return { log, els, st, env, later, arrive: () => { C = { cycle: id => 'beat(' + id + ')', INTERVENTIONS: {} }; } };
+  };
+  const run = f => { try { return f(); } catch (err) { return 'THREW ' + err.message; } };
+  {
+    const a = rig({}), b = rig({}, { noEngine: true }), c = rig({}, { throws: true });
+    ok('cycle(): a lesion is the engine\'s beat of that lesion; without the engine, or where it throws, none',
+       run(() => L.cycle(a.st, 'as', a.env)) === 'beat(as)' && run(() => L.cycle(b.st, 'as', b.env)) === null && run(() => L.cycle(c.st, 'as', c.env)) === null,
+       J([L.cycle(a.st, 'as', a.env), run(() => L.cycle(b.st, 'as', b.env)), run(() => L.cycle(c.st, 'as', c.env))]));
+    const pv = rig({ view: 'pv', iv: 'ino' }), flow = rig({ view: 'flow', iv: 'ino' }), unknown = rig({ view: 'pv', iv: 'gone' }), none = rig({ view: 'pv', iv: 'ino' }, { noIvs: true });
+    const said = [pv, flow, unknown, none].map(x => run(() => L.cycle(x.st, 'normal', x.env)));
+    ok('Normal is, in the PV loop, the chosen intervention\'s beat; elsewhere, for an intervention the engine has not, or an engine with none, the normal beat',
+       J(said) === J(['beat(inotrope)', 'beat(normal)', 'beat(normal)', 'beat(normal)']), J(said));
+    ok('ref(): the normal beat, or none without the engine or where it throws',
+       run(() => L.ref(a.env)) === 'beat(normal)' && run(() => L.ref(b.env)) === null && run(() => L.ref(c.env)) === null, J([run(() => L.ref(a.env)), run(() => L.ref(b.env)), run(() => L.ref(c.env))]));
+  }
+  {
+    const a = rig({ view: 'pv', iv: 'ino', lesion: 'normal' }), r = run(() => L.applyLesion(a.st, a.env));
+    ok('applyLesion(): the diagram is handed the chosen beat and the normal one, and the engine is not asked for',
+       r === undefined && J(a.log) === J(['setCycle beat(inotrope) beat(normal)']), J([r, a.log]));
+    const b = rig({ lesion: 'as' }, { noEngine: true }), rb = run(() => L.applyLesion(b.st, b.env));
+    ok('without the engine: it is asked for, and the diagram draws its own beat meanwhile',
+       rb === undefined && J(b.log) === J(['load', 'setCycle null undefined']) && b.later.length === 1, J([rb, b.log]));
+    b.log.length = 0; b.st.notePhase = 'ivc'; b.arrive(); const rl = run(() => b.later[0]());
+    ok('and when it is there, the lesion is handed over again, and the caption painted from no phase',
+       rl === undefined && J(b.log) === J(['applyLesion', 'setCycle beat(as) beat(normal)', 'paintNote ""']) && b.st.notePhase === '', J([rl, b.log]));
+    const c = rig({}, { noPhysio: true, noEngine: true }), rc = run(() => L.applyLesion(c.st, c.env));
+    ok('with no diagram, nothing is handed and nothing asked for', rc === undefined && J(c.log) === J([]), J([rc, c.log]));
+  }
+  {
+    const own = rig({}, { phase: 1, t: 0.1 }), clock = rig({}, { t: 0.9 }), none = rig({}, { noPhysio: true });
+    ok('phaseNow(): the diagram\'s own phase where it says one, else Physio\'s at the diagram\'s time, else at the start',
+       run(() => L.phaseNow(own.st, own.env).id) === 'ej' && run(() => L.phaseNow(clock.st, clock.env).id) === 'ej' && run(() => L.phaseNow(none.st, none.env).id) === 'ivc',
+       J([own, clock, none].map(x => run(() => L.phaseNow(x.st, x.env).id))));
+  }
+  {
+    const a = rig({ notePhase: '' }, { phase: 1 }), r = run(() => L.paintNote(a.st, a.env));
+    ok('paintNote() in Wiggers: a phase not yet shown is written, the caption and the pill painted with it',
+       r === undefined && a.st.notePhase === 'ej' && a.els.physioNote.innerHTML === 'NOTE wiggers' && a.els.physioPhase.textContent === 'Ejection' && J(a.log) === J(['noteHtml']), J([r, a.st.notePhase, a.els, a.log]));
+    a.els.physioNote.innerHTML = 'kept'; run(() => L.paintNote(a.st, a.env));
+    ok('and the same phase again paints nothing', a.els.physioNote.innerHTML === 'kept' && J(a.log) === J(['noteHtml']), J([a.els.physioNote.innerHTML, a.log]));
+    /* A view besides Wiggers, asked twice in the phase it already holds. */
+    const twice = view => { const x = rig({ view, notePhase: 'ivc' }, { phase: 0 }); run(() => L.paintNote(x.st, x.env)); run(() => L.paintNote(x.st, x.env)); return [x.els.physioPhase.textContent, x.st.notePhase, x.log.length]; };
+    ok('in the PV loop it paints each time it is asked, the pill naming the view, and the phase it holds is left',
+       J(twice('pv')) === J(['PV loop', 'ivc', 2]), J(twice('pv')));
+    /* The guard is Wiggers' alone: a view that is neither Wiggers nor the PV loop paints each time too. */
+    ok('and so does Flow, a view that is neither', J(twice('flow')) === J(['Flow', 'ivc', 2]), J(twice('flow')));
+    const c = rig({}, { noNote: true, phase: 1 }), d = rig({ view: 'flow' }, { noPill: true });
+    const rc = run(() => L.paintNote(c.st, c.env)), rd = run(() => L.paintNote(d.st, d.env));
+    ok('with no caption on the page nothing is painted or kept; with no pill, the caption alone',
+       rc === undefined && c.st.notePhase === '' && J(c.log) === J([]) && rd === undefined && d.els.physioNote.innerHTML === 'NOTE flow', J([rc, c.st.notePhase, c.log, rd]));
+  }
+}
+
 head('the page hands over what it has, and keeps what is chosen');
 {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
@@ -396,15 +476,17 @@ head('the page hands over what it has, and keeps what is chosen');
      handlers.length === 2 && handlers.every(n => table.split(TABLE[n]).length === 2 && count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1,
      handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1) + '/' + count('function ' + n + '(')).join(' '));
 
-  /* The markup is the module's and the mounts are the page's. They meet at six ids and four data attributes:
-     a name changed on one side leaves a canvas the page cannot find, and nothing says so. */
+  /* The markup is the module's, and what finds its elements again is the page's mounts and, since the caption's painter
+     moved, the module's own. They meet at six ids and four data attributes: a name changed on one side leaves a canvas or
+     a caption nothing can find, and nothing says so. Both are read with their comments blanked. */
   const ids = [...new Set([...all.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]))].sort();
-  const lookedUp = id => count('getElementById(\'' + id + '\')') > 0;
+  const modSrc = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'rhythmlab.js'), 'utf8'));
+  const lookedUp = id => count('getElementById(\'' + id + '\')') + modSrc.split('getElementById(\'' + id + '\')').length - 1 > 0;
   /* physioModel is the seventh: the note that says the cycle is a teaching model. The page does not look it up;
      tests/verify-physio.js reads it there. */
   const MOUNTED = ['labCanvas', 'leadCard', 'physioCanvas', 'physioNote', 'physioPhase', 'twelveCanvas'];
   const sectionIds = ['labRhythm', 'labRhythmHeading', 'labLoop', 'labLoopHeading'];
-  ok('the mounted elements and the section links have their distinct ids',
+  ok('the mounted elements and the section links have their distinct ids, and each mounted one is looked up by the page or the module',
      J(ids) === J(MOUNTED.concat('physioModel', sectionIds).sort()) && MOUNTED.every(lookedUp) && !lookedUp('physioModel'),
      ids.map(i => i + (lookedUp(i) ? '' : ' (not looked up)')).join(' '));
   const wig = draw(page({ physioView: 'wiggers' }));
@@ -434,8 +516,10 @@ head('the page hands over what it has, and keeps what is chosen');
   const whole = (from, to) => { const a = shell.indexOf(from); if (a < 0 || shell.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = shell.indexOf(to, a); return raw.slice(a, b + to.length); };
   const file = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
-    whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('const LAB_ENV=', '};'), whole('function physioIsPlaying(){', '\n'), whole('function setPhysioSlow(n){', '\n'),
-    whole('function setPhysioPlaying(on){', '\n'), whole('function setLab(k){', '\n'), whole('function leadCardHtml(id){', '\n')].join('\n');
+    whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('const LAB_ENV=', '};\n'), whole('function physioIsPlaying(){', '\n'), whole('function setPhysioSlow(n){', '\n'),
+    whole('function setPhysioPlaying(on){', '\n'), whole('function setLab(k){', '\n'), whole('function leadCardHtml(id){', '\n'),
+    whole('let circLibP=null;', '\n'), whole('function physioCycle(id){', '\n'), whole('function physioRef(){', '\n'), whole('function physioApplyLesion(){', '\n'),
+    whole('function physioPhaseNow(){', '\n'), whole('function paintPhysioNote(){', '\n')].join('\n');
   const world = (state, opts) => {
     const ctx = { RHYTHMS: { sinus: { name: 'Sinus <rhythm>', hr: 68, desc: 'Normal & regular' }, vt: { name: 'VT', hr: 180, desc: 'Fast' } }, RHYTHM_KEYS: ['sinus', 'vt'] };
     ctx.window = ctx; if (opts && opts.reduce !== undefined) ctx.matchMedia = () => ({ matches: opts.reduce });
@@ -488,6 +572,42 @@ head('the page hands over what it has, and keeps what is chosen');
     slow: 4, kind: 'vt', playing: false, lesion: 'as', play: 'Play', hot: ['4', 'as'] };
   ok('through LAB_ENV the handlers find the page\'s document, store, draw, lesion and caption: each call reaches its own, in order, and the old names read what was chosen',
      wired === J(want), String(wired));
+  const BEAT = ['function physioCycle(id){ return RhythmLabScreen.cycle(LAB,id,LAB_ENV); }', 'function physioRef(){ return RhythmLabScreen.ref(LAB_ENV); }',
+    'function physioApplyLesion(){ RhythmLabScreen.applyLesion(LAB,LAB_ENV); }', 'function physioPhaseNow(){ return RhythmLabScreen.phaseNow(LAB,LAB_ENV); }',
+    'function paintPhysioNote(){ RhythmLabScreen.paintNote(LAB,LAB_ENV); }'];
+  const kept = [count('Circulation.cycle('), count('.phaseAt('), count("getElementById('physioNote')"), count("getElementById('physioPhase')")];
+  ok('physioCycle(), physioRef(), physioApplyLesion(), physioPhaseNow() and paintPhysioNote() are one line each into the module, each declared once, and the page asks the engine for no beat, reads no phase, and looks up no caption or pill of its own',
+     BEAT.every(l => count(l) === 1) && ['physioCycle', 'physioRef', 'physioApplyLesion', 'physioPhaseNow', 'paintPhysioNote'].every(n => count('function ' + n + '(') === 1) && kept.every(k => k === 0),
+     BEAT.map(l => count(l)).join(' ') + ' · kept ' + kept.join(' '));
+  /* The engine's load, as LAB_ENV does it, called through the page's own names: the split build's file asked for once while
+     a load is under way, and when it is in, the chosen lesion's beat handed over and the caption painted from no phase. A
+     failed load is not remembered. The world has physio.js and no circulation engine, as the split build's page does. */
+  const loading = fail => world('var labKind="sinus", physioView="wiggers", physioSlow=2, physioIv="base", twelveLead=null;', { reduce: false }).ask(`var did=[], made=[], noteEl={innerHTML:'-'}, pillEl={textContent:'-'};
+    CIRC_SRC='vendor/circulation.js';
+    document={getElementById:id=>({physioNote:noteEl,physioPhase:pillEl})[id]||null, querySelectorAll:()=>[],
+      createElement:t=>{ const s={t,src:'',remove(){ did.push('remove '+this.src); }}; made.push(s); return s; }, head:{appendChild:s=>did.push('append '+s.src)}};
+    physioNoteHtml=()=>'NOTE '+physioView;
+    physio={setCycle:(c,r)=>did.push('setCycle '+(c&&c.id)+' '+(r&&r.id)), phaseNow:()=>({id:'ej',name:'Ejection'}), time:()=>0};
+    physioApplyLesion(); physioApplyLesion();
+    if(${fail}){ made[0].onerror(); physioApplyLesion(); }
+    else { Circulation={cycle:id=>({id}),INTERVENTIONS:{}}; physioLesion='as'; made[0].onload(); }
+    JSON.stringify({did, scripts:made.length, phase:__physioNotePhase, note:noteEl.innerHTML, pill:pillEl.textContent, loading:circLibP!==null})`);
+  const arrived = loading(false), failed = loading(true);
+  ok('without the engine, the page\'s names ask for its file once while it loads, and when it is in, hand over the chosen lesion\'s beat and paint the caption from no phase',
+     arrived === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'setCycle as normal'], scripts: 1, phase: 'ej', note: 'NOTE wiggers', pill: 'Ejection', loading: true }), String(arrived));
+  ok('and a load that fails is let go, so the next drawing asks again',
+     failed === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'remove vendor/circulation.js', 'append vendor/circulation.js', 'setCycle null undefined'], scripts: 2, phase: '', note: '-', pill: '-', loading: true }), String(failed));
+  /* The two of LAB_ENV's loans the load above does not reach: Physio, asked where a diagram keeps only a clock, and the
+     views, which name the pill outside Wiggers. The diagram's time, 0.62, is in rapid filling, a phase the start of the
+     cycle is not in, so a Physio asked at the wrong time says so. */
+  const read = world('var labKind="sinus", physioView="flow", physioSlow=2, physioIv="base", twelveLead=null;', { reduce: false }).ask(`var noteEl={innerHTML:'-'}, pillEl={textContent:'-'};
+    document={getElementById:id=>({physioNote:noteEl,physioPhase:pillEl})[id]||null, querySelectorAll:()=>[]};
+    physioNoteHtml=()=>'NOTE'; physio={time:()=>0.62};
+    var at=physioPhaseNow(), want=Physio.phaseAt(0.62); paintPhysioNote();
+    JSON.stringify({phase:at.id, physio:want.id, start:Physio.phaseAt(0).id, pill:pillEl.textContent, view:PHYSIO_VIEWS.find(v=>v[0]==='flow')[1]})`);
+  const rd = (() => { try { return JSON.parse(read); } catch (err) { return {}; } })();
+  ok('and LAB_ENV lends the page\'s own Physio and views: a diagram with only a clock is in Physio\'s phase at its time, and outside Wiggers the pill names the page\'s own view',
+     rd.phase === rd.physio && rd.phase !== rd.start && typeof rd.phase === 'string' && rd.pill === rd.view && rd.view === 'Flow', String(read));
   const bare = world('var labKind="sinus", physioView="flow", physioSlow=1, physioIv="base", twelveLead=null;', { noPhysio: true, reduce: false });
   ok('on a page with no Physio the screen is still drawn outside the PV loop', !bare.shown.startsWith('THREW') && bare.shown.includes('<span>Cardiac cycle · Flow</span>'), bare.shown.slice(0, 90));
 }
