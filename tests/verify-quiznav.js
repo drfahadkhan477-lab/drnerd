@@ -318,11 +318,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
        under it with the actions on this device; the conversation one line until something is asked. */
     const open = await p.evaluate(() => { const x = document.getElementById('aiSession'), stat = k => ((x && x.querySelector('.sb-stat[data-state="' + k + '"] b')) || {}).textContent;
       const row = x && x.querySelector('.sb-row'), body = document.getElementById('aiBody');
-      return { inApex: !!(x && x.closest('#ai')), first: !!(x && x.previousElementSibling && x.previousElementSibling.classList.contains('ai-head')), where: ((x && x.querySelector('.sb-where')) || {}).textContent,
+      return { inApex: !!(x && x.closest('#ai')), first: !!(x && x.parentElement && x.parentElement.classList.contains('ai-head')), where: ((x && x.querySelector('.sb-where')) || {}).textContent,
         right: stat('right'), wrong: stat('wrong'), share: stat('share'), shut: !!row && row.getAttribute('aria-expanded') === 'false' && !!x.querySelector('#sbDetail[hidden]'),
         asks: document.querySelectorAll('#aiChips .sb-ask').length, inRow: x ? x.querySelectorAll('.sb-ask').length : -1,
         body: body ? body.textContent.trim() : null, local: !!(body && body.querySelector('[data-apex-local-actions]')) }; });
-    ok('Apex opens on the session, one row under its head, shut: where the reader is, the counts and the share right', open.inApex && open.first && open.where === 'Question 2 of ' + fab.n
+    ok('Apex opens with the session in its head, shut: where the reader is, and the counts', open.inApex && open.first && open.where === 'Question 2 of ' + fab.n
       && open.right === '1' && open.wrong === '0' && open.share === '100% right' && open.shut, JSON.stringify(open));
     ok('and a clean conversation: one line, the session\'s asks and the actions on this device in the tray, not over the chat', open.asks === 2 && open.inRow === 0 && !open.local
       && open.body === 'Ask about this question, or anything in cardiology.', JSON.stringify({ asks: open.asks, inRow: open.inRow, local: open.local, body: open.body }));

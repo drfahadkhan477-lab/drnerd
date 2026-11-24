@@ -6,8 +6,9 @@
    It was the markup of buildAI() in app/systole.html (docs/ROADMAP.md, E1 step 3). It is here as functions
    of what they are given, so what the panel says can be held without a page:
 
-     headHtml(q, kit)                    the head: Apex, what it is answering from or about, as one
-                                         button that closes the panel
+     headHtml(q, kit, session)           the head: Apex, what it is answering from or about, as one
+                                         button that closes the panel; then, on a question, the session
+                                         the page draws (its pill, which opens below the head)
      setupPanelHtml(head, kit)           where there is no key to call with: the head, the actions that
                                          need no AI request, the provider settings and the caution
      panelHtml(head, q, hist, kit)       the conversation panel
@@ -31,9 +32,10 @@
                                                  them is the costly part and buildAI() runs after every step
                      refImgAttrs(key, src)       a figure's width and height as attributes, so it keeps its
                                                  room while it loads (src/core/imagesize.js), or ''
-                     apexLocalHtml(inTray), setupHtml()
+                     apexLocalHtml(inTray), setupHtml(), visionBadge(q)
                                                  the page's own pieces: the actions on this device (in the
-                                                 tray, with the session's asks first), and the provider settings
+                                                 tray, with the session's asks first), the provider settings,
+                                                 and what the model can see of the figures
                      clip, md, e, icon           the page's helpers
                    The values are handed as they stand when the panel is drawn: the page changes them as
                    a reply arrives, as the panel opens and closes, and as settings are saved, and draws again.
@@ -43,8 +45,9 @@
 
    WHAT THE PANEL SAYS:
 
-     1. The head: Apex, and under it the notes it is grounded in, or the question's number, or "Cardiology
-        tutor"; the whole of it closes the panel. Grounding, full screen and the connection are Settings'.
+     1. The head: Apex, and under it the notes it is grounded in, or the question's number with whether the
+        model can see its figures (it changes what the answers can be trusted with), or "Cardiology tutor";
+        the whole of it closes the panel. Grounding, full screen and the connection are Settings'.
      2. With no key, and not Gemini through this site: the actions on this device, the provider settings,
         and that Apex is a study aid that can be wrong.
      3. Otherwise the thread: what was asked, escaped; each reply as markdown, marked where it reused an
@@ -66,8 +69,8 @@
 (function (root) {
 'use strict';
 
-function headHtml(q, kit){
-  const {AI_GROUNDED,REF,icon}=kit;
+function headHtml(q, kit, session){
+  const {AI_GROUNDED,REF,visionBadge,icon}=kit;
   /* One control, the owner's choice of November 2026: the mark and the name close the panel, as the master Apex Brain
      opened it. Grounding, full screen and the connection are Settings' (its Apex section), not buttons here. */
   const head=`<div class="ai-head">
@@ -76,9 +79,9 @@ function headHtml(q, kit){
         <span class="ai-mark-text"><span class="ai-title">Apex</span>
         <span class="ai-sub">${AI_GROUNDED
           ? `<span class="grounded-tag">grounded · ${REF.length} note${REF.length===1?'':'s'}</span>`
-          : (q?'Item '+q.n:'Cardiology tutor')}</span></span>
+          : (q?'Item '+q.n+visionBadge(q):'Cardiology tutor')}</span></span>
         <span class="ai-mark-close" aria-hidden="true">${icon('chevron-down','icon-sm')}</span>
-      </button>
+      </button>${session||''}
     </div>`;
   return head;
 }

@@ -3233,13 +3233,13 @@ function apexLocalHtml(inTray){
    The figures from the notes drawn on are found here (apexFigsFor()), where their last answer is kept. */
 @@SLOT[src:src/app/apexpanel.js]@@
 const apexKit=()=>({AI_GROUNDED,REF,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,
-  apexLocalHtml,setupHtml,clip,md,e,icon});
+  apexLocalHtml,setupHtml,visionBadge,clip,md,e,icon});
 function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=chatFor(q);
-  const session=apexSessionHtml(), kit=apexKit(), head=ApexPanel.headHtml(q,kit)+session;
+  const session=apexSessionHtml(), kit=apexKit(), head=ApexPanel.headHtml(q,kit,session);
   wrap.classList.toggle('has-session',!!session);
   /* Hosted Gemini needs nothing typed, so the setup screen would be a door
      with no lock on it. Every other provider still asks. */
@@ -4845,8 +4845,8 @@ function syncApexBrain(){
   fab.classList.add('has-brain'); orb.innerHTML=SessionBrain.orbHtml(m); count.textContent=SessionBrain.fabCount(m);
   fab.setAttribute('aria-label',SessionBrain.fabLabel(m));
 }
-/* The panel's session, opened on the question on screen; '' off a question. buildAI() draws it after the head, so the
-   panel begins with it on the setup screen and the conversation alike. */
+/* The panel's session, opened on the question on screen; '' off a question. buildAI() hands it to the head, where it is a
+   pill beside Apex's name on the setup screen and the conversation alike, so the conversation keeps the panel. */
 function apexSessionHtml(){
   if(!onSession()) return '';
   const m=sessionBrainModel();

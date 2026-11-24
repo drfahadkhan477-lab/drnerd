@@ -115,14 +115,14 @@ body.has-gnav .sessions-page{padding-top:24px}
    and gone to. Dark in every theme, it paints a colour under its gradient, the lighter end, which is the ground its
    text is read on (tests/verify-ink.js). At most a little under half the panel, and it scrolls within itself; it never
    shrinks under what follows it (on the setup screen, shrunk, the actions on this device lay over its row). */
-.ai-session{flex:none;max-height:45%;overflow-y:auto;margin:10px 12px 2px;border-radius:16px;color:#F1F5F9;
+.ai-session{flex:0 1 auto;min-width:0;max-height:45vh;overflow-y:auto;margin:0;border-radius:16px;color:#F1F5F9;
   background:#113046 linear-gradient(160deg,rgba(17,48,70,.98),rgba(9,24,40,.98));border:1px solid rgba(94,234,212,.28);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
-.sb-row{width:100%;min-height:56px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:7px 12px 7px 7px;
+.sb-row{width:100%;min-height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 5px;
   margin:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:16px}
 .sb-row:focus-visible{outline:2px solid #5EEAD4;outline-offset:-2px}
-.sb-mini{display:block;width:42px;height:42px;flex:none}
-.sb-mini .sb-orb{width:42px;height:42px}
+.sb-mini{display:block;width:38px;height:38px;flex:none}
+.sb-mini .sb-orb{width:38px;height:38px}
 .sb-row-text{display:flex;flex-direction:column;gap:2px;min-width:7.5em;flex:1 1 9em}
 .sb-title{font-size:13px;font-weight:700;line-height:1.2;color:#F1F5F9;overflow-wrap:break-word}
 .sb-resumed{font-weight:600;color:#C3CFDC}
@@ -151,6 +151,16 @@ body.has-gnav .sessions-page{padding-top:24px}
 /* The tray under the conversation (the ⚡ button): the session's asks, then the actions on this device, each a row. */
 #aiChips>.src-strip{flex:1 0 100%;padding:0}
 #aiChips .src-pill{font:600 13px/1.2 var(--font-sans);letter-spacing:0;min-height:36px;padding:0 12px}
+/* The session is a pill in Apex's head, beside its name, so the conversation keeps the panel (verify-chat: most of it).
+   Shut, the pill says the place and right and wrong; tapped, it takes a line of its own under the head, at full width,
+   with the chapter, every count and the brain. */
+.ai-head{flex-wrap:wrap;row-gap:8px}
+.ai-head .ai-mark{flex:1 1 9em}
+.ai-session:not(.open) .sb-title,.ai-session:not(.open) .sb-stat[data-state="flagged"],.ai-session:not(.open) .sb-stat[data-state="share"]{display:none}
+.ai-session:not(.open) .sb-row{min-height:44px;padding:2px 10px 2px 3px;gap:8px}
+.ai-session:not(.open) .sb-row-text{min-width:0;flex:0 1 auto}
+.ai-session:not(.open) .sb-stats{max-width:none;flex-wrap:nowrap}
+.ai-session.open{flex:1 0 100%}
 /* With no thread, one line, quietly. */
 .ai-hello p{color:var(--muted)}
 /* Full screen, the session stands alongside the conversation: a column of its own at the left, open on the brain. */

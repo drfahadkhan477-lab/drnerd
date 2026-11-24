@@ -172,7 +172,7 @@ head('the page writes it in, and answers what it names');
   const fns = ['toggleSessionDetail', 'sessionBrainTap', 'sessionBrainKey', 'goToQ', 'paintApexSession', 'sessionBrainModel', 'syncApexBrain', 'apexSessionHtml', 'askApex', 'restartQuiz'];
   ok('and the functions they call are the page\'s, once each', fns.every(f => n('function ' + f + '(') === 1), fns.map(f => f + ':' + n('function ' + f + '(')).join(' '));
   const build = (page.match(/function buildAI\(\)\{[\s\S]*?\n\}/) || [''])[0], now = (page.match(/function renderNow\(\)\{[\s\S]*?\n\}/) || [''])[0];
-  ok('the session heads Apex\'s panel, on its setup screen too', /const session=apexSessionHtml\(\), kit=apexKit\(\), head=ApexPanel\.headHtml\(q,kit\)\+session;/.test(build) && build.indexOf('apexSessionHtml()') < build.indexOf('setupPanelHtml(head'));
+  ok('the session is in Apex\'s head, on its setup screen too', /const session=apexSessionHtml\(\), kit=apexKit\(\), head=ApexPanel\.headHtml\(q,kit,session\);/.test(build) && build.indexOf('apexSessionHtml()') < build.indexOf('setupPanelHtml(head'));
   ok('and the button is set at each draw of a screen', /\bsyncApexBrain\(\);/.test(now));
   const local = (page.match(/function apexLocalHtml\(inTray\)\{[\s\S]*?\n\}/) || [''])[0];
   ok('the session\'s asks head the tray on a question, and only there', /return \(inTray&&onSession\(\)\?SessionBrain\.asksHtml\(sessionBrainModel\(\),e\):''\)\+/.test(local), local.slice(0, 120));

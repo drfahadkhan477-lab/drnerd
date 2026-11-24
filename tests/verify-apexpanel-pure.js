@@ -71,7 +71,8 @@ head('the head');
   ok('one button, the head, which closes Apex (toggleAI) and says so: its avatar, its name, and a chevron',
      h.startsWith('<div class="ai-head">\n      <button class="ai-mark" type="button" data-action="toggleAI" aria-label="Close Apex" title="Close Apex">\n        <span class="ai-avatar"><canvas id="apexAvatar" aria-hidden="true"></canvas></span>')
      && h.includes('<span class="ai-title">Apex</span>') && h.includes('<span class="ai-mark-close" aria-hidden="true">[icon chevron-down icon-sm]</span>') && h.endsWith('</button>\n    </div>'), h.slice(0, 160));
-  ok('the question\'s number, and nothing more: its chapter is the session\'s row, and what the model sees is not said', sub(h).trim() === 'Item 12', sub(h));
+  ok('the question\'s number, and what the model sees of its figures (it changes what the answers can be trusted with)', sub(h).trim() === 'Item 12 · VB(Q1)', sub(h));
+  ok('and the session the page draws, in the head after Apex\'s name, and nothing without one', run(() => M.headHtml(Q, kitOf(), '[S]')).endsWith('</button>[S]\n    </div>') && h.endsWith('</button>\n    </div>'));
   ok('away from a question, "Cardiology tutor", and no figures asked about', sub(headOf(null)).trim() === 'Cardiology tutor', sub(headOf(null)));
   const g = headOf(Q, { AI_GROUNDED: true }), g1n = headOf(null, { AI_GROUNDED: true, REF: [1] });
   ok('grounded, the notes it answers from instead, and "note" for one', sub(g).trim() === '<span class="grounded-tag">grounded · 3 notes</span>' && g1n.includes('grounded · 1 note</span>') && headOf(null, { AI_GROUNDED: true, REF: [] }).includes('grounded · 0 notes</span>'), sub(g));
@@ -182,13 +183,13 @@ const KIT_READS = new Set();
   const outs = [run(() => M.headHtml(deepWatch(Q, 'q'), kit)), run(() => M.setupPanelHtml('[HEAD]', kit)), run(() => M.panelHtml('[HEAD]', deepWatch(Q, 'q'), deepWatch(HIST, 'hist'), kit)),
     run(() => M.headHtml(null, watched(kitOf({ AI_GROUNDED: true }), KIT_READS, 'kit')))];
   const names = [...KIT_READS].sort().join(' ');
-  ok('of its kit, sixteen names', !outs.some(o => o.startsWith('THREW')) && names === 'AI_GROUNDED CHIPS REF aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexLocalHtml clip e icon lastHits lastHitsKey md refImgAttrs setupHtml', names);
+  ok('of its kit, seventeen names', !outs.some(o => o.startsWith('THREW')) && names === 'AI_GROUNDED CHIPS REF aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexLocalHtml clip e icon lastHits lastHitsKey md refImgAttrs setupHtml visionBadge', names);
   ok('it sets, deletes and defines nothing on the question, the thread, the notes drawn on, the settings or the kit', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object') { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.panelHtml('[HEAD]', deep(Object.assign({}, Q)), deep(HIST.map(m => Object.assign({}, m))), deep(kitOf({ lastHits: HITS.map(h => Object.assign({}, h)), apexFigsFor: () => FIGS }))));
   ok('given everything frozen, it draws the same panel', !frozen.startsWith('THREW') && frozen === panel(Q, HIST) && frozen.includes('2 figures from those notes'), frozen.slice(0, 60));
   const readsOf = f => { const r = new Set(); run(() => f(watched(kitOf({ AI_GROUNDED: true }), r, 'kit'))); run(() => f(watched(kitOf(), r, 'kit'))); return [...r].sort().join(' '); };
-  ok('of those, the head reads three, the setup two and the panel thirteen, each only what it draws with', readsOf(k => M.headHtml(Q, k)) === 'AI_GROUNDED REF icon' && readsOf(k => M.setupPanelHtml('[HEAD]', k)) === 'apexLocalHtml setupHtml'
+  ok('of those, the head reads four, the setup two and the panel thirteen, each only what it draws with', readsOf(k => M.headHtml(Q, k)) === 'AI_GROUNDED REF icon visionBadge' && readsOf(k => M.setupPanelHtml('[HEAD]', k)) === 'apexLocalHtml setupHtml'
      && readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)) === 'CHIPS aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexLocalHtml clip e icon lastHits lastHitsKey md refImgAttrs', readsOf(k => M.headHtml(Q, k)) + ' · ' + readsOf(k => M.setupPanelHtml('[HEAD]', k)) + ' · ' + readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)));
 }
 
@@ -198,13 +199,13 @@ head('the page hands the module what it has, and keeps what touches the page');
   const page = blankComments(raw);
   const count = text => page.split(text).length - 1;
   const SLOT = '@@SLOT[src:src/app/apexpanel.js]@@';
-  const KIT = 'const apexKit=()=>({AI_GROUNDED,REF,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,\n  apexLocalHtml,setupHtml,clip,md,e,icon});';
+  const KIT = 'const apexKit=()=>({AI_GROUNDED,REF,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,\n  apexLocalHtml,setupHtml,visionBadge,clip,md,e,icon});';
   const BUILD = `function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=chatFor(q);
-  const session=apexSessionHtml(), kit=apexKit(), head=ApexPanel.headHtml(q,kit)+session;
+  const session=apexSessionHtml(), kit=apexKit(), head=ApexPanel.headHtml(q,kit,session);
   wrap.classList.toggle('has-session',!!session);`;
   const BRANCH = `  if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
     wrap.innerHTML=ApexPanel.setupPanelHtml(head,kit); bindSetup(); mountApexAvatar(); return; }
@@ -216,12 +217,12 @@ head('the page hands the module what it has, and keeps what touches the page');
 }`;
   const MEMO = `function apexFigsFor(hits,lastBot,hist){
 ${' '.repeat(2)}`;
-  ok('buildAI() reads the panel\'s state and the thread, makes the kit once, and draws the head first, then the session (the master Apex Brain)', count(BUILD) === 1 && count('function buildAI(') === 1);
+  ok('buildAI() reads the panel\'s state and the thread, makes the kit once, and draws the head first, with the session in it (the master Apex Brain)', count(BUILD) === 1 && count('function buildAI(') === 1);
   ok('then, with no key, the setup, bound; otherwise the panel, its questions wired to peekQuestion(), the chat bound, the state restored, the avatar started', count(BRANCH) === 1 && page.indexOf(BRANCH) > page.indexOf(BUILD) && page.indexOf(BRANCH) - page.indexOf(BUILD) < BUILD.length + 200);
   ok('the module is written into the page once, above apexKit() and buildAI()', count(SLOT) === 1 && page.indexOf(SLOT) < page.indexOf('const apexKit=') && page.indexOf(SLOT) < page.indexOf(BUILD));
   ok('the kit is made at each drawing, never kept: a function, called by buildAI() alone', count(KIT) === 1 && count('apexKit') === 2 && count('apexKit()') === 1, count('apexKit') + ' ' + count('apexKit()'));
   const handed = String(g1(page, /const apexKit=\(\)=>\(\{([^}]*)\}\);/)).replace(/\s+/g, '');
-  ok('the kit is the sixteen names the module was seen to ask for, each under its own name', KIT_READS.size === 16 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
+  ok('the kit is the seventeen names the module was seen to ask for, each under its own name', KIT_READS.size === 17 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
   const memo = g1(page, /(function apexFigsFor\(hits,lastBot,hist\)\{[\s\S]*?\n\})/) || '';
   ok('the figures\' memo is the page\'s: keyed on the notes, the reply\'s length and whether one is being written, kept in apexFigMemo, which it alone writes', memo.startsWith(MEMO) && memo.includes("const figKey=hits.map(h=>h.id).join(',')+'|'+lastBot.length+'|'+(aiBusy?1:0);") && memo.includes('if(apexFigMemo.key!==figKey){') && memo.endsWith('  return apexFigMemo.figs;\n}') && count('let apexFigMemo={key:null,figs:[]};') === 1 && count('apexFigMemo=') === 2, memo.slice(0, 80));
   ok('and finds none while a reply is being written or with no thread, three at most, none the reply already placed', memo.includes("apexFigMemo={ key:figKey, figs:(hist.length&&!aiBusy)\n      ? refFiguresForHits(hits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)\n      : [] };"));
@@ -271,19 +272,19 @@ ${' '.repeat(2)}`;
   const loaded = ask(parts + '\nCHATS.Q1=[{role:"user",content:"Why?"},{role:"assistant",content:"See refimg://f2 and **this**"}];\n"loaded"');
   log.length = 0; ask('buildAI()');
   const first = wrap.innerHTML, firstLog = log.slice();
-  ok('the page\'s own buildAI() draws the panel: the question\'s number, the thread as markdown, the actions on this device in the tray', loaded === 'loaded' && /<span class="ai-sub">\s*Item 12<\/span>/.test(first) && first.includes('<div class="msg user">Why?</div>') && first.includes('<strong>this</strong>') && first.includes('Review due cards (2)'), String(loaded).slice(0, 60) + ' · ' + g1(first, /<span class="ai-sub">([^<]*)/));
+  ok('the page\'s own buildAI() draws the panel: the question\'s number, the thread as markdown, the actions on this device in the tray', loaded === 'loaded' && /<span class="ai-sub">\s*Item 12 · sees 1 figure<\/span>/.test(first) && first.includes('<div class="msg user">Why?</div>') && first.includes('<strong>this</strong>') && first.includes('Review due cards (2)'), String(loaded).slice(0, 60) + ' · ' + g1(first, /<span class="ai-sub">([^<]*)/));
   ok('the caution ends it, with no model line; the prompt for a question answered is there', first.endsWith('check anything that changes care.</div></div>') && !first.includes('ai-powered') && first.includes('data-chip="2">Why did I pick that?</button>'), first.slice(-80));
   ok('the figures from the notes drawn on, less the one the reply placed, open as the page left them', times(first, '<figure class="ai-fig"') === 1 && first.includes('alt="Valve &lt;cap&gt;"') && first.includes('<div class="fig-strip open" id="aiFigWrap">') && first.includes('1 figure from those notes'));
   ok('and the page then wires the question drawn on, binds the chat to the question, restores what it read, and starts the avatar, in that order', J(firstLog) === J(['state', 'figures n1,Q9 3', 'bindChat Q1', 'restore {"s":1}', 'avatar']), J(firstLog));
   log.length = 0; ask('buildAI()');
   ok('the panel is marked as holding a session when it does (full screen gives it a column)', classes[classes.length - 1] === 'has-session true', J(classes));
-  ok('the session follows the head, before the conversation', /<\/div>\[SESSION\]<div class="ai-body"/.test(first.replace(/\s*\n\s*/g, '')), (first.match(/.{40}\[SESSION\].{30}/) || ['no session'])[0]);
+  ok('the session is in the head, after Apex\'s name, before the conversation', /<\/button>\[SESSION\]<\/div><div class="ai-body"/.test(first.replace(/\s*\n\s*/g, '')), (first.match(/.{40}\[SESSION\].{30}/) || ['no session'])[0]);
   ok('drawn again with nothing changed, the same panel, and the figures are not looked for again', wrap.innerHTML === first && !log.some(l => l.startsWith('figures')), J(log));
   log.length = 0; ask('aiBusy=true; buildAI()');
   ok('with a reply being written: the dots, Stop, no figures, none looked for, and the memo kept for this reply in progress', wrap.innerHTML.includes('id="aiLive"') && wrap.innerHTML.includes('aria-label="Stop generating"') && !wrap.innerHTML.includes('fig-strip') && !log.some(l => l.startsWith('figures')) && String(ask('JSON.stringify(apexFigMemo)')) === '{"key":"n1,Q9|28|1","figs":[]}', String(ask('JSON.stringify(apexFigMemo)')));
   log.length = 0; ask('aiBusy=false; location.protocol="file:"; buildAI()');
   ok('with no key and no site to call through: the setup, bound, with no conversation', wrap.innerHTML.includes('id="aiKey"') && !wrap.innerHTML.includes('id="aiBody"') && wrap.innerHTML.endsWith('check anything that changes care.</div>') && J(log) === J(['state', 'bindSetup', 'avatar']), J(log));
-  ok('and on the setup screen too, after the head', /<\/div>\[SESSION\]/.test(wrap.innerHTML.replace(/\s*\n\s*/g, '')) && wrap.innerHTML.indexOf('[SESSION]') < wrap.innerHTML.indexOf('id="aiKey"'));
+  ok('and on the setup screen too, in the head', /<\/button>\[SESSION\]<\/div>/.test(wrap.innerHTML.replace(/\s*\n\s*/g, '')) && wrap.innerHTML.indexOf('[SESSION]') < wrap.innerHTML.indexOf('id="aiKey"'));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

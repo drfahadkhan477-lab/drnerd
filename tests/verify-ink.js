@@ -224,9 +224,9 @@ const TOOLS = () => {
          end, which is the ground read here. The figure's zoom hint is read with Apex shut, under it. */
       ['the quiz, a question with a figure', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, null,
         [['the session\'s place, on the Apex button', '#aiFab .fab-count'], ['a figure\'s zoom hint', '.fig-zoom-hint']]],
-      /* Its row says the counts in words; the asks wait in the tray under the conversation, opened here to be read, with
+      /* Its pill, opened, says the chapter and the counts in words; the asks wait in the tray under the conversation, opened here to be read, with
          a key so the conversation is drawn rather than the setup (nothing is sent). */
-      ['the quiz, with Apex open on the session', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, () => { AI.provider = 'gemini'; AI.gemini = Object.assign({}, AI.gemini, { key: 'test-key' }); if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); apexChipsOpen = true; buildAI(); },
+      ['the quiz, with Apex open on the session', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, () => { AI.provider = 'gemini'; AI.gemini = Object.assign({}, AI.gemini, { key: 'test-key' }); if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); apexChipsOpen = true; sbDetail = true; buildAI(); },
         [['its chapter', '#aiSession .sb-title'], ['where the reader is', '#aiSession .sb-where'], ['the right answers it counts', '#aiSession .sb-stat[data-state="right"] b'],
          ['the wrong ones', '#aiSession .sb-stat[data-state="wrong"] b'], ['what each count is', '#aiSession .sb-stat[data-state="right"]'], ['an ask of Apex, in the tray', '#aiChips .sb-ask']]],
       ['the search screen', () => { openSearch(); }, () => {
