@@ -478,7 +478,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      minified one-line rules — a new unprefixed rule written beside a correct
      one sits inside any proximity window and reads as fine. */
   {
-    const src = require('fs').readFileSync(target, 'utf8');
+    /* Comments blanked first (tests/_source.js, positions kept): a stylesheet's comment that says why a rule has no
+       backdrop-filter quotes the property, and read as a declaration it was reported as an unpaired blur. */
+    const src = require('./_source.js').blankComments(require('fs').readFileSync(target, 'utf8'));
     const norm = v => v.trim().replace(/\s+/g, ' ').toLowerCase();
     const tally = re => {
       const out = new Map(); let m;
