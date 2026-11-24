@@ -402,6 +402,25 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const curves = await inFrames();
     measure('the Curves view, which has no time in it, is not redrawn while it is playing', curves, (await panel()).playing === true && curves.draws === 0, `${curves.draws} draws in ${curves.frames} frames`);
     await remounted(() => document.querySelector('[data-physio-view="wiggers"]').click(), 'Wiggers');
+
+    /* A speed chip, tapped as a finger taps it: the diagram slows by that chip's factor, the chip alone is marked, and the choice is
+       remembered, so a panel mounted again starts at it. Before this no browser suite tapped one, and the handler was held over stand-ins
+       alone (verify-rhythmlab-pure). The speed asked for is one the panel was not at, or nothing would be seen to change. */
+    const speed = () => page.evaluate(() => ({ slow: physio.slow(), kept: physioSlow, saved: localStorage.getItem('accsap12.physioslow'),
+      hot: [...document.querySelectorAll('[data-physio-slow]')].filter(b => b.classList.contains('hot')).map(b => b.dataset.physioSlow) }));
+    const was = await speed(), to = was.kept === 4 ? 1 : 4;
+    await click(`[data-physio-slow="${to}"]`);
+    const chosen = await speed();
+    ok('a speed chip slows the diagram by its own factor, is the one chip marked, and is remembered',
+       was.slow !== to && chosen.slow === to && chosen.kept === to && chosen.saved === String(to) && JSON.stringify(chosen.hot) === JSON.stringify([String(to)]),
+       `${JSON.stringify(was)} → ${JSON.stringify(chosen)}`);
+    await remounted(() => render(), 'after a speed was chosen');
+    const again = await speed();
+    ok('and the panel mounted again starts at it, its chip marked', again.slow === to && JSON.stringify(again.hot) === JSON.stringify([String(to)]), JSON.stringify(again));
+    await click(`[data-physio-slow="${was.kept}"]`);
+    const back = await speed();
+    ok('and the speed it had is had back the same way', back.slow === was.kept && back.saved === String(was.kept) && JSON.stringify(back.hot) === JSON.stringify([String(was.kept)]),
+       JSON.stringify(back));
   }
 
   head('Reduce Motion starts the cycle paused');
