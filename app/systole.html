@@ -1792,7 +1792,6 @@ function semText(v){ return String(v).replace(/^var\(--(green|red|amber)\)$/,'va
 function goStats(){ S.screen='stats'; render(); toTop(); }
 
 /* ═══════════ interactive Rhythm Lab ═══════════ */
-let labMon=null, labKind='sinus';
 /* The Rhythm Lab's markup is src/app/rhythmlab.js: the monitor and its chips, the cardiac cycle panel and the
    12-lead panel. This hands it what the three read, each as it is when the screen is drawn. What is chosen
    stays here, with setLab() and the mounts that draw into the canvases. */
@@ -1805,10 +1804,6 @@ function buildLab(){ return RhythmLabScreen.screenHtml({RHYTHMS,RHYTHM_KEYS,labK
 const PHYSIO_VIEWS=[['wiggers','Wiggers'],['pv','PV loop'],['flow','Flow'],
                     ['right','Right heart'],['curves','Curves'],['conduction','Conduction'],
                     ['coronary','Coronary']];
-let physio=null;
-let physioView=(()=>{try{const v=localStorage.getItem('accsap12.physioview');
-  return PHYSIO_VIEWS.some(x=>x[0]===v)?v:'wiggers';}catch(_){return 'wiggers';}})();
-let physioIv='base', physioCanvasEl=null;
 /* docs/ROADMAP.md, S8. The lesion the Wiggers view draws: Normal is physio.js's drawn cycle; each other is
    one beat of src/core/circulation.js with that lesion made in it, its curves computed and its valve
    events measured where they cross. Remembered like the view. */
@@ -1824,8 +1819,6 @@ const PHYSIO_LESION_NOTE={
   hfpef:'A stiff LV: a normal ejection fraction, filled only at a high pressure.',
   tamponade:'Fluid in the pericardium: the chambers are squeezed and fill at equal, high pressures. Breathing is held still here; the pulsus is a breath-to-breath finding.',
   constriction:'A small, rigid pericardium: filling stops abruptly once it is full, the dip and plateau, at equal, high pressures.'};
-let physioLesion=(()=>{try{const v=localStorage.getItem('accsap12.physiolesion');
-  return PHYSIO_LESIONS.some(x=>x[0]===v)?v:'normal';}catch(_){return 'normal';}})();
 /* The beat to draw: a lesion's, or Normal's, which in the PV loop is the chosen intervention's
    (Circulation.INTERVENTIONS); null until the engine is there, when physio.js draws. Circulation keeps each beat
    it has run. The normal beat is what the others are measured against: the PV loop's dashed loop, the coronary
@@ -1864,7 +1857,18 @@ function physioApplyLesion(){
    is long enough to follow the cursor through isovolumic contraction — 50ms in
    life — and short enough that the loop still reads as a loop. */
 const PHYSIO_SPEEDS=[[1,'1×'],[2,'½×'],[4,'¼×']];
-let physioSlow=(()=>{ try{ return +localStorage.getItem('accsap12.physioslow')||2; }catch(_){ return 2; } })();
+/* ═══════════ the lab's state has one owner ═══════════
+   What the Rhythm Lab chooses and holds was thirteen script-level names. It is one object, made by
+   src/app/rhythmlab.js (RhythmLabScreen.state), which reads the saved view, lesion and speed as the three names'
+   initialisers did and says what each field is. The old names stay, each a view of one field: the lab's functions
+   below still say them, and so do the browser suites, from inside the page. A function switches to LAB when it
+   leaves the shell (docs/ROADMAP.md, E1). */
+const LAB=RhythmLabScreen.state({getItem:k=>localStorage.getItem(k)},PHYSIO_VIEWS,PHYSIO_LESIONS);
+const labView=f=>({get(){ return LAB[f]; },set(v){ LAB[f]=v; },configurable:true});
+Object.defineProperties(window,{labMon:labView('mon'),labKind:labView('kind'),physio:labView('physio'),physioView:labView('view'),
+  physioIv:labView('iv'),physioCanvasEl:labView('canvas'),physioLesion:labView('lesion'),physioSlow:labView('slow'),
+  physioPlaying:labView('playing'),twelve:labView('twelve'),twelveLead:labView('lead'),
+  __physioNoteAt:labView('noteAt'),__physioNotePhase:labView('notePhase')});
 function setPhysioSlow(n){
   physioSlow=n;
   try{ localStorage.setItem('accsap12.physioslow',String(n)); }catch(_){}
@@ -1874,7 +1878,6 @@ function setPhysioSlow(n){
 }
 /* Playing or paused. Unset until the screen first needs it, then decided by the device: with Reduce Motion on, the cycle starts paused, a still
    diagram that can be dragged and played; without it, playing. After that the Play/Pause chip decides, for the visit. */
-let physioPlaying=null;
 function physioIsPlaying(){
   if(physioPlaying===null){
     let reduced=false;
@@ -2028,7 +2031,6 @@ function mountPhysio(){
   paintPhysioNote();
   requestAnimationFrame(()=>physio&&physio.draw());
 }
-let __physioNoteAt=0, __physioNotePhase='';
 function paintPhysioNote(){
   const el=document.getElementById('physioNote'); if(!el) return;
   /* Repainting a paragraph sixty times a second is wasteful and makes the text
@@ -2050,7 +2052,6 @@ function paintPhysioNote(){
 const LEAD12_MAP={sinus:'sinus',brady:'brady',tachy:'tachy',afib:'afib',flutter:'flutter',
   rbbb:'rbbb',lbbb:'lbbb',hyperk:'hyperk',longqt:'longqt',stemi:'stemi_ant',
   pericarditis:'pericarditis'};
-let twelve=null, twelveLead=null;
 /* A lead's card is src/app/rhythmlab.js's; mountTwelve() redraws it here when a lead is tapped. */
 function leadCardHtml(id){ return RhythmLabScreen.leadCardHtml(id,{Leads12:typeof Leads12!=='undefined'?Leads12:undefined,e}); }
 function mountTwelve(){

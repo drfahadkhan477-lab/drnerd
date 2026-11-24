@@ -191,6 +191,34 @@ head('the lesions: offered in every view a lesion changes (docs/ROADMAP.md, S8)'
   ok('a page with no lesions to offer draws none, and does not throw', (() => { const h = draw(page({ PHYSIO_LESIONS: undefined }), 'physioHtml'); return !h.startsWith('THREW') && !h.includes('lesion-chips'); })());
 }
 
+head('the lab\'s state: one object, read from what was saved');
+{
+  const store = saved => ({ getItem: k => (k in saved ? saved[k] : null) });
+  const V = [['wiggers', 'W'], ['pv', 'PV'], ['flow', 'F']], LS = [['normal', 'N'], ['as', 'AS']];
+  const mk = (saved, views, lesions) => { try { return L.state(store(saved || {}), views || V, lesions || LS); } catch (err) { return { err: err.message }; } };
+  const fresh = mk();
+  ok('nothing saved: sinus, the Wiggers view, Normal, half speed, and nothing mounted, chosen or decided yet',
+     J(fresh) === J({ mon: null, kind: 'sinus', physio: null, view: 'wiggers', iv: 'base', canvas: null, lesion: 'normal', slow: 2, playing: null, twelve: null, lead: null, noteAt: 0, notePhase: '' }), J(fresh));
+  const kept = mk({ 'accsap12.physioview': 'pv', 'accsap12.physiolesion': 'as', 'accsap12.physioslow': '4' });
+  ok('a saved view, lesion and speed are kept, the speed as a number', kept.view === 'pv' && kept.lesion === 'as' && kept.slow === 4, J([kept.view, kept.lesion, kept.slow]));
+  const lost = mk({ 'accsap12.physioview': 'a view that was removed', 'accsap12.physiolesion': 'constructor', 'accsap12.physioslow': 'fast' });
+  ok('a saved view or lesion the lab no longer has is the default, and a speed that is no number is half speed', lost.view === 'wiggers' && lost.lesion === 'normal' && lost.slow === 2 && mk({ 'accsap12.physioslow': '0' }).slow === 2,
+     J([lost.view, lost.lesion, lost.slow]));
+  const thrown = (() => { try { return L.state({ getItem: () => { throw new Error('denied'); } }, V, LS); } catch (err) { return { err: err.message }; } })();
+  ok('a store that refuses to be read gives the defaults', thrown.view === 'wiggers' && thrown.lesion === 'normal' && thrown.slow === 2, J(thrown));
+  ok('each call is an object of its own', mk() !== mk() && (() => { const a = mk(), b = mk(); a.kind = 'vt'; return b.kind === 'sinus'; })());
+  /* The page's views: each old name reads and writes one field of LAB. */
+  const VIEWS = { labMon: 'mon', labKind: 'kind', physio: 'physio', physioView: 'view', physioIv: 'iv', physioCanvasEl: 'canvas', physioLesion: 'lesion', physioSlow: 'slow',
+    physioPlaying: 'playing', twelve: 'twelve', twelveLead: 'lead', __physioNoteAt: 'noteAt', __physioNotePhase: 'notePhase' };
+  const pg = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const views = (/Object\.defineProperties\(window,\{labMon:([\s\S]*?)\}\);/.exec(pg) || [])[0] || '';
+  const named = [...views.matchAll(/([A-Za-z_$][\w$]*):labView\('([A-Za-z]+)'\)/g)].map(m => m[1] + ':' + m[2]);
+  ok('the page keeps each of the thirteen old names as a view of its own field, and declares none of them again',
+     J(named.sort()) === J(Object.entries(VIEWS).map(([k, f]) => k + ':' + f).sort()) && Object.keys(VIEWS).every(k => !new RegExp('\\b(?:let|var|const)\\s+(?:[^;]*,\\s*)?' + k.replace(/\$/g, '\\$') + '\\s*=').test(pg)),
+     named.length + ' views');
+  ok('and every field the module makes has its view', Object.values(VIEWS).sort().join(' ') === Object.keys(fresh).sort().join(' '), Object.keys(fresh).sort().join(' '));
+}
+
 head('the page hands over what it has, and keeps what is chosen');
 {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
@@ -233,7 +261,9 @@ head('the page hands over what it has, and keeps what is chosen');
   ok('and every data attribute on a cycle chip, in the PV loop and the Wiggers view, is one the page binds a tap to', J(datas) === J(['data-physio-iv', 'data-physio-lesion', 'data-physio-play', 'data-physio-slow', 'data-physio-view']) && datas.every(d => count('querySelectorAll(\'[' + d + ']\')') > 0),
      datas.map(d => d + ':' + count('querySelectorAll(\'[' + d + ']\')')).join(' '));
 
-  ok('which rhythm is chosen is still the page\'s to keep', count('let labMon=null, labKind=\'sinus\';') === 1);
+  ok('which rhythm is chosen is still the page\'s to keep: its state is LAB, made by the module, and labKind is a view of LAB.kind',
+     count('const LAB=RhythmLabScreen.state({getItem:k=>localStorage.getItem(k)},PHYSIO_VIEWS,PHYSIO_LESIONS);') === 1 && count("labKind:labView('kind')") === 1
+     && count('const labView=f=>({get(){ return LAB[f]; },set(v){ LAB[f]=v; },configurable:true});') === 1);
   ok('and setLab() still keeps it, gives the live cycle the rhythm\'s rate, and draws the screen again',
      count('function setLab(k){') === 1 && /function setLab\(k\)\{\s*labKind=k;\n  if\(physio\) physio\.setRate\(RHYTHMS\[k\]\.hr\|\|68\);\n  render\(\);\n\}/.test(shell));
 
@@ -242,13 +272,16 @@ head('the page hands over what it has, and keeps what is chosen');
   const whole = (from, to) => { const a = shell.indexOf(from); if (a < 0 || shell.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = shell.indexOf(to, a); return raw.slice(a, b + to.length); };
   const file = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
-    whole('const PHYSIO_LESIONS=[', '];'), whole('let physioLesion=', '})();'), whole('const LEAD12_MAP={', '};'), whole('let physioPlaying=null;', '\n'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n')].join('\n');
+    whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n')].join('\n');
   const world = (state, opts) => {
     const ctx = { RHYTHMS: { sinus: { name: 'Sinus <rhythm>', hr: 68, desc: 'Normal & regular' }, vt: { name: 'VT', hr: 180, desc: 'Fast' } }, RHYTHM_KEYS: ['sinus', 'vt'] };
     ctx.window = ctx; if (opts && opts.reduce !== undefined) ctx.matchMedia = () => ({ matches: opts.reduce });
     vm.createContext(ctx);
     const ask = code => { try { return vm.runInContext(code, ctx); } catch (err) { return 'THREW ' + err.message; } };
-    const loaded = ask((opts && opts.noPhysio ? '' : file('src/core/physio.js') + '\n') + file('src/core/leads12.js') + '\n' + pageCode + '\n' + file('src/app/rhythmlab.js') + '\n' + LINE + '\n' + state + '\n"loaded"');
+    const loaded = ask((opts && opts.noPhysio ? '' : file('src/core/physio.js') + '\n') + file('src/core/leads12.js') + '\n' + file('src/app/rhythmlab.js') + '\n' + pageCode + '\n' + LINE + '\n"loaded"');
+    /* The state is set after the page's lines have run, as a suite sets it from inside a loaded page: written into the
+       same script, its vars are hoisted above them and made before LAB's views can be. */
+    if (loaded === 'loaded') ask(state);
     return { ask, shown: loaded === 'loaded' ? String(ask('buildLab()')) : String(loaded) };
   };
   const w = world('var labKind="sinus", physioView="pv", physioSlow=2, twelveLead="V1"; var physioIv=Physio.INTERVENTIONS[1].id;', { reduce: false });

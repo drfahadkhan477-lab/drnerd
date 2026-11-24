@@ -143,5 +143,32 @@ function leadCardHtml(id,kit){
     <div class="lead-look">${e(L.look)}</div>`;
 }
 
-root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml };
+/* ── the lab's state ──
+   What the Rhythm Lab chooses and holds, as one object the page keeps (its old names are views of these fields):
+
+     mon        the monitor drawing the chosen rhythm, or null       (labMon)
+     kind       the chosen rhythm's key, 'sinus' to begin            (labKind)
+     physio     the cardiac cycle's diagram, or null                 (physio)
+     view       the cycle's view: the saved one, if it is one of VIEWS, else 'wiggers'   (physioView)
+     iv         the PV loop's intervention, 'base' to begin          (physioIv)
+     canvas     the canvas the diagram was mounted on                (physioCanvasEl)
+     lesion     the saved lesion, if it is one of LESIONS, else 'normal'                 (physioLesion)
+     slow       the saved slowing as a number, or 2 (half speed) where there is none     (physioSlow)
+     playing    null until the screen first asks, then whether the cycle plays           (physioPlaying)
+     twelve     the 12-lead's diagram, or null                       (twelve)
+     lead       the lead selected on it, or null                     (twelveLead)
+     noteAt, notePhase   the caption's last paint and the phase it showed                (__physioNoteAt, __physioNotePhase)
+
+   store is read with getItem, and a store that throws, or holds nothing, gives the defaults. */
+function state(store, VIEWS, LESIONS){
+  const read=k=>{ try{ return store.getItem(k); }catch(_){ return null; } };
+  const v=read('accsap12.physioview'), l=read('accsap12.physiolesion');
+  return { mon:null, kind:'sinus', physio:null,
+    view:VIEWS.some(x=>x[0]===v)?v:'wiggers', iv:'base', canvas:null,
+    lesion:LESIONS.some(x=>x[0]===l)?l:'normal',
+    slow:+read('accsap12.physioslow')||2,
+    playing:null, twelve:null, lead:null, noteAt:0, notePhase:'' };
+}
+
+root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state };
 })(typeof window !== 'undefined' ? window : this);
