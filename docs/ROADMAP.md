@@ -406,6 +406,10 @@ Then the screens' wiring, starting with the Rhythm Lab. First its state: thirtee
 `RhythmLabScreen.state()` from what was saved, with each old name kept as a view of its field, as
 `APEX_TURN` did for the turn. Then the cycle panel's caption: `physioNoteHtml()` is
 `RhythmLabScreen.noteHtml()`, handed what the panel chose and the beat and phase to ask.
+Then its handlers: `setLab()`, `setPhysioSlow()`, `physioIsPlaying()`, `setPhysioPlaying()` and
+the three taps `mountPhysio()` wrote inline (a lesion, a view, an intervention) are
+`RhythmLabScreen`'s, handed `LAB` and `LAB_ENV`, what they use of the page; the four names stay
+as one line each, and the mount still gives each chip its listener.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

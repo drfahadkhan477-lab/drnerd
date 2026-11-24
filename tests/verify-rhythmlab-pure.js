@@ -18,9 +18,15 @@
  *   - the 12-lead panel has a canvas and the page's lead card only for a rhythm with a 12-lead of its own,
  *     and otherwise a note that names the rhythm and says why;
  *   - that it asks for fifteen names of what it is given and changes nothing;
+ *   - the lab's handlers, over a stand-in page that says what it was asked: whether the cycle plays is decided
+ *     by the device once and then kept; Play and Pause, a speed, a rhythm, a lesion, a view and an intervention
+ *     are each kept, remembered under their key where they were, handed to the diagram, their chip alone marked,
+ *     and the screen or the caption drawn again, in the order the page did it; and they touch nothing else;
  *   - the page: its line, the slot, that the two panel builders are no longer the page's, the two handlers,
  *     that every element the page's mounts look up is in the markup under that name, that what is chosen
- *     is still the page's, and the page's own line over its own constants, helpers, Physio and Leads12.
+ *     is still the page's, and the page's own line over its own constants, helpers, Physio and Leads12; that the
+ *     page's four handler names are one line each into the module, that mountPhysio() hands its chips to them,
+ *     and, called through those lines, that LAB_ENV reaches the page's document, store, draw and two mounts.
  *
  * Not held here: what the titles of the half and quarter speed chips say. They read "${label} of real
  * time", the name where the label was meant; that is the page's as it was before the screen moved, and it
@@ -261,6 +267,109 @@ head('the cycle panel\'s caption');
      && n("cycle:()=>physio&&physio.cycle&&physio.cycle(),phase:()=>physioPhaseNow()}); }") === 1 && n('The dashed loop is the normal heart') === 0 && n('Two curves, one intersection') === 0);
 }
 
+head('what a tap on the cycle panel does, and a rhythm chip');
+{
+  /* A stand-in page: chips with the data attributes the panel draws, a store, a live diagram and a draw, each saying what
+     it was asked, in order. What each handler should do is worked out here by hand, from the old bodies' plain reading. */
+  const rig = (st0, o = {}) => {
+    const log = [], saved = {};
+    const chip = (attr, key, val) => { const b = { attr, val, dataset: { [key]: val }, hot: false, textContent: '-', title: '-' };
+      b.classList = { toggle: (c, on) => { if (c === 'hot') b.hot = !!on; } }; return b; };
+    const chips = [chip('data-physio-lesion', 'physioLesion', 'normal'), chip('data-physio-lesion', 'physioLesion', 'as'),
+      chip('data-physio-slow', 'physioSlow', '1'), chip('data-physio-slow', 'physioSlow', '2'), chip('data-physio-slow', 'physioSlow', '4'),
+      chip('data-physio-play', 'physioPlay', ''), chip('data-physio-play', 'physioPlay', ''),
+      chip('data-physio-view', 'physioView', 'wiggers'), chip('data-physio-view', 'physioView', 'pv'),
+      chip('data-physio-iv', 'physioIv', 'base'), chip('data-physio-iv', 'physioIv', 'ino')];
+    const physio = o.noPhysio ? null : { play: () => log.push('play'), pause: () => log.push('pause'), setRate: r => log.push('rate ' + r), setIntervention: i => log.push('iv ' + i) };
+    if (physio && !o.noSetSlow) physio.setSlow = n => log.push('slow ' + n);
+    const st = Object.assign({ kind: 'sinus', physio, view: 'wiggers', iv: 'base', lesion: 'normal', slow: 2, playing: null, notePhase: 'Ejection' }, st0);
+    const env = {
+      doc: { querySelectorAll: q => { const m = /^\[([a-z-]+)\]$/.exec(q); return m ? chips.filter(c => c.attr === m[1]) : []; } },
+      store: { getItem: () => null, setItem: (k, v) => { if (o.storeThrows) throw new Error('full'); saved[k] = v; log.push('save ' + k + '=' + v); } },
+      reducedMotion: () => { log.push('asked'); if (o.mmThrows) throw new Error('no matchMedia'); return !!o.reduced; },
+      RHYTHMS: { sinus: { hr: 68 }, vt: { hr: 180 }, asys: { hr: 0 } },
+      render: () => log.push('render'), applyLesion: () => log.push('applyLesion'), paintNote: () => log.push('paintNote "' + st.notePhase + '"'),
+    };
+    const hot = attr => chips.filter(c => c.attr === attr && c.hot).map(c => c.val);
+    const tap = (fn, attr, val) => run(() => L[fn](st, chips.find(c => c.attr === attr && c.val === val), env));
+    return { log, saved, st, env, chips, hot, tap };
+  };
+  const run = f => { try { return f(); } catch (err) { return 'THREW ' + err.message; } };
+
+  {
+    const a = rig({}, { reduced: true }), first = run(() => L.isPlaying(a.st, a.env)), again = run(() => L.isPlaying(a.st, a.env));
+    ok('isPlaying(): the first time, the device is asked, once; with Reduce Motion on the cycle is paused, and stays so',
+       first === false && again === false && a.st.playing === false && J(a.log) === J(['asked']), J([first, again, a.log]));
+    const b = rig({}), c = rig({}, { mmThrows: true });
+    ok('without Reduce Motion it plays, and a device that cannot be asked plays too', run(() => L.isPlaying(b.st, b.env)) === true && b.st.playing === true
+       && run(() => L.isPlaying(c.st, c.env)) === true && c.st.playing === true, J([b.st.playing, c.st.playing]));
+    const d = rig({ playing: false }), f = rig({ playing: true }, { reduced: true });
+    ok('once decided, it is not asked again: paused stays paused, and playing stays playing whatever the device says',
+       run(() => L.isPlaying(d.st, d.env)) === false && run(() => L.isPlaying(f.st, f.env)) === true && d.log.length + f.log.length === 0, J([d.log, f.log]));
+  }
+  {
+    const a = rig({ playing: false });
+    const on = run(() => L.setPlaying(a.st, true, a.env)), saysOn = a.chips.filter(c => c.attr === 'data-physio-play').map(c => c.textContent + '/' + c.title);
+    const off = run(() => L.setPlaying(a.st, 0, a.env)), saysOff = a.chips.filter(c => c.attr === 'data-physio-play').map(c => c.textContent + '/' + c.title);
+    ok('setPlaying(): played, the diagram plays and every Play chip says Pause; 0 pauses it, kept as false, and the chips say Play',
+       on === undefined && off === undefined && J(saysOn) === J(['Pause/Pause the cycle', 'Pause/Pause the cycle']) && J(saysOff) === J(['Play/Play the cycle', 'Play/Play the cycle'])
+       && a.st.playing === false && J(a.log.slice(-2)) === J(['play', 'pause']), J([saysOn, saysOff, a.st.playing, a.log]));
+    const b = rig({ playing: true }, { noPhysio: true }), r = run(() => L.setPlaying(b.st, false, b.env));
+    ok('with no diagram mounted, the chips still say what a tap would do', r === undefined && b.st.playing === false && b.chips.filter(c => c.attr === 'data-physio-play').every(c => c.textContent === 'Play'), String(r));
+  }
+  {
+    const a = rig({}), r = run(() => L.setSlow(a.st, 4, a.env));
+    ok('setSlow(): the speed is kept as given, remembered as text, handed to the diagram, and its chip alone is marked',
+       r === undefined && a.st.slow === 4 && J(a.saved) === J({ 'accsap12.physioslow': '4' }) && J(a.log) === J(['save accsap12.physioslow=4', 'slow 4']) && J(a.hot('data-physio-slow')) === J(['4'])
+       && J(a.hot('data-physio-lesion').concat(a.hot('data-physio-view'), a.hot('data-physio-iv'))) === J([]), J([r, a.st.slow, a.log, a.hot('data-physio-slow')]));
+    run(() => L.setSlow(a.st, 1, a.env));
+    ok('another speed moves the mark', J(a.hot('data-physio-slow')) === J(['1']) && a.st.slow === 1, J(a.hot('data-physio-slow')));
+    const b = rig({}, { storeThrows: true }), c = rig({}, { noSetSlow: true }), d = rig({}, { noPhysio: true });
+    const rs = [b, c, d].map(x => run(() => L.setSlow(x.st, 4, x.env)));
+    ok('a store that refuses, a diagram with no speed of its own, or none at all, and the speed is still kept and marked',
+       rs.every(x => x === undefined) && [b, c, d].every(x => x.st.slow === 4 && J(x.hot('data-physio-slow')) === J(['4'])) && J(b.log) === J(['slow 4']) && J(c.log) === J(['save accsap12.physioslow=4']), J([rs, b.log, c.log]));
+  }
+  {
+    const a = rig({ lead: 'V1' }), r = run(() => L.setKind(a.st, 'vt', a.env));
+    ok('setKind(): the rhythm is kept, the diagram given its rate, then the screen drawn again; the lead selected stays',
+       r === undefined && a.st.kind === 'vt' && a.st.lead === 'V1' && J(a.log) === J(['rate 180', 'render']), J([r, a.st.kind, a.log]));
+    const b = rig({}), c = rig({}, { noPhysio: true });
+    run(() => L.setKind(b.st, 'asys', b.env)); const rc = run(() => L.setKind(c.st, 'vt', c.env));
+    ok('a rhythm with no rate gives the diagram 68; with no diagram, the screen is only drawn again',
+       J(b.log) === J(['rate 68', 'render']) && rc === undefined && c.st.kind === 'vt' && J(c.log) === J(['render']), J([b.log, rc, c.log]));
+  }
+  {
+    const a = rig({ view: 'pv' }), r = a.tap('chooseLesion', 'data-physio-lesion', 'as');
+    ok('chooseLesion() in the PV loop: kept, remembered, and the panel drawn again, since the interventions come and go with it; nothing else',
+       r === undefined && a.st.lesion === 'as' && a.st.notePhase === 'Ejection' && J(a.log) === J(['save accsap12.physiolesion=as', 'render']) && J(a.hot('data-physio-lesion')) === J([]), J([r, a.log]));
+    const b = rig({}), rb = b.tap('chooseLesion', 'data-physio-lesion', 'as');
+    ok('in any other view: kept and remembered, handed to the diagram, its chip alone marked, and the caption painted from no phase',
+       rb === undefined && b.st.lesion === 'as' && b.st.notePhase === '' && J(b.log) === J(['save accsap12.physiolesion=as', 'applyLesion', 'paintNote ""'])
+       && J(b.hot('data-physio-lesion')) === J(['as']) && J(b.hot('data-physio-view').concat(b.hot('data-physio-iv'), b.hot('data-physio-slow'))) === J([]), J([rb, b.log, b.hot('data-physio-lesion')]));
+    const c = rig({}, { storeThrows: true }), rc = c.tap('chooseLesion', 'data-physio-lesion', 'normal');
+    ok('a store that refuses changes nothing else', rc === undefined && c.st.lesion === 'normal' && J(c.log) === J(['applyLesion', 'paintNote ""']) && J(c.hot('data-physio-lesion')) === J(['normal']), J([rc, c.log]));
+  }
+  {
+    const a = rig({}), r = a.tap('chooseView', 'data-physio-view', 'pv'), b = rig({}, { storeThrows: true }), rb = b.tap('chooseView', 'data-physio-view', 'pv');
+    ok('chooseView(): kept, remembered, and the screen drawn again, which marks the chip; a store that refuses only goes unwritten',
+       r === undefined && a.st.view === 'pv' && J(a.log) === J(['save accsap12.physioview=pv', 'render']) && rb === undefined && b.st.view === 'pv' && J(b.log) === J(['render']), J([r, a.log, rb, b.log]));
+  }
+  {
+    const a = rig({ view: 'pv' }), r = a.tap('chooseIv', 'data-physio-iv', 'ino');
+    ok('chooseIv(): kept, handed to the diagram, the lesion handed again over it, its chip alone marked, and the caption painted from no phase',
+       r === undefined && a.st.iv === 'ino' && a.st.notePhase === '' && J(a.log) === J(['iv ino', 'applyLesion', 'paintNote ""']) && J(a.hot('data-physio-iv')) === J(['ino'])
+       && Object.keys(a.saved).length === 0, J([r, a.log, a.hot('data-physio-iv')]));
+  }
+  /* Read with its comments blanked: the module says in prose what it does not touch. From the first handler to the export,
+     a name of the page's not reached through st or env (no dot before it) is the page reached around them. */
+  const mod = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'rhythmlab.js'), 'utf8'));
+  const at = mod.indexOf('function isPlaying('), end = mod.indexOf('root.RhythmLabScreen');
+  /* The quoted selectors and keys name the page's attributes, not its code, and are set aside; the handlers quote with ' alone. */
+  const part = at >= 0 && end > at ? mod.slice(at, end).replace(/'[^'\n]*'/g, "''") : '';
+  const seen = ['document', 'localStorage', 'window', 'matchMedia', 'render', 'physioApplyLesion', 'paintPhysioNote', 'RHYTHMS', 'physio', 'LAB'].filter(t => new RegExp('(?<![.\\w$])' + t + '\\b').test(part));
+  ok('the handlers reach the page only through what they are handed', part.length > 0 && seen.length === 0, part ? (seen.join(' ') || 'none of the page\'s names') : 'handlers not found');
+}
+
 head('the page hands over what it has, and keeps what is chosen');
 {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
@@ -306,15 +415,27 @@ head('the page hands over what it has, and keeps what is chosen');
   ok('which rhythm is chosen is still the page\'s to keep: its state is LAB, made by the module, and labKind is a view of LAB.kind',
      count('const LAB=RhythmLabScreen.state({getItem:k=>localStorage.getItem(k)},PHYSIO_VIEWS,PHYSIO_LESIONS);') === 1 && count("labKind:labView('kind')") === 1
      && count('const labView=f=>({get(){ return LAB[f]; },set(v){ LAB[f]=v; },configurable:true});') === 1);
-  ok('and setLab() still keeps it, gives the live cycle the rhythm\'s rate, and draws the screen again',
-     count('function setLab(k){') === 1 && /function setLab\(k\)\{\s*labKind=k;\n  if\(physio\) physio\.setRate\(RHYTHMS\[k\]\.hr\|\|68\);\n  render\(\);\n\}/.test(shell));
+  const ONE = ['function setLab(k){ RhythmLabScreen.setKind(LAB,k,LAB_ENV); }', 'function setPhysioSlow(n){ RhythmLabScreen.setSlow(LAB,n,LAB_ENV); }',
+    'function physioIsPlaying(){ return RhythmLabScreen.isPlaying(LAB,LAB_ENV); }', 'function setPhysioPlaying(on){ RhythmLabScreen.setPlaying(LAB,on,LAB_ENV); }'];
+  ok('setLab(), setPhysioSlow(), physioIsPlaying() and setPhysioPlaying() are one line each into the module, with LAB and what the page lends it, each declared once',
+     ONE.every(l => count(l) === 1) && ['setLab', 'setPhysioSlow', 'physioIsPlaying', 'setPhysioPlaying'].every(n => count('function ' + n + '(') === 1), ONE.map(l => count(l)).join(' '));
+  const mountAt = shell.indexOf('function mountPhysio(){'), mount = mountAt < 0 ? '' : shell.slice(mountAt, shell.indexOf('\n}\n', mountAt));
+  const TAPS = ["document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseLesion(LAB,b,LAB_ENV));",
+    "document.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseView(LAB,b,LAB_ENV));",
+    "document.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseIv(LAB,b,LAB_ENV));",
+    'b.onclick=()=>setPhysioSlow(+b.dataset.physioSlow));', 'b.onclick=()=>setPhysioPlaying(!physioIsPlaying()));'];
+  ok('mountPhysio() hands a lesion, view or intervention chip to the module, with LAB, and a speed or Play chip to the page\'s names',
+     mount.length > 0 && TAPS.every(l => mount.split(l).length === 2), mount ? TAPS.map(l => mount.split(l).length - 1).join(' ') : 'no mountPhysio()');
+  ok('and the page keeps no copy of what they do: no key they remember a choice under, and no word the Play chip says',
+     count('accsap12.physio') === 0 && count('Pause the cycle') === 0 && count("'Pause'") === 0, [count('accsap12.physio'), count('Pause the cycle'), count("'Pause'")].join(' '));
 
   /* The page's own line, with the page's own constants and helpers and the real Physio and Leads12, in a
      context that has nothing else. The rhythms are invented: the page's table is the waveform engine's. */
   const whole = (from, to) => { const a = shell.indexOf(from); if (a < 0 || shell.indexOf(from, a + 1) >= 0) return '\nthrow new Error("not in the page once: ' + from.replace(/["\\]/g, '') + '");\n'; const b = shell.indexOf(to, a); return raw.slice(a, b + to.length); };
   const file = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
-    whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('function physioIsPlaying(){', '\n}'), whole('function leadCardHtml(id){', '\n')].join('\n');
+    whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('const LAB_ENV=', '};'), whole('function physioIsPlaying(){', '\n'), whole('function setPhysioSlow(n){', '\n'),
+    whole('function setPhysioPlaying(on){', '\n'), whole('function setLab(k){', '\n'), whole('function leadCardHtml(id){', '\n')].join('\n');
   const world = (state, opts) => {
     const ctx = { RHYTHMS: { sinus: { name: 'Sinus <rhythm>', hr: 68, desc: 'Normal & regular' }, vt: { name: 'VT', hr: 180, desc: 'Fast' } }, RHYTHM_KEYS: ['sinus', 'vt'] };
     ctx.window = ctx; if (opts && opts.reduce !== undefined) ctx.matchMedia = () => ({ matches: opts.reduce });
@@ -351,6 +472,22 @@ head('the page hands over what it has, and keeps what is chosen');
   }
   ok('tapped through the real Actions and the page\'s table, the buttons the page\'s own line drew go home and set each rhythm by its own key',
      J(calls) === J(['goHome', 'setLab sinus', 'setLab vt']), J(calls));
+  /* What the page lends the handlers, LAB_ENV, over stand-ins for the document, the store, the draw and the two mounts'
+     functions, called through the page's own lines as a tap would call them. */
+  const live = world('var labKind="sinus", physioView="wiggers", physioSlow=2, physioIv="base", twelveLead=null;', { reduce: false });
+  const wired = live.ask(`var did=[], chip=(a,k,v)=>({a,v,dataset:{[k]:v},hot:false,textContent:'-',classList:{toggle(c,on){ if(c==='hot') this.owner.hot=!!on; }}});
+    var chips=[chip('data-physio-slow','physioSlow','2'),chip('data-physio-slow','physioSlow','4'),chip('data-physio-lesion','physioLesion','normal'),chip('data-physio-lesion','physioLesion','as'),chip('data-physio-play','physioPlay','')];
+    chips.forEach(c=>{ c.classList.owner=c; });
+    document={querySelectorAll:q=>chips.filter(c=>q==='['+c.a+']')};
+    localStorage={getItem:()=>null,setItem:(k,v)=>did.push('save '+k+'='+v)};
+    render=()=>did.push('render'); physioApplyLesion=()=>did.push('applyLesion'); paintPhysioNote=()=>did.push('paintNote "'+__physioNotePhase+'"');
+    physio={setSlow:n=>did.push('slow '+n),setRate:r=>did.push('rate '+r),play:()=>did.push('play'),pause:()=>did.push('pause')};
+    setPhysioSlow(4); setLab('vt'); setPhysioPlaying(false); RhythmLabScreen.chooseLesion(LAB,chips[3],LAB_ENV);
+    JSON.stringify({did,slow:physioSlow,kind:labKind,playing:physioPlaying,lesion:physioLesion,play:chips[4].textContent,hot:chips.filter(c=>c.hot).map(c=>c.v)})`);
+  const want = { did: ['save accsap12.physioslow=4', 'slow 4', 'rate 180', 'render', 'pause', 'save accsap12.physiolesion=as', 'applyLesion', 'paintNote ""'],
+    slow: 4, kind: 'vt', playing: false, lesion: 'as', play: 'Play', hot: ['4', 'as'] };
+  ok('through LAB_ENV the handlers find the page\'s document, store, draw, lesion and caption: each call reaches its own, in order, and the old names read what was chosen',
+     wired === J(want), String(wired));
   const bare = world('var labKind="sinus", physioView="flow", physioSlow=1, physioIv="base", twelveLead=null;', { noPhysio: true, reduce: false });
   ok('on a page with no Physio the screen is still drawn outside the PV loop', !bare.shown.startsWith('THREW') && bare.shown.includes('<span>Cardiac cycle · Flow</span>'), bare.shown.slice(0, 90));
 }

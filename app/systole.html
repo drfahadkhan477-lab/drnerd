@@ -1869,31 +1869,17 @@ Object.defineProperties(window,{labMon:labView('mon'),labKind:labView('kind'),ph
   physioIv:labView('iv'),physioCanvasEl:labView('canvas'),physioLesion:labView('lesion'),physioSlow:labView('slow'),
   physioPlaying:labView('playing'),twelve:labView('twelve'),twelveLead:labView('lead'),
   __physioNoteAt:labView('noteAt'),__physioNotePhase:labView('notePhase')});
-function setPhysioSlow(n){
-  physioSlow=n;
-  try{ localStorage.setItem('accsap12.physioslow',String(n)); }catch(_){}
-  if(physio&&physio.setSlow) physio.setSlow(n);
-  document.querySelectorAll('[data-physio-slow]').forEach(b=>
-    b.classList.toggle('hot',+b.dataset.physioSlow===n));
-}
+/* What the lab's handlers (src/app/rhythmlab.js) use of the page: the document, the store, whether motion is reduced
+   (asked each time), the rhythms' table, the screen's draw, and what the mounts below still own. */
+const LAB_ENV={doc:{querySelectorAll:q=>document.querySelectorAll(q)},
+  store:{getItem:k=>localStorage.getItem(k),setItem:(k,v)=>localStorage.setItem(k,v)},
+  reducedMotion:()=>!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches),
+  RHYTHMS, render:()=>render(), applyLesion:()=>physioApplyLesion(), paintNote:()=>paintPhysioNote()};
+function setPhysioSlow(n){ RhythmLabScreen.setSlow(LAB,n,LAB_ENV); }
 /* Playing or paused. Unset until the screen first needs it, then decided by the device: with Reduce Motion on, the cycle starts paused, a still
    diagram that can be dragged and played; without it, playing. After that the Play/Pause chip decides, for the visit. */
-function physioIsPlaying(){
-  if(physioPlaying===null){
-    let reduced=false;
-    try{ reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(_){}
-    physioPlaying=!reduced;
-  }
-  return physioPlaying;
-}
-function setPhysioPlaying(on){
-  physioPlaying=!!on;
-  if(physio) physioPlaying?physio.play():physio.pause();
-  document.querySelectorAll('[data-physio-play]').forEach(b=>{
-    b.textContent=physioPlaying?'Pause':'Play';
-    b.title=physioPlaying?'Pause the cycle':'Play the cycle';
-  });
-}
+function physioIsPlaying(){ return RhythmLabScreen.isPlaying(LAB,LAB_ENV); }
+function setPhysioPlaying(on){ RhythmLabScreen.setPlaying(LAB,on,LAB_ENV); }
 
 /* The cycle panel's caption is src/app/rhythmlab.js's; this hands it what the panel has chosen. */
 function physioNoteHtml(){ return RhythmLabScreen.noteHtml({view:physioView,lesion:physioLesion,iv:physioIv,
@@ -1944,31 +1930,13 @@ function mountPhysio(){
   physioCanvasEl=cv;
   physio.setIntervention(physioIv);
   physioApplyLesion();
-  document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>{
-    physioLesion=b.dataset.physioLesion;
-    try{localStorage.setItem('accsap12.physiolesion',physioLesion);}catch(_){}
-    /* In the PV loop the interventions come and go with Normal, so the panel is drawn again. */
-    if(physioView==='pv'){ render(); return; }
-    physioApplyLesion();
-    document.querySelectorAll('[data-physio-lesion]').forEach(x=>x.classList.toggle('hot',x===b));
-    __physioNotePhase=''; paintPhysioNote();
-  });
+  document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseLesion(LAB,b,LAB_ENV));
   document.querySelectorAll('[data-physio-slow]').forEach(b=>
     b.onclick=()=>setPhysioSlow(+b.dataset.physioSlow));
   document.querySelectorAll('[data-physio-play]').forEach(b=>
     b.onclick=()=>setPhysioPlaying(!physioIsPlaying()));
-  document.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>{
-    physioView=b.dataset.physioView;
-    try{localStorage.setItem('accsap12.physioview',physioView);}catch(_){}
-    render();
-  });
-  document.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>{
-    physioIv=b.dataset.physioIv;
-    physio.setIntervention(physioIv);
-    physioApplyLesion();
-    document.querySelectorAll('[data-physio-iv]').forEach(x=>x.classList.toggle('hot',x===b));
-    __physioNotePhase=''; paintPhysioNote();
-  });
+  document.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseView(LAB,b,LAB_ENV));
+  document.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseIv(LAB,b,LAB_ENV));
   /* Dragging the diagram scrubs the cycle. While a finger is down the heart's
      clock is ignored, so you can stop time on the dicrotic notch and read it. */
   let down=false;
@@ -2034,13 +2002,7 @@ function mountTwelve(){
      settles after a screen change — redraw once it is. */
   requestAnimationFrame(()=>twelve&&twelve.draw());
 }
-function setLab(k){
-  /* A lead selected on one rhythm is still the lead you want to watch on the
-     next, so the selection survives — but only if that rhythm has a 12-lead. */
-  labKind=k;
-  if(physio) physio.setRate(RHYTHMS[k].hr||68);
-  render();
-}
+function setLab(k){ RhythmLabScreen.setKind(LAB,k,LAB_ENV); }
 
 /* Every draw asks for this, not only a draw of the Lab: the monitor is a loop that asks for its own next frame, and one the
    screen does not end goes on drawing into a canvas that is no longer in the page, at 60 frames a second, for the rest of the

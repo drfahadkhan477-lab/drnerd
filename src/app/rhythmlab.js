@@ -41,8 +41,9 @@
 
    The rhythm chips and the Home button carry no inline handler (docs/ROADMAP.md, E2): each names an
    action, setLab with the rhythm's key in data-kind, or goHome, which the page's one delegated listener
-   (src/core/actions.js) finds in its ACTIONS table and calls. setLab() and goHome() stay the page's, as
-   do the listeners mountPhysio() gives the cycle's chips by their data-physio-* attributes.
+   (src/core/actions.js) finds in its ACTIONS table and calls. goHome() is the page's, and setLab() its one line
+   into setKind() below; mountPhysio() still gives the cycle's chips their listeners by their data-physio-*
+   attributes, each a call into the handlers below.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -225,5 +226,82 @@ function noteHtml(o){
   return `<b>${e(ph.name)}.</b> ${e(ph.blurb)}`+(lesionNote?`<br><b>${e(LESIONS.find(x=>x[0]===lesion)[1])}.</b> ${e(lesionNote)} Computed by the circulation model.`:'');
 }
 
-root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state, noteHtml };
+/* ── the lab's handlers ──
+   They were the page's setLab(), setPhysioSlow(), physioIsPlaying(), setPhysioPlaying() and the three taps
+   mountPhysio() wrote inline (a lesion, a view, an intervention); the page keeps the four names as one line each, and
+   mountPhysio() hands each tap its button. st is the page's LAB (state() above); env what they use of the page:
+
+     env.doc.querySelectorAll(q)     the page's buttons, to mark the chosen one
+     env.store.setItem(k, v)          where a choice is remembered; a store that refuses is let be
+     env.reducedMotion()             whether the device asks for less motion
+     env.RHYTHMS                     the rhythms, for a rhythm's rate
+     env.render(), env.applyLesion(), env.paintNote()   the screen drawn again, the lesion handed to the diagram, the
+                                                         caption painted
+
+     isPlaying(st, env)              whether the cycle plays: decided the first time it is asked, by the device (paused
+                                     with Reduce Motion on), then kept
+     setPlaying(st, on, env)         plays or pauses it, and says so on the Play chip
+     setSlow(st, n, env)             the speed: kept, remembered, handed to the diagram, its chip marked
+     setKind(st, k, env)             the rhythm: kept, its rate handed to the diagram (68 where it has none), the screen
+                                     drawn again; a lead selected stays selected
+     chooseLesion(st, btn, env)      the lesion btn names: kept and remembered; in the PV loop the screen is drawn again
+                                     (the interventions come and go with Normal), elsewhere the diagram is handed it,
+                                     its chip marked and the caption painted afresh
+     chooseView(st, btn, env)        the view btn names: kept, remembered, the screen drawn again
+     chooseIv(st, btn, env)          the intervention btn names: kept, handed to the diagram with the lesion, its chip
+                                     marked and the caption painted afresh */
+function isPlaying(st,env){
+  if(st.playing===null){
+    let reduced=false;
+    try{ reduced=!!env.reducedMotion(); }catch(_){}
+    st.playing=!reduced;
+  }
+  return st.playing;
+}
+function setPlaying(st,on,env){
+  st.playing=!!on;
+  if(st.physio) st.playing?st.physio.play():st.physio.pause();
+  env.doc.querySelectorAll('[data-physio-play]').forEach(b=>{
+    b.textContent=st.playing?'Pause':'Play';
+    b.title=st.playing?'Pause the cycle':'Play the cycle';
+  });
+}
+function setSlow(st,n,env){
+  st.slow=n;
+  try{ env.store.setItem('accsap12.physioslow',String(n)); }catch(_){}
+  if(st.physio&&st.physio.setSlow) st.physio.setSlow(n);
+  env.doc.querySelectorAll('[data-physio-slow]').forEach(b=>
+    b.classList.toggle('hot',+b.dataset.physioSlow===n));
+}
+/* A lead selected on one rhythm is still the lead you want to watch on the
+   next, so the selection survives — but only if that rhythm has a 12-lead. */
+function setKind(st,k,env){
+  st.kind=k;
+  if(st.physio) st.physio.setRate(env.RHYTHMS[k].hr||68);
+  env.render();
+}
+function chooseLesion(st,b,env){
+  st.lesion=b.dataset.physioLesion;
+  try{ env.store.setItem('accsap12.physiolesion',st.lesion); }catch(_){}
+  /* In the PV loop the interventions come and go with Normal, so the panel is drawn again. */
+  if(st.view==='pv'){ env.render(); return; }
+  env.applyLesion();
+  env.doc.querySelectorAll('[data-physio-lesion]').forEach(x=>x.classList.toggle('hot',x===b));
+  st.notePhase=''; env.paintNote();
+}
+function chooseView(st,b,env){
+  st.view=b.dataset.physioView;
+  try{ env.store.setItem('accsap12.physioview',st.view); }catch(_){}
+  env.render();
+}
+function chooseIv(st,b,env){
+  st.iv=b.dataset.physioIv;
+  st.physio.setIntervention(st.iv);
+  env.applyLesion();
+  env.doc.querySelectorAll('[data-physio-iv]').forEach(x=>x.classList.toggle('hot',x===b));
+  st.notePhase=''; env.paintNote();
+}
+
+root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state, noteHtml,
+  isPlaying, setPlaying, setSlow, setKind, chooseLesion, chooseView, chooseIv };
 })(typeof window !== 'undefined' ? window : this);
