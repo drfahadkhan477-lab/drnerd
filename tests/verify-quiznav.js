@@ -243,8 +243,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     /* Start over is in the session at the head of Apex's panel now (the owner's choice, November 2026). */
     const opened = await act(() => page.locator('#aiFab').click({ timeout: 5000 })) && await until(() => !!document.querySelector('#aiSession .q-restart'));
     ok('the Apex button, tapped, opens Apex on the session, with start over for a resumed session', opened, await page.evaluate(() => JSON.stringify({ session: !!document.getElementById('aiSession'), restart: !!document.querySelector('#aiSession .q-restart') })));
-    /* The same chapter and mode: the results screen's Restart is an action named restartQuiz too, and it would start a
-       quiz from its first question with neither. */
+    /* Start over is in the session row's detail, which the row opens (a clean chat window). The same chapter and mode:
+       the results screen's Restart is an action named restartQuiz too, and it would start a quiz from its first question
+       with neither. */
+    await act(() => page.locator('#aiSession .sb-row').click({ timeout: 5000 }));
+    await until(() => { const b = document.querySelector('#aiSession .q-restart'); return !!b && b.getBoundingClientRect().width > 0; });
     const over = await act(() => page.locator('.q-restart').click({ timeout: 5000 })) && await until(ch => S.screen === 'quiz' && S.qIdx === 0 && S.resumed === false && S.chapter === ch && S.mode === 'all', await page.evaluate(() => CHAPTERS[0]));
     ok('Start over deals the same chapter again, in the same mode, from its first question, no longer resumed', over, await page.evaluate(() => JSON.stringify({ qIdx: S.qIdx, resumed: S.resumed, chapter: S.chapter === CHAPTERS[0] ? 'the same' : S.chapter, mode: S.mode })));
     await page.evaluate(() => { if (document.getElementById('shell').classList.contains('ai-open')) toggleAI(); });
@@ -307,8 +310,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('the Apex button wears the session: a point for each question, the one answered right, the one on screen marked, beside Apex\'s own mark',
       fab.brain && fab.dots === fab.n && fab.right === 1 && fab.cur && fab.mark, JSON.stringify(fab));
     ok('and its name says the place and the counts', fab.label === `Apex, with this session: question 2 of ${fab.n}, 1 right, 0 wrong. Open`, fab.label);
+    /* A key, so Apex opens on its conversation rather than its setup (nothing is sent: fire() is stood in for below). */
+    await p.evaluate(() => { AI.provider = 'gemini'; AI.gemini = Object.assign({}, AI.gemini, { key: 'test-key' }); });
     await p.click('#aiFab');
-    await settled(p, () => !!document.querySelector('#aiSession .sb-row'), { label: 'Apex to open on the session' }).catch(() => {});
+    await settled(p, () => !!document.querySelector('#aiSession .sb-row') && !!document.getElementById('aiBody'), { label: 'Apex to open on the session and its conversation' }).catch(() => {});
     /* A clean chat window (the owner's word): the session one row over the conversation, shut; its asks in the tray
        under it with the actions on this device; the conversation one line until something is asked. */
     const open = await p.evaluate(() => { const x = document.getElementById('aiSession'), stat = k => ((x && x.querySelector('.sb-stat[data-state="' + k + '"] b')) || {}).textContent;
