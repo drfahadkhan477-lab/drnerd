@@ -741,17 +741,26 @@ let section = '';
     const show = async (p) => { pearlCurrent = p; S.screen = 'home'; render();
       await new Promise(r => { const t0 = performance.now(); const f = () => (document.getElementById('pearlCard') && !window.__vtLive) || performance.now() - t0 > 4000 ? r() : requestAnimationFrame(f); f(); });
       const em = document.getElementById('pearlEmblem');
-      return { fig: !!document.getElementById('pearlFig'), emblem: !!em, hidden: em && em.getAttribute('aria-hidden'), named: em ? em.textContent.trim() : '' }; };
+      return { fig: !!document.getElementById('pearlFig'), emblem: !!em, hidden: em && em.getAttribute('aria-hidden'), named: em ? em.textContent.trim() : '',
+        ground: em ? getComputedStyle(em).backgroundImage : '' }; };
     const bare = await show(Object.assign({}, base, { figKey: null, figCap: '', chapter: ch }));
+    /* The same emblem in High contrast, then the theme put back. */
+    const was = S.theme; setTheme('contrast');
+    const solid = getComputedStyle(document.getElementById('pearlEmblem')).backgroundImage;
+    setTheme(was);
     const withFig = pearlAll().find(p => p.figKey && refImgSrc(p.figKey));
     const fig = withFig ? await show(withFig) : null;
     /* and the emblem follows the pearl when another is asked for */
     const keep = Pearl.pick; Pearl.pick = () => Object.assign({}, base, { figKey: null, figCap: '', chapter: ch, id: base.id + '-again' });
     try { pearlNext(); } finally { Pearl.pick = keep; }
     const swapped = { fig: !!document.getElementById('pearlFig'), emblem: !!document.getElementById('pearlEmblem') };
-    return { ch, bare, fig, swapped };
+    return { ch, bare, fig, swapped, solid };
   });
   ok('a pearl whose note has no figure shows its chapter\'s emblem, as decoration', pics.bare.emblem && !pics.bare.fig && pics.bare.hidden === 'true' && pics.bare.named === pics.ch, JSON.stringify(pics.bare));
+  /* A var() nothing defines makes the whole background invalid when it is drawn, and the computed image is then none: the
+     emblem named --card2 for its glow's centre, and its glow never painted. */
+  ok('the emblem stands on its glow: a radial ground, from the palette\'s tint to the card', /^radial-gradient\(/.test(pics.bare.ground), pics.bare.ground);
+  ok('and in High contrast on the plain card, no glow', pics.solid === 'none', pics.solid);
   ok('a pearl with a figure shows the figure and no emblem', !!pics.fig && pics.fig.fig && !pics.fig.emblem, JSON.stringify(pics.fig));
   ok('another pearl without a figure brings the emblem with it', pics.swapped.emblem && !pics.swapped.fig, JSON.stringify(pics.swapped));
 
