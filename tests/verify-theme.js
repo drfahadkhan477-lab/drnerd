@@ -70,8 +70,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     modes: THEMES.map(t => t.mode),
     everyHasSwatch: THEMES.every(t => /^#/.test(t.bg) && /^#/.test(t.ac)),
   }));
-  ok('there are nine themes', presets.n === 9, String(presets.n));
-  ok('four are light, five are dark', presets.light.length === 4 && presets.dark.length === 5,
+  /* Four since D6 (src/core/themes.js): Auto, Daylight, Midnight and Contrast. */
+  ok('there are four themes', presets.n === 4, String(presets.n));
+  ok('two are light, two are dark', presets.light.length === 2 && presets.dark.length === 2,
      `light ${presets.light.join(',')} | dark ${presets.dark.join(',')}`);
   ok('every theme carries a two-colour swatch', presets.everyHasSwatch);
 
@@ -88,8 +89,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('auto removes data-theme and uses no palette',
      applied.auto.theme === null && applied.auto.palette === null, JSON.stringify(applied.auto));
   ok('midnight is dark with no palette override', applied.midnight.theme === 'dark' && applied.midnight.palette === null);
-  ok('cathlab is dark with the cathlab palette', applied.cathlab.theme === 'dark' && applied.cathlab.palette === 'cathlab');
-  ok('parchment is light with the parchment palette', applied.parchment.theme === 'light' && applied.parchment.palette === 'parchment');
+  ok('contrast is dark with the contrast palette', applied.contrast.theme === 'dark' && applied.contrast.palette === 'contrast', JSON.stringify(applied.contrast));
   ok('daylight is light with no palette override — no stale palette left behind',
      applied.daylight.theme === 'light' && applied.daylight.palette === null, JSON.stringify(applied.daylight));
 
@@ -105,40 +105,35 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     for (const t of THEMES) { setTheme(t.id); out[t.id] = read(); }
     return out;
   });
-  const bgs = new Set(['daylight', 'slate', 'parchment', 'midnight', 'nocturne', 'cathlab', 'monitor', 'contrast'].map(k => tokens[k].bg));
-  ok('the eight explicit themes have eight distinct backgrounds', bgs.size === 8, `${bgs.size} distinct`);
-  const accents = new Set(['daylight', 'slate', 'parchment', 'nocturne', 'cathlab', 'monitor', 'contrast'].map(k => tokens[k].teal));
-  ok('their accents are distinct too', accents.size === 7, `${accents.size} distinct`);
-  ok('cath lab is genuinely amber, not the default blue', /f5|fb|d9|b4/i.test(tokens.cathlab.teal), tokens.cathlab.teal);
-  ok('monitor accent is minted clear of the "correct" green so they do not collide',
-     tokens.monitor.teal.toLowerCase() !== tokens.monitor.green.toLowerCase(), `accent ${tokens.monitor.teal} vs green ${tokens.monitor.green}`);
+  const bgs = new Set(['daylight', 'midnight', 'contrast'].map(k => tokens[k].bg));
+  ok('the three explicit themes have three distinct backgrounds', bgs.size === 3, `${bgs.size} distinct`);
+  /* Daylight and Midnight share the default accent (#0284C7; verify-tokens holds it per theme). Contrast has its own. */
+  ok('Contrast has an accent of its own, not the default blue', !!tokens.contrast.teal && tokens.contrast.teal !== tokens.daylight.teal && tokens.daylight.teal === tokens.midnight.teal,
+     `Contrast ${tokens.contrast.teal}, Daylight ${tokens.daylight.teal}, Midnight ${tokens.midnight.teal}`);
+  ok('Contrast is the high-contrast ground, near black, not Midnight\'s navy', /^#0[0-9a-f]0[0-9a-f]0[0-9a-f]$/i.test(tokens.contrast.bg), tokens.contrast.bg);
 
   head('semantic colours are not themed');
   const greens = new Set(Object.values(tokens).map(t => t.green.toLowerCase()));
   const reds = new Set(Object.values(tokens).map(t => t.red.toLowerCase()));
-  /* Parchment softens its answer backgrounds for the warm paper, but the
-     foreground green/red that MEAN right and wrong stay put across the dark
-     themes and the default light one. Allow parchment its one warm exception. */
-  ok('"correct" green is stable across the non-parchment themes',
-     new Set(Object.entries(tokens).filter(([k]) => k !== 'parchment').map(([, t]) => t.green.toLowerCase())).size === 1,
-     [...greens].join(' '));
-  ok('"wrong" red is stable across the non-parchment themes',
-     new Set(Object.entries(tokens).filter(([k]) => k !== 'parchment').map(([, t]) => t.red.toLowerCase())).size === 1,
-     [...reds].join(' '));
+  /* The foreground green and red that MEAN right and wrong stay put in every theme. (Parchment softened its answer
+     backgrounds and was allowed that exception; it retired with D6, and the exception with it.) */
+  ok('"correct" green is the same in every theme', greens.size === 1, [...greens].join(' '));
+  ok('"wrong" red is the same in every theme', reds.size === 1, [...reds].join(' '));
 
   head('the hero recolours as one');
+  /* The greeting is the hero's heading when a pearl is showing, and a line of its own above the empty-library prompt.
+     The check that stood here passed any rgb() colour at all; it compares the greeting under two themes now, a light
+     and a dark one (Midnight and Contrast share their accent ink, so the two of them would read alike). */
   const heroCohesion = await page.evaluate(() => {
-    setTheme('cathlab');
-    const cs = getComputedStyle(document.documentElement);
-    const hero = cs.getPropertyValue('--hero-accent').trim().toLowerCase();
-    /* The greeting is the hero's heading when a pearl is showing, and a line
-       of its own above the empty-library prompt. */
-    const greet = getComputedStyle(document.querySelector('.hero-greet') || document.querySelector('#homePage0 .hero-h1')).color;
-    return { hero, greet };
+    const read = id => { setTheme(id); const cs = getComputedStyle(document.documentElement);
+      return { hero: cs.getPropertyValue('--hero-accent').trim().toLowerCase(),
+               greet: getComputedStyle(document.querySelector('.hero-greet') || document.querySelector('#homePage0 .hero-h1')).color }; };
+    return { contrast: read('contrast'), midnight: read('midnight'), daylight: read('daylight') };
   });
-  ok('the cath-lab hero accent is amber', /fbbf24|f59e0b|fb|f5/i.test(heroCohesion.hero), heroCohesion.hero);
-  ok('the greeting is drawn from that accent, not a hard-coded mint',
-     /25[0-5],\s*1[0-9][0-9]/.test(heroCohesion.greet) || /rgb/.test(heroCohesion.greet), heroCohesion.greet);
+  ok('the Contrast hero accent is its own light blue', heroCohesion.contrast.hero === '#7dd3fc', heroCohesion.contrast.hero);
+  ok('and the greeting follows the theme rather than holding one colour',
+     !!heroCohesion.daylight.greet && heroCohesion.daylight.greet !== heroCohesion.midnight.greet,
+     `Daylight ${heroCohesion.daylight.greet}, Midnight ${heroCohesion.midnight.greet}`);
 
   head('the picker');
   await page.evaluate(() => setTheme('midnight'));
@@ -152,16 +147,16 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { openNow, opts, checked };
   });
   ok('the menu opens', menu.openNow);
-  ok('it lists all nine themes', menu.opts === 9, String(menu.opts));
+  ok('it lists all four themes', menu.opts === 4, String(menu.opts));
   ok('the active theme is marked', /midnight/i.test(menu.checked || ''), menu.checked);
 
   const picked = await page.evaluate(async () => {
-    document.querySelector('#generalSettings .theme-opt[data-theme-id="nocturne"]').click();
+    document.querySelector('#generalSettings .theme-opt[data-theme-id="contrast"]').click();
     await new Promise(r => setTimeout(r, 60));
     return { theme: S.theme, attr: document.documentElement.getAttribute('data-palette'),
              menuOpen: !!document.getElementById('generalSettings')?.open };
   });
-  ok('clicking an option applies that theme', picked.theme === 'nocturne' && picked.attr === 'nocturne');
+  ok('clicking an option applies that theme', picked.theme === 'contrast' && picked.attr === 'contrast');
   ok('and keeps Settings open', picked.menuOpen === true);
 
   /* The key itself, pressed with focus inside the dialog: a synthetic cancel event would pass with Escape broken. */
@@ -203,10 +198,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('it persists, and old preferences still resolve');
   const persisted = await page.evaluate(() => {
-    setTheme('monitor');
+    setTheme('contrast');
     return JSON.parse(localStorage.getItem('accsap12.v2')).theme;
   });
-  ok('the choice is saved', persisted === 'monitor');
+  ok('the choice is saved', persisted === 'contrast');
 
   const legacy = await page.evaluate(() => {
     /* Someone who saved 'dark' before this system existed should land on the
@@ -215,10 +210,25 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     const a = { theme: document.documentElement.getAttribute('data-theme'), def: themeDef().id };
     S.theme = 'light'; applyTheme();
     const b = { theme: document.documentElement.getAttribute('data-theme'), def: themeDef().id };
-    return { a, b };
+    /* And a theme retired with D6: the kept one of its own lightness, with no palette left behind, and marked as the
+       chosen one in Settings. */
+    const was = {};
+    for (const id of ['slate', 'parchment', 'nocturne', 'cathlab', 'monitor']) {
+      S.theme = id; applyTheme();
+      was[id] = { theme: document.documentElement.getAttribute('data-theme'), palette: document.documentElement.getAttribute('data-palette'), def: themeDef().id };
+    }
+    S.theme = 'cathlab'; applyTheme(); openSettings();
+    const marked = (document.querySelector('#generalSettings .theme-opt.on') || {}).dataset?.themeId || null;
+    closeSettings();
+    return { a, b, was, marked };
   });
   ok('a saved "dark" resolves to a dark theme', legacy.a.theme === 'dark' && legacy.a.def === 'midnight', JSON.stringify(legacy.a));
   ok('a saved "light" resolves to a light theme', legacy.b.theme === 'light' && legacy.b.def === 'daylight', JSON.stringify(legacy.b));
+  const RETIRED = { slate: ['light', 'daylight'], parchment: ['light', 'daylight'], nocturne: ['dark', 'midnight'], cathlab: ['dark', 'midnight'], monitor: ['dark', 'midnight'] };
+  ok('a theme retired with D6 resolves to the kept one of its lightness, with no palette left behind',
+     Object.entries(RETIRED).every(([id, [mode, def]]) => legacy.was[id] && legacy.was[id].theme === mode && legacy.was[id].def === def && legacy.was[id].palette === null),
+     Object.entries(legacy.was).map(([id, w]) => `${id}: ${w.theme}/${w.palette}/${w.def}`).join(', '));
+  ok('and Settings marks that kept theme as the one chosen', legacy.marked === 'midnight', String(legacy.marked));
 
   head('the pre-paint boot script applies the theme on a cold load');
   /* Save a theme, then RELOAD this same context (a fresh page on a file:// URL
@@ -228,15 +238,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      the very first paint is already the saved palette — no flash of the wrong
      one. If it applied them correctly on this cold load, it applies them on
      every cold launch. */
-  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('accsap12.v2') || '{}'); s.theme = 'cathlab'; localStorage.setItem('accsap12.v2', JSON.stringify(s)); });
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: 250000 });
-  const early = await page.evaluate(() => ({
-    theme: document.documentElement.getAttribute('data-theme'),
-    palette: document.documentElement.getAttribute('data-palette'),
-    savedFromStorage: (JSON.parse(localStorage.getItem('accsap12.v2') || '{}')).theme,
-  }));
+  const coldLoad = async saved => {
+    await page.evaluate(t => { const s = JSON.parse(localStorage.getItem('accsap12.v2') || '{}'); s.theme = t; localStorage.setItem('accsap12.v2', JSON.stringify(s)); }, saved);
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 250000 });
+    return page.evaluate(() => ({
+      theme: document.documentElement.getAttribute('data-theme'),
+      palette: document.documentElement.getAttribute('data-palette'),
+      savedFromStorage: (JSON.parse(localStorage.getItem('accsap12.v2') || '{}')).theme,
+    }));
+  };
+  /* A retired theme, saved before D6: the script before paint draws its successor, so the first paint is not a palette
+     the stylesheet no longer has (a dark page with no palette, which is Midnight). */
+  const retired = await coldLoad('nocturne');
+  ok('a cold load of a theme retired with D6 paints the kept theme of its lightness, before the app is there',
+     retired.theme === 'dark' && retired.palette === null && retired.savedFromStorage === 'nocturne', JSON.stringify(retired));
+  await booted(page);
+  const early = await coldLoad('contrast');
   ok('a cold load restores the saved palette from localStorage, attributes and all',
-     early.theme === 'dark' && early.palette === 'cathlab' && early.savedFromStorage === 'cathlab', JSON.stringify(early));
+     early.theme === 'dark' && early.palette === 'contrast' && early.savedFromStorage === 'contrast', JSON.stringify(early));
 
   /* AND NOW LET THE APP COME BACK, which this did not do. The read above is
      deliberately early — the whole point is the pre-paint script, before the
@@ -257,10 +276,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      tokens. They cannot catch a surface nobody thought to tokenise, and three
      had been missed for exactly that reason — the shuffle-all card, the review
      card's glow and Apex's launcher kept the export's literal hexes, so a slab
-     of default blue sat in the middle of Parchment, Cath Lab and Monitor.
+     of default blue sat in the middle of Parchment, Cath Lab and Monitor
+     (palettes since retired with D6).
 
-     So instead of naming surfaces, render under two palettes chosen to share
-     nothing — warm paper against monitor green — and diff the computed
+     So instead of naming surfaces, render under two themes chosen to share
+     nothing — Daylight's paper against Contrast's black — and diff the computed
      background of every element large enough to be seen. Anything identical
      under both either reads no token at all, or is a semantic that is meant to
      stay put. There are no unthemed semantics on the home screen, so the
@@ -292,7 +312,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   /* ONE SURFACE IS MEANT TO STAY PUT, AND IT IS ASSERTED RATHER THAN SKIPPED.
      The hero medallion holds a photograph that carries its own dark ground;
      the plate behind it is that ground continued, which is what lets one
-     picture read on Parchment's cream and Nocturne's near-black without being
+     picture read on Daylight's paper and Contrast's near-black without being
      masked out of its background. Following the palette would put a cream
      plate behind a navy photograph.
 
@@ -319,7 +339,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      that ignores the palette. */
   await settled(page, () => !document.getElementById('splash'),
     { label: 'the splash to leave the document before the sweep' });
-  const w = await paint('parchment', FIXED_SEL), g = await paint('monitor', FIXED_SEL);
+  const w = await paint('daylight', FIXED_SEL), g = await paint('contrast', FIXED_SEL);
   const warm = w.out, green = g.out;
   const FIXED = Object.keys(w.fixed);
   const painted = Object.keys(warm).length;
@@ -374,7 +394,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return out;
     });
   };
-  const warmE = await edges('parchment'), greenE = await edges('monitor');
+  const warmE = await edges('daylight'), greenE = await edges('contrast');
   const stuck = Object.keys(warmE).filter(k => k in greenE && warmE[k] === greenE[k]);
   ok('and every coloured border moves with it too', stuck.length === 0,
      stuck.length ? stuck.join(', ') : `${Object.keys(warmE).length} coloured borders, all themed`);
@@ -480,7 +500,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
   head('a swatch is a promise about the palette');
   {
-    /* The eight swatches are hard-coded hex in THEMES, and the palettes they
+    /* The swatches are hard-coded hex in THEMES, and the palettes they
        claim to preview live in CSS. Nothing held them together, so a palette
        could be retuned and its swatch would go on showing the old colour —
        silently, because a swatch has nothing to be wrong against. */

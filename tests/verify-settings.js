@@ -96,7 +96,7 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await check('blocked storage does not claim a display preference was saved',async()=>await page.evaluate(()=>displaySettings().layout==='focused'&&document.querySelector('[name="layout"]').value==='focused'),async()=>{await page.evaluate(()=>document.querySelector('[name="layout"]').value='split');},18);
  await page.evaluate(()=>{closeSettings();AI.gemini.key='AIza-draft-test';if(!document.querySelector('#shell').classList.contains('ai-open'))toggleAI();else buildAI();});await quiet(page);
  await page.locator('#aiIn').fill('My unsent question');
- await page.evaluate(()=>{openSettings();setReadSize(1);setTheme('parchment');updateDisplaySetting('width','wide');closeSettings();});
+ await page.evaluate(()=>{openSettings();setReadSize(1);setTheme('midnight');updateDisplaySetting('width','wide');closeSettings();});
  await check('display changes preserve an unsent Apex draft',async()=>await page.locator('#aiIn').inputValue()==='My unsent question',async()=>{await page.locator('#aiIn').fill('');},19);
  await page.evaluate(()=>{openSettings('apex');DISCOVER.gemini.fn=()=>new Promise(resolve=>window.resolveSettingsRequest=resolve);});
  await page.locator('#generalSettings #aiKey').fill('AIza-cancelled-test');await page.locator('#generalSettings #aiSave').click({noWaitAfter:true});
@@ -128,13 +128,15 @@ const negative=process.env.NEGATIVE_CHECK||'';
  // docs/ROADMAP.md, E2: Settings names actions (data-action) and carries no inline handler, so each control is tapped
  // here through the page's one listener on the document; the text size, width, layout and brightness above are too.
  await page.evaluate(()=>{closeSettings();openSettings();});
- await check('Settings carries no inline handler, and its controls name actions',async()=>await page.evaluate(()=>{const box=document.querySelector('#generalSettings');const all=[box,...box.querySelectorAll('*')];return all.every(el=>![...el.attributes].some(a=>/^on/i.test(a.name)))&&box.querySelectorAll('[data-action]').length>=20;}),async()=>{await page.evaluate(()=>document.querySelector('#tuneReset').setAttribute('onclick','resetTune()'));},26);
+ /* The floor was 20 controls naming an action, nine of them the theme options; D6 kept four themes. It is the same
+    floor in two parts now: one option per theme, and at least 11 of the rest (20 less the nine). */
+ await check('Settings carries no inline handler, and its controls name actions',async()=>await page.evaluate(()=>{const box=document.querySelector('#generalSettings');const all=[box,...box.querySelectorAll('*')];return all.every(el=>![...el.attributes].some(a=>/^on/i.test(a.name)))&&box.querySelectorAll('[data-action="setTheme"]').length===THEMES.length&&box.querySelectorAll('[data-action]:not([data-action="setTheme"])').length>=11;}),async()=>{await page.evaluate(()=>document.querySelector('#tuneReset').setAttribute('onclick','resetTune()'));},26);
  await page.locator('#tune-c').evaluate(e=>{e.value='120';e.dispatchEvent(new Event('input',{bubbles:true}));});
  await check('the contrast slider sets contrast as it moves',async()=>await page.evaluate(()=>readTune().c===120&&/contrast\(1\.2\)/.test(document.documentElement.style.filter)&&document.querySelector('#tune-c-v').textContent==='120%'),async()=>{await page.evaluate(()=>setTune('c',100));},27);
  await page.locator('#tuneReset').click({noWaitAfter:true});
  await check('Reset to 100% puts brightness and contrast back and leaves Settings open',async()=>await page.evaluate(()=>readTune().b===100&&readTune().c===100&&document.documentElement.style.filter===''&&document.querySelector('#tuneReset').disabled&&!!document.querySelector('#generalSettings')?.open),async()=>{await page.evaluate(()=>setTune('c',120));},28);
- await page.locator('#generalSettings .theme-opt[data-theme-id="cathlab"]').click({noWaitAfter:true});
- await check('a theme tapped in Settings applies that theme',async()=>await page.evaluate(()=>S.theme==='cathlab'&&document.documentElement.getAttribute('data-palette')==='cathlab'&&document.querySelector('#generalSettings .theme-opt[data-theme-id="cathlab"]').getAttribute('aria-checked')==='true'),async()=>{await page.evaluate(()=>setTheme('midnight'));},29);
+ await page.locator('#generalSettings .theme-opt[data-theme-id="contrast"]').click({noWaitAfter:true});
+ await check('a theme tapped in Settings applies that theme',async()=>await page.evaluate(()=>S.theme==='contrast'&&document.documentElement.getAttribute('data-palette')==='contrast'&&document.querySelector('#generalSettings .theme-opt[data-theme-id="contrast"]').getAttribute('aria-checked')==='true'),async()=>{await page.evaluate(()=>setTheme('midnight'));},29);
  await page.locator('#generalSettings [aria-label="Close settings"]').click({noWaitAfter:true});
  await check('the close button closes Settings',async()=>await page.evaluate(()=>!document.querySelector('#generalSettings')),async()=>{await page.evaluate(()=>openSettings());},30);
  await page.evaluate(()=>openSettings('apex'));

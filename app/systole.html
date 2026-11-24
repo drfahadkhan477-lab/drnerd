@@ -151,10 +151,9 @@
    dark does not mean a flash of the system one on every cold open. Inline and
    tiny on purpose — it has to run ahead of the 25 MB below. */
 try{var _t=(JSON.parse(localStorage.getItem('accsap12.v2')||'{}')||{}).theme||'auto';
-  var _M={auto:['',''],light:['light',''],daylight:['light',''],slate:['light','slate'],
-    parchment:['light','parchment'],dark:['dark',''],midnight:['dark',''],
-    nocturne:['dark','nocturne'],cathlab:['dark','cathlab'],monitor:['dark','monitor'],
-    contrast:['dark','contrast']};
+  var _M={auto:['',''],light:['light',''],daylight:['light',''],dark:['dark',''],midnight:['dark',''],
+    contrast:['dark','contrast'],slate:['light',''],parchment:['light',''],
+    nocturne:['dark',''],cathlab:['dark',''],monitor:['dark','']};
   var _p=_M[_t]||['',''], _h=document.documentElement;
   if(_p[0])_h.setAttribute('data-theme',_p[0]);
   if(_p[1])_h.setAttribute('data-palette',_p[1]);

@@ -727,6 +727,18 @@ and floor checks. Once usage shows which are used, keep those (at least Auto, on
 light, one dark and the high-contrast one) and retire or freeze the rest. The
 owner's decision.
 
+*Decided and done (24 November 2026; the owner handed the choice to Claude):*
+the floor is what is kept, Auto, Daylight, Midnight and Contrast, because the
+app keeps no record of which themes are used and none was coming. Slate,
+Parchment, Nocturne, Cath Lab and Monitor are retired: their palettes are gone
+from `app/css/themes.css`, and a choice saved under one of their names is the
+kept theme of its own lightness (Daylight or Midnight), on a cold load before
+the app is there as well as after (`src/core/themes.js`, `OLD`;
+`verify-themes-pure`, `verify-theme`). `verify-palette-pure` fails on a palette
+the stylesheet styles and no theme uses. The contrast and ink sweeps read the
+four themes, with Auto and Daylight on a device of each kind, where they read
+the retired palettes before.
+
 ## 4. AI — Apex
 
 **A1 — A provider seam, and a second provider.** The tool list is already written
@@ -1079,7 +1091,6 @@ same: they are the project's, not a reminder.
 | D2 | `opus` | `high` | The contrast sweep; F1 is its first finding |
 | D3 | `opus` | `high` | Measure in WebKit at iPad sizes |
 | D4, D5 | `sonnet` | `medium` | D4 after you pick from the candidates |
-| D6 | (you), then `sonnet` | `low` | Which themes to keep is yours |
 | A1 | `opus` | `high` | The provider seam and a Claude adapter behind the Worker |
 | A2 | `opus` | `medium` | Claim savings only from reported cached tokens |
 | A3 design | `fable` | `high` | The judge and the adversarial cases |

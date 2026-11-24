@@ -34,7 +34,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
 :root{--card:#FFFFFF;--bg:#EDF0F6;--navh:56px;--green-bg:#ECFDF5;--red-bg:#FFF1F1}
-html[data-theme="dark"][data-palette="cathlab"]{--card:#1D140B;--bg:#120C07}
+html[data-theme="dark"]{--card:#111E35;--bg:#0A1628}
 html[data-theme="dark"][data-palette="contrast"]{--card:#121212;--bg:#000000}
 body{background:var(--bg);font:16px sans-serif;padding:20px}
 .btn{background:var(--card);border:1px solid #ccc;border-radius:12px;padding:10px 16px;transition:all .2s}
@@ -157,8 +157,9 @@ var S = {};
      `fab ${fab.position}, icon ${icon.position}, icon::after ${iconAfter.content}`);
 
   head('the theme is followed, whatever it is');
-  await theme('dark', 'cathlab');
-  ok('cathlab: the glass is cathlab\'s card, see-through', await bg('btn') === 'rgba(29, 20, 11, 0.62)', await bg('btn'));
+  /* Midnight's card (base.css), the dark theme kept with D6; it was Cath Lab's amber-brown until that theme retired. */
+  await theme('dark', null);
+  ok('Midnight: the glass is Midnight\'s card, see-through', await bg('btn') === 'rgba(17, 30, 53, 0.62)', await bg('btn'));
   ok('and the light is dimmed for a dark ground', /rgba\(255, 255, 255, 0\.16\)/.test((await style('btn', '::after', ['box-shadow']))['box-shadow']));
   await theme('dark', 'contrast');
   ok('High contrast: solid, as it was', await bg('btn') === 'rgb(18, 18, 18)', await bg('btn'));

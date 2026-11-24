@@ -16,7 +16,7 @@
  * WHAT IT READS: fifteen screens (Home's three pages, Chapters, a question answered wrong, Progress, Notes, the Rhythm Lab,
  * Sessions, the mock exam with an answer chosen, a figure question answered right, Apex before a key is given and with an
  * invented conversation, Settings, and the mock exam's report) at 1180x820, and eight of them on a 390x844 touch phone, in
- * the twelve theme states verify-ink uses, with motion reduced, so an animated glow is read where it rests.
+ * the theme states verify-ink uses, with motion reduced, so an animated glow is read where it rests.
  * WHAT IT LEAVES OUT: text a reader is not given (hidden, screen-reader-only, aria-hidden, on a disabled control), a text
  * with no letter or digit in it (a separator dot), text behind an open modal dialog or inside [inert] (inactive), and
  * text a reader cannot see where it is: cut away by a box that clips overflow, under a frosted bar or a sheet
@@ -46,11 +46,10 @@ const ok = (label, cond, detail = '') => {
 let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
-/* [theme, the device's own scheme, how a check names it]: verify-ink's twelve states. */
-const STATES = [['auto', 'dark', 'Auto on a dark device'], ['midnight', 'light', 'Midnight'], ['nocturne', 'light', 'Nocturne'],
-  ['cathlab', 'light', 'Cath Lab'], ['monitor', 'light', 'Monitor'], ['contrast', 'light', 'Contrast'],
-  ['auto', 'light', 'Auto on a light device'], ['daylight', 'light', 'Daylight'], ['slate', 'light', 'Slate'], ['parchment', 'light', 'Parchment'],
-  ['daylight', 'dark', 'Daylight on a dark device'], ['parchment', 'dark', 'Parchment on a dark device']];
+/* [theme, the device's own scheme, how a check names it]: verify-ink's states. */
+/* Every theme the app offers (src/core/themes.js; four since D6), and Auto and Daylight on both kinds of device. */
+const STATES = [['auto', 'dark', 'Auto on a dark device'], ['midnight', 'light', 'Midnight'], ['contrast', 'light', 'Contrast'],
+  ['auto', 'light', 'Auto on a light device'], ['daylight', 'light', 'Daylight'], ['daylight', 'dark', 'Daylight on a dark device']];
 const SCREENS = [
   ['Home', () => { goHome(); homeGo(0, false); }],
   ['Brain', () => { goHome(); homeGo(1, false); }],
