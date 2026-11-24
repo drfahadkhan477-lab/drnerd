@@ -5865,7 +5865,9 @@ function gnavGo(k){
   if(k==='chapters'){ goStudy(); return; }
   const p={home:0,brain:1,labs:2}[k]; if(p===undefined) return;
   /* On Home's pager the page glides and focus stays on the capsule; from any other screen Home opens on that page. */
-  if(S.screen==='home') homeGo(p); else { homePage=p; goHome(); }
+  /* Home's first page has no capsule, so a press of its Home item would leave focus on a button that is gone: homeOpen(0)
+     glides there and hands focus to the door of the page that was left, as Brain's and Labs' own Home button did. */
+  if(S.screen==='home'){ if(p===0) homeOpen(0); else homeGo(p); } else { homePage=p; goHome(); }
 }
 if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('resize',()=>requestAnimationFrame(gnavSync));
 function buildNav(){
@@ -6889,7 +6891,11 @@ function homeGo(i){
    Home button, or back to the door that was used. */
 function homeOpen(i){
   const from=homePage; homeGo(i);
-  const to=i===0?document.querySelector('#homePage0 .home-door[data-page="'+from+'"]'):document.querySelector('#homePage'+i+' .home-back');
+  /* Brain's and Labs' Home button is set aside while the header's capsule is up (gnav.css), so the way back is then the
+     capsule's Home item. homeGo has already marked the page (homeMark runs gnavSync), so which one is drawn is known here. */
+  const back=i===0?null:document.querySelector('#homePage'+i+' .home-back');
+  const to=i===0?document.querySelector('#homePage0 .home-door[data-page="'+from+'"]')
+    :back&&back.getClientRects().length?back:document.querySelector('#gnav .gnav-it[data-go="home"]');
   /* While the pages glide, each frame marks the page nearer the middle current and the others inert (homePagerSync), and
      an inert button loses focus: so focus is offered once the glide is over (homeTween is 0), each frame until it holds,
      for at most a few seconds. */

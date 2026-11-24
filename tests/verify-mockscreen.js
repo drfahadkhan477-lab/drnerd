@@ -153,9 +153,12 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     /* The home screen remembers its page, and the way here came through Labs: the pager is set to its first page first,
        so only goLabs() lands on the Labs page, and a tap that went home anyhow does not. */
     await page.evaluate(() => { homePage = 0; });
-    const tapped = await page.click('#sessionsPage .sb-back', { timeout: 5000 }).then(() => true, () => false);
+    /* At 834px the header's capsule is up and Sessions' own way back is set aside (app/css/gnav.css): the capsule's Labs is it. */
+    const aside = await page.evaluate(() => { const b = document.querySelector('#sessionsPage .sb-back'); return !!b && !b.getClientRects().length; });
+    const tapped = aside && await page.click('#gnav .gnav-it[data-go="labs"]', { timeout: 5000 }).then(() => true, () => false);
     const back = tapped && await page.waitForFunction(() => S.screen === 'home' && homePage === 2, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
-    ok('the way back from Sessions goes to the Labs page of the home screen', back, tapped ? await page.evaluate(() => JSON.stringify({ screen: S.screen, homePage })) : 'the button could not be tapped');
+    ok('the way back from Sessions goes to the Labs page of the home screen: the capsule\'s Labs, Sessions\' own button set aside', back,
+       tapped ? await page.evaluate(() => JSON.stringify({ screen: S.screen, homePage })) : aside ? 'the capsule\'s Labs could not be tapped' : 'Sessions\' own way back is still drawn');
     /* S.screen is set when the tap lands, and render() swaps the screen in later, inside a view transition. Going on
        before the home screen is drawn left that swap to land after Sessions was drawn again, and the card the next check
        holds was drawn a second time under it (CI, Chromium shard 2). So each screen is waited for drawn and quiet. */

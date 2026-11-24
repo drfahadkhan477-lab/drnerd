@@ -422,7 +422,7 @@ const SUITES = [
   ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
   ['swlifetime-pure', 'the service worker keeps the event alive for each cache write it makes, including the refresh behind a cache hit that the network answers late'],
   ['hover-pure', 'no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind'],
-  ['gnav-pure', 'the header\'s capsule shows where it should, lights the right section, is no tab bar, and the page keeps it in step'],
+  ['gnav-pure', 'the header\'s capsule shows where it should, lights the right section, is no tab bar, takes over only the back buttons it covers, and the page keeps it in step'],
   ['cssvars-pure', 'every var() with no fallback in the stylesheets the pages ship names a custom property something defines, or one listed as waiting for a decision'],
   /* The stylesheets use CSS that iPadOS 13.4, the floor, does not read, and an older Safari does not stop at it: it skips the declaration, the whole rule or
      the whole @media, and says nothing. ipad-pure holds the script to a list; this holds every property, function, unit, pseudo-class, at-rule and

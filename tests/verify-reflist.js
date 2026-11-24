@@ -268,11 +268,18 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
       [await tap('.ref-new button:has-text("Cancel")'), 'refCancel', 'with a note edited, Cancel stops editing'],
       [await tap('.ref-new button:has-text("Import")'), 'refImportText', 'Import reads a file'],
       [await tap('.ref-new button:has-text("Export notes")'), 'refExport', 'Export writes the notes'],
-      [await tap('.ref-new button:has-text("Back")'), 'goHome', 'Back goes home'],
+      /* At 1194px the header's capsule is up, so the Notes screen's Back is set aside (app/css/gnav.css) and the capsule's
+         Labs, which Notes lights, goes home to the Labs page through the same goHome. */
+      [await p.evaluate(() => { const b = document.querySelector('.ref-new [data-action="goHome"]'); return !!b && !b.getClientRects().length; })
+        .then(aside => aside ? tap('#gnav .gnav-it[data-go="labs"]') : { made: false, taps: ['the Notes screen\'s Back is still drawn'] }),
+        'goHome', 'Back goes home: the capsule\'s Labs, the screen\'s own Back set aside'],
     ];
     await draw(null, one);
     await onScreen(p, 'refs', { marker: '.ref-btns .chip' }); await quiet(p);
-    rows.push([await tap('.ref-btns .chip:has-text("Back to study")'), 'goHome', 'with one note looked at, Back to study goes home']);
+    /* Back to study goes home too, so it is set aside with Back while the capsule is up. */
+    rows.push([await p.evaluate(() => { const b = [...document.querySelectorAll('.ref-btns .chip')].find(c => /Back to study/.test(c.textContent));
+      return !!b && !b.getClientRects().length; }).then(aside => aside ? tap('#gnav .gnav-it[data-go="labs"]') : { made: false, taps: ['Back to study is still drawn'] }),
+      'goHome', 'with one note looked at, Back to study is set aside with Back, the capsule\'s Labs going there']);
     rows.push([await tap('.ref-btns .chip:has-text("Show all notes")'), 'goRefs', 'and Show all notes opens the whole library']);
     for (const [r, want, label] of rows) ok(label + ', by one call with nothing, and no other', r.made && JSON.stringify(r.taps) === JSON.stringify([[want]]), (r.made ? '' : 'the tap could not be made; ') + JSON.stringify(r.taps));
     ok('and nothing throws on that page', tapErrors.length === 0, tapErrors.slice(0, 3).join(' | '));

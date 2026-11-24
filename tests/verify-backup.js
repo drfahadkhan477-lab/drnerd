@@ -662,7 +662,11 @@ const restore = `(text) => new Promise((resolve, reject) => {
       return { made, taps: await p.evaluate(() => window.__taps), label }; };
     const chapter = await p.evaluate(() => CHAPTERS[0]);
     const rows = [
-      [await tap('.stats-head .sb-back'), [['goHome']], 'Home goes home'],
+      /* At this width the header's capsule is up and Progress's own Home button is set aside (app/css/gnav.css): the way back
+         is the capsule's Labs, which Progress lights, and it goes home to the Labs page through the same goHome. */
+      [await p.evaluate(() => { const b = document.querySelector('.stats-head .sb-back'); return !!b && !b.getClientRects().length; })
+        .then(aside => aside ? tap('#gnav .gnav-it[data-go="labs"]') : { made: false, taps: ['Progress\'s own Home button is still drawn'] }),
+        [['goHome']], 'Home goes home, by the capsule\'s Labs while the screen\'s own button is set aside'],
       [await tap('.off-btn'), [['offlineDownload']], 'Download the rest downloads the figures'],
       [await p.evaluate(() => { offlineJob.busy = true; }).then(() => tap('.off-btn')), [['offlineStop']], 'while a download runs, the same button stops it'],
       [await tap('.mast'), [['startQuiz', chapter]], 'a chapter\'s ring starts a quiz in that chapter'],

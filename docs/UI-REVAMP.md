@@ -179,6 +179,12 @@ toolbar. So:
   T5.3 adds it), state-aware once #435 lands; geometry untouched.
 - **Back buttons stay** in v1, visible: `verify-homepager.js:171` needs focus on `#homePage2 .home-back`, `verify-taps.js:121-140` measures `.study-back`, and six
   pure suites pin the markup. The capsule complements them. Retiring them is an optional later task (T3.6).
+- **T3.6, done (the owner asked for it).** While the capsule is up (`body.has-gnav`), a back button whose destination is a capsule item is set aside by
+  `app/css/gnav.css`: Brain's and Labs' Home, Chapters' Back, and the Home or Labs of the Rhythm Lab, Search, Progress, Sessions, Annotations, the Practice
+  lab and Notes. The markup is untouched, so a phone, focus mode, the question screens and a header with no room keep every back button. Kept everywhere:
+  the Practice lab's back within the lab, the note search's Results, and the question screens' Home. The keyboard that opens Brain or Labs lands on the
+  capsule's Home, and the capsule's Home hands it back to the door that was used. `verify-gnav-pure` holds the list to the source's buttons; the browser
+  suites that tapped a back button at tablet width now take the capsule's item, after measuring that the screen's own button is set aside.
 
 ### D. Polish and motion
 `.lab-card:focus-visible` (CSS only; leave the card markup alone); shared rim/shadow tokens; per-palette lab hues including the Contrast palette; label the session pill

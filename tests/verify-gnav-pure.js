@@ -76,10 +76,59 @@ head('the page\'s side');
   ok('renderNow puts it right after drawing the bar, and homeMark when the page changes', /bar\.innerHTML=buildNav\(\); gnavSync\(\);/.test(code) && /function homeMark\(\)\{[\s\S]*?gnavSync\(\);\s*\}/.test(code));
   ok('ACTIONS names gnavGo, with the destination from the button', /gnavGo:el=>gnavGo\(el\.dataset\.go\)/.test(code));
   const fn = (code.match(/function gnavGo\(k\)\{[\s\S]*?\n\}/) || [''])[0];
-  ok('gnavGo: Chapters opens Chapters; Home, Brain and Labs glide the pager there, or open Home on that page', /if\(k==='chapters'\)\{ goStudy\(\); return; \}/.test(fn) && /\{home:0,brain:1,labs:2\}\[k\]/.test(fn) && /if\(S\.screen==='home'\) homeGo\(p\); else \{ homePage=p; goHome\(\); \}/.test(fn), fn.replace(/\s+/g, ' ').slice(0, 200));
+  ok('gnavGo: Chapters opens Chapters; Home, Brain and Labs glide the pager there (Home through homeOpen, which hands focus back to the door that was used), or open Home on that page', /if\(k==='chapters'\)\{ goStudy\(\); return; \}/.test(fn) && /\{home:0,brain:1,labs:2\}\[k\]/.test(fn) && /if\(S\.screen==='home'\)\{ if\(p===0\) homeOpen\(0\); else homeGo\(p\); \} else \{ homePage=p; goHome\(\); \}/.test(fn), fn.replace(/\s+/g, ' ').slice(0, 200));
   ok('the session score beside it is spoken as what it is, not as bare numbers (docs/UI-REVAMP.md, D)',
      /<div class="score-pill" role="img" aria-label="This session: \$\{S\.sessionCorrect\} of \$\{S\.sessionTotal\} correct, \$\{p\}%"/.test(code));
   ok('gnavSync shows it only where the module says and only from 700px, and folds Home\'s search while it is up', /GNav\.gnavShown\(S\.screen,page,!!S\.focusMode\)&&!\(window\.matchMedia&&matchMedia\('\(max-width:699px\)'\)\.matches\)/.test(code) && /classList\.toggle\('has-gnav',want\)/.test(code));
+}
+
+head('the back buttons it takes over (app/css/gnav.css)');
+{
+  /* The rule in gnav.css that sets a back button aside while the capsule is up, read as text with comments blanked: a
+     display:none under body.has-gnav outside the header (the header folds its own search with rules of the same shape). */
+  const css = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'css', 'gnav.css'), 'utf8'));
+  const rules = [...css.matchAll(/([^{}]+)\{\s*display\s*:\s*none\s*\}/g)].map(m => m[1].split(',').map(x => x.trim()).filter(Boolean))
+    .filter(sels => sels.length && sels.every(x => x.startsWith('body.has-gnav ') && !x.startsWith('body.has-gnav .nav')));   // .nav: the header's own
+  const sels = rules.length === 1 ? rules[0].map(x => x.slice('body.has-gnav '.length)) : [];
+  /* Written out: each back button whose destination is a capsule item (Home, Brain and Labs' Home button; Chapters' Back;
+     the Rhythm Lab's, Search's and Progress's Home; Sessions' Labs; Annotations' Chapters; the Practice lab's Home; the
+     Notes screen's Back and Back to study). */
+  const WANT = ['.home-back', '.study-back', '.sb-back[data-action="goHome"]', '.sb-back[data-action="goLabs"]',
+    '.sb-back[data-action="goStudy"]', '.plab-back[data-act="leave"]', '.ref-btns [data-action="goHome"]'];
+  ok('one rule, and only while the capsule is up (body.has-gnav), sets aside exactly these', rules.length === 1 && J(sels) === J(WANT), J(rules));
+  /* Every button the app's modules draw: its classes, its attributes, and its file. A button in refs.js counts as inside
+     .ref-btns, where both of that screen's goHome buttons sit. */
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+  const files = walk(path.join(__dirname, '..', 'src')).filter(f => f.endsWith('.js'));
+  const buttons = files.flatMap(f => [...blankComments(fs.readFileSync(f, 'utf8')).matchAll(/<button class="([^"]*)"([^>]*)>/g)].map(m => ({
+    file: path.relative(path.join(__dirname, '..'), f), cls: m[1].split(/\s+/),
+    attrs: Object.fromEntries([...m[2].matchAll(/([a-z-]+)="([^"]*)"/g)].map(a => [a[1], a[2]])) })));
+  const one = (sel, b) => {
+    const m = sel.match(/^(\.ref-btns )?(?:\.([a-z-]+))?(?:\[([a-z-]+)="([^"]*)"\])?$/);
+    if (!m) return null;
+    if (m[1] && !/refs\.js$/.test(b.file)) return false;
+    if (m[2] && !b.cls.includes(m[2])) return false;
+    if (m[3] && b.attrs[m[3]] !== m[4]) return false;
+    return true;
+  };
+  const read = WANT.every(x => buttons.some(b => one(x, b) !== null));
+  ok('the source was read: many buttons, and each selector understood (precondition)', buttons.length > 50 && read, buttons.length + ' buttons');
+  const hit = sels.map(x => ({ x, b: buttons.filter(b => one(x, b)) }));
+  ok('each selector sets aside a button the app draws, none a name nothing has', hit.length === WANT.length && hit.every(h => h.b.length > 0), J(hit.map(h => h.x + ': ' + h.b.length)));
+  /* Where each goes, and the capsule item that goes there too (Home's pages and the screens Labs opens come back through
+     goHome to the page they were left on, which the capsule names). */
+  const dest = b => b.attrs['data-action'] === 'homeOpen' && b.attrs['data-page'] === '0' ? 'home'
+    : b.attrs['data-action'] === 'goHome' || b.attrs['data-act'] === 'leave' ? 'home'
+    : b.attrs['data-action'] === 'goLabs' ? 'labs' : b.attrs['data-action'] === 'goStudy' ? 'chapters' : null;
+  const stray = hit.flatMap(h => h.b).filter(b => !dest(b) || /\/(quiz|results|mock[a-z]*)\.js$/.test(b.file));
+  ok('and every one it sets aside goes where a capsule item goes, on a screen the capsule is drawn on', stray.length === 0,
+     J(stray.map(b => b.file + ' ' + b.cls.join('.') + ' ' + J(b.attrs))));
+  const KEPT = [['the Practice lab\'s back to the lab', b => b.cls.includes('plab-back') && b.attrs['data-act'] === 'home'],
+    ['the note search\'s back to its results', b => b.cls.includes('ns-back')],
+    ['the question screens\' Home', b => b.cls.includes('btn-home')],
+    ['Progress\'s export and import buttons, which share the back button\'s style', b => b.cls.includes('sb-back') && /Markup|Backup|reset/i.test(b.attrs['data-action'] || '')]];
+  const taken = KEPT.map(([what, is]) => [what, buttons.filter(is)]).map(([what, bs]) => [what, bs.length, bs.filter(b => sels.some(x => one(x, b))).length]);
+  ok('and it keeps the ones the capsule does not cover: ' + KEPT.map(k => k[0]).join('; '), taken.every(([, n, t]) => n > 0 && t === 0), J(taken));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
