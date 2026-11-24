@@ -193,7 +193,7 @@ const pixels = () => {
     const cls = await p.evaluate(() => { const all = Array.from(document.querySelectorAll('#plabRoot [class]')).flatMap(el => Array.from(el.classList)); return { n: all.length, foreign: all.filter(c => !/^plab-/.test(c)) }; });
     ok('every class in it is its own, plab-: none of Systole\'s (.btn, .chip, .card) is on it', cls.n >= 20 && cls.foreign.length === 0, cls.foreign.slice(0, 6).join(', ') || cls.n + ' classes, all plab-');
     const looks = [];
-    for (const th of ['daylight', 'midnight', 'cathlab']) {
+    for (const th of ['daylight', 'midnight', 'contrast']) {
       await p.evaluate(t => setTheme(t), th); await quiet(p);
       looks.push(await p.evaluate(th => { const pr = document.createElement('div'); pr.style.background = 'var(--card)'; document.body.appendChild(pr); const want = getComputedStyle(pr).backgroundColor; pr.remove();
         /* With no Lab drawn there is no card: the check below says so, where reading a card that is not there ended the suite. */

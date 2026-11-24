@@ -9,8 +9,8 @@
  * 4.5:1 that text needs, so text in them takes --green-ink, --red-ink or --amber-ink: a step darker in a light theme, a
  * step lighter in a dark one. What is measured, rather than assumed:
  *   · no stylesheet rule writes text in a fill colour (the rules as written, comments blanked);
- *   · in each of the nine themes, and in Auto and a light theme on a device of the other scheme, each ink clears 4.5:1
- *     on the page, a card, the raised surface and its own tint; the dark green ink stays clear of Monitor's teal accent;
+ *   · in each of the four themes, and in Auto and Daylight on a device of the other scheme, each ink clears 4.5:1
+ *     on the page, a card, the raised surface and its own tint; the green ink stays clear of every theme's accent;
  *   · real text the shell colours itself clears 4.5:1 against what is under it in every one of those, and is written in
  *     its ink: an option's peer figure, right and wrong, the Flag button on, and on a quiz's results the score, a
  *     chapter's figure and Retry Missed. The mock report writes its score and chapter figures through the same semText,
@@ -18,7 +18,7 @@
  *   · the correct option's letter badge is still white on the deep green;
  *   · the accent as text takes --teal-ink, the same way: no rule or inline style is written color:var(--teal),
  *     var(--teal2) or var(--accent) (the scan reads that form; the chapter icons' color:var(--accent,var(--teal)) is a
- *     graphic's colour, held to 3:1, and is not read), and in each of those twelve states the ink clears 4.5:1 on the page, a card, the raised surface, the
+ *     graphic's colour, held to 3:1, and is not read), and in each of those states the ink clears 4.5:1 on the page, a card, the raised surface, the
  *     accent's tint (--teal4) and the green tint some of it sits on;
  *   · real accent and chapter text, in every state: a chapter's badge on the quiz and its label in search results, a
  *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, a chapter
@@ -50,10 +50,9 @@ let section = '';
 const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
 
 /* [theme, the device's own scheme, how a check names it] */
-const STATES = [['auto', 'dark', 'Auto on a dark device'], ['midnight', 'light', 'Midnight'], ['nocturne', 'light', 'Nocturne'],
-  ['cathlab', 'light', 'Cath Lab'], ['monitor', 'light', 'Monitor'], ['contrast', 'light', 'Contrast'],
-  ['auto', 'light', 'Auto on a light device'], ['daylight', 'light', 'Daylight'], ['slate', 'light', 'Slate'], ['parchment', 'light', 'Parchment'],
-  ['daylight', 'dark', 'Daylight on a dark device'], ['parchment', 'dark', 'Parchment on a dark device']];
+/* Every theme the app offers (src/core/themes.js; four since D6), and Auto and Daylight on both kinds of device. */
+const STATES = [['auto', 'dark', 'Auto on a dark device'], ['midnight', 'light', 'Midnight'], ['contrast', 'light', 'Contrast'],
+  ['auto', 'light', 'Auto on a light device'], ['daylight', 'light', 'Daylight'], ['daylight', 'dark', 'Daylight on a dark device']];
 const INKS = ['green', 'red', 'amber'];
 
 /* In the page: colours as rgba arrays, alpha-composited grounds, WCAG contrast. Installed once per page. */
@@ -148,9 +147,16 @@ const TOOLS = () => {
       return { ink: c && c.slice(0, 3).map(Math.round).join(','), min: Math.min(...r.map(x => x[1])), r }; });
     ok(`${name}: accent text clears 4.5:1 on the page, a card, the raised surface, its tint and the green tint`, t.min >= 4.5, `ink ${t.ink}; ` + t.r.map(([g, v]) => g + ' ' + v).join(', '));
   }
-  await theme('monitor', 'light');
-  const apart = await page.evaluate(() => { const T = window.__ink; return Math.round(Math.abs(T.hue(T.token('--green-ink')) - T.hue(T.token('--teal')))); });
-  ok('Monitor: the green ink is at least 20° of hue from the teal accent, so "correct" does not read as the accent', apart >= 20, apart + '°');
+  /* "Correct" must not read as the accent. Held on Monitor alone, whose mint accent sat closest to the green, until D6
+     retired it; held now on every theme, as a hue apart on the colour wheel either way round. */
+  const aparts = [];
+  for (const [id, scheme, name] of STATES) {
+    await theme(id, scheme);
+    aparts.push([name, await page.evaluate(() => { const T = window.__ink, d = Math.abs(T.hue(T.token('--green-ink')) - T.hue(T.token('--teal'))) % 360;
+      return Math.round(Math.min(d, 360 - d)); })]);
+  }
+  ok('in every theme the green ink is at least 20° of hue from the accent, so "correct" does not read as the accent',
+     aparts.length === STATES.length && aparts.every(([, d]) => d >= 20), aparts.map(([n, d]) => n + ' ' + d + '°').join(', '));
 
   /* Real text, coloured by the stylesheets and the shell's own inline styles. Each is measured against what is under it
      on the page, in every theme, with the page left where it is; and it has to be its ink, so text that reads only because

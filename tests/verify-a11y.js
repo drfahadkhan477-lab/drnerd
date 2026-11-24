@@ -9,7 +9,7 @@
  * results, the notes, note search, Memory, statistics, annotations, Echo, the Rhythm Lab, the Practice Lab and one of its
  * drills, a mock exam, and the theme menu. Each is read at rest, once its entrances have ended, in Daylight on a light
  * device and Midnight on a dark one. The rules are WCAG 2.2 A and AA and axe's best practice; a screen passes when axe
- * finds nothing, whatever the impact. Contrast in all twelve theme states is verify-ink's; this is every other rule, and
+ * finds nothing, whatever the impact. Contrast in every theme state is verify-ink's; this is every other rule, and
  * contrast again in these two.
  *
  * Its report names a rule, how many elements broke it, and the first one's tag and class: never the page's text, which
