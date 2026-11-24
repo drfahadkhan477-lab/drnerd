@@ -97,6 +97,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   /* Every card's white type sits on its own gradient: a card with none is white on the page (Sessions shipped so). */
   const bare = await page.evaluate(() => [...document.querySelectorAll('.lab-card')].filter(c => getComputedStyle(c).backgroundImage === 'none').map(c => c.className));
   ok('every Labs card is painted with its own gradient', bare.length === 0 && parts.labs.length === 4, bare.join(' · '));
+  /* docs/UI-REVAMP.md, D: High contrast draws each card as its plain card with a strong edge, not the four literal gradients. */
+  const hc = await page.evaluate(async () => { const was = themeDef().id; setTheme('contrast');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const cards = [...document.querySelectorAll('.lab-card')].map(c => { const s = getComputedStyle(c); return { img: s.backgroundImage.slice(0, 20), edge: parseFloat(s.borderTopWidth) }; });
+    setTheme(was); return cards; });
+  ok('in High contrast every Labs card is the palette\'s plain card, with an edge of 2px or more', hc.length === 4 && hc.every(c => c.img === 'none' && c.edge >= 2), JSON.stringify(hc));
   ok('and under them the study tools, Chapters first', parts.after && parts.labDoors[0] === 'Chapters' && ['Search', 'Progress', 'Notes', 'Memory', 'Annotations'].every(d => parts.labDoors.includes(d)),
      parts.labDoors.join(' · ') + (parts.after ? '' : ' (not under the labs)'));
 
@@ -160,6 +166,58 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok(`${at}: no tile is blurred: they are content, not navigation`, t.blurred.length === 0, t.blurred.join(', '));
     ok(`${at}: and the keyboard meets them in the order the eye does`, JSON.stringify(t.dom) === JSON.stringify(t.visual), JSON.stringify({ dom: t.dom, visual: t.visual }));
   }
+
+  head('the header\'s capsule: Home, Brain, Labs, Chapters, in the bar and nowhere it would cover');
+  /* docs/UI-REVAMP.md, C (src/app/gnav.js holds where it shows and what it lights; this holds the page): drawn in the header band,
+     so it costs no height; never overlapping the brand or the header's buttons; its buttons 44px tall; gone on Home's first page,
+     where a question is read, and below 700px; and Home's search keeps its width where there is no capsule. */
+  /* goHome() redraws inside a view transition, so the pager a homeGo() moves is the new one only once it is there. */
+  const homeAt = async (p, label) => { await page.evaluate(() => goHome()); await settled(page, () => !window.__vtLive && S.screen === 'home' && !!document.getElementById('homePager'), { label: label + ': the home screen' });
+    await page.evaluate(p => homeGo(p, false), p); await still(label); };
+  const capsule = () => page.evaluate(() => {
+    const g = document.getElementById('gnav'), r = e => e && e.getBoundingClientRect();
+    const shown = !!g && !g.hidden && g.getClientRects().length > 0, gr = r(g), br = r(document.querySelector('#navbar .nav-brand')), rr = r(document.querySelector('#navbar .nav-right')),
+      bar = r(document.getElementById('navbar')), search = r(document.querySelector('#navbar [data-action="openSearch"]'));
+    return { shown, lit: shown ? ((g.querySelector('[aria-current="page"]') || {}).dataset || {}).go || null : null, has: document.body.classList.contains('has-gnav'),
+      clear: shown ? gr.left >= br.right && gr.right <= rr.left : null, inBar: shown ? gr.top >= bar.top && gr.bottom <= bar.bottom : null,
+      short: shown ? [...g.querySelectorAll('.gnav-it')].filter(b => b.getBoundingClientRect().height < 44).length : null, search: search ? Math.round(search.width) : 0,
+      screen: S.screen, page: homePage };
+  });
+  for (const size of [{width:1180,height:820},{width:834,height:1194},{width:744,height:1133}]) {
+    await page.setViewportSize(size); const at = `${size.width}×${size.height}`;
+    await homeAt(0, 'Home');
+    const h0 = await capsule();
+    ok(`${at}: not on Home's first page, whose search keeps its width`, !h0.shown && !h0.has && h0.search >= 200, JSON.stringify(h0));
+    for (const [p, lit] of [[1, 'brain'], [2, 'labs']]) {
+      await page.evaluate(p=>homeGo(p,false), p); await still('a landing page');
+      const c = await capsule();
+      ok(`${at}: on ${lit === 'brain' ? 'Brain' : 'Labs'}, in the bar, lit on ${lit}, clear of the brand and the buttons, every button 44px tall`, c.shown && c.lit === lit && c.inBar && c.clear && c.short === 0, JSON.stringify(c));
+    }
+    await page.evaluate(()=>goStudy()); await settled(page, () => !window.__vtLive && S.screen === 'study', { label: 'Chapters' }); await quiet(page);
+    const st = await capsule();
+    ok(`${at}: on Chapters, lit on Chapters and clear of the bar's buttons`, st.shown && st.lit === 'chapters' && st.inBar && st.clear && st.short === 0, JSON.stringify(st));
+    await page.evaluate(()=>startAdhocQuiz([POOL.find(x => !x.bad)], null)); await settled(page, () => !window.__vtLive && S.screen === 'quiz', { label: 'a question' }); await quiet(page);
+    const qz = await capsule();
+    ok(`${at}: and not where a question is read`, !qz.shown && !qz.has, JSON.stringify(qz));
+  }
+  await page.setViewportSize({width:600,height:900});
+  await homeAt(2, 'Labs on a phone');
+  const ph = await capsule();
+  ok('600×900: no capsule below 700px, where the bar has no room for it', !ph.shown && !ph.has, JSON.stringify(ph));
+
+  /* Tapped: the pages glide and the capsule keeps the focus; Chapters opens Chapters; Labs from there comes back to the Labs page. */
+  await page.setViewportSize({width:1180,height:820});
+  await homeAt(2, 'Labs');
+  await page.locator('#gnav [data-go="brain"]').click();
+  await settled(page, () => homePage === 1 && !homeTween, { label: 'the pager at Brain' }); await quiet(page);
+  const tb = await page.evaluate(() => ({ page: homePage, lit: (document.querySelector('#gnav [aria-current="page"]') || {}).dataset?.go, focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.go : null }));
+  ok('tapped, Brain glides the pager to Brain, lights Brain and keeps the focus on the capsule', tb.page === 1 && tb.lit === 'brain' && tb.focus === 'brain', JSON.stringify(tb));
+  await page.locator('#gnav [data-go="chapters"]').click();
+  await settled(page, () => !window.__vtLive && S.screen === 'study', { label: 'Chapters' }); await quiet(page);
+  await page.locator('#gnav [data-go="labs"]').click();
+  await settled(page, () => !window.__vtLive && S.screen === 'home', { label: 'Labs from Chapters' }); await quiet(page);
+  const tl = await capsule();
+  ok('Chapters opens Chapters, and Labs from there opens Home on the Labs page, lit on Labs', tl.screen === 'home' && tl.page === 2 && tl.lit === 'labs', JSON.stringify(tl));
   await page.setViewportSize({width:1180,height:820});
   await page.evaluate(()=>homeGo(0,false)); await still('Home after tablet sizes');
   // The pearl and live heart are already visible.

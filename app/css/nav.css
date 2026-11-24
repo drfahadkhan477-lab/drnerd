@@ -8,7 +8,10 @@
   box-shadow:0 2px 16px rgba(0,0,0,.25);
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
   border-bottom:1px solid rgba(255,255,255,.06)}
-.echo-studio{padding:0 max(20px,var(--sal)) 40px max(20px,var(--sar));max-width:var(--measure);margin:0 auto}
+.echo-studio{padding:0 max(20px,var(--sal)) 40px max(20px,var(--sar));max-width:var(--measure);margin:0 auto;
+  /* The ground under the phase buttons and the flow's two answers. Named here and never defined until the UI revamp's
+     lint (verify-cssvars-pure) found it: both painted no background at all. It is the card's, as the tabs above are. */
+  --ground:var(--card)}
 .echo-tabs{display:flex;gap:8px;margin:12px 0 20px}
 .echo-tab{font:inherit;padding:8px 18px;border-radius:999px;cursor:pointer;
   background:var(--card);color:var(--muted);border:1px solid var(--border)}

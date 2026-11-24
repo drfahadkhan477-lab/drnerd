@@ -18,7 +18,7 @@
 @font-face{font-family:'DM Sans';font-style:italic;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSans-Italic.woff2]@@) format('woff2')}
 @font-face{font-family:'DM Serif Display';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/DMSerifDisplay.woff2]@@) format('woff2')}
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 700;font-display:swap;src:url(data:font/woff2;base64,@@SLOT[asset:assets/fonts/JetBrainsMono.woff2]@@) format('woff2')}
-@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/photoswipe.css]@@@@SLOT[app:app/css/figviewer.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@@@SLOT[app:app/css/tools.css]@@</style>
+@@SLOT[app:app/css/base.css]@@@@SLOT[app:app/css/nav.css]@@@@SLOT[app:app/css/home-quiz.css]@@@@SLOT[app:app/css/tablet.css]@@@@SLOT[app:app/css/themes.css]@@@@SLOT[app:app/css/apex.css]@@@@SLOT[app:app/css/photoswipe.css]@@@@SLOT[app:app/css/figviewer.css]@@@@SLOT[app:app/css/figures.css]@@@@SLOT[app:app/css/refinements.css]@@@@SLOT[app:app/css/cardiac.css]@@@@SLOT[app:app/css/study.css]@@@@SLOT[app:app/css/practice.css]@@@@SLOT[app:app/css/ipad.css]@@@@SLOT[app:app/css/home.css]@@@@SLOT[app:app/css/tools.css]@@@@SLOT[app:app/css/gnav.css]@@</style>
 <script>
 /* Home Screen apps only. navigator.standalone is the iOS spelling and
    display-mode:standalone is everyone else's; either one means the browser
@@ -5111,6 +5111,8 @@ document.addEventListener('click',ev=>{
 const ACTIONS={
   /* more than one screen */
   goHome:()=>goHome(),
+  /* the header's capsule (src/app/gnav.js): the destination is the button's data */
+  gnavGo:el=>gnavGo(el.dataset.go),
   /* the Memory screen (src/app/memory.js) */
   memForget:el=>memForget(el.dataset.memoryId),
   memForgetAll:()=>memForgetAll(),
@@ -5735,7 +5737,7 @@ function renderNow(){
   /* The bar is painted into its own fixed header rather than into the screen:
      inside #app it could never be wider than the reading column. */
   const bar=document.getElementById('navbar');
-  if(bar) bar.innerHTML=buildNav(); 
+  if(bar){ bar.innerHTML=buildNav(); gnavSync(); }
   /* Which screen is up, readable from CSS. The home screen is cards and wants
      the whole iPad; every other screen is prose and keeps its measure. */
   app.dataset.screen=S.screen;
@@ -5819,6 +5821,45 @@ function buildScreen(){
     :S.screen==='stats'?buildStats():S.screen==='lab'?buildLab()
     :S.screen==='practice'?buildPractice():S.screen==='sessions'?buildSessions():'';
 }
+/* ══════════════ The header's capsule: Home, Brain, Labs, Chapters (docs/UI-REVAMP.md, C) ══════════════ */
+@@SLOT[src:src/app/gnav.js]@@
+/* buildNav draws the capsule on every render; a move along Home's pager redraws nothing, so gnavSync puts the capsule
+   right after either: shown or not, which item is lit, labels or icons only (whichever the header has room for: measured
+   0-73 px free on a phone, so below 700px there is none), and the lit capsule slid from where it last stood. The body's
+   has-gnav class lets Home's header fold its wide search into a button while the capsule is up (gnav.css). */
+let gnavLast=null;
+function gnavSync(){
+  const nav=document.getElementById('gnav'); if(!nav) return;
+  const page=typeof homePage==='number'?homePage:0;
+  const want=GNav.gnavShown(S.screen,page,!!S.focusMode)&&!(window.matchMedia&&matchMedia('(max-width:699px)').matches);
+  document.body.classList.toggle('has-gnav',want);
+  nav.hidden=!want;
+  const on=GNav.gnavActive(S.screen,page);
+  nav.querySelectorAll('.gnav-it').forEach(b=>{ if(b.dataset.go===on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  if(!want){ gnavLast=null; return; }
+  const bar=nav.parentNode, brand=bar.querySelector('.nav-brand'), right=bar.querySelector('.nav-right');
+  const cs=getComputedStyle(bar), room=bar.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)
+    -(brand?brand.offsetWidth:0)-(right?right.offsetWidth:0)-32;
+  nav.classList.remove('compact');
+  if(nav.offsetWidth>room) nav.classList.add('compact');
+  if(nav.offsetWidth>room){ nav.hidden=true; document.body.classList.remove('has-gnav'); gnavLast=null; return; }
+  const ind=nav.querySelector('.gnav-ind'), btn=nav.querySelector('.gnav-it[aria-current="page"]');
+  if(!btn){ ind.classList.remove('on'); gnavLast=null; return; }
+  const to={x:btn.offsetLeft,w:btn.offsetWidth};
+  if(gnavLast&&homeMotionOK()&&(gnavLast.x!==to.x||gnavLast.w!==to.w)){
+    ind.style.transition='none'; ind.style.width=gnavLast.w+'px'; ind.style.transform='translateX('+gnavLast.x+'px)';
+    void ind.offsetWidth; ind.style.transition='';
+  }
+  ind.style.width=to.w+'px'; ind.style.transform='translateX('+to.x+'px)'; ind.classList.add('on');
+  gnavLast=to;
+}
+function gnavGo(k){
+  if(k==='chapters'){ goStudy(); return; }
+  const p={home:0,brain:1,labs:2}[k]; if(p===undefined) return;
+  /* On Home's pager the page glides and focus stays on the capsule; from any other screen Home opens on that page. */
+  if(S.screen==='home') homeGo(p); else { homePage=p; goHome(); }
+}
+if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('resize',()=>requestAnimationFrame(gnavSync));
 function buildNav(){
   const p=S.sessionTotal>0?Math.round(S.sessionCorrect/S.sessionTotal*100):null;
   const col=S.screen==='home'?(p===null?'var(--teal-ink)':p>=70?'var(--green-ink)':p>=50?'var(--amber-ink)':'var(--red-ink)'):(p===null?'#5EEAD4':p>=70?'#34D399':p>=50?'#FBBF24':'#F87171');
@@ -5831,8 +5872,9 @@ function buildNav(){
 
       </div>
     </div>
+    ${GNav.gnavHtml(S.screen,typeof homePage==='number'?homePage:0,{icon})}
     <div class="nav-right">
-      ${p!==null?`<div class="score-pill">
+      ${p!==null?`<div class="score-pill" role="img" aria-label="This session: ${S.sessionCorrect} of ${S.sessionTotal} correct, ${p}%" title="This session: ${S.sessionCorrect} of ${S.sessionTotal} correct">
         <span class="score-dot" style="background:${col};box-shadow:0 0 6px ${col}"></span>
         <span>${S.sessionCorrect}/${S.sessionTotal}</span>
         <span style="opacity:.6">·</span>
@@ -6790,6 +6832,9 @@ function homeMark(){
   }
   if(homePage===1) homeFillBrain();
   syncHomeMotion();
+  /* The header's capsule follows the page: shown on Brain and Labs, lit on the one in view (it runs when the page changes,
+     not on every frame of a glide). */
+  if(typeof gnavSync==='function') gnavSync();
 }
 /* Home remains mounted behind pager panels and full-screen overlays. Its
    hidden canvases must not consume the foreground's frame budget. */

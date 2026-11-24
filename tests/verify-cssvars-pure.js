@@ -81,7 +81,6 @@ head('the reader, on small stylesheets');
 /* Undefined when this suite was written (and its reader found every one of them), each with what it costs. */
 const KNOWN = {
   '--card2': '.pearl-emblem (home.css): the radial ground is void; only its background-color paints',
-  '--ground': '.echo-phase-controls button, .echo-flow-branches p (nav.css): no background paints',
 };
 
 head('the stylesheets the pages ship');
