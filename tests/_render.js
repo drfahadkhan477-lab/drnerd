@@ -301,6 +301,31 @@ async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {})
   }
 }
 
-module.exports = { booted, settled, onScreen, quiet, afterRender, resolved,
+/* What is still moving: the transitions, and the finite animations still running, that a wait for the screen to come to
+   rest is waiting on, named by their element (tag, id, two classes, pseudo-element), what they animate and how far they
+   are. Never any text: an element's classes and ids are the app's own words. For the message of a wait that timed out,
+   so a run on another machine says what never stopped rather than only that something did (verify-contrast on Windows
+   WebKit, 24 November 2026, stopped on the first screen with no more than that). */
+async function stillMoving(page, limit = 6) {
+  return page.evaluate(limit => {
+    const moving = document.getAnimations().filter(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
+      || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity));
+    const name = a => {
+      const t = a.effect && a.effect.target;
+      if (!t || !t.tagName) return '?';
+      const cls = t.classList && t.classList.length ? '.' + [...t.classList].slice(0, 2).join('.') : '';
+      return t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') + cls + (a.effect.pseudoElement || '');
+    };
+    const what = a => typeof CSSTransition !== 'undefined' && a instanceof CSSTransition ? 'transition ' + a.transitionProperty
+      : typeof CSSAnimation !== 'undefined' && a instanceof CSSAnimation ? 'animation ' + a.animationName : 'animation';
+    const rows = moving.slice(0, limit).map(a => {
+      const tm = a.effect ? a.effect.getComputedTiming() : {};
+      return `${name(a)} ${what(a)} ${a.playState} at ${Math.round(a.currentTime || 0)} of ${Math.round(tm.endTime || 0)} ms`;
+    });
+    return moving.length ? `${moving.length} still moving: ${rows.join('; ')}` : 'nothing listed as moving now';
+  }, limit).catch(e => 'could not list what was moving: ' + String(e && e.message || e).split('\n')[0]);
+}
+
+module.exports = { booted, settled, onScreen, quiet, afterRender, resolved, stillMoving,
                    watchTransitions, transitionDone, resized, framesSteady,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };

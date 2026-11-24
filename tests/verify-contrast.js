@@ -32,7 +32,7 @@
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, settled, watchTransitions } = require('./_render.js');
+const { booted, settled, watchTransitions, stillMoving } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-contrast.js <build.html>'); process.exit(1); }
@@ -189,9 +189,14 @@ const READ = async ({ png, shown, boxes }) => {
     /* At rest, as verify-a11y waits: the screen change over, and no transition or finite animation still listed. */
     const rest = async () => {
       await settled(page, () => !window.__vtLive, { timeout: 15000, label: 'the screen change to finish' });
-      await settled(page, () => !document.getAnimations().some(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
-        || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity)),
-        { timeout: 15000, label: 'the screen\'s entrances and the theme\'s transitions to end' });
+      try {
+        await settled(page, () => !document.getAnimations().some(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
+          || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity)),
+          { timeout: 15000, label: 'the screen\'s entrances and the theme\'s transitions to end' });
+      } catch (e) {
+        /* Says what never stopped, by element and property and never by text, so a run on another machine can be acted on. */
+        throw new Error(`${e.message} ${await stillMoving(page)}`);
+      }
     };
     const per = {}, counts = {}, skipped = { clipped: 0, covered: 0, inert: 0, under: {} }, missing = [], thin = [];
     let photographed = 0, hiddenWorked = true;
