@@ -722,6 +722,18 @@ touched. Candidates to try in a real session: the heart still until tapped, the
 strip beside rather than over it, the stats row hidden until there is data. The
 owner picks, then *Sonnet*.
 
+*Decided (24 November 2026; the owner handed the choice to Claude):* two of the
+three candidates ran into what the owner chose after this was written, from a
+screenshot of the hero as it was before the Quiet Atlas (November 2026): the
+heart live on Home without a tap, and the bank in one line under the greeting.
+Those stand. So the heart stays live; it already stops when Home is out of view
+or the page is hidden, and whether it should rest by default is E5's question,
+answered by the iPad's battery readings. The strip sits clear of the heart (F4).
+The bank's line keeps the bank's size, and its two other figures, the share
+started and today's answers, come only once something is started or answered:
+for someone new they were two zeros beside the pearl (`src/app/home.js`;
+`verify-homescreen-pure` holds both cases).
+
 **D5 — A rule for floating controls.** The pencil and Apex buttons get defined
 safe areas, never cover text, and on tablets fold into the rail. *Sonnet.*
 *Started, the end of every screen:* scrolled to its end, Sessions' last line
@@ -732,6 +744,15 @@ clears it. `verify-readsize` reads eight screens at three sizes. Still open: tex
 passes under the button while a page scrolls (a sweep counted it on the
 notes, Progress, Chapters and the Lab, mostly on a phone), and folding the
 Apex button into the rail on tablets is a design decision.
+
+*Decided (24 November 2026; the owner handed the choice to Claude):* the rule is
+that a floating control never covers text at rest. Every screen scrolled to its
+end clears the Apex button and the pencil's rail, on a phone and on an iPad
+either way up, which `verify-readsize` holds. Text passing under them while a
+page scrolls is the ordinary trade for a floating control, as F3 found for the
+phone, and is accepted. There is no rail to fold the Apex button into: the
+owner took the rail away (November 2026), and the UI revamp kept Apex a floating
+button beside the header capsule on inner screens. Nothing is left open here.
 
 **D6 — Fewer themes, each kept correct.** Every palette multiplies the contrast
 and floor checks. Once usage shows which are used, keep those (at least Auto, one
@@ -1088,7 +1109,6 @@ same: they are the project's, not a reminder.
 | D1 token moves | `sonnet` | `medium` | Mechanical once D1's decisions are made |
 | D2 | `opus` | `high` | The contrast sweep; F1 is its first finding |
 | D3 | `opus` | `high` | Measure in WebKit at iPad sizes |
-| D4, D5 | `sonnet` | `medium` | D4 after you pick from the candidates |
 | D6 | (you), then `sonnet` | `low` | Which themes to keep is yours |
 | A1 | `opus` | `high` | The provider seam and a Claude adapter behind the Worker |
 | A2 | `opus` | `medium` | Claim savings only from reported cached tokens |

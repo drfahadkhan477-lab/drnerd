@@ -265,6 +265,14 @@ head('the bank in the hero, and no session strip');
   ok('started is capped at all of the bank, and nothing with no bank', lineOf(homePage({}, { startedCount: () => 9 })) === '5 questions 100% started 6 today' && lineOf(homePage({}, { TOTAL_Q: 0 })) === '0 questions 0% started 6 today',
      lineOf(homePage({}, { startedCount: () => 9 })) + ' | ' + lineOf(homePage({}, { TOTAL_Q: 0 })));
   ok('today\'s answers are today\'s, not another day\'s, and none with none', lineOf(homePage({ daily: { '2026-11-16': { a: 9, c: 9 } } })) === '5 questions 80% started 0 today', lineOf(homePage({ daily: { '2026-11-16': { a: 9, c: 9 } } })));
+  /* docs/ROADMAP.md, D4: for someone new the line said "0% started · 0 today", two zeros beside the pearl that teaches.
+     The bank's size stays (the owner's "bank in one line"); the two figures come once there is something to count. */
+  const fresh = homePage({ daily: {} }, { startedCount: () => 0 });
+  ok('with nothing started and nothing answered, the line is the bank\'s size alone, with no dot',
+     lineOf(fresh) === '5 questions' && !/hl-dot/.test(String(g1(fresh, /<div class="hero-line">([\s\S]*?)<\/div>/) || '')), lineOf(fresh));
+  ok('and a question answered today brings the whole line back, as one started does',
+     lineOf(homePage({}, { startedCount: () => 0 })) === '5 questions 0% started 6 today' && lineOf(homePage({ daily: {} })) === '5 questions 80% started 0 today',
+     lineOf(homePage({}, { startedCount: () => 0 })) + ' | ' + lineOf(homePage({ daily: {} })));
   ok('mastery is the chapters\' weighed by their size: (0.666×3 + 0.25×2 + 0×0) of 5 is 50%, handed to the Brain page', (hcalls.length = 0, homePage(), hcalls.some(c => c.startsWith('brain [2,4,80,50,'))), J(hcalls));
   ok('for someone new, what Chapters and Apex are, with the bank\'s size, and Got it by dismissHello; for others, nothing', homePage({}, { showHello: () => true }).includes('<i><b>Chapters</b> holds all 5 questions, grouped by topic.') && homePage({}, { showHello: () => true }).includes('<button class="hello-x" data-action="dismissHello">Got it</button>') && !html.includes('homeHello'));
 }

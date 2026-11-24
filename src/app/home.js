@@ -70,7 +70,8 @@
         to its note, and its figure or its chapter's emblem.
      2. The hero: a greeting, Systole, and the living heart, with the 3D model's place and the menu with
         chambers and flow, motion and the model's credit.
-     3. In the hero, how many questions there are, how much of the bank is started and how many were answered today.
+     3. In the hero, how many questions there are; and, once something is started or answered, how much of the bank is
+        started and how many were answered today (docs/ROADMAP.md, D4: for someone new they were two zeros).
      4. For someone new, what Chapters and Apex are.
      5. A door to the Brain page and one to the Labs page; each of those opens with a way back Home.
 
@@ -138,9 +139,9 @@ function homeHtml(S, CHAPTERS, kit){
         <div class="hero-h1">Systole</div>
         <div class="hero-owner">© 2026 Dr Fahad Khan · FCPS Cardiology</div>
         <div class="hero-line">
-          <span class="hl-item"><b>${TOTAL_Q}</b> questions</span><span class="hl-dot" aria-hidden="true"></span>
+          <span class="hl-item"><b>${TOTAL_Q}</b> questions</span>${seenN>0||today.a>0?`<span class="hl-dot" aria-hidden="true"></span>
           <span class="hl-item"><b>${covered}%</b> started</span><span class="hl-dot" aria-hidden="true"></span>
-          <span class="hl-item"><b>${today.a}</b> today</span>
+          <span class="hl-item"><b>${today.a}</b> today</span>`:''}
         </div>
         <div class="hero-rhythm-label" id="heroRhythmLabel">&nbsp;</div>
       </div>
