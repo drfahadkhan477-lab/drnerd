@@ -1,5 +1,12 @@
 /* ═════════════════════════════════════════════
-   figzoom.js — the figure viewer's zoom row: + and −, Fit, and the readout between them (docs/ROADMAP.md, E1).
+   figzoom.js — the figure viewer: which figures open together, and its zoom row (+ and −, Fit, and the readout
+   between them) (docs/ROADMAP.md, E1).
+
+     GROUP         what holds figures that open together: a reply's strip, a note's figures, a message's own
+     item(el)      what the viewer is handed for the figure el is or holds: its picture's address, the picture,
+                   the caption and its source; or null where there is no picture
+     gather(el)    every figure that opens with el, in the order drawn, and where el is among them:
+                   { items, at }; el alone when it is not one of them
 
      STEP          one press of + or −: times or divided by 1.4
      by(ps, k)     the current slide zoomed by k about the middle of the viewport, held between fitted and the most it
@@ -45,6 +52,34 @@ function sync(ps){
   el0.classList.toggle('figv-zoomed',p>100);
 }
 
-root.FigZoom = { STEP, by, fit, pct, sync };
+/* ── which figures open together ──
+   They were the page's FIG_GROUP, figFromEl() and the gathering in openFigureFrom(); the page keeps figFromEl()
+   as one line and openFigureFrom() as the call that opens what this gathers. */
+
+/* Anything with a figure in it can hand the viewer an element. The other
+   figures beside it (a reply's strip, a note's figures, a message's inline
+   ones) come too, so a swipe goes to the next. */
+const GROUP='.fig-list,.msg,.ref-body,.ref-view,.pearl-card,.feed-card,#aiBody,#app';
+function item(el){
+  const img=el.tagName==='IMG'?el:el.querySelector('img');
+  if(!img) return null;
+  const cap=el.querySelector('figcaption');
+  const src=cap&&cap.querySelector('span');
+  return {src:img.currentSrc||img.src,element:img,
+    caption:(cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
+    source:src?src.textContent:''};
+}
+function gather(el){
+  const scope=el.closest&&el.closest(GROUP);
+  /* Every figure that opens full size names one of two actions (docs/ROADMAP.md, E2): a note's, a reply's and the Apex
+     strip's openFigureFrom, and the pearl's openPearlFigure, which has keys of its own. Both are gathered, in the order
+     they are drawn. */
+  const els=scope?[...scope.querySelectorAll('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')]:[];
+  if(els.indexOf(el)<0) return {items:[item(el)].filter(Boolean),at:0};
+  const items=els.map(item), at=els.indexOf(el);
+  return {items:items.filter(Boolean),at:items.slice(0,at).filter(Boolean).length};
+}
+
+root.FigZoom = { STEP, by, fit, pct, sync, GROUP, item, gather };
 
 })(typeof window !== 'undefined' ? window : this);

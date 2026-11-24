@@ -2629,29 +2629,12 @@ function openFigures(list,index){
     return null;
   });
 }
-/* Anything with a figure in it can hand the viewer an element. The other
-   figures beside it (a reply's strip, a note's figures, a message's inline
-   ones) come too, so a swipe goes to the next. */
-const FIG_GROUP='.fig-list,.msg,.ref-body,.ref-view,.pearl-card,.feed-card,#aiBody,#app';
-function figFromEl(el){
-  const img=el.tagName==='IMG'?el:el.querySelector('img');
-  if(!img) return null;
-  const cap=el.querySelector('figcaption');
-  const src=cap&&cap.querySelector('span');
-  return {src:img.currentSrc||img.src,element:img,
-    caption:(cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
-    source:src?src.textContent:''};
-}
+/* Which figures open together, and what each of them is, are src/ui/figzoom.js's. */
+function figFromEl(el){ return FigZoom.item(el); }
 function openFigureFrom(el){
   if(!el) return Promise.resolve(null);
-  const scope=el.closest&&el.closest(FIG_GROUP);
-  /* Every figure that opens full size names one of two actions (docs/ROADMAP.md, E2): a note's, a reply's and the Apex
-     strip's openFigureFrom, and the pearl's openPearlFigure, which has keys of its own. Both are gathered, in the order
-     they are drawn. */
-  const els=scope?[...scope.querySelectorAll('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')]:[];
-  if(els.indexOf(el)<0) return openFigures([figFromEl(el)].filter(Boolean),0);
-  const items=els.map(figFromEl), at=els.indexOf(el);
-  return openFigures(items.filter(Boolean),items.slice(0,at).filter(Boolean).length);
+  const g=FigZoom.gather(el);
+  return openFigures(g.items,g.at);
 }
 /* A question's figures, full size: the expand button on each figure card. */
 function openQuestionFigures(qid,i,ev){
@@ -3461,10 +3444,9 @@ function chatFor(q){ const k=q?q.id:'_general'; return CHATS[k]||(CHATS[k]=[]); 
    the sentence you were part-way through typing, the place you had scrolled
    to, and keyboard focus while reading. Without them, working through a long
    answer while Apex used a tool meant losing them, several times per question. */
-const APEX_STICK=40;         // px of slack — "at the bottom" is not an exact number
-function apexAtBottom(el){
-  return !el || (el.scrollHeight - el.scrollTop - el.clientHeight) < APEX_STICK;
-}
+/* Whether you are at the bottom, staying there as a reply arrives, and going back to your place are
+   src/app/apexpanel.js's; what is read of the panel and put back into it stays here. */
+function apexAtBottom(el){ return ApexPanel.atBottom(el); }
 function apexPanelState(){
   const ta=document.getElementById('aiIn'), body=document.getElementById('aiBody');
   return { text: ta?ta.value:'', start: ta?ta.selectionStart:0, end: ta?ta.selectionEnd:0,
@@ -3482,19 +3464,12 @@ function apexPanelRestore(st){
     ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,120)+'px';
     if(st.focus){ try{ ta.focus(); ta.setSelectionRange(st.start,st.end); }catch(_){} }
   }
-  /* Only when it differs. Writing scrollTop is a no-op in principle when the
-     value is unchanged, but on iOS writing it AT ALL during a momentum scroll
-     stops the momentum — and this runs on every rebuild, which is after every
-     tool step. */
   if(body){
     if(st.reading){ try{body.focus({preventScroll:true});}catch(_){body.focus();} }
-    const want = st.pinned ? body.scrollHeight : st.top;
-    if(Math.abs(body.scrollTop - want) > 1) body.scrollTop = want;
+    ApexPanel.keepPlace(body,st);
   }
 }
-/* Used by every streaming tick as well: a reply arriving is not a reason to
-   move someone who is reading something further up. */
-function apexStick(body){ if(body && apexAtBottom(body)) body.scrollTop=body.scrollHeight; }
+function apexStick(body){ ApexPanel.stick(body); }
 
 function apexLocalAction(action){
   if(aiBusy||apexAway()) return;

@@ -145,5 +145,30 @@ function panelHtml(head, q, hist, kit){
         :'your own key, called directly from this device'}</div></div>`;
 }
 
-root.ApexPanel = { headHtml, setupPanelHtml, panelHtml };
+/* ── the place you had scrolled to ──
+   They were the page's APEX_STICK, apexAtBottom(), apexStick() and the place apexPanelRestore() put the
+   conversation back to; the page keeps apexAtBottom() and apexStick() as one line each, and what is read of the
+   panel and put back into it.
+
+     STICK                  px of slack: "at the bottom" is not an exact number
+     atBottom(el)           whether el is scrolled to within STICK of its end; no element counts as at the bottom
+     stick(body)            a reply arriving keeps you at the bottom if you were there, and never moves you otherwise
+     keepPlace(body, st)    after a rebuild: the bottom if you were there (st.pinned), else where you were (st.top) */
+const STICK=40;
+function atBottom(el){
+  return !el || (el.scrollHeight - el.scrollTop - el.clientHeight) < STICK;
+}
+/* Used by every streaming tick as well: a reply arriving is not a reason to
+   move someone who is reading something further up. */
+function stick(body){ if(body && atBottom(body)) body.scrollTop=body.scrollHeight; }
+/* Only when it differs. Writing scrollTop is a no-op in principle when the
+   value is unchanged, but on iOS writing it AT ALL during a momentum scroll
+   stops the momentum — and this runs on every rebuild, which is after every
+   tool step. */
+function keepPlace(body,st){
+  const want = st.pinned ? body.scrollHeight : st.top;
+  if(Math.abs(body.scrollTop - want) > 1) body.scrollTop = want;
+}
+
+root.ApexPanel = { headHtml, setupPanelHtml, panelHtml, STICK, atBottom, stick, keepPlace };
 })(typeof window !== 'undefined' ? window : this);
