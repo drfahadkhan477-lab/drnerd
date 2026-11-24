@@ -4,8 +4,10 @@
  *
  *   NODE_PATH=$(npm root -g) node tests/verify-home.js <patched.html|url>
  *
- * Five claims:
+ * Six claims:
  *   · the welcome bar (the hero ECG strip) is genuinely larger than it was;
+ *   · on an iPad the trace never covers the heart: on its side the two are apart, and upright, where the trace runs
+ *     into the heart, the heart is drawn over it (docs/ROADMAP.md, F4);
  *   · the Brain page's gauge reports the REAL state of the bank — its mastery
  *     ring is FSRS's own recall estimate and is drawn to the number it shows,
  *     and mastery never exceeds coverage (you cannot have mastered more than
@@ -433,9 +435,34 @@ onDeath(() => ({ section, checks: passed + failed, errors,
                  over: document.documentElement.scrollHeight - innerHeight,
                  screen: app.dataset.screen,
                  hero: R('.hero-live'), pearl: R('.pearl-card'), doors: R('.door-row'), col: R('#homePage0 .home-page-in'),
-                 homeDoors: document.querySelectorAll(document.getElementById('homePage0') ? '#homePage0 .door' : '#app .door').length, labDoors: document.querySelectorAll('#homePage2 .door').length };
+                 homeDoors: document.querySelectorAll(document.getElementById('homePage0') ? '#homePage0 .door' : '#app .door').length, labDoors: document.querySelectorAll('#homePage2 .door').length,
+                 trace: traceAndHeart() };
+        /* Roadmap F4: on an iPad on its side the trace's panel sat over the lower half of the 3D heart. Where the trace's
+           box and the heart's meet, which one the engine paints on top: read with elementFromPoint at the middle of the
+           shared box, with the heart's own contents hidden and both made hit-testable for that one read, then put back. */
+        function traceAndHeart() {
+          const ecg = document.getElementById('heroECG'), slot = document.getElementById('heroHeart3dSlot');
+          if (!ecg || !slot) return null;
+          const a = ecg.getBoundingClientRect(), b = slot.getBoundingClientRect();
+          const ow = Math.min(a.right, b.right) - Math.max(a.left, b.left), oh = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          const shared = ow > 0 && oh > 0 ? Math.round(ow) * Math.round(oh) : 0;
+          if (!shared) return { shared: 0, heartArea: Math.round(b.width * b.height), top: null };
+          const x = (Math.max(a.left, b.left) + Math.min(a.right, b.right)) / 2, y = (Math.max(a.top, b.top) + Math.min(a.bottom, b.bottom)) / 2;
+          const inside = [...slot.querySelectorAll('*'), document.getElementById('heroHeart'), document.getElementById('heroHeartBtn')].filter(Boolean);
+          const kept = inside.map(el => el.style.visibility), pe = [ecg.style.pointerEvents, slot.style.pointerEvents];
+          try {
+            inside.forEach(el => { el.style.visibility = 'hidden'; });
+            ecg.style.pointerEvents = 'auto'; slot.style.pointerEvents = 'auto';
+            const hit = document.elementFromPoint(x, y);
+            return { shared, heartArea: Math.round(b.width * b.height), top: hit === slot ? 'heart' : hit === ecg ? 'trace' : (hit && (hit.id || hit.className)) || 'nothing' };
+          } finally {
+            inside.forEach((el, i) => { el.style.visibility = kept[i]; });
+            ecg.style.pointerEvents = pe[0]; slot.style.pointerEvents = pe[1];
+          }
+        }
       });
     };
+    const traceSays = t => !t ? 'no trace or no heart' : !t.shared ? 'apart' : `${t.shared}px² shared of the heart's ${t.heartArea}, ${t.top} on top`;
 
     const pro = await at(1366, 1024);
     ok('the shell says which screen it is showing', pro.screen === 'home', String(pro.screen));
@@ -455,6 +482,10 @@ onDeath(() => ({ section, checks: passed + failed, errors,
     const air = await at(1194, 834);
     ok('an 11-inch iPad in landscape fits too',
        air.over <= 0 && air.appW / air.vw > 0.9, `${air.appW}/${air.vw}, ${air.over}px over`);
+    /* F4: on its side the trace is a strip below the heart, and meets none of it. */
+    ok('on an iPad on its side the trace runs below the heart and covers none of it, 13-inch and 11-inch',
+       !!pro.trace && !!air.trace && pro.trace.shared === 0 && air.trace.shared === 0,
+       `1366x1024 ${traceSays(pro.trace)}; 1194x834 ${traceSays(air.trace)}`);
 
     /* THE CHECK ABOVE MEASURES WHICHEVER PEARL WAS DRAWN, and the pearl is one
        of a few hundred picked at random. A tall one opened the grid's 1fr row
@@ -507,6 +538,12 @@ onDeath(() => ({ section, checks: passed + failed, errors,
        less the page's own padding, 24px a side. */
     ok('and its column runs the screen\'s width, with no rail to make room for',
        !!port.col && port.col.w === port.vw - 48, port.col ? `${port.col.w}px of ${port.vw}` : 'no column');
+    /* Upright, the trace is a strip under the words that runs the hero's width, behind the heart at its right
+       (home.css, "An iPad upright"): the two meet, and the heart is the one drawn. */
+    const upright = await at(834, 1194);
+    ok('upright, where the trace runs into the heart it runs behind it, 12.9-inch and 11-inch',
+       [port.trace, upright.trace].every(t => !!t && (t.shared === 0 || t.top === 'heart')),
+       `1024x1366 ${traceSays(port.trace)}; 834x1194 ${traceSays(upright.trace)}`);
 
     /* THE ONE THAT WOULD QUIETLY RUIN THE APP. The reading measure exists so a
        vignette is readable; widening the home screen must not widen a stem.
