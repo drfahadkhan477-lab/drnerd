@@ -12,12 +12,15 @@
  * date drifting further out every time its question is revisited.
  *
  * And the header those moves redraw: the counter says the place in the session ("4 of 20"), and only the question's
- * tag says "Question" with the bank's own number. And Skip, Home and Resumed · start over, clicked.
+ * tag says "Question" with the bank's own number. And Skip, Home and start over, clicked.
+ * And the owner's choices of November 2026, each through the real page: the session brain that replaced the card over
+ * the question (its panel opens, a tap or a key picks, Go goes, Escape and a tap elsewhere close it); the keys offered
+ * only once a key is pressed; the pencil's tools only once Settings turns them on.
  */
 'use strict';
 const path = require('path');
 const { launch } = require('./_engine');
-const { booted, afterRender } = require('./_render.js');
+const { booted, afterRender, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -233,13 +236,98 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     await fresh();
     const home = await act(() => page.locator('.btn-home').click({ timeout: 5000 })) && await until(() => S.screen === 'home');
     ok('Home leaves the quiz for the home screen', home, await page.evaluate(() => S.screen));
-    await fresh('.q-restart');
+    await fresh('#sbPill');
     await page.evaluate(() => { S.qIdx = 1; S.resumed = true; render(); });
-    await afterRender(page, () => S.qIdx === 1 && !!document.querySelector('.q-restart'), { label: 'the second question, resumed' });
+    await afterRender(page, () => S.qIdx === 1 && !!document.getElementById('sbPill'), { label: 'the second question, resumed' });
+    /* Start over is in the session brain's panel now (the owner's choice, November 2026), which the pill opens. */
+    const opened = await act(() => page.locator('#sbPill').click({ timeout: 5000 })) && await until(() => !!document.querySelector('#sbPanel .q-restart'));
+    ok('the session brain, tapped, opens its panel, with start over for a resumed session', opened, await page.evaluate(() => JSON.stringify({ panel: !!document.getElementById('sbPanel'), restart: !!document.querySelector('#sbPanel .q-restart') })));
     /* The same chapter and mode: the results screen's Restart is an action named restartQuiz too, and it would start a
        quiz from its first question with neither. */
     const over = await act(() => page.locator('.q-restart').click({ timeout: 5000 })) && await until(ch => S.screen === 'quiz' && S.qIdx === 0 && S.resumed === false && S.chapter === ch && S.mode === 'all', await page.evaluate(() => CHAPTERS[0]));
-    ok('Resumed · start over deals the same chapter again, in the same mode, from its first question, no longer resumed', over, await page.evaluate(() => JSON.stringify({ qIdx: S.qIdx, resumed: S.resumed, chapter: S.chapter === CHAPTERS[0] ? 'the same' : S.chapter, mode: S.mode })));
+    ok('Start over deals the same chapter again, in the same mode, from its first question, no longer resumed', over, await page.evaluate(() => JSON.stringify({ qIdx: S.qIdx, resumed: S.resumed, chapter: S.chapter === CHAPTERS[0] ? 'the same' : S.chapter, mode: S.mode })));
+  }
+
+  head('the session brain, the keys and the pencil');
+  {
+    /* A context of its own, so nothing a section above pressed or saved is carried in, at an iPad's size, where the
+       keys would be offered. */
+    const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    const p = await ctx.newPage();
+    p.on('pageerror', e => errors.push(e.message));
+    await p.goto(URL, { waitUntil: 'load', timeout: 200000 });
+    await booted(p);
+    await p.evaluate(() => { (S.resume = {}, startQuiz)(CHAPTERS[0], 'all'); });
+    await afterRender(p, () => S.screen === 'quiz' && S.qIdx === 0 && !!document.getElementById('sbPill') && !!document.querySelector('.kb-keys'),
+      { label: 'a fresh quiz with the session brain and the key hint drawn' });
+    const shown = sel => p.evaluate(x => { const el = document.querySelector(x); return !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0; }, sel);
+
+    ok('before a key is pressed, the hint that names keys is drawn but not shown', await shown('.kb-keys') === false && await p.evaluate(() => !document.documentElement.hasAttribute('data-keys')));
+    await p.keyboard.press('Shift');
+    ok('a modifier alone says nothing of a keyboard', await shown('.kb-keys') === false);
+    await p.keyboard.press('x');
+    ok('a key pressed shows it, and the device keeps that', await shown('.kb-keys') === true && await p.evaluate(() => localStorage.getItem('systole.keys') === '1'),
+      await p.evaluate(() => String(localStorage.getItem('systole.keys'))));
+
+    ok('the pencil\'s tools are not offered on a question until Settings turns them on', await p.evaluate(() => !!document.getElementById('rail')) && await shown('#rail') === false);
+    await p.evaluate(() => openSettings());
+    await p.selectOption('#generalSettings select[name="pencil"]', 'on');
+    ok('Settings\' pencil tools, set On, offer them on the question, kept on the device', await shown('#rail') === true
+       && await p.evaluate(() => (JSON.parse(localStorage.getItem('systole.display') || '{}')).pencil === 'on'));
+    await p.evaluate(() => railAction('pen'));
+    const inHand = await p.evaluate(() => T.active);
+    await p.selectOption('#generalSettings select[name="pencil"]', 'off');
+    ok('and set Off, take them away again', await shown('#rail') === false);
+    ok('with the pen that was in hand put down, so nothing draws on a question that shows no tools',
+      inHand === true && await p.evaluate(() => T.active === false && !document.querySelector('.ink-host.ink-on')), String(inHand));
+    await p.evaluate(() => closeSettings());
+    /* A Pencil touch with the rail folded and auto-minimize on wakes the tools and draws (verify-polish); with the tools
+       away it is a touch like a finger's. The event is dispatched, as in verify-polish, for pointerType 'pen'. */
+    const woke = await p.evaluate(() => {
+      const cap = Element.prototype.setPointerCapture; Element.prototype.setPointerCapture = function () {};
+      T.autoMin = true; T.min = true;
+      const cv = document.querySelector('.q-card .ink-canvas'); if (!cv) { Element.prototype.setPointerCapture = cap; return 'no canvas'; }
+      const r = cv.getBoundingClientRect();
+      cv.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + 20, clientY: r.top + 20, pointerType: 'pen', pressure: .5, bubbles: true }));
+      cv.dispatchEvent(new PointerEvent('pointerup', { clientX: r.left + 20, clientY: r.top + 20, pointerType: 'pen', bubbles: true }));
+      Element.prototype.setPointerCapture = cap;
+      const out = { active: T.active, min: T.min }; T.autoMin = false; return out;
+    });
+    ok('a Pencil touch does not wake tools that Settings has put away', woke.active === false && woke.min === true, JSON.stringify(woke));
+
+    await p.evaluate(() => { selectOpt(S.questions[0].ci); });
+    await afterRender(p, () => S.answered === true, { label: 'the first question answered' });
+    await p.evaluate(() => nextQ());
+    await afterRender(p, () => S.qIdx === 1 && !!document.getElementById('sbPill'), { label: 'the second question' });
+    await p.click('#sbPill');
+    await settled(p, () => !!document.getElementById('sbPanel'), { label: 'the session brain\'s panel to open' }).catch(() => {});
+    const open = await p.evaluate(() => ({ panel: !!document.getElementById('sbPanel'), expanded: document.getElementById('sbPill').getAttribute('aria-expanded'),
+      focus: !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.sb-brain')), text: (document.getElementById('sbPanel') || {}).textContent || '' }));
+    ok('the pill, tapped, opens its panel and says so, with the brain ready for the keys', open.panel && open.expanded === 'true' && open.focus, JSON.stringify({ panel: open.panel, expanded: open.expanded, focus: open.focus }));
+    ok('the panel counts the answer given, and says where the reader is', /1 right/.test(open.text) && /Question 2 of /.test(open.text), open.text.slice(0, 120));
+    const dot = await p.evaluate(() => { const c = document.querySelectorAll('#sbPanel .sb-dot')[0].getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height / 2 }; });
+    await p.mouse.click(dot.x, dot.y);
+    const picked = await p.evaluate(() => (document.querySelector('#sbPanel .sb-picked-t') || {}).textContent || '');
+    ok('a tap on a point picks that question, said in words', picked === 'Question 1, answered right', picked);
+    await p.keyboard.press('ArrowRight');
+    const here = await p.evaluate(() => ({ t: (document.querySelector('#sbPanel .sb-picked-t') || {}).textContent || '', go: !!document.querySelector('#sbPanel .sb-go') }));
+    await p.keyboard.press('ArrowRight');
+    const third = await p.evaluate(() => (document.querySelector('#sbPanel .sb-go') || {}).textContent || '');
+    ok('the arrow keys walk the questions: the one on screen has no Go, the next has one', /^Question 2, on screen/.test(here.t) && !here.go && /Go to question 3/.test(third), JSON.stringify([here, third]));
+    await p.click('#sbPanel .sb-go');
+    await afterRender(p, () => S.qIdx === 2, { label: 'question 3, gone to' }).catch(() => {});
+    ok('Go goes to that question and closes the panel', await p.evaluate(() => S.screen === 'quiz' && S.qIdx === 2 && !document.getElementById('sbPanel')), await p.evaluate(() => S.qIdx));
+    await p.click('#sbPill');
+    await settled(p, () => !!document.getElementById('sbPanel'), { label: 'the panel to open again' }).catch(() => {});
+    await p.keyboard.press('Escape');
+    ok('Escape closes it, and leaves the question as it was', await p.evaluate(() => !document.getElementById('sbPanel') && S.screen === 'quiz' && S.qIdx === 2
+       && document.getElementById('sbPill').getAttribute('aria-expanded') === 'false'));
+    await p.click('#sbPill');
+    await settled(p, () => !!document.getElementById('sbPanel'), { label: 'the panel to open a third time' }).catch(() => {});
+    const card = await p.evaluate(() => { const r = document.querySelector('.q-card').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 20 }; });
+    await p.mouse.click(card.x, card.y);
+    ok('a tap anywhere else closes it', await p.evaluate(() => !document.getElementById('sbPanel') && S.qIdx === 2));
+    await ctx.close();
   }
 
   ok('no console or page errors across the run', errors.length === 0, errors.slice(0, 3).join(' | '));

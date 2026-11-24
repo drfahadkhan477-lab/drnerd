@@ -59,6 +59,9 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
     page.on('console', m => { if (m.type() === 'error' && !isEngineNoise(m.text())) errors.push(m.text()); });
     await page.goto(URL, { waitUntil: 'load', timeout: 200000 });
     await booted(page);
+    /* The pencil's tools are offered only once Settings turns them on (November 2026). This suite measures where they
+       stand, so it turns them on; with them away, every check of the rail below would pass on a rail of no size. */
+    await page.evaluate(() => updateDisplaySetting('pencil', 'on'));
     return page;
   };
   const quiz = async page => {
@@ -595,7 +598,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
   }
 
   head('the floating controls leave the end of every screen readable');
-  /* D5. The Apex button and the pencil's rail float over the screen. Text can pass under them while it scrolls, but the end
+  /* D5. The Apex button, the pencil's rail and the session brain's pill float over the screen. Text can pass under them while it scrolls, but the end
      of every screen must scroll clear: on a phone the last line of Sessions stayed under the Apex button. Read where the
      page is scrolled to its end: every text under a visible floating control, as the engine hit-tests it. */
   {
@@ -628,7 +631,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
           const se = document.scrollingElement, app = document.getElementById('app'), frame = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
           for (let i = 0, was = -1; i < 40 && se.scrollHeight + app.scrollHeight !== was; i++) {
             was = se.scrollHeight + app.scrollHeight; se.scrollTop = se.scrollHeight; app.scrollTop = app.scrollHeight; await frame(); await frame(); }
-          const ctl = [document.querySelector('#rail:not(.hidden)'), document.getElementById('aiFab')].filter(el => {
+          const ctl = [document.querySelector('#rail:not(.hidden)'), document.getElementById('aiFab'), document.getElementById('sbPill')].filter(el => {
             if (!el) return false; const cs = getComputedStyle(el), b = el.getBoundingClientRect();
             return cs.display !== 'none' && cs.visibility === 'visible' && +cs.opacity > 0 && b.width > 2; });
           const hits = [];
@@ -658,7 +661,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
         seen.push(name + ':' + r.controls + (r.atEnd ? '' : ' (not at its end)'));
         for (const x of r.hits) under.push(name + ': ' + x);
       }
-      ok(what + ': at the end of every screen, no text is under the Apex button or the pencil\'s rail', under.length === 0,
+      ok(what + ': at the end of every screen, no text is under the Apex button, the pencil\'s rail or the session brain', under.length === 0,
         under.length ? under.slice(0, 4).join('; ') : seen.join(' '));
       ok(what + ': and each was scrolled to its end with the Apex button on screen (precondition)', seen.every(x => !/:0/.test(x) && !/not at its end/.test(x)), seen.join(' '));
       await page.context().close();

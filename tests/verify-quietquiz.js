@@ -66,7 +66,9 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
       .then(() => true, () => false);
     await quiet(page);
   };
-  await page.evaluate(() => { startAdhocQuiz(POOL.filter(q => q.o.length >= 4 && !q.imgopt).slice(0, 4), null); });
+  /* The pencil's tools, offered only once Settings turns them on, are on here: a rail put away runs no animation, so the
+     pencil's "does not pop in again" below would hold of a pencil no one can see. */
+  await page.evaluate(() => { updateDisplaySetting('pencil', 'on'); startAdhocQuiz(POOL.filter(q => q.o.length >= 4 && !q.imgopt).slice(0, 4), null); });
   await arrived();
 
   head('choosing an answer');
@@ -77,7 +79,7 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
     const first = document.querySelector('.q-card');
     document.querySelector('.opts>.opt[data-idx="' + idx + '"]').click();
     return { redrawn: document.querySelector('.q-card') !== first, again: document.getElementById('app').classList.contains('again'),
-      question: COUNT('riseIn', '.q-card'), bar: COUNT('slideUp', '.qbar'), slid: COUNT('slideL', '.opts>.opt'),
+      question: COUNT('riseIn', '.q-card'), halo: COUNT('sbPulse', '.sb-halo'), slid: COUNT('slideL', '.opts>.opt'),
       verdict: COUNT('riseIn', '.reveal-card'), right: COUNT('popIn', '.opt.correct'), wrong: COUNT('nudge', '.opt.wrong'),
       pencil: COUNT('popIn', '.rail-open'), pencils: document.querySelectorAll('.rail-open').length,
       options: document.querySelectorAll('.opts>.opt').length };
@@ -85,7 +87,10 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
   ok('the screen was redrawn and was one the quiz started with, so these readings are of a redraw', before.sees && before.opts >= 4 && r.redrawn, JSON.stringify([before, r.redrawn]));
   ok('the redraw says it is the same view again', r.again === true, String(r.again));
   ok('the question card does not rise in again', r.question === 0, r.question + ' running');
-  ok('the progress bar does not slide up again, and no option slides in again', r.bar === 0 && r.slid === 0, `bar ${r.bar}, options ${r.slid}`);
+  ok('no option slides in again', r.slid === 0, `options ${r.slid}`);
+  /* The card over the question, whose bar slid up, went for the session brain (the owner's choice, November 2026). Its
+     one motion is the halo of the question on screen, for a session that changed: an answer is one. */
+  ok('the session brain\'s halo brightens, once, for the answer', r.halo === 1, r.halo + ' running');
   ok('what is new arrives: the verdict rises in', r.verdict === 1, r.verdict + ' running');
   ok('the right option pops and the one that was wrong gives its nudge', r.right === 1 && r.wrong === 1, `right ${r.right}, wrong ${r.wrong}`);
   ok('the annotation pencil is there, and does not pop in again', r.pencils === 1 && r.pencil === 0, `${r.pencils} pencil(s), ${r.pencil} running`);
@@ -96,11 +101,11 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
     const n = await page.evaluate(`(() => {
       const COUNT = ${COUNT};
       nextQ();
-      return { again: document.getElementById('app').classList.contains('again'), question: COUNT('riseIn', '.q-card'), slid: COUNT('slideL', '.opts>.opt'), bar: COUNT('slideUp', '.qbar'),
+      return { again: document.getElementById('app').classList.contains('again'), question: COUNT('riseIn', '.q-card'), slid: COUNT('slideL', '.opts>.opt'), halo: COUNT('sbPulse', '.sb-halo'),
         pencil: COUNT('popIn', '.rail-open'), pencils: document.querySelectorAll('.rail-open').length };
     })()`);
     ok('the next question is not the same view: it does not wear it', n.again === false, String(n.again));
-    ok('and it arrives as a question does: the card rises in and the options slide in', n.question === 1 && n.slid >= 4 && n.bar === 1, JSON.stringify([n.question, n.slid, n.bar]));
+    ok('and it arrives as a question does: the card rises in, the options slide in, and the session brain\'s halo brightens', n.question === 1 && n.slid >= 4 && n.halo === 1, JSON.stringify([n.question, n.slid, n.halo]));
     ok('the annotation pencil, which is on every question, does not pop in again with it', n.pencils === 1 && n.pencil === 0, `${n.pencils} pencil(s), ${n.pencil} running`);
     await arrived();
 
@@ -124,9 +129,9 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
     const twice = await page.evaluate(`(() => {
       const COUNT = ${COUNT};
       render(); render();
-      return { again: document.getElementById('app').classList.contains('again'), question: COUNT('riseIn', '.q-card'), slid: COUNT('slideL', '.opts>.opt') };
+      return { again: document.getElementById('app').classList.contains('again'), question: COUNT('riseIn', '.q-card'), slid: COUNT('slideL', '.opts>.opt'), halo: COUNT('sbPulse', '.sb-halo') };
     })()`);
-    ok('a quiz redrawn twice in place is not entered twice', twice.again === true && twice.question === 0 && twice.slid === 0, JSON.stringify(twice));
+    ok('a quiz redrawn twice in place is not entered twice, and the session brain, which has not changed, does not brighten', twice.again === true && twice.question === 0 && twice.slid === 0 && twice.halo === 0, JSON.stringify(twice));
   }
 
   head('the pencil is made again when it is not what it was');

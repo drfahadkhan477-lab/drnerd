@@ -320,6 +320,9 @@ const SUITES = [
   /* The app's themes, and which one a saved choice is (docs/ROADMAP.md, E1): the table and its rules, moved to
      src/core/themes.js; the script before paint is held to it. */
   ['themes-pure', 'every theme has an id, a group and a mode it allows, a palette or none and its colours; a saved choice is its theme, the old names their new ones, anything else Auto; Auto alone follows the system; and the script before paint draws each theme as the table says'],
+  /* Where the reader is in a question session, drawn as a small brain (src/ui/sessionbrain.js): the owner's choice of
+     November 2026 for the card that stood over the question. */
+  ['sessionbrain-pure', 'a point per question in the brain, each in its state; the pill says the place and opens a small panel that picks and goes to a question; one motion, which rests'],
   /* Where the fellow's material starts and stops in what Apex is sent (docs/ROADMAP.md, E1): the nonce, the fence and
      what a note cannot carry inside one, moved to src/core/fence.js. */
   ['fence-pure', 'a fence is twelve characters from random bytes, kept for a request and new for a turn; a note cannot forge one, whole, half or as a bare block id, while ordinary comparisons are left alone; every block of a request is on its fence'],
@@ -605,11 +608,12 @@ const SUITES = [
    one that had been waiting: pearlbake-pure. The split-build figure is still
    134; the record does not say whether this run measured it again. */
 /* The complete Systole family run at 391f7c5 also measured reader-assets-pure. */
+/* Waiting since the question screen's session brain: sessionbrain-pure. */
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
    sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E5: framemeter-pure, frames. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since E7's review: backupcrypto-pure. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure; and resuming a deck: resume-pure; and the figure viewer's zoom row: figzoom-pure; and the sign-in page told from a reply: accessgate-pure. And since the UI revamp's CSS-variable lint: cssvars-pure; and its header capsule: gnav-pure; and its glass budget: glassbudget. */
-const PENDING_RECORD = ['glassbudget', 'gnav-pure', 'framemeter-pure', 'frames', 'cssvars-pure', 'backupcrypto-pure', 'accessgate-pure', 'figzoom-pure', 'resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
+const PENDING_RECORD = ['sessionbrain-pure', 'glassbudget', 'gnav-pure', 'framemeter-pure', 'frames', 'cssvars-pure', 'backupcrypto-pure', 'accessgate-pure', 'figzoom-pure', 'resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

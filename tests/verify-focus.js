@@ -124,11 +124,11 @@ const FOCUS_BTN = '#navbar [data-action="toggleFocusMode"]';
         const el = document.querySelector(sel);
         return el ? getComputedStyle(el).display !== 'none' : null;
       };
-      return { prog: shown('.prog-fill'), cf: shown('.cf-row'), card: shown('.q-card') };
+      return { prog: shown('#sbPill'), cf: shown('.cf-row'), card: shown('.q-card') };
     });
     ok('the question is still on screen', kept.card === true);
-    ok('the progress bar is still visible — knowing where you are is the point',
-       kept.prog === true, `.prog-fill ${kept.prog}`);
+    ok('the session brain is still visible — knowing where you are is the point',
+       kept.prog === true, `#sbPill ${kept.prog}`);
     /* Reported either way rather than skipped: if the confidence row is not in
        this build at all the claim is "focus mode did not remove it", which is
        still the thing being defended. */

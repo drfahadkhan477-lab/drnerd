@@ -68,3 +68,87 @@ body.has-gnav .ref-btns [data-action="goHome"]{display:none}
 /* Sessions' page has no top padding of its own: its back button, and the grid's gap after it, were all the room above its
    heading, which without them sat against the bar, in the bar's shadow (verify-contrast read its eyebrow at 4.19:1 there). */
 body.has-gnav .sessions-page{padding-top:24px}
+
+/* ═══ THE SESSION BRAIN (src/ui/sessionbrain.js) ═══
+   Where the reader is in a question session: a pill at the bottom left, the size of the Apex button at the bottom
+   right, and its panel, small on purpose (the owner's word, November 2026). Dark glass in every theme, as the Apex
+   button is. Its depth is drawn, not filtered: each hemisphere lit from the upper left and shaded below, the folds
+   pressed in with a dark line under a light one, a highlight on each crown. The one motion is the halo of the question
+   on screen, which brightens twice when it is drawn, by opacity alone, and then rests; none when motion is reduced. */
+.sb-pill{position:fixed;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));z-index:70;
+  height:50px;box-sizing:border-box;padding:0 16px 0 3px;border-radius:25px;display:flex;align-items:center;gap:8px;cursor:pointer;
+  border:1px solid rgba(94,234,212,.38);color:#F1F5F9;font:700 13px/1 var(--font-sans);
+  background:#15405A linear-gradient(160deg,#15405A,#0B2236);
+  box-shadow:0 8px 24px rgba(0,0,0,.32),0 0 18px rgba(94,234,212,.16),inset 0 1px 0 rgba(255,255,255,.16)}
+.sb-pill:active{transform:scale(.97)}
+.sb-pill[aria-expanded="true"]{border-color:#5EEAD4}
+/* the pill is dark in every theme: its count takes the pill's ink, not the page's muted one (1.45:1 on Daylight) */
+.sb-pill .q-counter{white-space:nowrap;color:inherit}
+.sb-orb{width:44px;height:44px;flex:none;display:block}
+.sb-orb-ground{fill:#06131F}
+.sb-ring-track{fill:none;stroke:rgba(94,234,212,.18);stroke-width:3}
+.sb-ring{fill:none;stroke:#5EEAD4;stroke-width:3;stroke-linecap:round}
+.sb-l0{stop-color:#8FF3EA}.sb-l1{stop-color:#2A8FA8}.sb-l2{stop-color:#0B3247}
+.sb-s0{stop-color:#000;stop-opacity:0}.sb-s1{stop-color:#000;stop-opacity:.42}
+.sb-h0{stop-color:#fff;stop-opacity:.5}.sb-h1{stop-color:#fff;stop-opacity:0}
+.sb-rim{fill:none;stroke:#9AF5EC;stroke-opacity:.75;stroke-width:1.4}
+.sb-orb .sb-rim{stroke-width:5}
+.sb-folds-dark path{fill:none;stroke:#05202E;stroke-opacity:.55;stroke-width:1.3;stroke-linecap:round}
+.sb-folds-lit path{fill:none;stroke:#C8FBF5;stroke-opacity:.45;stroke-width:.8;stroke-linecap:round}
+.sb-dot{fill:rgba(203,213,225,.5)}
+.sb-dot[data-state="right"]{fill:#4ADE80}
+.sb-dot[data-state="wrong"]{fill:#FB7185}
+.sb-dot[data-flagged]{stroke:#FBBF24;stroke-width:.9}
+.sb-dot[data-current]{fill:#F0F9FF;stroke:#38BDF8;stroke-width:1}
+.sb-orb .sb-dot[data-flagged],.sb-orb .sb-dot[data-current]{stroke-width:2.6}
+.sb-halo{fill:#7DD3FC;opacity:.3}
+.sb-fresh .sb-halo{animation:sbPulse .9s ease-in-out 2}
+@keyframes sbPulse{0%,100%{opacity:.3}50%{opacity:.85}}
+@media(prefers-reduced-motion:reduce){.sb-fresh .sb-halo{animation:none}}
+.sb-panel{position:fixed;left:max(14px,env(safe-area-inset-left));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 60px);z-index:71;
+  width:min(320px,calc(100vw - 28px));box-sizing:border-box;padding:12px 14px;border-radius:20px;
+  display:grid;grid-template-columns:116px minmax(0,1fr);gap:8px 12px;align-items:center;color:#F1F5F9;
+  background:#113046 linear-gradient(160deg,rgba(17,48,70,.98),rgba(9,24,40,.98));border:1px solid rgba(94,234,212,.3);
+  box-shadow:0 18px 48px rgba(0,0,0,.5),0 0 32px rgba(94,234,212,.12)}
+.sb-brain{width:116px;height:97px;display:block;cursor:pointer;overflow:visible}
+.sb-brain:focus-visible{outline:2px solid #5EEAD4;outline-offset:3px;border-radius:12px}
+.sb-pick{fill:none;stroke:#fff;stroke-width:1}
+.sb-info{display:flex;flex-direction:column;gap:3px;min-width:0}
+.sb-eyebrow{margin:0;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5EEAD4}
+.sb-title{margin:0;font-size:16px;font-weight:700;line-height:1.2;overflow-wrap:break-word;overflow-wrap:anywhere;color:#F1F5F9}
+.sb-title:focus{outline:none}
+.sb-where{margin:0;font-size:13px;color:#C3CFDC}
+.sb-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.sb-chip{padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.4}
+.sb-chip[data-state="right"]{background:rgba(74,222,128,.14);color:#4ADE80}
+.sb-chip[data-state="wrong"]{background:rgba(251,113,133,.16);color:#FDA4AF}
+.sb-chip[data-state="flagged"]{background:rgba(251,191,36,.14);color:#FBBF24}
+.sb-picked,.sb-actions{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sb-picked{justify-content:space-between;padding:6px 8px 6px 10px;border-radius:12px;background:rgba(6,19,31,.7);border:1px solid rgba(94,234,212,.2)}
+.sb-picked-t{margin:0;font-size:13px;color:#D5DEE8;flex:1 1 120px}
+.sb-here{margin:0;font-size:13px;color:#5EEAD4}
+.sb-go,.sb-done,.sb-panel .q-restart{min-height:44px;padding:0 14px;border-radius:12px;font:700 13px/1 var(--font-sans);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px}
+.sb-go{border:1px solid #5EEAD4;background:transparent;color:#5EEAD4}
+.sb-actions{justify-content:flex-end}
+.sb-panel .q-restart{border:1px solid rgba(148,197,255,.28);background:transparent;color:#D5DEE8}
+.sb-done{border:0;background:#5EEAD4;color:#062A2A}
+@media print{.sb-pill,.sb-panel{display:none}}
+
+/* ═══ THE TOP BAR'S ICONS ═══
+   Two tones (the i-nav-* symbols in the shell): the line in the button's own colour, a soft fill and an accent. Inside a
+   question or any inner screen the bar is navy in every theme, so the buttons are glass there with a light accent; on
+   Home the bar is the page's own ground, so the accent is the theme's ink. */
+#navbar .icon-btn{--icon-duo:rgba(56,189,248,.16)}
+body:not(.on-home) #navbar .nav-right .icon-btn{--icon-acc:#7DD3FC;--icon-knob:#0F1A33;width:36px;height:36px;border-radius:12px;
+  border:1px solid rgba(148,197,255,.24);background:linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.03));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 6px 16px rgba(0,0,0,.24)}
+body:not(.on-home) #navbar .nav-right .icon-btn .icon{width:19px;height:19px}
+body.on-home #navbar .icon-btn{--icon-acc:var(--teal-ink);--icon-knob:var(--card)}
+
+/* The pill and its panel keep off the other floating controls (D5). Beside the pencil's rail, shown on the left, they
+   stand clear of it; while Apex is open, a sheet over the lower screen or a column whose composer and the folded rail
+   take the lower left, they step aside, and come back when it closes. */
+html.rail-shown .sb-pill,html.rail-shown .sb-panel{left:calc(max(10px,env(safe-area-inset-left)) + 70px)}
+html.rail-shown .sb-panel{width:min(320px,calc(100vw - 98px))}
+#shell.ai-open .sb-pill,#shell.ai-open .sb-panel{display:none}

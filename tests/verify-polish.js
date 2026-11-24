@@ -134,6 +134,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      beat's coupling to it. The re-render race those checks defended cannot
      recur: an <img> in the markup is rebuilt with the markup. */
 
+  /* The pencil's tools are offered only once Settings turns them on (November 2026), and a Pencil touch wakes them only
+     then. The sections below use them, so they are on. */
+  await page.evaluate(() => updateDisplaySetting('pencil', 'on'));
   head('pencil: width responds to pressure, tilt, and size — verified against the real paint path');
   const widths = await page.evaluate(() => ({
     baseline: PencilFX.widthFor(2.6, 0.5, 0, 'M'),

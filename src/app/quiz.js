@@ -31,8 +31,10 @@
 
    WHAT THE SCREEN SAYS, each a thing a reader acts on:
 
-     1. Where the reader is: the chapter, the question's place in the session, a way to start over when
-        the session was resumed, and the score so far.
+     1. Where the reader is: the session brain's pill (src/ui/sessionbrain.js, drawn by the page's
+        sessionBrainHtml), which says the question's place in the session and opens the chapter, the score so
+        far, each question's state and the way to start over when the session was resumed. It replaced the
+        card that said these over the question (the owner's choice, November 2026).
      2. The question, its options, and whether it is flagged or written on.
      3. Before answering: how sure the reader is, and the keys or a tap to answer.
      4. After answering: which option was right and which was chosen, the commentary, peer statistics where
@@ -82,7 +84,7 @@ function missRow(S,LOG,kit,wasCorrect){
 }
 
 function screenHtml(S, LOG, CH_COLORS, kit){
-  const {BANK,RATINGS,IMGS,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}=kit;
+  const {BANK,RATINGS,IMGS,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window,sessionBrainHtml}=kit;
   /* The two rows, under the names the body below calls them by. */
   const cfRowHtml=()=>cfRow(S,kit), missRowHtml=wasCorrect=>missRow(S,LOG,kit,wasCorrect);
   const {questions,qIdx,selected,answered}=S;
@@ -91,7 +93,6 @@ function screenHtml(S, LOG, CH_COLORS, kit){
   const canGoBack=qIdx>0;
   if(!questions.length)return '<div style="padding:60px;text-align:center;color:var(--muted)">No questions found.</div>';
   const q=questions[qIdx];
-  const prog=(qIdx+1)/questions.length*100;
   const chColor=CH_COLORS[q.ch]||'var(--teal)';
   const figHtml='<div class="fig-zone"></div>';
   /* render() fills the zone after the layout is decided; whether there will be figures is buildFigures' own test. */
@@ -141,8 +142,8 @@ function screenHtml(S, LOG, CH_COLORS, kit){
   const isMobile=window.innerWidth<768;
   const letters=q.o.map(o=>`<kbd>${o.l}</kbd>`).join('');
   const kbHint=!answered
-    ?`<div class="kb-hint kbd-row">${isMobile?'Tap to answer':`Press ${letters} to answer · <kbd>←</kbd> <kbd>→</kbd> to move · <kbd>F</kbd> to flag`}</div>`
-    :`<div class="kb-hint">${isMobile?'Tap Next to continue':'Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next · <kbd>F</kbd> to flag'}</div>`;
+    ?`<div class="kb-hint kbd-row${isMobile?'':' kb-keys'}">${isMobile?'Tap to answer':`Press ${letters} to answer · <kbd>←</kbd> <kbd>→</kbd> to move · <kbd>F</kbd> to flag`}</div>`
+    :`<div class="kb-hint${isMobile?'':' kb-keys'}">${isMobile?'Tap Next to continue':'Press <kbd>Enter</kbd> or <kbd>Space</kbd> for next · <kbd>F</kbd> to flag'}</div>`;
 
   /* The flag is a toggle: its name stays "Flag" and aria-pressed says whether it is on, as the mock block's does. */
   const flagOn=S.flagged.has(q.id);
@@ -168,16 +169,7 @@ function screenHtml(S, LOG, CH_COLORS, kit){
       <button class="btn btn-skip" data-action="nextQ" type="button">Skip ${icon('arrow-right','icon-sm')}</button>`;
 
   return `<div class="quiz-wrap">
-    <div class="qbar anim-slide">
-      <div class="qbar-top">
-        <span class="ch-badge" style="background:${chColor}22;color:${chInk(chColor)}">${e(q.ch)}</span>
-        <span class="q-counter">${qIdx+1} of ${questions.length}<span class="sr-only"> in this session</span></span>
-        ${S.resumed?`<button class="q-restart" type="button" data-action="quizStartOver"
-          title="Deal this chapter again from the beginning">Resumed · start over</button>`:''}
-      </div>
-      <div class="prog-track"><div class="prog-fill" style="transform:scaleX(${(prog / 100).toFixed(4)})"></div></div>
-      <div class="qstats">${S.quizTotal?`This quiz: ${S.quizCorrect}/${S.quizTotal} (${Math.round(S.quizCorrect/S.quizTotal*100)}%)`:''}</div>
-    </div>
+    ${typeof sessionBrainHtml==='function'?sessionBrainHtml():''}
     <div class="reading-columns"><div class="reading-question">${hasFigs?`<div class="reading-figs">${figHtml}</div>`:figHtml}<div class="reading-text">
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}

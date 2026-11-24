@@ -132,6 +132,14 @@
      only there (expand, collapse) drew nothing, and palette existed in neither. tests/verify-icons-pure.js
      fails if an icon is named that is not here, or a symbol is defined anywhere else. -->
 <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 4.5H4.5V9M15 4.5h4.5V9M9 19.5H4.5V15M15 19.5h4.5V15"/></symbol>
+<!-- The top bar's own icons: two tones, a line in the button's colour and a fill and an accent the bar sets
+     (--icon-duo, --icon-acc, --icon-knob; app/css/gnav.css), drawn for the bar alone so no other screen changes. -->
+<symbol id="i-nav-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" style="fill:var(--icon-duo,none)"/><path d="M15.4 15.4 20 20" style="stroke:var(--icon-acc,currentColor);stroke-width:2.2"/></symbol>
+<symbol id="i-nav-focus" viewBox="0 0 24 24"><path d="M4 8.5v-3A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/><circle cx="12" cy="12" r="2.6" style="fill:var(--icon-acc,currentColor);stroke:none"/></symbol>
+<symbol id="i-nav-notes" viewBox="0 0 24 24"><path d="M12 6.5C10.5 5.2 8.3 4.5 5.5 4.5H4v13h1.5c2.8 0 5 .7 6.5 2 1.5-1.3 3.7-2 6.5-2H20v-13h-1.5c-2.8 0-5 .7-6.5 2Z" style="fill:var(--icon-duo,none)"/><path d="M12 6.5v13" style="stroke:var(--icon-acc,currentColor)"/></symbol>
+<symbol id="i-nav-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2" style="stroke:var(--icon-acc,currentColor);fill:var(--icon-knob,none)"/><circle cx="9" cy="12" r="2" style="stroke:var(--icon-acc,currentColor);fill:var(--icon-knob,none)"/><circle cx="17" cy="17" r="2" style="stroke:var(--icon-acc,currentColor);fill:var(--icon-knob,none)"/></symbol>
+<symbol id="i-nav-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" style="fill:var(--icon-duo,none);stroke:var(--icon-acc,currentColor)"/><path d="M12 3v2M12 19v2M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M3 12h2M19 12h2M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5"/></symbol>
+<symbol id="i-nav-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z" style="fill:var(--icon-duo,none)"/><circle cx="17.5" cy="5.5" r="1.2" style="fill:var(--icon-acc,currentColor);stroke:none"/></symbol>
 <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M4.5 9H9V4.5M19.5 9H15V4.5M4.5 15H9v4.5M19.5 15H15v4.5"/></symbol>
 <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.3-1-1.5-1-2.6 0-1 .8-1.7 1.8-1.7H17a3.5 3.5 0 0 0 3.5-3.5C20.5 7 16.7 3.5 12 3.5Z"/><circle cx="7.7" cy="11.2" r="1.1"/><circle cx="10.2" cy="7.4" r="1.1"/><circle cx="14.6" cy="7.4" r="1.1"/></symbol>
 <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/></symbol>
@@ -157,6 +165,7 @@ try{var _t=(JSON.parse(localStorage.getItem('accsap12.v2')||'{}')||{}).theme||'a
   var _p=_M[_t]||['',''], _h=document.documentElement;
   if(_p[0])_h.setAttribute('data-theme',_p[0]);
   if(_p[1])_h.setAttribute('data-palette',_p[1]);
+  if(localStorage.getItem('systole.keys')==='1')_h.setAttribute('data-keys','1');
 }catch(_e){}</script>
 <div id="splash" role="status" aria-label="Loading Systole">
   <div class="sp-in">
@@ -714,7 +723,7 @@ function attachInk(host,key){
   }
   function down(e){
     disarmAutoMinimize();
-    if(e.pointerType==='pen'&&T.min&&T.autoMin){ T.active=true; railMin(false); }
+    if(e.pointerType==='pen'&&T.min&&T.autoMin&&pencilOn()){ T.active=true; railMin(false); }   // not while Settings has the tools away
     if(!T.active||!allow(e))return;
     e.preventDefault(); cv.setPointerCapture(e.pointerId);
     if(T.erase){ eraseAt(pos(e)); return; }
@@ -932,8 +941,8 @@ function hasMarkup(qid){
 function mountInk(){
   sweepInkHosts();
   const q=currentQ();
-  const rail=buildRail();
-  rail.classList.toggle('hidden', S.screen!=='quiz');
+  buildRail();
+  syncRailShown();
   if(S.screen!=='quiz')return;
   document.querySelectorAll('.fig-card').forEach((el,i)=>attachInk(el,`${q.id}:f${i}`));
   const qc=document.querySelector('.q-card');
@@ -4290,7 +4299,20 @@ function readingAnchor(){
 }
 function displaySettings(){
   let v={};try{v=JSON.parse(localStorage.getItem(DISPLAY_KEY)||'{}')||{};}catch(_){}
-  return {layout:v.layout==='split'?'split':'focused',width:['narrow','standard','wide','full'][readWidth()],brightness:readTune().b};
+  return {layout:v.layout==='split'?'split':'focused',width:['narrow','standard','wide','full'][readWidth()],brightness:readTune().b,
+    pencil:v.pencil==='on'?'on':'off'};
+}
+/* The pencil's tools on a question are offered only when the reader turns them on in Settings (the owner's choice,
+   November 2026): a web page cannot tell that an Apple Pencil is paired, and the button stood over every question
+   for readers who never write. Kept with the other display preferences on the device. */
+function pencilOn(){ return displaySettings().pencil==='on'; }
+/* The tools are away on every screen but a question, and on a question until Settings turns them on. Put away by
+   Settings, the tool in hand is put down too: a pen still active would draw on a question that shows no tools. */
+function syncRailShown(){
+  const rail=document.getElementById('rail'); if(!rail) return;
+  rail.classList.toggle('hidden',S.screen!=='quiz'||!pencilOn());
+  document.documentElement.classList.toggle('rail-shown',!rail.classList.contains('hidden'));   // the session brain's pill moves clear of it
+  if(!pencilOn()&&(T.active||T.erase)){ T.active=false; T.erase=false; syncInkMode(); buildRail(); }
 }
 function applyDisplaySettings(){
   const v=displaySettings(),h=document.documentElement;
@@ -4304,6 +4326,7 @@ function applyDisplaySettings(){
      reading width, Split View and Apex's panel; not while the explanation stands beside the question, three columns. */
   if(app)app.classList.toggle('fig-split',!!app.querySelector('.reading-figs')&&!app.classList.contains('reading-split')
     &&app.clientWidth-parseFloat(getComputedStyle(app).paddingLeft)-parseFloat(getComputedStyle(app).paddingRight)>=size*56+24);
+  syncRailShown();
 }
 function updateDisplaySetting(key,value){
   if(key==='width'){setReadWidth(['narrow','standard','wide','full'].indexOf(value));return;}
@@ -4316,6 +4339,7 @@ function syncSettingsControls(){
   const box=document.getElementById('generalSettings');if(!box)return;
   const v=displaySettings();
   box.querySelector('[name="layout"]').value=v.layout;
+  const pen=box.querySelector('[name="pencil"]'); if(pen) pen.value=v.pencil;
   paintTune();
 }
 function refreshSettingsThemes(){
@@ -4363,6 +4387,8 @@ function openSettings(section='reading'){
     <section aria-labelledby="readingSettingsHeading"><h3 id="readingSettingsHeading">Reading</h3>
       <label>Question layout<select name="layout" data-action="setLayout"><option value="focused">Focused</option><option value="split">Side by side</option></select></label>
       <p>Side by side appears after answering when both columns have room to read comfortably.</p>
+      <label>Pencil tools on questions<select name="pencil" data-action="setPencil"><option value="off">Off</option><option value="on">On</option></select></label>
+      <p>On shows the pencil button on each question, for writing and highlighting with an Apple Pencil or a finger.</p>
       ${readSizeHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}
       ${readWidthHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}</section>
     <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading">Appearance</h3><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
@@ -4733,6 +4759,78 @@ function prevQ(){
   toTop();
   S.qIdx--;restoreQuizState();render();clearAnnounce();focusEl('.q-card');markShown();saveResume();
 }
+/* ── keys: the keyboard hints (.kb-keys, app/css/home-quiz.css) are offered only once a key is pressed outside a text
+   field, and the device keeps that (the script before paint reads it). An iPad with no keyboard showed "Press A to
+   answer" to a finger. A key typed into a field, a modifier alone, or a key an input method composes says nothing. ── */
+function keysSeen(ev){
+  const h=document.documentElement;
+  if(h.hasAttribute('data-keys')||!ev.isTrusted||ev.metaKey||ev.ctrlKey||ev.altKey) return;
+  if(/^(Shift|Meta|Control|Alt|AltGraph|CapsLock|Unidentified|Process|Dead)$/.test(ev.key)) return;
+  const t=ev.target; if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||''))) return;
+  h.setAttribute('data-keys','1');
+  try{localStorage.setItem('systole.keys','1');}catch(_){}
+}
+document.addEventListener('keydown',keysSeen,true);
+/* Straight to a question of the session, from the session brain's panel: as Next and Back move, by any distance. */
+function goToQ(i){
+  sbOpen=false;
+  if(!(i>=0&&i<S.questions.length)) return;
+  if(i===S.qIdx){ paintSessionBrain(); return; }
+  toTop();
+  S.qIdx=i;restoreQuizState();render();clearAnnounce();focusEl('.q-card');markShown();saveResume();
+}
+/* ── the session brain: where the reader is in the session, as a small brain (src/ui/sessionbrain.js) ──
+   The pill is drawn with the question screen, and a redraw of the screen closes the panel. The panel is opened, closed
+   and repicked in place, never by render(), which would replay the screen's entrances and drop the keyboard's place,
+   as the flag is painted in place (paintFlag). It replaced the card over the question (the owner's choice, November
+   2026): the chapter, "k of n", the way to start a resumed session over, and the progress line. */
+let sbOpen=false, sbSel=-1, sbDrawn='';
+function sessionBrainModel(){
+  const q=S.questions[S.qIdx];
+  return {n:S.questions.length,qIdx:S.qIdx,states:SessionBrain.states(S.questions,S.answers,S.qIdx,id=>S.flagged.has(id)),
+    chapter:S.chapter||(q&&q.ch)||'',resumed:!!S.resumed,open:sbOpen};
+}
+function sessionBrainHtml(){
+  sbOpen=false;
+  /* The halo brightens when the session has changed since the pill was last drawn, not at every redraw of the same. */
+  const m=sessionBrainModel(), was=sbDrawn;
+  sbDrawn=m.qIdx+':'+m.states.map(s=>s.state.charAt(0)).join('');
+  m.fresh=sbDrawn!==was;
+  return SessionBrain.pillHtml(m,e);
+}
+function paintSessionBrain(){
+  const pill=document.getElementById('sbPill'), old=document.getElementById('sbPanel');
+  if(!sbOpen||S.screen!=='quiz'||!pill){ if(old) old.remove(); if(pill) pill.setAttribute('aria-expanded','false'); return; }
+  const html=SessionBrain.panelHtml(sessionBrainModel(),sbSel,e,icon);
+  if(old) old.outerHTML=html; else pill.insertAdjacentHTML('afterend',html);
+  pill.setAttribute('aria-expanded','true');
+}
+function toggleSessionBrain(force,keepFocus){
+  sbOpen=typeof force==='boolean'?force:!sbOpen;
+  if(sbOpen) sbSel=S.qIdx;
+  paintSessionBrain();
+  if(keepFocus) return;
+  if(sbOpen) document.querySelector('#sbPanel .sb-brain')?.focus({preventScroll:true});
+  else document.getElementById('sbPill')?.focus({preventScroll:true});
+}
+/* A tap anywhere on the brain picks the question nearest it: a point is a few pixels across, and a finger is not. */
+function sessionBrainTap(el,ev){
+  const m=el.getScreenCTM&&el.getScreenCTM(); if(!m||!m.a||!m.d) return;
+  const i=SessionBrain.nearest(SessionBrain.layout(S.questions.length),(ev.clientX-m.e)/m.a,(ev.clientY-m.f)/m.d);
+  if(i<0) return;
+  sbSel=i; paintSessionBrain(); document.querySelector('#sbPanel .sb-brain')?.focus({preventScroll:true});
+}
+function sessionBrainKey(ev){
+  const k=SessionBrain.step(sbSel,ev.key,S.questions.length);
+  if(k>=0){ ev.preventDefault(); sbSel=k; paintSessionBrain(); document.querySelector('#sbPanel .sb-brain')?.focus({preventScroll:true}); return; }
+  if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); goToQ(sbSel); }
+}
+document.addEventListener('pointerdown',ev=>{
+  if(!sbOpen) return;
+  const p=document.getElementById('sbPanel'), b=document.getElementById('sbPill');
+  if(p&&!p.contains(ev.target)&&!(b&&b.contains(ev.target))) toggleSessionBrain(false,true);
+},true);
+document.addEventListener('keydown',ev=>{ if(ev.key==='Escape'&&sbOpen){ ev.preventDefault(); toggleSessionBrain(false); } });
 /* ── Flag: mark the question on screen to come back to (src/core/flagset.js). Painted in place, not by render():
    a redraw replays the card's entrance, closes a sticky note being typed into and drops the keyboard's place.
    The count is what the bank still has, which is also what the Flagged card and deck count. ── */
@@ -4878,6 +4976,11 @@ const ACTIONS={
   prevQ:()=>prevQ(),
   nextQ:()=>nextQ(),
   quizStartOver:()=>restartQuiz(),
+  /* the session brain (src/ui/sessionbrain.js): its pill opens and closes the panel; a tap on the brain picks the
+     question nearest it; Go goes to the question picked */
+  toggleSessionBrain:()=>toggleSessionBrain(),
+  sessionBrainTap:(el,ev)=>sessionBrainTap(el,ev),
+  sessionBrainGo:el=>goToQ(+el.dataset.i),
   /* the mock block (src/app/mock.js): an option carries its index and a chip or a cell its question's, read back as the
      numbers the handlers were given; Back to the block goes to the question the block is on as it stands when tapped */
   mockPick:el=>mockPick(Number(el.dataset.mi)),
@@ -4980,6 +5083,8 @@ const CHANGE_ACTIONS={
   setExamDate:el=>setExamDate(el.value),
   /* Settings' question layout */
   setLayout:el=>updateDisplaySetting('layout',el.value),
+  /* Settings' pencil tools on questions */
+  setPencil:el=>updateDisplaySetting('pencil',el.value),
 };
 Actions.install(document,CHANGE_ACTIONS,'change');
 /* What a key does, by the name of the element it is pressed on or in: the brain, whose neurons the arrows walk and Enter
@@ -4993,6 +5098,8 @@ const KEY_ACTIONS={
      its box. Enter is taken here first, as it was on the figure, so the click of a focused role="button" below does not
      open it a second time. */
   openPearlFigure:(el,ev)=>pearlFigureKey(ev,el),
+  /* the session brain: the arrows, Home and End move the question picked; Enter and Space go to it */
+  sessionBrainTap:(el,ev)=>sessionBrainKey(ev),
 };
 Actions.install(document,KEY_ACTIONS,'keydown');
 /* What a scroll does. A scroll does not bubble, so this listens as it goes down to the element that scrolled, and acts
@@ -5590,18 +5697,18 @@ function buildNav(){
         <span style="opacity:.6">·</span>
         <span style="color:${col}">${p}%</span>
       </div>`:''}
-      <button class="icon-btn${S.screen==='home'?' atlas-search':''}" data-action="openSearch" title="Search questions by topic" aria-label="Search by topic">${icon("search")}${S.screen==='home'?'<span>Search questions, topics, or figures…</span>':''}</button>
+      <button class="icon-btn${S.screen==='home'?' atlas-search':''}" data-action="openSearch" title="Search questions by topic" aria-label="Search by topic">${icon('nav-search')}${S.screen==='home'?'<span>Search questions, topics, or figures…</span>':''}</button>
       ${S.screen==='quiz'?`<button class="icon-btn" data-action="toggleFocusMode" title="Focus mode"
         aria-label="Focus mode — hide the top bar while answering"
-        aria-pressed="${S.focusMode?'true':'false'}">${icon('expand')}</button>`:''}
+        aria-pressed="${S.focusMode?'true':'false'}">${icon('nav-focus')}</button>`:''}
       ${S.screen!=='home'?`
       <button class="icon-btn" data-action="goNoteSearch" title="Search your notes"
-        aria-label="Search your notes">${icon('book')}</button>
+        aria-label="Search your notes">${icon('nav-notes')}</button>
       <!-- Study shortcuts end -->
       `:''}
-      ${S.screen==='home'?`<button class="icon-btn" data-action="toggleLightDark" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'sun':'moon')}</button>`:''}
+      ${S.screen==='home'?`<button class="icon-btn" data-action="toggleLightDark" aria-label="${themeIsDark()?'Switch to light theme':'Switch to dark theme'}">${icon(themeIsDark()?'nav-sun':'nav-moon')}</button>`:''}
       <button class="icon-btn" data-action="openSettings" title="Settings" aria-label="Settings"
-        aria-haspopup="dialog" id="settingsBtn">${icon('settings')}</button>
+        aria-haspopup="dialog" id="settingsBtn">${icon('nav-settings')}</button>
     </div>
   </nav>`;
 }
@@ -6662,8 +6769,9 @@ function buildSessions(){ return SessionsScreen.screenHtml(S,CHAPTERS,sessionsKi
 
 /* The question screen's markup, with the confidence and miss rows, is src/app/quiz.js. setConfidence() and
    setMissReason(), which repaint those rows' chips in place, stay where the rows were, with every other handler. */
+@@SLOT[src:src/ui/sessionbrain.js]@@
 @@SLOT[src:src/app/quiz.js]@@
-function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }
+function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window,sessionBrainHtml}); }
 
 /* The results screen is src/app/results.js. This hands it the page's state, the bank's chapters and their
    accents, and the four helpers its markup uses; the handlers its buttons name stay here. */
@@ -6698,6 +6806,8 @@ document.addEventListener('keydown',ev=>{
   if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||ev.target.isContentEditable)return;
   // A focused conversation owns its reading keys, including Space and arrows.
   if(ev.target.closest&&ev.target.closest('#aiBody'))return;
+  // So does the session brain's panel: its arrows move the question picked (KEY_ACTIONS), not the question on screen.
+  if(ev.target.closest&&ev.target.closest('#sbPanel'))return;
   // Figure and related-question dialogs own their keys, not the quiz behind them.
   if(figPs||document.querySelector('.peek-open'))return;
   if(S.screen==='mock'){ mockKey(ev); return; }

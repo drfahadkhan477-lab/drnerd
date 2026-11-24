@@ -160,7 +160,7 @@ fs.writeFileSync(OUT, SCAFFOLD
       noEcho: !!document.querySelector('.nav') && !document.querySelector('.nav [onclick="goEcho()"], .nav [data-action="goEcho"]') } : null;
   });
   ok('the nav has a Search-your-notes button', !!btn && btn.label === 'Search your notes', btn ? btn.label : 'missing');
-  ok('with the book glyph, evaluated rather than left as text', !!btn && btn.icon === 'book', btn ? String(btn.icon) : '');
+  ok('with the notes glyph (the bar's own two-tone book), evaluated rather than left as text', !!btn && btn.icon === 'nav-notes', btn ? String(btn.icon) : '');
   ok('and Echo is not in the bar beside it: Labs has it', !!btn && btn.noEcho);
   await page.click('.nav [data-action="goNoteSearch"]');
   const screen = await page.evaluate(() => ({ s: S.screen, field: !!document.querySelector('[data-ns-q]'),

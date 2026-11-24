@@ -20,7 +20,8 @@
  *     var(--teal2) or var(--accent) (the scan reads that form; the chapter icons' color:var(--accent,var(--teal)) is a
  *     graphic's colour, held to 3:1, and is not read), and in each of those states the ink clears 4.5:1 on the page, a card, the raised surface, the
  *     accent's tint (--teal4) and the green tint some of it sits on;
- *   · real accent and chapter text, in every state: a chapter's badge on the quiz and its label in search results, a
+ *   · real accent and chapter text, in every state: the session's place on the quiz (its pill) and its chapter and counts
+ *     (its panel, opened), a chapter's label in search results, a
  *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, a chapter
  *     tile's percentage (in its own chapter's ink, not the accent's), and the Echo screen's selected tab (text on the ink
  *     rather than in it, with no glass sheen under it); a chapter with no colour of its own takes the accent ink;
@@ -217,8 +218,13 @@ const TOOLS = () => {
         const c = T.parse(getComputedStyle(el).color), g = T.ground(el), seen = [0, 1, 2].map(i => c[i] * c[3] * a + g[i] * (1 - c[3] * a));
         return { name, ratio: Math.round(T.contrast(seen, g) * 100) / 100 }; }); }, probes);
     const screens = [
-      ['the quiz, a question with a figure', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, null,
-        [['a chapter\'s badge', '.ch-badge'], ['a figure\'s zoom hint', '.fig-zoom-hint']]],
+      /* The chapter's badge over the question became the session brain (November 2026): its pill says the place, and its
+         panel, opened, the chapter and what was answered. Both are dark in every theme; each paints a colour under its
+         gradient, its lighter end, which is the ground read here. */
+      ['the quiz, a question with a figure', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, () => { toggleSessionBrain(true, true); },
+        [['the session\'s place, on its pill', '#sbPill .q-counter'], ['its chapter, in its panel', '#sbPanel .sb-title'],
+         ['the right answers it counts', '#sbPanel .sb-chip[data-state="right"]'], ['the wrong ones', '#sbPanel .sb-chip[data-state="wrong"]'],
+         ['a figure\'s zoom hint', '.fig-zoom-hint']]],
       ['the search screen', () => { openSearch(); }, () => {
         /* A word the bank's own questions hold, so there are results on any bank. */
         let w = null;

@@ -282,16 +282,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return !!c && c.textContent.trim() === (S.qIdx + 1) + ' of ' + S.questions.length + ' in this session';
   }, null, { timeout: 15000 });
   await settled();
+  /* Start over is in the session brain's panel (the owner's choice, November 2026): opened here as its pill opens it. */
   const chrome = await page.evaluate(() => ({
-    hasRestart: !!document.querySelector('.q-restart'),
+    hasRestart: (toggleSessionBrain(true), !!document.querySelector('#sbPanel .q-restart')),
     live: (document.getElementById('srLive') || {}).textContent || '',
   }));
   ok('a resumed quiz shows the restart control', chrome.hasRestart);
   ok('and says out loud that it resumed', /Resumed at question/.test(chrome.live), chrome.live);
   await page.evaluate(() => { restartQuiz(); });
   await settled();
-  const freshChrome = await page.evaluate(() => !!document.querySelector('.q-restart'));
-  ok('a fresh quiz does not', freshChrome === false);
+  const freshChrome = await page.evaluate(() => (toggleSessionBrain(true), { panel: !!document.getElementById('sbPanel'), restart: !!document.querySelector('#sbPanel .q-restart') }));
+  ok('a fresh quiz does not: its panel opens without one', freshChrome.panel === true && freshChrome.restart === false, JSON.stringify(freshChrome));
 
   head('a deck from search, a jump or Apex starts clean, and leaves saved places alone');
   /* quizFromSearch, jumpTo and Apex's start_quiz (flushNav) dealt their decks
