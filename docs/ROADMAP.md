@@ -427,6 +427,11 @@ Then the mounts: `mountPhysio()`, `mountTwelve()` and `mountLab()` are `RhythmLa
 handed the page's document, theme, diagrams' code, next frame, screen and Wiggers' load
 through `LAB_ENV`. The Rhythm Lab's wiring is then the module's; the page keeps its names,
 one line each, the views of `LAB`, `LAB_ENV`, and the loads it shares with other screens.
+Then Echo Studio's: the four listeners the page put on the document for it (a tab or a disease, a
+phase, the keys on the tabs, typing in a field) and `echoRepaintResults()` are
+`src/app/echoscreen.js`'s `EchoScreen.install` and `repaint`, handed `ECHO_ENV`; the module is
+written into the page's own script, after the two slots the split build lifts, because the
+listeners are needed before EchoUI is loaded (held by `verify-echoscreen-pure`).
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -2776,63 +2776,14 @@ function goEcho(){
   S.screen = 'echo'; render();
 }
 
-function echoRepaintResults(){
-  var out = document.querySelector('.echo-out');
-  if (out) out.innerHTML = EchoUI.resultsHtml(ECHO.fields);
-}
-
-/* Delegated once, from the document, so a render that replaces the panel
-   cannot leave a dead listener behind or need a live one re-attached. */
-document.addEventListener('click', function(e){
-  var el = e.target && e.target.closest ? e.target.closest('[data-echo-tab],[data-echo-disease]') : null;
-  if (!el) return;
-  if (el.hasAttribute('data-echo-tab')) ECHO.tab = EchoUI.tabId(el.getAttribute('data-echo-tab'));
-  else ECHO.disease = el.getAttribute('data-echo-disease');
-  var attribute = el.hasAttribute('data-echo-tab') ? 'data-echo-tab' : 'data-echo-disease';
-  var value = el.getAttribute(attribute);
-  render();
-  var replacement = document.querySelector('[' + attribute + '="' + value + '"]');
-  if (replacement) replacement.focus();
-});
-
-document.addEventListener('click', function(e){
-  var button = e.target && e.target.closest && e.target.closest('[data-echo-phase]');
-  if (!button) return;
-  ECHO.phase = button.getAttribute('data-echo-phase');
-  var cycle = document.querySelector('.echo-cycle');
-  if (cycle) cycle.setAttribute('data-phase', ECHO.phase);
-  document.querySelectorAll('[data-echo-phase]').forEach(function(b){
-    b.setAttribute('aria-pressed', String(b === button));
-  });
-});
-
-// Manual tab activation: arrows move focus, Enter/Space use the native button.
-document.addEventListener('keydown', function(e){
-  var el = e.target;
-  if (!el || !el.matches || !el.matches('[data-echo-tab]')) return;
-  var tabs = Array.prototype.slice.call(el.parentNode.querySelectorAll('[data-echo-tab]'));
-  var i = tabs.indexOf(el), next;
-  if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
-  else if (e.key === 'ArrowLeft') next = (i + tabs.length - 1) % tabs.length;
-  else if (e.key === 'Home') next = 0;
-  else if (e.key === 'End') next = tabs.length - 1;
-  else return;
-  e.preventDefault();
-  tabs.forEach(function(t, n){ t.tabIndex = n === next ? 0 : -1; });
-  tabs[next].focus();
-});
-
-document.addEventListener('input', function(e){
-  var el = e.target;
-  if (!el || !el.getAttribute || !el.hasAttribute('data-echo-field')) return;
-  var id = el.getAttribute('data-echo-field');
-  var n = parseFloat(el.value);
-  /* Absent, not zero. An empty field means "not measured", and the module
-     below reports that as missing rather than computing from a nought. */
-  if (typeof n === 'number' && isFinite(n)) ECHO.fields[id] = n;
-  else delete ECHO.fields[id];
-  echoRepaintResults();
-});
+/* Echo Studio's listeners and the repaint of its results are src/app/echoscreen.js's. It is written here, in the page's
+   own script, because the split build lifts the two slots above into vendor/ and loads them when the screen is first
+   drawn, while the listeners are on the document from the start. The page lends it ECHO, EchoUI once it is there, its
+   render() and its repaint, each asked when it is used. */
+@@SLOT[src:src/app/echoscreen.js]@@
+const ECHO_ENV={echo:()=>ECHO,ui:()=>typeof EchoUI!=='undefined'?EchoUI:undefined,render:()=>render(),repaint:()=>echoRepaintResults()};
+function echoRepaintResults(){ EchoScreen.repaint(document,ECHO_ENV); }
+EchoScreen.install(document,ECHO_ENV);
 
 /* ══════════ Search your notes — see src/core/notesearch.js ══════════ */
 @@SLOT[src:src/core/notesearch.js]@@
