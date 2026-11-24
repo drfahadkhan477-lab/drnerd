@@ -309,24 +309,43 @@ async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {})
      · on Windows, a theme change left 34 transitions of -webkit-text-fill-color, finished at 0 of 0 ms, listed for
        good (the private gate of 24 November 2026, build 446): a wait for the list to empty never ended, and
        verify-contrast stopped on its first screen having read nothing.
-   A finished transition is first seen finished in one call of the predicate and held to the grace from then, in a
-   WeakMap on the page, so a later call does not start its clock again. A running or pending one is never at rest. */
+   Rerun there with a first version of this grace, the list had grown to 100 and the wait still never ended. That
+   version had two ways to hold it, and which one did is not known, so both are closed:
+     · it returned at the first transition still inside its grace, so the next one's clock had not started: the graces
+       ran one after another, and 34 of them are 34 seconds, past the timeout. Every transition listed is timed in
+       every look here, so transitions finished together share one grace;
+     · it timed each transition object, so a transition the engine lists as a new object at each look, or makes again,
+       started its clock again each time. The grace is timed per element, pseudo-element and property here.
+   The clock for a place starts when a finished transition is first seen there, in a WeakMap on the page, so a later look
+   does not start it again; a running or pending transition there holds the wait and clears the clock, so the next
+   finish there has its full grace. The clocks are new at every wait: kept from the wait before, a place's clock had run
+   out before the theme changed, and on Linux WebKit verify-a11y read Echo's title in Daylight in Midnight's colour
+   (1.09:1), the very case the grace is for. */
 const REST_GRACE = 1000;
 async function atRest(page, opts = {}) {
   const grace = opts.grace === undefined ? REST_GRACE : opts.grace;
   try {
-    await settled(page, grace => {
-      const seen = window.__restSeen || (window.__restSeen = new WeakMap());
+    await settled(page, ([grace, call]) => {
+      if (window.__restCall !== call || !window.__restSeen) { window.__restCall = call; window.__restSeen = new WeakMap(); }
+      const seen = window.__restSeen;
+      const clock = a => {
+        const t = a.effect && a.effect.target;
+        if (!t) return { map: seen, key: a, own: true };
+        if (!seen.has(t)) seen.set(t, new Map());
+        return { map: seen.get(t), key: (a.effect.pseudoElement || '') + '|' + a.transitionProperty };
+      };
       const now = performance.now();
+      let still = true;
       for (const a of document.getAnimations()) {
         if (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition) {
-          if (a.playState !== 'finished') return false;
-          if (!seen.has(a)) seen.set(a, now);
-          if (now - seen.get(a) < grace) return false;
-        } else if (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity) return false;
+          const c = clock(a);
+          if (a.playState !== 'finished') { if (!c.own) c.map.delete(c.key); still = false; continue; }
+          if (!c.map.has(c.key)) c.map.set(c.key, now);
+          if (now - c.map.get(c.key) < grace) still = false;
+        } else if (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity) still = false;
       }
-      return true;
-    }, { arg: grace, timeout: opts.timeout || SETTLE_TIMEOUT, label: opts.label || 'the screen\'s entrances and the theme\'s transitions to end' });
+      return still;
+    }, { arg: [grace, String(Math.random())], timeout: opts.timeout || SETTLE_TIMEOUT, label: opts.label || 'the screen\'s entrances and the theme\'s transitions to end' });
   } catch (e) {
     /* Says what never stopped, by element and property and never by text, so a run on another machine can be acted on. */
     throw new Error(`${e.message} ${await stillMoving(page)}`);
