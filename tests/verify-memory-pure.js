@@ -174,12 +174,19 @@ head('grounded mode keeps who is taught, and withholds the key');
     cut(APP, 'function apexStandingLines(){', '\nfunction aiCtx(q){'),
     cut(APP, 'function aiCtx(q){', '\nconst CHIPS=['),
   ].join('\n');
+  /* The commentary's sentinel has to be something the prompt cannot hold by chance. A memory's id goes into the prompt,
+     and it is 'm', the clock in base 36 and three random base-36 characters (src/core/memory.js); the fence is base 36
+     in capitals. The sentinel was kz9, which an id can spell: at 2026-11-24T17:38:30.453Z the clock part was mwuzakz9,
+     and CI's logic job said the commentary had leaked when it had not. The memory is made at that instant here, so a
+     sentinel an id can spell fails every run; the sentinel holds an underscore, which neither an id nor a fence has. */
+  const SENTINEL = 'kz_9';
   const { M } = fresh();
-  M.add('Sitting the boards in October 2026.', 'fact', { src: 'tool', said: true });
+  const clock = Date.now; Date.now = () => Date.parse('2026-11-24T17:38:30.453Z');
+  try { M.add('Sitting the boards in October 2026.', 'fact', { src: 'tool', said: true }); } finally { Date.now = clock; }
   const q = { id: 'ZZ_7', ch: 'Invented chapter', n: 7, ci: 2,
     s: 'An invented stem: transthyretin amyloidosis, tafamidis or not.',
     o: ['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((t, i) => ({ l: 'ABCDE'[i], t: t + 'opt', p: 10 + i })),
-    ex: 'Invented commentary, keyed sentinel kz9.' };
+    ex: 'Invented commentary, keyed sentinel ' + SENTINEL + '.' };
   /* The world the answer-aware parts read: no block open, one question answered, the review log, and the module that turns them into
      lines. The page's own helpers run over it; nothing here is a copy of what they do. */
   const ctx = { ALL_Q: [q], REF: [{ id: 'r1', title: 'Amyloidosis note', tags: '', body: 'Apical sparing on strain is the amyloidosis pattern.' }],
@@ -217,6 +224,7 @@ head('grounded mode keeps who is taught, and withholds the key');
   ctx.AI_GROUNDED = true;
   const g = ctx.aiCtx(q), gTool = tool();
   ok('grounded mode is genuinely on', /commentary for this item is withheld/.test(g));
+  ok('and the memory in it has the id made at that instant, which spells the old sentinel', /\[m[a-z0-9]*kz9[a-z0-9]*\]/.test(g), (g.match(/\[m[a-z0-9]{8,}\]/) || ['no memory id'])[0]);
   const beforeItem = /^INVENTED LEARNING PROFILE\n\n<<<MEMORY-([A-Z0-9]{12})>>>[\s\S]*?WHAT YOU ALREADY KNOW ABOUT THIS FELLOW[\s\S]*?boards in October 2026\.[\s\S]*?<<<\/MEMORY-\1>>>\n\n/;
   const oldFence = ctx.refFence();
   ctx.refFenceRoll();
@@ -228,11 +236,11 @@ head('grounded mode keeps who is taught, and withholds the key');
        && browsing.match(beforeItem)?.[1] !== oldFence);
   ok('every option is there as its letter and text alone: none marked as the key, none with how many candidates chose it',
      [...'ABCDE'].every(L => BARE_GROUNDED.test(line(g, L))) && !/← CORRECT|of candidates chose/.test(g), line(g, 'C').trim());
-  ok('and the commentary is not in it', !/kz9/.test(g) && !/OFFICIAL ACC COMMENTARY/.test(g));
+  ok('and the commentary is not in it', !g.includes(SENTINEL) && !/OFFICIAL ACC COMMENTARY/.test(g));
   ok('the bank tool returns the note, fenced',
      /<<<NOTE-[A-Z0-9]{12}>>>/.test(gTool.result) && /Amyloidosis note/.test(gTool.result), kinds(gTool));
   ok('and no bank item: no answer, no commentary, no id',
-     !/Correct:|Commentary:|kz9|ZZ_7/.test(gTool.result) && (gTool.cite || []).every(c => c.kind === 'r'), kinds(gTool));
+     !/Correct:|Commentary:|ZZ_7/.test(gTool.result) && !gTool.result.includes(SENTINEL) && (gTool.cite || []).every(c => c.kind === 'r'), kinds(gTool));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
