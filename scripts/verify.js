@@ -269,7 +269,7 @@ const SUITES = [
      drift it guards is silent in the worst way for a study aid: a rhythm added
      to the picker table without its generator draws a NORMAL beat under a
      pathology's name and rate. */
-  ['rhythms-pure', 'every arrhythmia the picker offers has something that draws it'],
+  ['rhythms-pure', 'every arrhythmia the picker offers has something that draws it, and the base engine draws a beat, its rhythms and the page table as written'],
   /* The suite runs on Chromium; the app runs on an iPad. A regex lookbehind is
      a parse-time SyntaxError below Safari 16.4 — a dead <script> block, not a
      caught exception — and this app lost most of itself to one once, with CI
