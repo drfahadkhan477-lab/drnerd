@@ -404,7 +404,8 @@ pen's width (held by `verify-pencil-pure`).
 Then the screens' wiring, starting with the Rhythm Lab. First its state: thirteen script-level names
 (`labKind`, `physio`, `physioView`, `twelveLead`…) are one object, `LAB`, made by
 `RhythmLabScreen.state()` from what was saved, with each old name kept as a view of its field, as
-`APEX_TURN` did for the turn.
+`APEX_TURN` did for the turn. Then the cycle panel's caption: `physioNoteHtml()` is
+`RhythmLabScreen.noteHtml()`, handed what the panel chose and the beat and phase to ask.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

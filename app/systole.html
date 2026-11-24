@@ -1895,52 +1895,10 @@ function setPhysioPlaying(on){
   });
 }
 
-function physioNoteHtml(){
-  if(physioView==='pv'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
-    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The dashed loop is the normal heart's. Computed by the circulation model.`;
-  if(physioView==='pv'){
-    const iv=Physio.INTERVENTIONS.find(x=>x.id===physioIv)||Physio.INTERVENTIONS[0];
-    const y=physio&&physio.cycle&&physio.cycle();
-    /* Drawn by the engine: the resting loop's figures are the engine's own, not physio.js's. */
-    if(y&&y.loop){
-      const l=y.loop, note=iv.id==='base'?`Ees ${l.ees.toFixed(1)} mmHg/mL, Ea ${l.ea.toFixed(2)}, EDV ${l.edv.toFixed(0)} mL. Everything else is measured off this.`:iv.note;
-      return `<b>${e(iv.label)}</b> ${e(note)} Computed by the circulation model.`;
-    }
-    return `<b>${e(iv.label)}</b> ${e(iv.note)}`;
-  }
-  if(physioView==='curves')
-    return `<b>Two curves, one intersection.</b> Cardiac output is not set by the heart alone —
-      it is set where what the heart can pump meets what the circulation returns. That is why an
-      inotrope moves it so little, and why volume moves it so much in a failing ventricle.`;
-  if(physioView==='flow'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
-    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} Flow below the line runs back through a leaking valve. Computed by the circulation model.`;
-  if(physioView==='flow')
-    return `<b>Flow follows the gradient.</b> The left coronary bed is squeezed shut by the muscle
-      around it during systole and fills in diastole; the right is perfused throughout, because RV
-      cavity pressure never rises far. Shorten diastole and you starve the left side first.`;
-  if(physioView==='right'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
-    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The splits are measured where the pressures cross. Computed by the circulation model.`;
-  if(physioView==='right')
-    return `<b>Same cycle, quarter the pressure, different timing.</b> The right ventricle has
-      about 10 mmHg to overcome instead of 80, so it opens earlier and shuts later — which is the
-      physiological splitting of the second heart sound, not a separate phenomenon to memorise.`;
-  if(physioView==='conduction')
-    return `<b>The pause is the point.</b> SA to atria is fast — that is the P wave. Atria to
-      ventricle is not: the AV node deliberately slows conduction so the atria finish emptying
-      into the ventricles before they contract, which is what the isoelectric PR segment actually
-      is. Lose that delay (WPW's accessory pathway) and you lose the coordination it buys.`;
-  if(physioView==='coronary'&&physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion])
-    return `<b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(PHYSIO_LESION_NOTE[physioLesion])} The glow is on a scale that holds the normal heart's peak, so a starved bed reads dimmer. Computed by the circulation model.`;
-  if(physioView==='coronary')
-    return `<b>The left ventricle squeezes its own arteries.</b> Intramyocardial pressure in
-      systole compresses the left coronary bed, so most left coronary flow arrives in diastole — and
-      the subendocardium, where that compression is greatest, is where ischaemia shows first. The
-      right coronary keeps flowing through systole because RV pressure stays low. Tachycardia
-      shortens diastole, and with it the left ventricle's perfusion time.`;
-  const ph=physioPhaseNow();
-  const lesion=physioLesion!=='normal'&&PHYSIO_LESION_NOTE[physioLesion];
-  return `<b>${e(ph.name)}.</b> ${e(ph.blurb)}`+(lesion?`<br><b>${e(PHYSIO_LESIONS.find(x=>x[0]===physioLesion)[1])}.</b> ${e(lesion)} Computed by the circulation model.`:'');
-}
+/* The cycle panel's caption is src/app/rhythmlab.js's; this hands it what the panel has chosen. */
+function physioNoteHtml(){ return RhythmLabScreen.noteHtml({view:physioView,lesion:physioLesion,iv:physioIv,
+  Physio:typeof Physio!=='undefined'?Physio:undefined,LESIONS:PHYSIO_LESIONS,NOTES:PHYSIO_LESION_NOTE,e,
+  cycle:()=>physio&&physio.cycle&&physio.cycle(),phase:()=>physioPhaseNow()}); }
 /* The cycle's diagrams (src/ui/wiggers.js), which the split build lifts into vendor/ and names in WIG_SRC (scripts/
    build-pwa.js, 3.748). Resolves true once Wiggers is there, loading it the first time it is asked for; false where it
    cannot be had. Shared by the cycle panel and ambient mode, so it is loaded once. A failed load is not remembered. */

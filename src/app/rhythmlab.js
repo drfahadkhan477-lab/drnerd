@@ -170,5 +170,60 @@ function state(store, VIEWS, LESIONS){
     playing:null, twelve:null, lead:null, noteAt:0, notePhase:'' };
 }
 
-root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state };
+/* ── the cycle panel's caption ──
+   It was the page's physioNoteHtml(), which keeps its name as one line handing over what this reads: the view, the
+   lesion and the intervention chosen, Physio, the lesions and their notes (PHYSIO_LESION_NOTE stays the page's, where
+   tests/verify-circulation-pure.js holds each note's valve area to the circulation presets), e, and two functions it
+   asks only where it needs them: cycle() (the diagram's beat, in the PV loop) and phase() (the phase now, in Wiggers).
+
+     noteHtml({view, lesion, iv, cycle, phase, Physio, LESIONS, NOTES, e})   the caption's markup, as a string */
+function noteHtml(o){
+  const {view,lesion,iv,cycle,phase,Physio,LESIONS,NOTES,e}=o;
+  if(view==='pv'&&lesion!=='normal'&&NOTES[lesion])
+    return `<b>${e(LESIONS.find(x=>x[0]===lesion)[1])}.</b> ${e(NOTES[lesion])} The dashed loop is the normal heart's. Computed by the circulation model.`;
+  if(view==='pv'){
+    const it=Physio.INTERVENTIONS.find(x=>x.id===iv)||Physio.INTERVENTIONS[0];
+    const y=cycle();
+    /* Drawn by the engine: the resting loop's figures are the engine's own, not physio.js's. */
+    if(y&&y.loop){
+      const l=y.loop, note=it.id==='base'?`Ees ${l.ees.toFixed(1)} mmHg/mL, Ea ${l.ea.toFixed(2)}, EDV ${l.edv.toFixed(0)} mL. Everything else is measured off this.`:it.note;
+      return `<b>${e(it.label)}</b> ${e(note)} Computed by the circulation model.`;
+    }
+    return `<b>${e(it.label)}</b> ${e(it.note)}`;
+  }
+  if(view==='curves')
+    return `<b>Two curves, one intersection.</b> Cardiac output is not set by the heart alone —
+      it is set where what the heart can pump meets what the circulation returns. That is why an
+      inotrope moves it so little, and why volume moves it so much in a failing ventricle.`;
+  if(view==='flow'&&lesion!=='normal'&&NOTES[lesion])
+    return `<b>${e(LESIONS.find(x=>x[0]===lesion)[1])}.</b> ${e(NOTES[lesion])} Flow below the line runs back through a leaking valve. Computed by the circulation model.`;
+  if(view==='flow')
+    return `<b>Flow follows the gradient.</b> The left coronary bed is squeezed shut by the muscle
+      around it during systole and fills in diastole; the right is perfused throughout, because RV
+      cavity pressure never rises far. Shorten diastole and you starve the left side first.`;
+  if(view==='right'&&lesion!=='normal'&&NOTES[lesion])
+    return `<b>${e(LESIONS.find(x=>x[0]===lesion)[1])}.</b> ${e(NOTES[lesion])} The splits are measured where the pressures cross. Computed by the circulation model.`;
+  if(view==='right')
+    return `<b>Same cycle, quarter the pressure, different timing.</b> The right ventricle has
+      about 10 mmHg to overcome instead of 80, so it opens earlier and shuts later — which is the
+      physiological splitting of the second heart sound, not a separate phenomenon to memorise.`;
+  if(view==='conduction')
+    return `<b>The pause is the point.</b> SA to atria is fast — that is the P wave. Atria to
+      ventricle is not: the AV node deliberately slows conduction so the atria finish emptying
+      into the ventricles before they contract, which is what the isoelectric PR segment actually
+      is. Lose that delay (WPW's accessory pathway) and you lose the coordination it buys.`;
+  if(view==='coronary'&&lesion!=='normal'&&NOTES[lesion])
+    return `<b>${e(LESIONS.find(x=>x[0]===lesion)[1])}.</b> ${e(NOTES[lesion])} The glow is on a scale that holds the normal heart's peak, so a starved bed reads dimmer. Computed by the circulation model.`;
+  if(view==='coronary')
+    return `<b>The left ventricle squeezes its own arteries.</b> Intramyocardial pressure in
+      systole compresses the left coronary bed, so most left coronary flow arrives in diastole — and
+      the subendocardium, where that compression is greatest, is where ischaemia shows first. The
+      right coronary keeps flowing through systole because RV pressure stays low. Tachycardia
+      shortens diastole, and with it the left ventricle's perfusion time.`;
+  const ph=phase();
+  const lesionNote=lesion!=='normal'&&NOTES[lesion];
+  return `<b>${e(ph.name)}.</b> ${e(ph.blurb)}`+(lesionNote?`<br><b>${e(LESIONS.find(x=>x[0]===lesion)[1])}.</b> ${e(lesionNote)} Computed by the circulation model.`:'');
+}
+
+root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state, noteHtml };
 })(typeof window !== 'undefined' ? window : this);

@@ -219,6 +219,44 @@ head('the lab\'s state: one object, read from what was saved');
   ok('and every field the module makes has its view', Object.values(VIEWS).sort().join(' ') === Object.keys(fresh).sort().join(' '), Object.keys(fresh).sort().join(' '));
 }
 
+head('the cycle panel\'s caption');
+{
+  const PH = { INTERVENTIONS: [{ id: 'base', label: 'Rest', note: 'At rest.' }, { id: 'ino', label: 'Inotrope', note: 'Stronger.' }] };
+  const LS = [['normal', 'Normal'], ['as', 'AS'], ['hfref', 'HFrEF']], NOTES = { as: 'A narrow valve.' };
+  let asked = [];
+  const note = (o, beat, ph) => { asked = []; try { return R0(Object.assign({ view: 'wiggers', lesion: 'normal', iv: 'base', Physio: PH, LESIONS: LS, NOTES, e: x => 'E(' + x + ')',
+    cycle: () => (asked.push('cycle'), beat === undefined ? null : beat), phase: () => (asked.push('phase'), ph || { name: 'Ejection', blurb: 'The valve is open.' }) }, o)); } catch (err) { return 'THREW ' + err.message; } };
+  const R0 = o => L.noteHtml(o);
+  ok('in Wiggers: the phase now, by name, and what happens in it', note({}) === '<b>E(Ejection).</b> E(The valve is open.)' && J(asked) === J(['phase']), note({}));
+  ok('and a lesion that has a note says it after, by name', note({ lesion: 'as' }) === '<b>E(Ejection).</b> E(The valve is open.)<br><b>E(AS).</b> E(A narrow valve.) Computed by the circulation model.',
+     note({ lesion: 'as' }));
+  ok('a lesion with no note, or one the lab does not have, adds nothing', note({ lesion: 'hfref' }) === note({}) && note({ lesion: 'gone' }) === note({}));
+  ok('in the PV loop a lesion with a note is that note, measured against the normal heart, and neither beat nor phase is asked',
+     note({ view: 'pv', lesion: 'as' }) === '<b>E(AS).</b> E(A narrow valve.) The dashed loop is the normal heart\'s. Computed by the circulation model.' && J(asked) === J([]),
+     note({ view: 'pv', lesion: 'as' }));
+  /* The engine's resting loop: Ees 2 to one decimal, Ea 1.5 to two, EDV 120.4 to none. */
+  ok('at rest with the engine\'s beat, the loop\'s own figures', note({ view: 'pv' }, { loop: { ees: 2, ea: 1.5, edv: 120.4 } }) ===
+     '<b>E(Rest)</b> E(Ees 2.0 mmHg/mL, Ea 1.50, EDV 120 mL. Everything else is measured off this.) Computed by the circulation model.' && J(asked) === J(['cycle']),
+     note({ view: 'pv' }, { loop: { ees: 2, ea: 1.5, edv: 120.4 } }));
+  ok('with an intervention, its own note; without the engine\'s beat, or with a beat that has no loop, the note alone; an unknown one is the first',
+     note({ view: 'pv', iv: 'ino' }, { loop: { ees: 2, ea: 1.5, edv: 120 } }) === '<b>E(Inotrope)</b> E(Stronger.) Computed by the circulation model.'
+     && note({ view: 'pv', iv: 'ino' }) === '<b>E(Inotrope)</b> E(Stronger.)' && note({ view: 'pv', iv: 'ino' }, {}) === '<b>E(Inotrope)</b> E(Stronger.)'
+     && note({ view: 'pv', iv: 'gone' }) === '<b>E(Rest)</b> E(At rest.)',
+     note({ view: 'pv', iv: 'gone' }));
+  ok('Flow, the right heart and Coronary say a lesion\'s note with what they show of it, and their own words without one',
+     /^<b>E\(AS\)\.<\/b> E\(A narrow valve\.\) Flow below the line runs back/.test(note({ view: 'flow', lesion: 'as' })) && /^<b>Flow follows the gradient\.<\/b>/.test(note({ view: 'flow' }))
+     && /The splits are measured where the pressures cross\./.test(note({ view: 'right', lesion: 'as' })) && /^<b>Same cycle, quarter the pressure/.test(note({ view: 'right' }))
+     && /The glow is on a scale that holds the normal heart/.test(note({ view: 'coronary', lesion: 'as' })) && /^<b>The left ventricle squeezes its own arteries\.<\/b>/.test(note({ view: 'coronary' })));
+  ok('Curves and Conduction say their own words, whatever the lesion, and ask nothing', /^<b>Two curves, one intersection\.<\/b>/.test(note({ view: 'curves', lesion: 'as' })) && J(asked) === J([])
+     && /^<b>The pause is the point\.<\/b>/.test(note({ view: 'conduction', lesion: 'as' })));
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const pg = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => pg.split(t).length - 1;
+  ok('the page\'s physioNoteHtml() hands over what the panel chose, its tables, and the beat and phase to ask, and keeps no copy of the words',
+     n("function physioNoteHtml(){ return RhythmLabScreen.noteHtml({view:physioView,lesion:physioLesion,iv:physioIv,") === 1
+     && n("cycle:()=>physio&&physio.cycle&&physio.cycle(),phase:()=>physioPhaseNow()}); }") === 1 && n('The dashed loop is the normal heart') === 0 && n('Two curves, one intersection') === 0);
+}
+
 head('the page hands over what it has, and keeps what is chosen');
 {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
