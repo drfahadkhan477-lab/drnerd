@@ -139,7 +139,7 @@ const SUITES = [
      says the width curve "can be unit-tested without a canvas or a real
      Pencil in the room". Nobody had. Only verify-polish touched it, and
      that needs a real build. */
-  ['pencil-pure',   'the Pencil width curve only ever broadens with pressure or tilt, and stays in range'],
+  ['pencil-pure',   'the Pencil width curve only ever broadens with pressure or tilt, and stays in range, and a pen stroke outline hands the library points placed in the box at their share of the widest width'],
   /* The pure logic core for a new feature (the Living Diagram — an ambient
      home-screen mode composing the heart, the 12-lead and the PV loop when
      nobody has touched the screen in a while), written alongside the module

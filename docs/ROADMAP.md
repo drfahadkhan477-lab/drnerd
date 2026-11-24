@@ -100,6 +100,15 @@ and the Illustration and Pause controls sit over the lower half of the 3D heart.
 Put the strip beside or below the heart, or size the heart's box to clear it.
 Coordinate with PR #339. *Sonnet* (Opus if it becomes a layout-system change).
 
+*Settled by the Home rework that #339 carried, measured 24 November 2026 in WebKit
+and Chromium on the synthetic build.* On an iPad on its side the trace is a strip
+below the heart and meets none of it, and the Illustration and Pause controls are
+in the heart's menu, shown only when the heart is tapped. Upright, the trace runs
+the hero's width under the words and passes behind the heart at its right
+(`app/css/home.css`, "An iPad upright"): the heart is the one drawn where they
+meet. `verify-home` holds both, at 1366x1024 and 1194x834 on its side and at
+1024x1366 and 834x1194 upright.
+
 **F5 — A storage premise to re-check.** `src/core/store.js` (the paragraph ending
 near line 93) says the keys moved to IndexedDB are protected from eviction.
 WebKit's seven-day cap on script-writable storage, for a site used in a Safari
@@ -399,6 +408,8 @@ Then which figures open together: `FIG_GROUP`, `figFromEl()` and the gathering i
 Then the cardiac waveform engine: the base `RHYTHMS`, `gauss()`, `beatMV()` and
 `rhythmMV()` are `src/core/rhythms.js`'s `Rhythms` (held by `verify-rhythms-pure`); the page
 keeps `RHYTHMS` (the base with the extras merged in), `RHYTHM_KEYS` and `rhythmMV()`.
+Then a pen stroke's outline: `penOutline()` is `src/ui/pencil.js`'s `PencilFX.outline`, handed the
+pen's width (held by `verify-pencil-pure`).
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by
@@ -1075,7 +1086,6 @@ same: they are the project's, not a reminder.
 
 | Item | Model | Effort | Note |
 | --- | --- | --- | --- |
-| F4 | `sonnet` | `medium` | Only if PR #339 does not already settle it; check its head first |
 | F9 | (you) | | A decision, not a task; A1 follows if you change provider or tier |
 | E1 map and first two moves | `fable` | `xhigh` | The dependency map of the shell's globals; one module per PR |
 | E1 each screen after | `opus` | `high` | Follow E1's map; Chromium and WebKit before and after, measured |
