@@ -61,6 +61,13 @@ const SCREENS = [
   ['the notes', () => { goRefs(); }],
   ['the Rhythm Lab', () => { goLab(); }],
   ['Sessions', () => { goSessions(); }],
+  /* The screens the UI revamp's capsule reaches that were not read here before (docs/UI-REVAMP.md, T5.1): each wears the
+     capsule in its header, and Echo's ground was changed. */
+  ['Echo', () => { goEcho(); }],
+  ['the Practice lab', () => { goPractice(); }],
+  ['Search', () => { openSearch(); }],
+  ['Annotations', () => { goAnnotations(); }],
+  ['Memory', () => { goMemory(); }],
   /* The clock is stopped once the block is on screen, so a slow run cannot hand it in while the page is photographed. */
   /* A long stem pushes the options below the fold: the chosen one is scrolled to once the screen is drawn, and must be there. */
   ['the mock exam, an answer chosen', () => { if (S.mock) resumeMock(); else startMock(); mockStopTicker(); if (S.mock.sel[S.mock.i] !== 1) mockPick(1); },
