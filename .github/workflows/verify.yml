@@ -156,7 +156,7 @@ jobs:
         run: node tests/verify-profile-pure.js
       - name: imported figures survive a note list that has not loaded (51 checks)
         run: node tests/verify-refassets-pure.js
-      - name: every arrhythmia the picker offers has something that draws it (23 checks)
+      - name: every arrhythmia the picker offers has something that draws it, and the base engine draws a beat, its rhythms and the page's table as written (23 checks)
         run: node tests/verify-rhythms-pure.js
       - name: nothing in src/ uses syntax an iPad cannot parse (49 checks)
         run: node tests/verify-ipad-pure.js
