@@ -2753,35 +2753,18 @@ window.ECHO_MEDIA = {fourChamber:'data:image/jpeg;base64,@@SLOT[asset:assets/ech
 
 var ECHO = { tab: 'reference', disease: null, fields: {} };
 
-let echoLoadState = 'idle';
-function buildEchoScreen(){
-  if(typeof EchoUI !== 'undefined') return EchoUI.screenHtml(ECHO);
-  if(echoLoadState === 'idle' && window.ECHO_SRC){
-    echoLoadState = 'loading';
-    const script = document.createElement('script');
-    script.src = window.ECHO_SRC;
-    script.onload = script.onerror = () => {
-      echoLoadState = typeof EchoUI === 'undefined' ? 'failed' : 'ready';
-      if(echoLoadState === 'failed') script.remove();
-      if(S.screen === 'echo') render();
-    };
-    document.head.appendChild(script);
-  }
-  if(echoLoadState === 'failed') return '<p role="status">Echo Studio could not load.</p><button data-action="goEcho">Retry</button>';
-  return '<p role="status">Loading Echo Studio…</p>';
-}
-
-function goEcho(){
-  if(echoLoadState === 'failed') echoLoadState = 'idle';
-  S.screen = 'echo'; render();
-}
-
-/* Echo Studio's listeners and the repaint of its results are src/app/echoscreen.js's. It is written here, in the page's
-   own script, because the split build lifts the two slots above into vendor/ and loads them when the screen is first
-   drawn, while the listeners are on the document from the start. The page lends it ECHO, EchoUI once it is there, its
-   render() and its repaint, each asked when it is used. */
+/* Echo Studio's wiring is src/app/echoscreen.js's: putting the screen on the page and loading its code the first time,
+   the way in, the repaint of its results, and the listeners. It is written here, in the page's own script, because the
+   split build lifts the two slots above into vendor/ and loads them when the screen is first drawn, while the listeners
+   are on the document from the start. ECHO_LOAD is that load's state. The page lends it ECHO, EchoUI once it is there,
+   its render(), its repaint, the file's name, the screen it is on and its way of putting Echo on, each asked when it
+   is used. */
 @@SLOT[src:src/app/echoscreen.js]@@
-const ECHO_ENV={echo:()=>ECHO,ui:()=>typeof EchoUI!=='undefined'?EchoUI:undefined,render:()=>render(),repaint:()=>echoRepaintResults()};
+const ECHO_LOAD=EchoScreen.loader();
+const ECHO_ENV={echo:()=>ECHO,ui:()=>typeof EchoUI!=='undefined'?EchoUI:undefined,render:()=>render(),repaint:()=>echoRepaintResults(),
+  src:()=>window.ECHO_SRC,screen:()=>S.screen,show:()=>{ S.screen='echo'; render(); }};
+function buildEchoScreen(){ return EchoScreen.screenHtml(document,ECHO_LOAD,ECHO_ENV); }
+function goEcho(){ EchoScreen.go(ECHO_LOAD,ECHO_ENV); }
 function echoRepaintResults(){ EchoScreen.repaint(document,ECHO_ENV); }
 EchoScreen.install(document,ECHO_ENV);
 

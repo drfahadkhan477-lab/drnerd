@@ -431,7 +431,9 @@ Then Echo Studio's: the four listeners the page put on the document for it (a ta
 phase, the keys on the tabs, typing in a field) and `echoRepaintResults()` are
 `src/app/echoscreen.js`'s `EchoScreen.install` and `repaint`, handed `ECHO_ENV`; the module is
 written into the page's own script, after the two slots the split build lifts, because the
-listeners are needed before EchoUI is loaded (held by `verify-echoscreen-pure`).
+listeners are needed before EchoUI is loaded (held by `verify-echoscreen-pure`). Then its
+loader and way in: `buildEchoScreen()` and `goEcho()` are `EchoScreen.screenHtml` and `go`,
+and the load's state is `ECHO_LOAD`, made by the module.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

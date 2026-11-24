@@ -266,7 +266,7 @@ jobs:
         run: node tests/verify-echo-pure.js
       - name: Echo Studio computes only what was measured (62 checks)
         run: node tests/verify-echoui-pure.js
-      - name: Echo Studio's listeners choose a tab, a disease and a phase, move focus along the tabs by key, and keep what is typed without drawing the field again (28 checks)
+      - name: Echo Studio's listeners choose a tab, a disease and a phase, move focus along the tabs by key, and keep what is typed without drawing the field again; and its loader and way in (41 checks)
         run: node tests/verify-echoscreen-pure.js
       - name: the notes search ranks, quotes and escapes (37 checks)
         run: node tests/verify-notesearch-pure.js

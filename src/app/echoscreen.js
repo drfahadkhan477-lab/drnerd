@@ -1,6 +1,6 @@
 /* ═════════════════════════════════════════════
-   echoscreen.js — Echo Studio's wiring: the four listeners the page puts on the document for it, and the repaint of
-   its results (docs/ROADMAP.md, E1).
+   echoscreen.js — Echo Studio's wiring: putting the screen on the page, loading its code the first time, the four
+   listeners the page puts on the document for it, and the repaint of its results (docs/ROADMAP.md, E1).
 
    EchoUI (src/ui/echo.js) writes the screen's markup; this is what the page does with it. It is written into the
    page's own script, not beside EchoUI, because the split build lifts EchoUI and src/core/echo.js into vendor/ and
@@ -19,15 +19,27 @@
                              results alone drawn again, so the field typed in is not rebuilt under the caret
      repaint(doc, env)   the results block (.echo-out) drawn again from the fields, where there is one
 
+     loader()                   a load's state, { state: 'idle' }: then 'loading', and 'ready' or 'failed'
+     screenHtml(doc, load, env) the screen's markup: EchoUI's, once it is there. Before, where the split build left
+                                the file's name, the first drawing loads it, once, and draws the screen again when it
+                                is in, if the screen is still Echo's; until then a line saying it is loading, and
+                                after a load that failed, one saying so with a Retry that goes in again
+     go(load, env)              the way in: a load that failed is let go, so it is tried again, and the screen shown
+
    env is what they use of the page, each asked when it is used:
      env.echo()      the page's ECHO: the tab, the disease, the phase and the fields
      env.ui()        EchoUI, once it is there
      env.render()    the page's render()
      env.repaint()   the page's echoRepaintResults()
+     env.src()       the file the split build left EchoUI in (window.ECHO_SRC), or nothing where it is in the page
+     env.screen()    the screen the page is on
+     env.show()      the page's own way of putting Echo on: S.screen set, and render()
 
-   They were the page's echoRepaintResults() and the four document.addEventListener calls below it, moved unchanged;
-   the page keeps echoRepaintResults() as one line, and installs these where it added them.
-   tests/verify-echoscreen-pure.js holds them over a document of its own, and verify-echo in a browser.
+   They were the page's buildEchoScreen(), goEcho(), echoRepaintResults() and the four document.addEventListener calls
+   below them, moved unchanged; the page keeps the three names as one line each, and installs the listeners where it
+   added them.
+   tests/verify-echoscreen-pure.js holds them over a document of its own, and verify-echo and verify-pwa (the split build's
+   late load) in a browser.
 
    No DOM of its own: what it touches is the document it is handed. ES2015; Safari 13.4 is the floor (README).
    ═════════════════════════════════════════════ */
@@ -97,6 +109,31 @@ function install(doc, env){
   });
 }
 
-root.EchoScreen = { install: install, repaint: repaint };
+function loader(){ return { state: 'idle' }; }
+
+function screenHtml(doc, load, env){
+  var ui = env.ui();
+  if(ui) return ui.screenHtml(env.echo());
+  if(load.state === 'idle' && env.src()){
+    load.state = 'loading';
+    var script = doc.createElement('script');
+    script.src = env.src();
+    script.onload = script.onerror = function(){
+      load.state = env.ui() ? 'ready' : 'failed';
+      if(load.state === 'failed') script.remove();
+      if(env.screen() === 'echo') env.render();
+    };
+    doc.head.appendChild(script);
+  }
+  if(load.state === 'failed') return '<p role="status">Echo Studio could not load.</p><button data-action="goEcho">Retry</button>';
+  return '<p role="status">Loading Echo Studio…</p>';
+}
+
+function go(load, env){
+  if(load.state === 'failed') load.state = 'idle';
+  env.show();
+}
+
+root.EchoScreen = { install: install, repaint: repaint, loader: loader, screenHtml: screenHtml, go: go };
 
 })(typeof window !== 'undefined' ? window : this);
