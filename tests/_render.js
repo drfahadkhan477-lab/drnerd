@@ -301,6 +301,82 @@ async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {})
   }
 }
 
-module.exports = { booted, settled, onScreen, quiet, afterRender, resolved,
+/* AT REST: no transition still going and no finite animation still running, the precondition verify-contrast and
+   verify-a11y read a screen under. A transition is waited on until the engine stops listing it, OR until it has been
+   finished for REST_GRACE. Both halves were learned on WebKit:
+     · on Linux, a just-finished transition kept the old theme's colour on #app for about a fifth of a second
+       (verify-a11y, 1.1:1 on the Echo title), so a finished transition is not at rest the moment it finishes;
+     · on Windows, a theme change left 34 transitions of -webkit-text-fill-color, finished at 0 of 0 ms, listed for
+       good (the private gate of 24 November 2026, build 446): a wait for the list to empty never ended, and
+       verify-contrast stopped on its first screen having read nothing.
+   Rerun there with a first version of this grace, the list had grown to 100 and the wait still never ended. That
+   version had two ways to hold it, and which one did is not known, so both are closed:
+     · it returned at the first transition still inside its grace, so the next one's clock had not started: the graces
+       ran one after another, and 34 of them are 34 seconds, past the timeout. Every transition listed is timed in
+       every look here, so transitions finished together share one grace;
+     · it timed each transition object, so a transition the engine lists as a new object at each look, or makes again,
+       started its clock again each time. The grace is timed per element, pseudo-element and property here.
+   The clock for a place starts when a finished transition is first seen there, in a WeakMap on the page, so a later look
+   does not start it again; a running or pending transition there holds the wait and clears the clock, so the next
+   finish there has its full grace. The clocks are new at every wait: kept from the wait before, a place's clock had run
+   out before the theme changed, and on Linux WebKit verify-a11y read Echo's title in Daylight in Midnight's colour
+   (1.09:1), the very case the grace is for. */
+const REST_GRACE = 1000;
+async function atRest(page, opts = {}) {
+  const grace = opts.grace === undefined ? REST_GRACE : opts.grace;
+  try {
+    await settled(page, ([grace, call]) => {
+      if (window.__restCall !== call || !window.__restSeen) { window.__restCall = call; window.__restSeen = new WeakMap(); }
+      const seen = window.__restSeen;
+      const clock = a => {
+        const t = a.effect && a.effect.target;
+        if (!t) return { map: seen, key: a, own: true };
+        if (!seen.has(t)) seen.set(t, new Map());
+        return { map: seen.get(t), key: (a.effect.pseudoElement || '') + '|' + a.transitionProperty };
+      };
+      const now = performance.now();
+      let still = true;
+      for (const a of document.getAnimations()) {
+        if (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition) {
+          const c = clock(a);
+          if (a.playState !== 'finished') { if (!c.own) c.map.delete(c.key); still = false; continue; }
+          if (!c.map.has(c.key)) c.map.set(c.key, now);
+          if (now - c.map.get(c.key) < grace) still = false;
+        } else if (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity) still = false;
+      }
+      return still;
+    }, { arg: [grace, String(Math.random())], timeout: opts.timeout || SETTLE_TIMEOUT, label: opts.label || 'the screen\'s entrances and the theme\'s transitions to end' });
+  } catch (e) {
+    /* Says what never stopped, by element and property and never by text, so a run on another machine can be acted on. */
+    throw new Error(`${e.message} ${await stillMoving(page)}`);
+  }
+}
+
+/* What is still moving: the transitions, and the finite animations still running, that a wait for the screen to come to
+   rest is waiting on, named by their element (tag, id, two classes, pseudo-element), what they animate and how far they
+   are. Never any text: an element's classes and ids are the app's own words. For the message of a wait that timed out,
+   so a run on another machine says what never stopped rather than only that something did (verify-contrast on Windows
+   WebKit, 24 November 2026, stopped on the first screen with no more than that). */
+async function stillMoving(page, limit = 6) {
+  return page.evaluate(limit => {
+    const moving = document.getAnimations().filter(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
+      || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity));
+    const name = a => {
+      const t = a.effect && a.effect.target;
+      if (!t || !t.tagName) return '?';
+      const cls = t.classList && t.classList.length ? '.' + [...t.classList].slice(0, 2).join('.') : '';
+      return t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') + cls + (a.effect.pseudoElement || '');
+    };
+    const what = a => typeof CSSTransition !== 'undefined' && a instanceof CSSTransition ? 'transition ' + a.transitionProperty
+      : typeof CSSAnimation !== 'undefined' && a instanceof CSSAnimation ? 'animation ' + a.animationName : 'animation';
+    const rows = moving.slice(0, limit).map(a => {
+      const tm = a.effect ? a.effect.getComputedTiming() : {};
+      return `${name(a)} ${what(a)} ${a.playState} at ${Math.round(a.currentTime || 0)} of ${Math.round(tm.endTime || 0)} ms`;
+    });
+    return moving.length ? `${moving.length} still moving: ${rows.join('; ')}` : 'nothing listed as moving now';
+  }, limit).catch(e => 'could not list what was moving: ' + String(e && e.message || e).split('\n')[0]);
+}
+
+module.exports = { booted, settled, onScreen, quiet, afterRender, resolved, stillMoving, atRest, REST_GRACE,
                    watchTransitions, transitionDone, resized, framesSteady,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };

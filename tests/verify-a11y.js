@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
 const { onDeath, watch } = require('./_deathnote.js');
-const { booted, quiet, settled, watchTransitions } = require('./_render.js');
+const { booted, quiet, settled, watchTransitions, atRest } = require('./_render.js');
 
 const target = process.argv[2];
 if (!target) { console.error('usage: node tests/verify-a11y.js <build.html>'); process.exit(1); }
@@ -88,14 +88,13 @@ const THEMES = [['daylight', 'light', 'Daylight'], ['midnight', 'dark', 'Midnigh
 
   /* At rest. render() swaps screens inside a view transition, and while it runs the old screen's snapshot is drawn over the
      page, so it is waited out: a precondition. So is every finite animation on the page: the screen's entrances, and the
-     colour transitions a theme change starts. A transition is waited out until the engine no longer lists it, not only
-     until it stops running: WebKit kept a finished one's old colour on #app, and so on the Echo title it passes down to,
-     for about a fifth of a second after it finished (1.1:1, the previous theme's text). */
+     colour transitions a theme change starts. A transition is waited out until the engine no longer lists it, or for
+     tests/_render.js's REST_GRACE after it finished, not only until it stops running: WebKit kept a finished one's old
+     colour on #app, and so on the Echo title it passes down to, for about a fifth of a second after it finished (1.1:1,
+     the previous theme's text). The grace is for Windows WebKit, which lists finished transitions for good (atRest). */
   const rest = async () => {
     await settled(page, () => !window.__vtLive, { timeout: 15000, label: 'the screen change to finish' });
-    await settled(page, () => !document.getAnimations().some(a => (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition)
-      || (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity)),
-      { timeout: 15000, label: 'the screen\'s entrances and the theme\'s transitions to end' });
+    await atRest(page, { timeout: 15000 });
   };
   const reset = () => page.evaluate(() => {
     if (S.mock && typeof mockStopTicker === 'function') mockStopTicker();

@@ -294,6 +294,73 @@ head('no wait passes its options where the argument goes');
     ok('a predicate that throws counts as not yet, and its error is named at the end', /last error: .*figures/.test(thrown), thrown.slice(0, 90));
   }
 
+  head('atRest(): a running transition is not at rest, and a finished one the engine keeps listing is, after its grace');
+  {
+    /* Windows WebKit listed 34 transitions, finished at 0 of 0 ms, for good after a theme change, and verify-contrast's
+       wait for the list to empty never ended (tests/_render.js, atRest). Such a transition is made here: an object of
+       CSSTransition's own prototype, finished, returned by getAnimations every time it is asked. */
+    const rp = watch(await (await browser.newContext()).newPage(), events, 'blank/atRest');
+    await rp.setContent('<!doctype html><html><body><div id="mover" style="opacity:1">x</div></body></html>');
+    const listForGood = () => rp.evaluate(() => {
+      const left = Object.create(CSSTransition.prototype, { playState: { value: 'finished' }, effect: { value: null },
+        currentTime: { value: 0 }, transitionProperty: { value: '-webkit-text-fill-color' } });
+      window.__realGetAnimations = window.__realGetAnimations || document.getAnimations.bind(document);
+      document.getAnimations = () => [left];
+    });
+    const restore = () => rp.evaluate(() => { if (window.__realGetAnimations) document.getAnimations = window.__realGetAnimations; window.__restSeen = null; });
+    const time = async opts => { const t0 = Date.now(); let err = ''; await R.atRest(rp, opts).catch(e => { err = e.message; }); return { ms: Date.now() - t0, err }; };
+
+    ok('with nothing listed it is at rest at once', (await time({ timeout: 2000 })).err === '');
+    await listForGood();
+    const early = await time({ timeout: 400 });
+    await restore(); await listForGood();
+    const later = await time({ timeout: 4000 });
+    await restore();
+    ok('a transition that has only just finished still holds the wait, for the old colour WebKit keeps briefly',
+       /render never settled/.test(early.err), early.err.slice(0, 80) || 'it settled inside the grace');
+    ok('and one the engine keeps listing, finished, stops holding it once the grace has passed',
+       later.err === '' && later.ms >= R.REST_GRACE, later.err ? later.err.slice(0, 120) : `${later.ms} ms`);
+
+    /* The rerun on Windows WebKit, with a first version of this grace, listed 100 and still never ended. Each of the two
+       ways that version could hold the wait is made here: forty finished at once, which it waited on one grace after
+       another; and one listed as a new object at every look, whose clock it started again each time. */
+    const listMany = (n, fresh) => rp.evaluate(([n, fresh]) => {
+      const host = document.createElement('div'); host.id = 'many'; document.body.appendChild(host);
+      const make = el => Object.create(CSSTransition.prototype, { playState: { value: 'finished' }, currentTime: { value: 0 },
+        effect: { value: { target: el, pseudoElement: '::before', getComputedTiming: () => ({ endTime: 0 }) } },
+        transitionProperty: { value: '-webkit-text-fill-color' } });
+      const els = Array.from({ length: n }, () => host.appendChild(document.createElement('div')));
+      const kept = els.map(make);
+      window.__realGetAnimations = window.__realGetAnimations || document.getAnimations.bind(document);
+      document.getAnimations = () => fresh ? els.map(make) : kept;
+    }, [n, fresh]);
+    const clearMany = () => rp.evaluate(() => { const h = document.getElementById('many'); if (h) h.remove(); });
+    await listMany(40, false);
+    const many = await time({ timeout: 4000 });
+    await restore(); await clearMany();
+    ok('forty finished together share one grace, rather than taking one each in turn',
+       many.err === '' && many.ms >= R.REST_GRACE, many.err ? many.err.slice(0, 120) : `${many.ms} ms`);
+    await listMany(1, true);
+    const fresh = await time({ timeout: 4000 });
+    await restore(); await clearMany();
+    ok('and one the engine lists as a new object at every look stops holding it once the grace has passed, all the same',
+       fresh.err === '' && fresh.ms >= R.REST_GRACE, fresh.err ? fresh.err.slice(0, 120) : `${fresh.ms} ms`);
+    /* The clocks are the wait's own. Kept from the wait before, a place's clock has already run out when the theme
+       changes, and the transition the change starts there is let go at once: on Linux WebKit, verify-a11y then read Echo's
+       title in Daylight in Midnight's colour. Two waits on one finished place, with nothing cleared between them. */
+    await listMany(1, true);
+    const first = await time({ timeout: 4000 });
+    const second = await time({ timeout: 400 });
+    await restore(); await clearMany();
+    ok('a second wait gives a finished transition its own grace, not what is left of the wait before\'s',
+       first.err === '' && /render never settled/.test(second.err), first.err ? first.err.slice(0, 120) : second.err.slice(0, 80) || `the second settled in ${second.ms} ms`);
+    await rp.evaluate(() => { const m = document.getElementById('mover'); m.style.transition = 'opacity 30s linear'; m.getBoundingClientRect(); m.style.opacity = '0'; });
+    const running = await time({ timeout: 1200 });
+    ok('a transition still running holds it to the timeout, and the timeout names it',
+       /render never settled/.test(running.err) && /div#mover transition opacity running/.test(running.err), running.err.slice(-120));
+    await rp.close();
+  }
+
   head('booted() is a real wait, not an immediate true');
   const blank = watch(await (await browser.newContext()).newPage(), events, 'blank/booted');
   await blank.setContent('<!doctype html><html><body><p>nothing here</p></body></html>');
