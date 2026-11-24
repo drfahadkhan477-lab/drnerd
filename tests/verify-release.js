@@ -135,6 +135,37 @@ head('--skip is honoured and held against the verdict');
      /asked for with --skip/.test(r.out));
 }
 
+head('a step runs one suite at a time, whatever the shell has set');
+{
+  /* The gate of 24 November 2026 inherited SYSTOLE_JOBS=auto and ran three suites at once on a 4-core, 8 GB laptop:
+     twelve failed in the run and eleven passed alone (scripts/release-check.js). Driven here with the variable set, as
+     that shell had it. Then each step's own arguments go to verify.js with SYSTOLE_JOBS set to something that is not a
+     count, a placeholder build, and one quick pure suite: verify.js refuses that variable unless --jobs is given, so if
+     it runs, the flag won. */
+  const r = spawnSync(process.execPath, [GATE, '--dry-run'], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SYSTOLE_JOBS: 'auto' } });
+  const out = (r.stdout || '') + (r.stderr || '');
+  const cmdOf = id => {
+    const m = out.match(new RegExp(`[–✓✗] ${id}\\s[^\\n]*\\n[^\\n]*would run: ([^\\n]*)`));
+    return m ? m[1].trim().split(/\s+/) : null;
+  };
+  const jobsOf = argv => argv && argv.indexOf('--jobs') > 0 ? argv[argv.indexOf('--jobs') + 1] : null;
+  for (const id of ['chromium', 'pwa', 'webkit'])
+    ok(`the ${id} step names --jobs 1 with SYSTOLE_JOBS=auto in the shell`, jobsOf(cmdOf(id)) === '1', cmdOf(id) ? cmdOf(id).join(' ') : 'no "would run" line');
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'jobs-'));
+  try {
+    const build = path.join(tmp, 'b.html');
+    fs.writeFileSync(build, '<html></html>');
+    for (const id of ['chromium', 'webkit']) {
+      const argv = cmdOf(id) || [];
+      const v = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'verify.js'), build, ...argv.slice(3), '--only', 'fsrs'],
+        { cwd: ROOT, encoding: 'utf8', timeout: 120000, env: { ...process.env, SYSTOLE_JOBS: 'not-a-count' } });
+      const said = (v.stdout || '') + (v.stderr || '');
+      ok(`and verify.js lets the ${id} step's --jobs win over the variable`, v.status === 0 && !/is not a number of jobs/.test(said),
+         /is not a number of jobs/.test(said) ? 'the variable won' : `exit ${v.status}`);
+    }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+
 head('a step that says chromium runs on chromium, whatever the shell has set');
 {
   /* verify.js takes SYSTOLE_ENGINE from the environment when it is given no
