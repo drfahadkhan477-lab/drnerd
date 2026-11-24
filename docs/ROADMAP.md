@@ -410,6 +410,23 @@ Then the cardiac waveform engine: the base `RHYTHMS`, `gauss()`, `beatMV()` and
 keeps `RHYTHMS` (the base with the extras merged in), `RHYTHM_KEYS` and `rhythmMV()`.
 Then a pen stroke's outline: `penOutline()` is `src/ui/pencil.js`'s `PencilFX.outline`, handed the
 pen's width (held by `verify-pencil-pure`).
+Then the screens' wiring, starting with the Rhythm Lab. First its state: thirteen script-level names
+(`labKind`, `physio`, `physioView`, `twelveLead`…) are one object, `LAB`, made by
+`RhythmLabScreen.state()` from what was saved, with each old name kept as a view of its field, as
+`APEX_TURN` did for the turn. Then the cycle panel's caption: `physioNoteHtml()` is
+`RhythmLabScreen.noteHtml()`, handed what the panel chose and the beat and phase to ask.
+Then its handlers: `setLab()`, `setPhysioSlow()`, `physioIsPlaying()`, `setPhysioPlaying()` and
+the three taps `mountPhysio()` wrote inline (a lesion, a view, an intervention) are
+`RhythmLabScreen`'s, handed `LAB` and `LAB_ENV`, what they use of the page; the four names stay
+as one line each, and the mount still gives each chip its listener.
+Then the beat and the painter: `physioCycle()`, `physioRef()`, `physioApplyLesion()`,
+`physioPhaseNow()` and `paintPhysioNote()` are `RhythmLabScreen`'s `cycle`, `ref`,
+`applyLesion`, `phaseNow` and `paintNote`; the circulation engine's load stays the page's,
+lent as `LAB_ENV.loadCirculation`, since the Practice Lab and the Home hero share it.
+Then the mounts: `mountPhysio()`, `mountTwelve()` and `mountLab()` are `RhythmLabScreen`'s,
+handed the page's document, theme, diagrams' code, next frame, screen and Wiggers' load
+through `LAB_ENV`. The Rhythm Lab's wiring is then the module's; the page keeps its names,
+one line each, the views of `LAB`, `LAB_ENV`, and the loads it shares with other screens.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

@@ -216,7 +216,7 @@ jobs:
         run: node tests/verify-memoryscreen-pure.js
       - name: a tap on a data-action calls that action from the page's table, the nearest one winning, and nothing outside the table or the root; a scroll caught as it goes down, for the element scrolled alone (19 checks)
         run: node tests/verify-actions-pure.js
-      - name: the Rhythm Lab's markup says what is chosen, offers what the view allows, draws a 12-lead only where one is modelled, names every element the page's mounts look up, and names actions where it had inline handlers; and a lead's card (56 checks)
+      - name: the Rhythm Lab's markup says what is chosen, offers what the view allows, draws a 12-lead only where one is modelled, names every element the mounts look up, and names actions where it had inline handlers; a lead's card; the lab's state, one object read from what was saved; the cycle panel's caption; what a tap on a rhythm or a cycle chip does; the beat handed to the diagram and the caption painted; and the mounts of the monitor, the 12-lead and the cycle (128 checks)
         run: node tests/verify-rhythmlab-pure.js
       - name: the annotations screen draws a row for each annotated question, says which of two things no rows means, the page repaints on typing what the screen itself draws, and its box and buttons name actions where they had inline handlers (57 checks)
         run: node tests/verify-annotations-pure.js
