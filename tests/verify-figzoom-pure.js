@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /*
- * The figure viewer's zoom row: + and −, Fit, and the readout between them — src/ui/figzoom.js.
+ * The figure viewer: which figures open together, and its zoom row (+ and −, Fit, and the readout between them) —
+ * src/ui/figzoom.js.
  *
  *   node tests/verify-figzoom-pure.js
  *
@@ -15,6 +16,9 @@
  *     nothing to a slide that cannot zoom; Fit goes back to fitted;
  *   - after each, the bar says the new readout and the viewer is marked zoomed exactly while it is over 100;
  *   - no viewer, a viewer with no slide, or no element is nothing to do, never a throw;
+ *   - a figure is its picture as drawn, its caption (or the picture's alt) and the caption's source, and no picture is
+ *     nothing to open; it opens with the other figures of its group, in order, at its own place among those with a
+ *     picture, and alone when it is in no group or not one of its figures;
  *   - the page's five names are the calls into this, written into the page once, above them, and the page keeps no copy.
  *
  * verify-figzoom is the browser half: it drives the real PhotoSwipe viewer through these.
@@ -104,6 +108,51 @@ head('nothing to zoom is nothing to do');
   const r = quiet.map(f => safely(f));
   ok('no viewer, no slide, or no element: never a throw', r.every(x => x === undefined), J(r));
   ok('and a viewer with no element still zooms', noEl.calls.length === 1 && Math.abs(noEl.calls[0][0] - 2.8) < 1e-12, J(noEl.calls));
+}
+
+head('which figures open together');
+{
+  /* Figures of the test's own: a picture with a caption and its source, one with no picture, one whose picture has a
+     sharper source drawn and no caption, and one with an empty caption over an empty alt. */
+  const txt = t => ({ textContent: t });
+  const img = (src, alt, cur) => ({ tagName: 'IMG', src, alt, currentSrc: cur || '', querySelector: () => null });
+  const fig = (im, cap, source) => { const c = cap == null ? null : { childNodes: [txt(cap)], querySelector: q => (q === 'span' && source ? txt(source) : null) };
+    return { tagName: 'FIGURE', querySelector: q => (q === 'img' ? im : q === 'figcaption' ? c : null) }; };
+  const A = fig(img('a.png', 'A alt'), 'Cap A', 'Src A'), NONE = fig(null, 'no picture'), B = fig(img('b.png', 'B alt', 'b@2x.png'), null), C = fig(img('c.png', ''), '', '');
+  const asked = [];
+  const group = { querySelectorAll: q => (asked.push(q), [A, NONE, B, C]) };
+  [A, NONE, B, C].forEach(f => { f.closest = q => (asked.push(q), group); });
+  /* Read without throwing: a defect can make any of these null, or an error's text. */
+  const srcs = x => (x && Array.isArray(x.items) ? x.items.map(i => (i && i.src) || String(i)) : 'not a gathering: ' + String(x));
+  const at = x => (x && typeof x.at === 'number' ? x.at : 'no place: ' + String(x));
+  const plain = it => it && { src: it.src, el: it.element && it.element.src, caption: it.caption, source: it.source };
+  ok('a figure is its picture, its caption and the caption\'s source', J(plain(safely(() => Z.item(A)))) === J({ src: 'a.png', el: 'a.png', caption: 'Cap A', source: 'Src A' }), J(plain(safely(() => Z.item(A)))));
+  ok('the picture as drawn, when the browser chose a sharper one; and with no caption, the picture\'s alt', J(plain(safely(() => Z.item(B)))) === J({ src: 'b@2x.png', el: 'b.png', caption: 'B alt', source: '' }), J(plain(safely(() => Z.item(B)))));
+  ok('an empty caption over an empty alt is no caption; a bare picture is itself; and no picture is nothing to open',
+     J(plain(safely(() => Z.item(C)))) === J({ src: 'c.png', el: 'c.png', caption: '', source: '' }) && (plain(safely(() => Z.item(img('d.png', 'D')))) || {}).src === 'd.png' && safely(() => Z.item(NONE)) === null,
+     J([plain(safely(() => Z.item(C))), plain(safely(() => Z.item(img('d.png', 'D')))), safely(() => Z.item(NONE))]));
+  const g = safely(() => Z.gather(B));
+  ok('a figure opens with every other in its group, in the order drawn, the one with no picture left out',
+     J(srcs(g)) === J(['a.png', 'b@2x.png', 'c.png']), J(srcs(g)));
+  ok('and at its own place among them, counted without the one left out', at(g) === 1 && at(safely(() => Z.gather(C))) === 2 && at(safely(() => Z.gather(A))) === 0,
+     [at(g), at(safely(() => Z.gather(C))), at(safely(() => Z.gather(A)))].join(' '));
+  ok('the group is what holds figures that open together, and its figures are those of the two actions that open one',
+     asked.includes(Z.GROUP) && asked.includes('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')
+     && Z.GROUP === '.fig-list,.msg,.ref-body,.ref-view,.pearl-card,.feed-card,#aiBody,#app', Z.GROUP);
+  const lone = fig(img('l.png', 'L'), 'Lone'); lone.closest = () => null;
+  const stray = fig(img('s.png', 'S'), 'Stray'); stray.closest = () => group;
+  const lg = safely(() => Z.gather(lone)), sg = safely(() => Z.gather(stray)), ng = safely(() => Z.gather(NONE));
+  ok('a figure in no group, or in one it is not a figure of, opens alone', J(srcs(lg)) === J(['l.png']) && at(lg) === 0 && J(srcs(sg)) === J(['s.png']) && at(sg) === 0,
+     J([srcs(lg), srcs(sg)]));
+  const nc = fig(img('n.png', 'N'), 'N cap');
+  ok('and so does one that cannot look for its group; with no picture of its own, the group opens at what it would be', J(srcs(safely(() => Z.gather(nc)))) === J(['n.png'])
+     && J(srcs(ng)) === J(['a.png', 'b@2x.png', 'c.png']) && at(ng) === 1, J([srcs(safely(() => Z.gather(nc))), srcs(ng), at(ng)]));
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const pg = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => pg.split(t).length - 1;
+  ok('the page\'s figFromEl() is one line, openFigureFrom() opens what gather() finds, and the page keeps no copy',
+     n('function figFromEl(el){ return FigZoom.item(el); }') === 1 && n('const g=FigZoom.gather(el);') === 1 && n('return openFigures(g.items,g.at);') === 1
+     && n('FIG_GROUP') === 0 && n("cap.childNodes[0]") === 0);
 }
 
 head('the page\'s five names are the calls into this');

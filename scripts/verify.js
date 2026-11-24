@@ -309,7 +309,7 @@ const SUITES = [
      src/core/accessgate.js. */
   ['accessgate-pure', 'an HTML reply where data was asked for is a lapsed session; the sign-in probe is lapsed on an opaque redirect, a 3xx or the sign-in page; a figure is an ok reply with an image type, never a 200 sign-in page, an octet-stream or nothing cached'],
   /* The figure viewer's zoom row (docs/ROADMAP.md, E1): + and −, Fit and the readout, moved to src/ui/figzoom.js. */
-  ['figzoom-pure', 'one press is 1.4 times; + and − zoom about the middle, held between fitted and the most allowed, and Fit goes back; the readout is times the fitted size and the viewer is marked zoomed exactly while it is over 100; no viewer or slide is nothing to do'],
+  ['figzoom-pure', 'a figure is its picture, caption and source, and opens with the others of its group in order at its own place, or alone; one press is 1.4 times; + and − zoom about the middle, held between fitted and the most allowed, and Fit goes back; the readout is times the fitted size and the viewer is marked zoomed exactly while it is over 100; no viewer or slide is nothing to do'],
   /* A practice deck put down and taken up again (docs/ROADMAP.md, E1): which decks are kept, how many, and when a kept
      one can be dealt again, moved to src/core/resume.js. */
   ['resume-pure', 'only an "all" deck is kept, twelve at most and the oldest touched first out; a kept deck comes back in its order at its place, question one included, and not when the bank lost a question, the pool is another deck, or it was finished'],

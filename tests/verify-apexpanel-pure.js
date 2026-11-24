@@ -242,8 +242,10 @@ ${' '.repeat(2)}`;
   const table = (page.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
   ok('each is in the page\'s ACTIONS table once, calling the page\'s function of that name; a figure is handed itself',
      handlers.length === 5 && handlers.every(n => table.split(TABLE[n] || '\u0000').length === 2), handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1)).join(' '));
+  /* The gathering is src/ui/figzoom.js's (FigZoom.gather), read with its comments blanked like the page. */
+  const figzoom = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'figzoom.js'), 'utf8'));
   ok('and openFigureFrom() gathers the figures that name its action, with the pearl\'s',
-     count(`querySelectorAll('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')`) === 1);
+     figzoom.split(`querySelectorAll('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')`).length === 2 && count('const g=FigZoom.gather(el);') === 1);
   const IDS = ['apexAvatar', 'aiBody', 'aiLive', 'aiFigWrap', 'aiFigs', 'aiFigList', 'aiChips', 'aiMore', 'aiIn', 'aiSend'];
   ok('the ids the page finds again are each drawn once: the avatar, the conversation, the figures, the prompts, the box', IDS.every(id => times(headOf(Q) + panel(Q, HIST, { aiBusy: true }), 'id="' + id + '"') === 1) && IDS.every(id => count("getElementById('" + id + "')") >= 1 || id === 'aiFigList' || id === 'aiLive' || id === 'aiChips'), IDS.map(id => id + ':' + count("getElementById('" + id + "')")).join(' '));
   const WORDS = ['Cardiology tutor', 'Ask me anything about the item', 'Reused explanation · matching context', 'from those notes', 'Explain draft · no tools', 'Clear thread', 'called directly from this device'];

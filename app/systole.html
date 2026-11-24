@@ -2629,29 +2629,12 @@ function openFigures(list,index){
     return null;
   });
 }
-/* Anything with a figure in it can hand the viewer an element. The other
-   figures beside it (a reply's strip, a note's figures, a message's inline
-   ones) come too, so a swipe goes to the next. */
-const FIG_GROUP='.fig-list,.msg,.ref-body,.ref-view,.pearl-card,.feed-card,#aiBody,#app';
-function figFromEl(el){
-  const img=el.tagName==='IMG'?el:el.querySelector('img');
-  if(!img) return null;
-  const cap=el.querySelector('figcaption');
-  const src=cap&&cap.querySelector('span');
-  return {src:img.currentSrc||img.src,element:img,
-    caption:(cap?cap.childNodes[0]&&cap.childNodes[0].textContent:'')||img.alt||'',
-    source:src?src.textContent:''};
-}
+/* Which figures open together, and what each of them is, are src/ui/figzoom.js's. */
+function figFromEl(el){ return FigZoom.item(el); }
 function openFigureFrom(el){
   if(!el) return Promise.resolve(null);
-  const scope=el.closest&&el.closest(FIG_GROUP);
-  /* Every figure that opens full size names one of two actions (docs/ROADMAP.md, E2): a note's, a reply's and the Apex
-     strip's openFigureFrom, and the pearl's openPearlFigure, which has keys of its own. Both are gathered, in the order
-     they are drawn. */
-  const els=scope?[...scope.querySelectorAll('figure[data-action="openFigureFrom"],figure[data-action="openPearlFigure"]')]:[];
-  if(els.indexOf(el)<0) return openFigures([figFromEl(el)].filter(Boolean),0);
-  const items=els.map(figFromEl), at=els.indexOf(el);
-  return openFigures(items.filter(Boolean),items.slice(0,at).filter(Boolean).length);
+  const g=FigZoom.gather(el);
+  return openFigures(g.items,g.at);
 }
 /* A question's figures, full size: the expand button on each figure card. */
 function openQuestionFigures(qid,i,ev){
