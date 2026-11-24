@@ -258,6 +258,11 @@ passed alone:
 
     rerun alone: 7 of 9 passed (pearl, quiznav, …); still failing alone: settings
 
+The gate runs one suite at a time (`--jobs 1`), whatever `SYSTOLE_JOBS` says. Its
+run of 24 November 2026 inherited `SYSTOLE_JOBS=auto`, which ran three suites at
+once on a 4-core, 8 GB laptop. Twelve suites failed, and eleven of them passed
+alone.
+
 A suite that fails alone too has a defect you can reproduce on its own. A
 suite that passes alone failed because of the full run's conditions, such as a
 busy machine or a suite before it. The step stays failed either way, and so
