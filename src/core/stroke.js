@@ -15,8 +15,8 @@
                            midpoints of its sides, each corner a control point; under three points, nothing
 
    Together round and rdp cut stored ink by roughly an order of magnitude. The page keeps the old names (roundPt,
-   rdp, simplifyStroke, fillOutline) as one line each; penOutline(), which reads the page's pen and PencilFX's width
-   curve, stays the page's.
+   rdp, simplifyStroke, fillOutline) as one line each. A stroke's outline, which needs PencilFX's width curve, is
+   src/ui/pencil.js's (PencilFX.outline), handed the pen's width; the page's penOutline() is one line into it.
 
    Pure: no DOM of its own, no clock, no storage. ES2015; Safari 13.4 is the floor (README).
    ═════════════════════════════════════════════ */
