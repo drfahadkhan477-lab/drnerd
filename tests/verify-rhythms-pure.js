@@ -4,6 +4,11 @@
  *
  *   node tests/verify-rhythms-pure.js
  *
+ * Its last part holds the base engine, src/core/rhythms.js (docs/ROADMAP.md, E1): a beat's P wave, ST segment and R
+ * wave where the formulas put them, the base rhythms, sinus at its rate, an unknown kind as a sinus beat, asystole, a
+ * paced spike, the extras drawn by the extras, fibrillation's irregular intervals kept in the caller's state, and the
+ * page's table, rhythmMV() and slot.
+ *
  * Pure Node, no browser, no build. rhythms-extra.js duplicates the beat model
  * rather than importing it precisely so it can be tested alone — its header has
  * said so since it was written, and until now nothing took it up on that.
@@ -225,6 +230,53 @@ head('the AV-block strips show the interval they are named for');
   ok('and it is a normal PR (under 200 ms), not a long one: the block shows only in the dropped beats', m2[0].gap >= base && m2[0].gap <= base + 40, m2[0].gap + ' ms against ' + base);
   const gaps = []; for (let i = 1; i < m2.length; i++) gaps.push(m2[i].r - m2[i - 1].r);
   ok('which leave a pause twice the usual interval', gaps.some(g => g > 1.9 * Math.min(...gaps) && g < 2.1 * Math.min(...gaps)), Math.min(...gaps) + ' and ' + Math.max(...gaps) + ' ms');
+}
+
+head('the base engine: a beat, the base rhythms, and the page\'s table (src/core/rhythms.js)');
+{
+  const E = require('../src/core/rhythms.js').Rhythms;
+  const TABLE = Object.assign({}, E.BASE, R.EXTRA);   // as the page builds it
+  const mv = (k, t, st) => E.mv(k, t, st, TABLE, R);
+  const near = (a, b, tol) => Math.abs(a - b) <= (tol || 1e-9);
+  /* A gaussian peaks at its amplitude on its centre, and one width away is e^-1/2 of it, the same either side. */
+  ok('a bump peaks at its amplitude, and one width either side is e^-1/2 of it', E.gauss(45, 45, 20, 0.13) === 0.13
+     && near(E.gauss(65, 45, 20, 0.13), 0.13 * Math.exp(-0.5)) && E.gauss(25, 45, 20, 0.13) === E.gauss(65, 45, 20, 0.13), String(E.gauss(65, 45, 20, 0.13)));
+  /* At 45 ms the P wave's bump is at its centre and every other bump is at least 24 widths away. */
+  ok('a beat\'s P wave is 0.13 mV at 45 ms, and gone when its amplitude is 0', near(E.beatMV(45), 0.13, 1e-6) && near(E.beatMV(45, { pAmp: 0 }), 0, 1e-6), [E.beatMV(45), E.beatMV(45, { pAmp: 0 })].join(' '));
+  /* The ST segment runs from 60 widths after the QRS onset at 160 ms, for 120 ms: 220 to 340 for a normal QRS. */
+  const st = t => E.beatMV(t, { stElev: 0.32 }) - E.beatMV(t);
+  ok('an ST shift is added exactly over the segment, 220 to 340 ms, and nowhere else', near(st(221), 0.32) && near(st(339), 0.32) && st(220) === 0 && st(340) === 0 && st(100) === 0, [st(221), st(220), st(340)].join(' '));
+  /* The R wave's centre is 26 widths after the onset: 186 ms, and 219.8 for a QRS 2.3 times as wide. */
+  const peakNear = (c, o) => [c - 3, c + 3].every(t => E.beatMV(c, o) > E.beatMV(t, o));
+  ok('the R wave peaks 26 widths after the QRS onset: 186 ms, or 219.8 ms for a QRS 2.3 times as wide', peakNear(186, {}) && peakNear(219.8, { qrsW: 2.3 }) && !peakNear(186, { qrsW: 2.3 }));
+  ok('the base rhythms each have a name and a rate, and the page\'s table is them with the extras after', Object.keys(E.BASE).length === 12 && Object.values(E.BASE).every(r => r.name && typeof r.hr === 'number' && r.desc)
+     && JSON.stringify(Object.keys(TABLE)) === JSON.stringify(Object.keys(E.BASE).concat(Object.keys(R.EXTRA))), Object.keys(E.BASE).join(' '));
+  /* Sinus at 68 a minute is one beat every 60000/68 ms. */
+  const rr = 60000 / 68;
+  ok('a sinus beat repeats every 60000/68 ms, and a kind the table does not know is a sinus beat', [10, 186, 500].every(t => near(mv('sinus', t), mv('sinus', t + rr), 1e-9))
+     && [10, 186, 500, 1000, 1500, 2600].every(t => mv('no-such-rhythm', t) === mv('sinus', t)),
+     /* Past the first beat (882 ms), where a sinus beat at any other rate is somewhere else in its cycle. */
+     [1000, 1500, 2600].map(t => mv('no-such-rhythm', t).toFixed(4) + '/' + mv('sinus', t).toFixed(4)).join(' '));
+  ok('asystole stays within 0.008 mV of the line', Array.from({ length: 400 }, (_, i) => mv('asystole', i * 50)).every(v => Math.abs(v) <= 0.008));
+  /* A paced beat: a 1.1 mV artefact between 150 and 156 ms into each cycle, on a wide beat. */
+  const paced = t => mv('paced', t) - E.beatMV(t % (60000 / 70), { pAmp: 0, qrsW: 2.0, tAmp: -0.3 });
+  ok('a paced beat carries a 1.1 mV spike from 150 to 156 ms of its cycle, and none outside it', near(paced(153), 1.1) && paced(149) === 0 && paced(157) === 0, [paced(153), paced(149)].join(' '));
+  const extraKey = Object.keys(R.EXTRA)[0];
+  ok('a rhythm of the extras is the extras\' own drawing', [0, 333, 1717].every(t => mv(extraKey, t, {}) === R.extraRhythmMV(extraKey, t, {})), extraKey);
+  /* Fibrillation's intervals are kept in the state the caller hands back: 380 to 1000 ms each, never two the same in a row. */
+  const af = {}; for (let t = 0; t < 30000; t += 5) mv('afib', t, af);
+  const rrs = []; const af2 = {}; let last = -1;
+  for (let t = 0; t < 30000; t += 5) { mv('afib', t, af2); if (af2.n !== last) { rrs.push(af2.rr); last = af2.n; } }
+  ok('atrial fibrillation keeps its place in the state it is handed: intervals of 380 to 1000 ms, irregular', af.n > 20 && rrs.every(x => x >= 380 && x < 1000) && new Set(rrs.map(x => Math.round(x))).size > rrs.length / 2,
+     af.n + ' beats, ' + rrs.length + ' intervals');
+  /* Read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const page = blankComments(fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8'));
+  const n = t => page.split(t).length - 1;
+  const slot = page.indexOf('@@SLOT[src:src/core/rhythms.js]@@');
+  ok('the page\'s table is the base merged with the extras, its rhythmMV() is one line into mv(), and the module is written in above them',
+     n('const RHYTHMS=Object.assign({},Rhythms.BASE);') === 1 && n('Object.assign(RHYTHMS, RhythmsExtra.EXTRA);') === 1 && n('function rhythmMV(kind,tms,state){ return Rhythms.mv(kind,tms,state,RHYTHMS,RhythmsExtra); }') === 1
+     && slot >= 0 && n('@@SLOT[src:src/core/rhythms.js]@@') === 1 && slot < page.indexOf('const RHYTHMS='), slot < 0 ? 'no slot' : 'slot at ' + slot);
+  ok('and the page keeps no copy of the engine', n('function beatMV(') === 0 && n('function gauss(') === 0 && n("sinus:      {name:'Normal Sinus'") === 0);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
