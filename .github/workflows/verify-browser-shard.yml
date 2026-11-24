@@ -100,7 +100,7 @@ jobs:
         name: the cardiac cycle is computed, not drawn, and keeps its own clock (58 checks)
         run: node tests/verify-physio.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-theme,') }}
-        name: nine palettes, two axes, unthemed semantics (42 checks)
+        name: four palettes, two axes, unthemed semantics, and the five retired with D6 still resolve (42 checks)
         run: node tests/verify-theme.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-ink,') }}
         name: green, red, amber and accent text a reader can read in every theme, the colours that fill left as they are (82 checks)

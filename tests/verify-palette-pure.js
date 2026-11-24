@@ -105,8 +105,6 @@ function palette(src, id, where) {
 }
 
 const CONTRAST = palette(HC, 'contrast', 'the stylesheet');
-const NAMED = ['slate', 'parchment', 'nocturne', 'cathlab', 'monitor']
-  .reduce((a, id) => (a[id] = palette(THEME, id, 'the stylesheet'), a), {});
 
 head('the palettes were actually read');
 {
@@ -116,9 +114,16 @@ head('the palettes were actually read');
   const missing = need.filter(k => !CONTRAST[k]);
   ok('the Contrast palette parsed, with every token this suite reads',
      missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : Object.keys(CONTRAST).length + ' tokens');
-  const thin = Object.entries(NAMED).filter(([, p]) => !p['--border2'] || !p['--border3'] || !p['--accent'] || !p['--accent-2']).map(([id]) => id);
-  ok('and all five named palettes parsed their border weights and accents',
-     thin.length === 0, thin.length ? `thin: ${thin.join(', ')}` : Object.keys(NAMED).join(', '));
+  /* D6 kept four themes and retired five palettes (src/core/themes.js). A palette block no theme can reach is a
+     palette nobody can see and every check still has to read, so the stylesheet styles only the palettes the themes
+     name. Read with comments blanked: the comment above the Contrast block names the retired ones. */
+  const Themes = require('../src/core/themes.js').Themes;
+  const used = new Set(Themes.LIST.map(t => t.palette).filter(Boolean));
+  const styled = [...new Set([...THEME.matchAll(/data-palette\s*=\s*"([^"]*)"/g)].map(m => m[1]))];
+  ok('the stylesheet styles a palette, so the next check reads something (precondition)', styled.length > 0, styled.join(', ') || 'none found');
+  const stray = styled.filter(p => !used.has(p));
+  ok('and it styles no palette a theme does not use', stray.length === 0,
+     stray.length ? `styled but no theme uses: ${stray.join(', ')}` : `${styled.join(', ')}, each a theme's`);
 }
 
 head('the properties Contrast exists for — floors, not snapshots');
@@ -143,19 +148,9 @@ head('the properties Contrast exists for — floors, not snapshots');
      ratio(CONTRAST['--muted'], card) >= 4.5, `${r2(ratio(CONTRAST['--muted'], card))}:1`);
   ok('the accent clears AA against the ground as well',
      ratio(CONTRAST['--accent'], bg) >= 4.5, `${r2(ratio(CONTRAST['--accent'], bg))}:1`);
-
-  /* THE ENVELOPE CLAIM, AS A RELATIONSHIP RATHER THAN A NUMBER. The accent
-     sits under text in composites verify-pearl and verify-home already sweep
-     for AA, and every one of those sweeps passes today with Monitor as the
-     brightest dark accent in the set. An accent brighter than Monitor's is a
-     composite nothing has measured — so this asserts the ordering, which
-     survives either palette being retuned, rather than a fixed figure. */
-  ok('the Contrast accent is no brighter than Monitor’s, the brightest already swept',
-     lum(CONTRAST['--accent']) <= lum(NAMED.monitor['--accent']),
-     `${l3(lum(CONTRAST['--accent']))} vs ${l3(lum(NAMED.monitor['--accent']))}`);
-  ok('and neither is its accent-2',
-     lum(CONTRAST['--accent-2']) <= lum(NAMED.monitor['--accent-2']),
-     `${l3(lum(CONTRAST['--accent-2']))} vs ${l3(lum(NAMED.monitor['--accent-2']))}`);
+  /* The envelope claim that stood here (the accent no brighter than Monitor's, the brightest accent any sweep had
+     passed) went with Monitor (D6). It was a proxy for the composites nothing read; verify-contrast now reads every
+     text on its screens in this palette against the pixels under it, which is the measurement the proxy stood in for. */
 }
 
 head('and the figures quoted beside the Contrast palette are those figures');

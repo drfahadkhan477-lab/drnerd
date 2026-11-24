@@ -11,10 +11,11 @@
  * What is measured, rather than assumed:
  *   - every theme has an id of its own, a group of light or dark, a mode its group allows (Auto is light's), a
  *     palette or none, and the three colours of its swatch and bar;
- *   - a saved choice is its own theme; the old 'dark' and 'light' are Midnight and Daylight; anything else is Auto;
+ *   - a saved choice is its own theme; the old 'dark' and 'light' are Midnight and Daylight, and the five themes retired
+ *     with D6 each the kept theme of its own lightness; anything else is Auto;
  *   - a theme is dark by its mode, and Auto by the system, which is asked only for Auto;
  *   - only Auto follows the system; the next theme after the last is the first;
- *   - the script before paint gives every theme, and the two old names, the mode and palette the table gives;
+ *   - the script before paint gives every theme, and every old name, the mode and palette the table gives;
  *   - the page's names are the calls into this, written into the page once, above them.
  */
 'use strict';
@@ -47,6 +48,16 @@ head('which theme a saved choice is');
 {
   ok('a saved id is its own theme', T.LIST.every(t => safely(() => T.def(t.id)) === t));
   ok('the old dark and light are Midnight and Daylight', safely(() => T.def('dark').id) === 'midnight' && safely(() => T.def('light').id) === 'daylight');
+  /* D6 retired five themes. A choice saved under one of their names is the kept theme of the same lightness, so an
+     upgrade never turns someone's page from dark to light or back; and no old name is a theme still in the table. */
+  const RETIRED = { slate: 'daylight', parchment: 'daylight', nocturne: 'midnight', cathlab: 'midnight', monitor: 'midnight' };
+  ok('the five retired themes are no longer offered', Object.keys(RETIRED).every(id => !T.byId[id]), Object.keys(RETIRED).filter(id => T.byId[id]).join(' ') || 'none of them');
+  ok('and a choice saved under one is the kept theme of its own lightness',
+     Object.entries(RETIRED).every(([old, now]) => safely(() => T.def(old).id) === now),
+     Object.keys(RETIRED).map(old => old + ':' + safely(() => T.def(old).id)).join(' '));
+  ok('every old name is a theme the table has, and none is still a theme of its own',
+     Object.entries(T.OLD || {}).every(([old, now]) => !T.byId[old] && !!T.byId[now]) && Object.keys(T.OLD || {}).length === 7,
+     Object.entries(T.OLD || {}).map(([o, n]) => o + '→' + n).join(' ') || 'no OLD');
   /* A restored backup's theme is any string (ProgressData only asks that it be one), and the table is a plain
      object: "constructor" found Object itself, "__proto__" its prototype, and the page set data-theme="undefined" and
      drew no theme at all. */
@@ -61,7 +72,7 @@ head('dark, light, or as the system is');
   ok('a dark theme is dark and a light one light, the system not asked', T.isDark(T.byId.midnight, sys(false)) === true && T.isDark(T.byId.daylight, sys(true)) === false && asked === 0, asked + ' asked');
   ok('Auto is as the system is', T.isDark(T.byId.auto, sys(true)) === true && T.isDark(T.byId.auto, sys(false)) === false && asked === 2);
   ok('and light where the system cannot say', T.isDark(T.byId.auto, null) === false && T.isDark(T.byId.auto, () => undefined) === false);
-  ok('only Auto follows the system, and no theme at all does', T.followsSystem(T.byId.auto) && !T.followsSystem(T.byId.midnight) && !T.followsSystem(T.byId.slate) && T.followsSystem(null));
+  ok('only Auto follows the system, and no theme at all does', T.followsSystem(T.byId.auto) && !T.followsSystem(T.byId.midnight) && !T.followsSystem(T.byId.contrast) && T.followsSystem(null));
   ok('the next theme is the one after it, and after the last, the first', safely(() => T.next('auto')) === T.LIST[1].id && safely(() => T.next(T.LIST[T.LIST.length - 1].id)) === 'auto');
 }
 
@@ -75,8 +86,10 @@ head('the script before paint draws each theme as the table says');
   const want = t => [t.mode === 'auto' ? '' : t.mode, t.palette || ''];
   const off = M && typeof M === 'object' ? T.LIST.filter(t => J(M[t.id]) !== J(want(t))).map(t => t.id + ': ' + J(M[t.id]) + ' not ' + J(want(t))) : ['no map'];
   ok('every theme, with the mode and palette the table gives', off.length === 0, off.join('; ') || 'all ' + T.LIST.length);
-  ok('and the two old names as the themes they now are', !!M && J(M.dark) === J(want(T.def('dark'))) && J(M.light) === J(want(T.def('light'))), M ? J([M.dark, M.light]) : '');
-  ok('and no theme the table does not have', !!M && Object.keys(M).every(k => T.byId[k] || k === 'dark' || k === 'light'), M ? Object.keys(M).filter(k => !T.byId[k] && k !== 'dark' && k !== 'light').join(' ') || 'none' : '');
+  const olds = Object.keys(T.OLD || {});
+  const oldOff = M && typeof M === 'object' ? olds.filter(o => J(M[o]) !== J(want(T.def(o)))).map(o => o + ': ' + J(M[o]) + ' not ' + J(want(T.def(o)))) : ['no map'];
+  ok('and every old name as the theme it now is', olds.length > 0 && oldOff.length === 0, oldOff.join('; ') || 'all ' + olds.length);
+  ok('and no name the table and its old names do not have', !!M && Object.keys(M).every(k => T.byId[k] || olds.includes(k)), M ? Object.keys(M).filter(k => !T.byId[k] && !olds.includes(k)).join(' ') || 'none' : '');
 }
 
 head('the page\'s names are the calls into this');
