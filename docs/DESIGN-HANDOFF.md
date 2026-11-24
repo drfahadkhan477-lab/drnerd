@@ -14,6 +14,13 @@ Open the existing repository in Claude Code or Codex and use this prompt:
 > remain accessible through scrolling. Preserve alternative palettes and dark
 > mode. Do not replace the physiological heart with a static illustration.
 >
+> *Since the UI revamp (November 2026, [UI-REVAMP.md](UI-REVAMP.md)):* Home's first page keeps all of the above. The other
+> screens wear a glass capsule in the header band on a tablet (Home, Brain, Labs, Chapters). It is a labelled group of
+> buttons, not a tab bar (no `role="tab"`, no `.home-tabs`), and while it is up it takes over each back button whose
+> destination it names. Phones, focus mode and the screens a question is read on have no capsule and keep their back
+> buttons. `src/app/gnav.js` and `app/css/gnav.css` say where it shows; `tests/verify-gnav-pure.js` and
+> `tests/verify-homepager.js` hold it.
+>
 > Run affected Home, homepager, pearl, typography, accessibility and theme
 > checks in Chromium and WebKit. Follow the repository's negative-test evidence
 > requirements. Use synthetic content for public checks. Locate and hash the

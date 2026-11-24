@@ -156,7 +156,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('"Quiz these N" deals the N found', await act(() => page.click('.sb-quiz', { timeout: 5000 })) && await until(k => S.screen === 'quiz' && S.questions.length === k, n), await where());
 
     await drawnFor('', '', '.sb-back');
-    ok('Home goes home', await act(() => page.click('.sb-back', { timeout: 5000 })) && await until(() => S.screen === 'home'), await where());
+    /* At 1194px the header's capsule is up and Search's own Home is set aside (app/css/gnav.css): the capsule's Home is the way. */
+    const aside = await page.evaluate(() => !document.querySelector('.sb-back').getClientRects().length);
+    ok('Home goes home: the capsule\'s Home, Search\'s own button set aside while it is up', aside
+       && await act(() => page.click('#gnav .gnav-it[data-go="home"]', { timeout: 5000 })) && await until(() => S.screen === 'home'), await where());
     await page.evaluate(() => { SQ.ch = ''; runSearch(''); });
   }
 

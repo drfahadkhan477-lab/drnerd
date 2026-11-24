@@ -752,6 +752,9 @@ html[data-theme="dark"] .pearl-card{--pk-violet:#C4B5FD;--pk-violet-bg:#1E1535;-
 .door-row{gap:10px}
 .icon-btn{border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 4px 12px rgba(0,0,0,.1);
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+/* In the header's bar, which is blurred already, a button's own blur is glass on glass: it can sample only the bar's painting
+   (the bar is its backdrop root), so it costs a blur and shows nothing (tests/verify-glassbudget.js). */
+#navbar .icon-btn{backdrop-filter:none;-webkit-backdrop-filter:none}
 .door{
   background:linear-gradient(145deg,var(--gl-shine),transparent 52%),
     linear-gradient(160deg,color-mix(in srgb,var(--card) 94%,transparent),color-mix(in srgb,var(--card) 76%,transparent));
@@ -977,10 +980,11 @@ html[data-palette="contrast"] .door{background:var(--card)}
   background:#050D1A;border:1px solid rgba(94,234,212,.2);margin-bottom:10px;
   box-shadow:inset 0 0 40px rgba(45,212,191,.07)}
 .lab-monitor canvas{width:100%;height:100%;display:block}
+/* No backdrop-filter: the trace under it is drawn every frame, and a blur over a canvas that moves is blurred again on every
+   one of them (docs/UI-REVAMP.md, E; tests/verify-glassbudget.js). A ground opaque enough to read on stands in for it. */
 .lab-readout{position:absolute;left:14px;bottom:10px;display:flex;align-items:baseline;gap:8px;
-  background:rgba(5,13,26,.72);padding:4px 10px;border-radius:99px;
-  border:1px solid rgba(94,234,212,.22);
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  background:rgba(5,13,26,.9);padding:4px 10px;border-radius:99px;
+  border:1px solid rgba(94,234,212,.22)}
 .lab-name{font-size:13px;font-weight:800;color:#5EEAD4;letter-spacing:-.01em}
 .lab-hr{font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.5)}
 .physio-panel{padding:0;overflow:hidden}

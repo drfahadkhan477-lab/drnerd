@@ -128,8 +128,10 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     await page.evaluate(() => { goStudy(); render(); });
     await onScreen(page, 'study', { marker: '#planCard' });
     await quiet(page);
-    const back = await fits('.study-back'), study = await wide();
+    const back = await fits('.study-back'), backTall = await tall('.study-back'), study = await wide();
     ok(`at ${w} px the "Got it" button on home and the Back button on Study are inside the phone and the card that holds them`, hello.length === 1 && back.length >= 1 && ![...hello, ...back].some(c => c.out), JSON.stringify([hello.length, back.length, ...hello.filter(c => c.out), ...back.filter(c => c.out)]));
+    /* A phone has no header capsule, so Study's own Back button is the way back here, and is measured here. */
+    ok(`at ${w} px the Back button on Study is drawn and at least 44 px tall`, backTall.length >= 1 && backTall.every(h => h >= 44), JSON.stringify(backTall));
     ok(`and neither home nor Study scrolls sideways`, home.scroll <= home.inner && study.scroll <= study.inner, `home ${home.scroll} of ${home.inner}, Study ${study.scroll} of ${study.inner}`);
   }
   await resized(page, 834, 1194);
@@ -143,8 +145,10 @@ const FITS = `(sel) => [...document.querySelectorAll(sel)].map(el => {
     ok('the welcome card\'s "Got it" is at least 44 px tall', hello.length === 1 && hello[0] >= 44, JSON.stringify(hello));
     await page.evaluate(() => goStudy());
     await onScreen(page, 'study', { marker: '#planCard' });
-    const back = await tall('.study-back');
-    ok('the Back button on the Study screen is at least 44 px tall', back.length >= 1 && back.every(h => h >= 44), JSON.stringify(back));
+    /* At 834px the header's capsule is up and Study's own Back is set aside (app/css/gnav.css): the capsule's items take it. */
+    const back = await tall('.study-back'), items = await tall('#gnav .gnav-it');
+    ok('on a tablet the Study screen\'s way back is the capsule, each of its items at least 44 px tall, and its own Back is set aside',
+       back.length >= 1 && back.every(h => h === 0) && items.length === 4 && items.every(h => h >= 44), JSON.stringify({ back, items }));
 
     await page.evaluate(() => { startAdhocQuiz(POOL.filter(q => q.o.length >= 4 && !q.imgopt).slice(0, 3), null); });
     await onScreen(page, 'quiz', { marker: '.opt' });

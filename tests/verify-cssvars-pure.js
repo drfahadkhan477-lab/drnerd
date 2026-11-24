@@ -78,9 +78,9 @@ head('the reader, on small stylesheets');
   ok('each use is reported with its line', (() => { const u = bareUses('.a{}\n.b{color:var(--q)}'); return u.length === 1 && u[0].line === 2; })());
 }
 
-/* Undefined when this suite was written (and its reader found every one of them), each with what it costs. */
+/* Undefined when this suite was written (and its reader found every one of them), each with what it costs. All three are now
+   fixed (--hp-b, --font-serif, --card2), so the list is empty; a name added here must say what it breaks. */
 const KNOWN = {
-  '--card2': '.pearl-emblem (home.css): the radial ground is void; only its background-color paints',
 };
 
 head('the stylesheets the pages ship');

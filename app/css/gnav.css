@@ -49,3 +49,22 @@ body.has-gnav.on-home .nav{padding-left:max(20px,var(--sal))}
   box-shadow:var(--e3),0 0 22px -6px rgba(167,139,250,.65)}}
 @media(hover:hover){.ai-fab:hover{box-shadow:var(--e4),0 0 28px -6px rgba(167,139,250,.8)}}
 html[data-palette="contrast"] .ai-fab{border:2px solid currentColor;background:var(--navy3);box-shadow:var(--e3)}
+
+/* ── The back buttons the capsule takes over (docs/UI-REVAMP.md, T3.6) ──
+   While the capsule is up (body.has-gnav, which gnavSync sets only when it is drawn and fits), a back button whose
+   destination is one of its items is set aside (Notes' and Memory's Back among them): the capsule names the same place, and tapping the lit item goes back to
+   that section's root, as a tab bar's selected tab does. Each is named by what it does, never by its class alone (.sb-back
+   is also the plain style of Progress's export and import buttons). Kept, because the capsule does not go where they go:
+   the Practice lab's "Practice Lab" (back within the lab), the note search's "Results", the Home buttons of the question
+   screens (no capsule there), and every back button on a phone and in focus mode (no capsule there either).
+   tests/verify-gnav-pure.js holds this list to the screens. */
+body.has-gnav .home-back,
+body.has-gnav .study-back,
+body.has-gnav .sb-back[data-action="goHome"],
+body.has-gnav .sb-back[data-action="goLabs"],
+body.has-gnav .sb-back[data-action="goStudy"],
+body.has-gnav .plab-back[data-act="leave"],
+body.has-gnav .ref-btns [data-action="goHome"]{display:none}
+/* Sessions' page has no top padding of its own: its back button, and the grid's gap after it, were all the room above its
+   heading, which without them sat against the bar, in the bar's shadow (verify-contrast read its eyebrow at 4.19:1 there). */
+body.has-gnav .sessions-page{padding-top:24px}

@@ -181,7 +181,10 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     return { shown, lit: shown ? ((g.querySelector('[aria-current="page"]') || {}).dataset || {}).go || null : null, has: document.body.classList.contains('has-gnav'),
       clear: shown ? gr.left >= br.right && gr.right <= rr.left : null, inBar: shown ? gr.top >= bar.top && gr.bottom <= bar.bottom : null,
       short: shown ? [...g.querySelectorAll('.gnav-it')].filter(b => b.getBoundingClientRect().height < 44).length : null, search: search ? Math.round(search.width) : 0,
-      screen: S.screen, page: homePage };
+      screen: S.screen, page: homePage,
+      /* The screen's own way back (Brain's or Labs' Home, Chapters' Back): set aside while the capsule is up (gnav.css, T3.6). */
+      back: (b => b ? b.getClientRects().length > 0 : null)(S.screen === 'study' ? document.querySelector('.study-back')
+        : S.screen === 'home' && homePage > 0 ? document.querySelector('#homePage' + homePage + ' .home-back') : null) };
   });
   for (const size of [{width:1180,height:820},{width:834,height:1194},{width:744,height:1133}]) {
     await page.setViewportSize(size); const at = `${size.width}×${size.height}`;
@@ -191,11 +194,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     for (const [p, lit] of [[1, 'brain'], [2, 'labs']]) {
       await page.evaluate(p=>homeGo(p,false), p); await still('a landing page');
       const c = await capsule();
-      ok(`${at}: on ${lit === 'brain' ? 'Brain' : 'Labs'}, in the bar, lit on ${lit}, clear of the brand and the buttons, every button 44px tall`, c.shown && c.lit === lit && c.inBar && c.clear && c.short === 0, JSON.stringify(c));
+      ok(`${at}: on ${lit === 'brain' ? 'Brain' : 'Labs'}, in the bar, lit on ${lit}, clear of the brand and the buttons, every button 44px tall, the page's own Home set aside`, c.shown && c.lit === lit && c.inBar && c.clear && c.short === 0 && c.back === false, JSON.stringify(c));
     }
     await page.evaluate(()=>goStudy()); await settled(page, () => !window.__vtLive && S.screen === 'study', { label: 'Chapters' }); await quiet(page);
     const st = await capsule();
-    ok(`${at}: on Chapters, lit on Chapters and clear of the bar's buttons`, st.shown && st.lit === 'chapters' && st.inBar && st.clear && st.short === 0, JSON.stringify(st));
+    ok(`${at}: on Chapters, lit on Chapters and clear of the bar's buttons, Chapters' own Back set aside`, st.shown && st.lit === 'chapters' && st.inBar && st.clear && st.short === 0 && st.back === false, JSON.stringify(st));
     await page.evaluate(()=>startAdhocQuiz([POOL.find(x => !x.bad)], null)); await settled(page, () => !window.__vtLive && S.screen === 'quiz', { label: 'a question' }); await quiet(page);
     const qz = await capsule();
     ok(`${at}: and not where a question is read`, !qz.shown && !qz.has, JSON.stringify(qz));
@@ -203,7 +206,36 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.setViewportSize({width:600,height:900});
   await homeAt(2, 'Labs on a phone');
   const ph = await capsule();
-  ok('600×900: no capsule below 700px, where the bar has no room for it', !ph.shown && !ph.has, JSON.stringify(ph));
+  ok('600×900: no capsule below 700px, where the bar has no room for it, so Labs keeps its own Home button', !ph.shown && !ph.has && ph.back === true, JSON.stringify(ph));
+  await page.evaluate(()=>goStudy()); await settled(page, () => !window.__vtLive && S.screen === 'study', { label: 'Chapters on a phone' }); await quiet(page);
+  const phs = await capsule();
+  ok('600×900: and Chapters keeps its own Back', !phs.shown && phs.back === true, JSON.stringify(phs));
+  /* Where there is no capsule its back buttons are the only way back, so each is tapped here, where it is drawn, and must reach
+     its own destination by its own action: the capsule's taps elsewhere take their own paths and would not see one broken.
+     Sessions' is tapped with the pager set to Home's page, so only goLabs() lands on the Labs page. */
+  const BACKS = [
+    ['Brain\'s Home', 'homePage=1;goHome();homeGo(1,false)', '#homePage1 .home-back', 'S.screen==="home"&&homePage===0'],
+    ['Labs\' Home', 'homePage=2;goHome();homeGo(2,false)', '#homePage2 .home-back', 'S.screen==="home"&&homePage===0'],
+    ['Chapters\' Back', 'goStudy()', '.study-back', 'S.screen==="home"'],
+    ['the Rhythm Lab\'s Home', 'goLab()', '.sb-back[data-action="goHome"]', 'S.screen==="home"'],
+    ['Search\'s Home', 'openSearch()', '.sb-back[data-action="goHome"]', 'S.screen==="home"'],
+    ['Progress\'s Home', 'goStats()', '.stats-head .sb-back', 'S.screen==="home"'],
+    ['Sessions\' Labs', 'goSessions()', '#sessionsPage .sb-back', 'S.screen==="home"&&homePage===2', 'homePage=0'],
+    ['Annotations\' Chapters', 'goAnnotations()', '.anno-wrap .sb-back', 'S.screen==="study"'],
+    ['the Practice lab\'s Home', 'goPractice()', '.plab-back[data-act="leave"]', 'S.screen==="home"'],
+    ['Notes\' Back', 'goRefs()', '.ref-new .ref-btns [data-action="goHome"]', 'S.screen==="home"'],
+    ['Memory\'s Back', 'goMemory()', '.ref-btns [data-action="goHome"]', 'S.screen==="home"'],
+  ];
+  for (const [what, open, sel, there, before] of BACKS) {
+    await page.evaluate(open); await settled(page, () => !window.__vtLive, { label: what + ': its screen' }); await quiet(page);
+    const drawn = await page.evaluate(sel => { const b = document.querySelector(sel); return !!b && b.getClientRects().length > 0 && !document.body.classList.contains('has-gnav'); }, sel);
+    if (before) await page.evaluate(before);
+    const tapped = drawn && await page.locator(sel).first().click({ timeout: 5000 }).then(() => true, () => false);
+    const went = tapped && await page.waitForFunction(there, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    if (went) { await settled(page, () => !window.__vtLive, { label: what + ': where it went' }); await quiet(page); }
+    ok(`600×900: ${what}, drawn with no capsule, tapped, goes where it says`, went,
+       !drawn ? 'not drawn, or the capsule is up' : !tapped ? 'could not be tapped' : await page.evaluate(() => JSON.stringify({ screen: S.screen, page: homePage })));
+  }
 
   /* Tapped: the pages glide and the capsule keeps the focus; Chapters opens Chapters; Labs from there comes back to the Labs page. */
   await page.setViewportSize({width:1180,height:820});
@@ -251,13 +283,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('offscreen Home does not repaint its pearl or advance its ECG', hiddenHero.paints===0 && hiddenHero.advance===0, JSON.stringify(hiddenHero));
   const s2 = await state();
   ok('the Labs door glides there rather than jumping', glide.moving, JSON.stringify(glide));
-  ok('and lands on Labs, the only page in use, with the keyboard on its way Home', Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2'
-     && await page.evaluate(() => document.activeElement === document.querySelector('#homePage2 .home-back')), JSON.stringify(s2));
+  /* At 1180px the header's capsule is up, so Labs' own Home button is set aside (gnav.css) and the way Home is the capsule's. */
+  const wayHome = await page.evaluate(() => { const b = document.querySelector('#homePage2 .home-back'), a = document.activeElement;
+    return { back: !!b && b.getClientRects().length > 0, on: a && (a.closest('#gnav') ? 'gnav:' + a.dataset.go : a.className) }; });
+  ok('and lands on Labs, the only page in use, with the keyboard on its way Home: the capsule\'s Home, Labs\' own button set aside',
+     Math.abs(s2.f - 2) < 0.01 && s2.sel.join() === '2' && !wayHome.back && wayHome.on === 'gnav:home', JSON.stringify(Object.assign({}, s2, wayHome)));
   await page.keyboard.press('Enter');
   await still('after Home from Labs');
   const homeAgain = await page.evaluate(() => ({ f: document.getElementById('homePager').scrollLeft / document.getElementById('homePager').clientWidth,
     focus: document.activeElement && document.activeElement.className + ' ' + (document.activeElement.dataset.page || '') }));
-  ok('Enter on the way Home goes Home and puts the keyboard back on the door it came by', Math.abs(homeAgain.f) < 0.01 && homeAgain.focus === 'home-door 2', JSON.stringify(homeAgain));
+  /* The capsule is not drawn on Home's first page, so a focus left on its Home item would be on nothing. */
+  ok('Enter on the way Home goes Home and puts the keyboard back on the door it came by, not on the capsule it hid', Math.abs(homeAgain.f) < 0.01 && homeAgain.focus === 'home-door 2', JSON.stringify(homeAgain));
   // The trace clock wraps at the canvas edge; actual paints cannot look like backwards progress when a sample crosses that wrap.
   const ecg = await require('./_home-ecg')(page);
   ok('back on Home the trace is shown across the hero and drawn', ecg.shown !== 'hidden' && ecg.width > 200 && ecg.live > 0, JSON.stringify(ecg));

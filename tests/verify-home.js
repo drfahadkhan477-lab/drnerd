@@ -840,12 +840,17 @@ onDeath(() => ({ section, checks: passed + failed, errors,
 
     t = await tap(0, '#homePage0 .home-door[data-page="1"]', () => homePage === 1);
     ok('Home\'s Brain door goes to the Brain page', t.went, t.said);
-    t = await tap(1, '#homePage1 .home-back', () => homePage === 0);
-    ok('and Brain\'s Home button back to Home', t.went, t.said);
+    /* At this iPad size the header's capsule is up, so Brain's and Labs' own Home button is set aside (app/css/gnav.css,
+       T3.6) and the way back is the capsule's Home: measured set aside first, then the capsule tapped. */
+    const wayHome = async n => { const aside = await page.evaluate(n => { const b = document.querySelector('#homePage' + n + ' .home-back'); return !!b && !b.getClientRects().length; }, n);
+      const t = aside ? await tap(n, '#gnav .gnav-it[data-go="home"]', () => homePage === 0) : { went: false, said: 'the page\'s own Home button is still drawn' };
+      return t; };
+    t = await wayHome(1);
+    ok('and from Brain, the capsule\'s Home back to Home, Brain\'s own Home button set aside', t.went, t.said);
     t = await tap(0, '#homePage0 .home-door[data-page="2"]', () => homePage === 2);
     ok('Home\'s Labs door goes to the Labs page', t.went, t.said);
-    t = await tap(2, '#homePage2 .home-back', () => homePage === 0);
-    ok('and Labs\' Home button back to Home', t.went, t.said);
+    t = await wayHome(2);
+    ok('and from Labs, the capsule\'s Home back to Home, Labs\' own Home button set aside', t.went, t.said);
 
     /* With no notes to draw a pearl from, the intro is shown, and its button opens the notes. */
     const pearls = await page.evaluate(() => { const was = pearlCache; pearlCache = []; pearlCurrent = null; window.__pearls = was; return Array.isArray(was) ? was.length : 0; });

@@ -639,10 +639,11 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     ok('a row says what the question is marked with: flagged, previously missed, how many notes, pencil', /flagged/.test(at(A).top) && !/flagged/.test(at(B).top) && /previously missed/.test(at(B).top) && /2 notes/.test(at(B).top) && /note/.test(at(A).top) && /pencil/.test(at(C).top), JSON.stringify(list.map(r => r.top)));
     const head0 = await page.evaluate(() => ({ count: document.getElementById('annoCount').textContent, practise: document.getElementById('annoPractise').textContent.trim(), dis: document.getElementById('annoPractise').disabled,
       label: document.getElementById('annoQ').getAttribute('aria-label'), type: document.getElementById('annoQ').type, h: document.getElementById('annoPractise').offsetHeight, hq: document.getElementById('annoQ').offsetHeight,
-      hb: document.querySelector('.anno-wrap .sb-back').offsetHeight }));
+      /* The way back: the header's capsule is up at 834px, so the screen's own Back is set aside and the capsule's Chapters takes it. */
+      aside: !document.querySelector('.anno-wrap .sb-back').getClientRects().length, hb: (document.querySelector('#gnav .gnav-it[data-go="chapters"]') || {}).offsetHeight || 0 }));
     ok('it counts them, and offers to practise all three', /^3 questions with a sticky note or pencil marks$/.test(head0.count) && head0.practise === 'Practise these 3' && head0.dis === false, JSON.stringify(head0));
     ok('the count is a status, so a screen reader hears it change as the list narrows', await page.evaluate(() => document.getElementById('annoCount').getAttribute('role')) === 'status');
-    ok('the box is a search box with a name, and the box and the buttons are at least 44 px tall', head0.type === 'search' && /annotations/i.test(head0.label) && head0.h >= 44 && head0.hq >= 44 && head0.hb >= 44, JSON.stringify(head0));
+    ok('the box is a search box with a name, and the box and the buttons are at least 44 px tall (the way back is the capsule\'s Chapters, the screen\'s own Back set aside)', head0.type === 'search' && /annotations/i.test(head0.label) && head0.h >= 44 && head0.hq >= 44 && head0.hb >= 44 && head0.aside, JSON.stringify(head0));
 
     /* typing narrows the list in place */
     await page.evaluate(() => { window.__box = document.getElementById('annoQ'); window.__list = document.getElementById('annoList'); });
@@ -723,8 +724,9 @@ const RESTORE = `(text) => new Promise((resolve, reject) => {
     await page.evaluate(() => goAnnotations()); await reached('annotations'); await settle();
     const empty = await page.evaluate(() => ({ rows: document.querySelectorAll('#annoList .anno-row').length, text: document.getElementById('annoList').textContent.trim(), count: document.getElementById('annoCount').textContent, dis: document.getElementById('annoPractise').disabled }));
     ok('with nothing written anywhere the screen says so, and how to begin, and Practise is switched off', empty.rows === 0 && /Nothing is written on any question yet/.test(empty.text) && /sticky note/.test(empty.text) && empty.dis === true && /Nothing is written/.test(empty.count), JSON.stringify(empty));
-    await page.click('.sb-back');
-    ok('the way back goes to the Study screen', await reached('study'));
+    const aside = await page.evaluate(() => !document.querySelector('.anno-wrap .sb-back').getClientRects().length);
+    await page.click('#gnav .gnav-it[data-go="chapters"]');
+    ok('the way back goes to the Study screen: the capsule\'s Chapters, the screen\'s own Back set aside while it is up', aside && await reached('study'));
   }
 
   head('a mock block\'s flags');

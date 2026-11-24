@@ -81,6 +81,7 @@ const SUITES = [
   ['assets',       'an imported chapter brings its figures, and keeps them'],
   ['chatfigs',     'the figure Apex is reasoning from is one you can see'],
   ['pearl',        'the home screen opens with something worth knowing'],
+  ['glassbudget',  'no screen has more blurred surfaces than before the revamp, and nothing animates, roots or moves beneath one'],
   ['worker',       'the Gemini key lives on the edge, and the site still serves'],
   ['fsrs',         'the scheduler cannot make forgetting a reward'],
   ['boundary',     'a retrieved note is material to teach from, never an instruction'],
@@ -422,7 +423,7 @@ const SUITES = [
   ['swupdate-pure', 'a deploy landing under a running app leaves a pair that is noticed'],
   ['swlifetime-pure', 'the service worker keeps the event alive for each cache write it makes, including the refresh behind a cache hit that the network answers late'],
   ['hover-pure', 'no :hover rule in any stylesheet the pages ship applies where a device cannot hover, so a tap leaves no hover style behind'],
-  ['gnav-pure', 'the header\'s capsule shows where it should, lights the right section, is no tab bar, and the page keeps it in step'],
+  ['gnav-pure', 'the header\'s capsule shows where it should, lights the right section, is no tab bar, takes over only the back buttons it covers, and the page keeps it in step'],
   ['cssvars-pure', 'every var() with no fallback in the stylesheets the pages ship names a custom property something defines, or one listed as waiting for a decision'],
   /* The stylesheets use CSS that iPadOS 13.4, the floor, does not read, and an older Safari does not stop at it: it skips the declaration, the whole rule or
      the whole @media, and says nothing. ipad-pure holds the script to a list; this holds every property, function, unit, pseudo-class, at-rule and
@@ -606,8 +607,8 @@ const SUITES = [
 /* Waiting since roadmap E1's first moves: providererror-pure, reviewqueue-pure, apexwire-pure, apexturn-pure, apexloop-pure;
    and since its screens: results-pure, memoryscreen-pure, rhythmlab-pure, annotations-pure, mockreport-pure,
    search-pure, study-pure, refs-pure, quiz-pure, mock-pure,
-   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E5: framemeter-pure, frames. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since E7's review: backupcrypto-pure. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure; and resuming a deck: resume-pure; and the figure viewer's zoom row: figzoom-pure; and the sign-in page told from a reply: accessgate-pure. And since the UI revamp's CSS-variable lint: cssvars-pure; and its header capsule: gnav-pure. */
-const PENDING_RECORD = ['gnav-pure', 'framemeter-pure', 'frames', 'cssvars-pure', 'backupcrypto-pure', 'accessgate-pure', 'figzoom-pure', 'resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
+   sessions-pure, statsscreen-pure, homescreen-pure, apexpanel-pure. And since roadmap E5: framemeter-pure, frames. And since roadmap E2: actions-pure. And since E1's leaves: refimport-pure, progressdata-pure, stroke-pure; and its readers: progressstats-pure. And since roadmap D2: contrast. And since E7's review: backupcrypto-pure. And since figures were written with their size: imagesize-pure. And since E1's tokenizer: terms-pure; and the pearl's card: pearl-pure; and the fence: fence-pure; and the themes: themes-pure; and the notes seeding: refseed-pure; and resuming a deck: resume-pure; and the figure viewer's zoom row: figzoom-pure; and the sign-in page told from a reply: accessgate-pure. And since the UI revamp's CSS-variable lint: cssvars-pure; and its header capsule: gnav-pure; and its glass budget: glassbudget. */
+const PENDING_RECORD = ['glassbudget', 'gnav-pure', 'framemeter-pure', 'frames', 'cssvars-pure', 'backupcrypto-pure', 'accessgate-pure', 'figzoom-pure', 'resume-pure', 'refseed-pure', 'themes-pure', 'fence-pure', 'pearl-pure', 'terms-pure', 'imagesize-pure', 'backupcrypto', 'progressstats-pure', 'stroke-pure', 'progressdata-pure', 'refimport-pure', 'providererror-pure', 'reviewqueue-pure', 'apexwire-pure', 'apexturn-pure', 'apexloop-pure', 'results-pure', 'memoryscreen-pure', 'rhythmlab-pure', 'annotations-pure', 'mockreport-pure', 'search-pure', 'study-pure', 'refs-pure', 'quiz-pure', 'mock-pure', 'sessions-pure', 'statsscreen-pure', 'homescreen-pure', 'apexpanel-pure', 'actions-pure', 'contrast', 'confusable-pure', 'circulation-pure'];
 
 /* ── suites deleted since the record was last written ───────────────────────
    The mirror of PENDING_RECORD. A suite removed from the registry is still in

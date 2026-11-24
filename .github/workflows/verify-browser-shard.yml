@@ -147,6 +147,9 @@ jobs:
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-pearl,') }}
         name: the home screen opens with something worth knowing (144 checks)
         run: node tests/verify-pearl.js build/synthetic/systole.html
+      - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-glassbudget,') }}
+        name: no screen has more blurred surfaces than before the revamp, and nothing animates, roots or moves beneath one (15 checks)
+        run: node tests/verify-glassbudget.js build/synthetic/systole.html
       - if: ${{ !cancelled() && contains(steps.shard.outputs.suites, ',verify-boundary,') }}
         name: a retrieved note is material to teach from, never an instruction (56 checks)
         run: node tests/verify-boundary.js build/synthetic/systole.html
