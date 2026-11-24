@@ -196,6 +196,35 @@ head('armAutoMinimize: a plain, cancellable countdown, nothing more');
      firedNormally === true);
 }
 
+head('a pen stroke\'s outline (PencilFX.outline, which was the page\'s penOutline())');
+{
+  /* A perfect-freehand of the test's own: it hands back what it was given. */
+  const L = { getStroke: (pts, o) => ({ pts, o }) };
+  const box = { width: 200, height: 100 };
+  const run = (s, last, w) => { try { return P.outline(L, s, box, last, w === undefined ? 2.6 : w); } catch (err) { return { err: err.message }; } };
+  const near = (a, b) => Math.abs(a - b) < 1e-12;
+  /* widthFor: base × size × (0.45 + 1.25 × pressure) × (1 + 0.7 × tilt). Half pressure, upright, medium: 1.075 of base;
+     the widest a medium stroke can be, full pressure laid flat: 1.7 × 1.7 = 2.89 of base. */
+  const half = run({ sz: 'M', p: [[0.5, 0.25, 0.5, 0], [1, 1, 1, 1]] }, true);
+  ok('each point is placed in the canvas\'s box', half.pts && half.pts[0][0] === 100 && half.pts[0][1] === 25 && half.pts[1][0] === 200 && half.pts[1][1] === 100, JSON.stringify(half.pts));
+  ok('and its pressure is its width over the widest the stroke can be: 1.075/2.89 at half pressure upright, 1 at full laid flat',
+     half.pts && near(half.pts[0][2], 1.075 / 2.89) && near(half.pts[1][2], 1), half.pts && half.pts.map(q => q[2]).join(' '));
+  ok('the size handed over is half that widest: 2.6 × 2.89 / 2 for a medium pen, and 1.7 times it for a large one',
+     half.o && near(half.o.size, 2.6 * 2.89 / 2) && near(run({ sz: 'L', p: [[0, 0, 0.5, 0]] }, true).o.size, 1.7 * 2.6 * 2.89 / 2), half.o && String(half.o.size));
+  ok('a stroke with no size is medium, and the pen\'s width is the one handed in', near(run({ p: [[0, 0, 0.5, 0]] }, true).o.size, 2.6 * 2.89 / 2) && near(run({ p: [[0, 0, 0.5, 0]] }, true, 4).o.size, 4 * 2.89 / 2));
+  ok('the library is asked for a capped, untapered stroke, its own pressure model off',
+     half.o && half.o.thinning === 1 && half.o.smoothing === 0.5 && half.o.streamline === 0.25 && half.o.simulatePressure === false
+       && JSON.stringify([half.o.start, half.o.end]) === JSON.stringify([{ cap: true, taper: 0 }, { cap: true, taper: 0 }]), JSON.stringify(half.o));
+  ok('and told whether the stroke is finished, as a true or false', half.o && half.o.last === true && run({ p: [[0, 0, 0.5, 0]] }, false).o.last === false && run({ p: [[0, 0, 0.5, 0]] }).o.last === false
+     && run({ p: [[0, 0, 0.5, 0]] }, 1).o.last === true);
+  /* The page's line, read with its comments blanked: the shell explains itself, and quotes what is looked for. */
+  const { blankComments } = require('./_source.js');
+  const page = blankComments(read('app/systole.html'));
+  const n = t => page.split(t).length - 1;
+  ok('the page\'s penOutline() is one line handing over the pen\'s width, and the page keeps no copy',
+     n('function penOutline(L,s,r,last){ return PencilFX.outline(L,s,r,last,INK_TOOLS.pen.w); }') === 1 && n('L.getStroke(') === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
 })();

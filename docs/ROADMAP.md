@@ -399,6 +399,8 @@ Then which figures open together: `FIG_GROUP`, `figFromEl()` and the gathering i
 Then the cardiac waveform engine: the base `RHYTHMS`, `gauss()`, `beatMV()` and
 `rhythmMV()` are `src/core/rhythms.js`'s `Rhythms` (held by `verify-rhythms-pure`); the page
 keeps `RHYTHMS` (the base with the extras merged in), `RHYTHM_KEYS` and `rhythmMV()`.
+Then a pen stroke's outline: `penOutline()` is `src/ui/pencil.js`'s `PencilFX.outline`, handed the
+pen's width (held by `verify-pencil-pure`).
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

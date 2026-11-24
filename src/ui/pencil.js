@@ -60,6 +60,19 @@ function tiltFactor(tiltX, tiltY) {
    next pointerdown. No knowledge of the app's own state. */
 function armAutoMinimize(ms, fn) { return setTimeout(fn, ms); }
 
-root.PencilFX = { SIZES, SIZE_ORDER, widthFor, tiltFactor, armAutoMinimize };
+/* The outline of a pen stroke, in the canvas's points (docs/ROADMAP.md, E1: it was app/systole.html's penOutline(),
+   which keeps its name as one line handing over the pen's width). L is perfect-freehand; s a stored stroke, its points
+   [x, y, pressure, tilt] as fractions of r, the canvas's box; penW the pen's base width. Each point is as wide as
+   widthFor makes it, as each segment was: with thinning 1 the library's width is twice size × pressure, so the
+   pressure handed to it is the point's width over the widest a stroke of this size can be, and size is half that.
+   last: whether the stroke is finished; a stroke still being written ends in a cap that moves with the pen. */
+function outline(L, s, r, last, penW) {
+  const sz=s.sz||'M', w=penW, max=widthFor(w,1,1,sz);
+  const pts=s.p.map(q=>[q[0]*r.width,q[1]*r.height,widthFor(w,q[2],q[3],sz)/max]);
+  return L.getStroke(pts,{size:max/2,thinning:1,smoothing:.5,streamline:.25,simulatePressure:false,last:!!last,
+    start:{cap:true,taper:0},end:{cap:true,taper:0}});
+}
+
+root.PencilFX = { SIZES, SIZE_ORDER, widthFor, tiltFactor, armAutoMinimize, outline };
 
 })(typeof window !== 'undefined' ? window : this);
