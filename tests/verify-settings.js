@@ -139,6 +139,12 @@ const negative=process.env.NEGATIVE_CHECK||'';
  await check('a theme tapped in Settings applies that theme',async()=>await page.evaluate(()=>S.theme==='contrast'&&document.documentElement.getAttribute('data-palette')==='contrast'&&document.querySelector('#generalSettings .theme-opt[data-theme-id="contrast"]').getAttribute('aria-checked')==='true'),async()=>{await page.evaluate(()=>setTheme('midnight'));},29);
  await page.locator('#generalSettings [aria-label="Close settings"]').click({noWaitAfter:true});
  await check('the close button closes Settings',async()=>await page.evaluate(()=>!document.querySelector('#generalSettings')),async()=>{await page.evaluate(()=>openSettings());},30);
+ /* The ways to the sections in Settings' head (the owner's choice, November 2026): Apex's, tapped, brings its section up
+    under the head, which stays, and gives it the keyboard. */
+ await page.evaluate(()=>openSettings());
+ await page.locator('#generalSettings .set-nav [data-to="apexSettingsHeading"]').click({noWaitAfter:true});
+ await check('a way to a section, in the head, brings it up under the head and gives it the keyboard',async()=>await page.evaluate(()=>{const box=document.getElementById('generalSettings'),h=document.getElementById('apexSettingsHeading'),head=box&&box.querySelector('header');if(!box||!h||!head)return false;const hb=h.getBoundingClientRect(),eb=head.getBoundingClientRect(),bb=box.getBoundingClientRect();return document.activeElement===h&&box.scrollTop>0&&hb.top>=eb.bottom-1&&hb.bottom<=bb.bottom;}),async()=>{await page.evaluate(()=>{const box=document.getElementById('generalSettings');box.scrollTop=0;document.getElementById('settingsTitle').focus();document.querySelector('.set-nav [data-to="apexSettingsHeading"]').setAttribute('data-to','nowhere');});await page.locator('#generalSettings .set-nav [data-to="nowhere"]').click({noWaitAfter:true});},32);
+ await page.evaluate(()=>closeSettings());
  await page.evaluate(()=>openSettings('apex'));
  await page.locator('#generalSettings [data-action="settingsMemory"]').click({noWaitAfter:true});await quiet(page);
  await check('Apex memory closes Settings and opens the Memory screen',async()=>await page.evaluate(()=>!document.querySelector('#generalSettings')&&S.screen==='memory'),async()=>{await page.evaluate(()=>{S.screen='home';});},31);

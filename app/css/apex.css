@@ -80,8 +80,17 @@
   justify-content:center;background:linear-gradient(135deg,var(--navy3),var(--teal));font-size:16px;
   overflow:hidden}
 .ai-avatar canvas{width:100%;height:100%;display:block}
-.ai-title{font-weight:700;font-size:13px;letter-spacing:-.01em}
-.ai-sub{font-size:11px;color:var(--muted)}
+.ai-title{display:block;font-weight:700;font-size:13px;letter-spacing:-.01em}
+.ai-sub{display:block;font-size:11px;color:var(--muted)}
+/* The head is one control: the mark and the name close the panel (the owner's choice, November 2026), and a chevron
+   says so; grounding, full screen and the connection are in Settings. A large target, the whole row. */
+.ai-mark{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;gap:9px;padding:0;margin:0;border:0;background:none;
+  color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:12px}
+.ai-mark-text{display:flex;flex-direction:column;min-width:0}
+.ai-mark-close{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
+  border-radius:50%;color:var(--muted);border:1px solid var(--border)}
+.ai-mark:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+@media (hover:hover){.ai-mark:hover .ai-mark-close{color:var(--text);border-color:var(--teal)}}
 .ai-body{flex:1;min-height:0;overflow-y:auto;padding:18px 18px 20px;
   display:flex;flex-direction:column;gap:18px;
   /* THE GESTURE STOPS HERE. Without this, reaching the end of the thread
@@ -151,7 +160,7 @@
 @media(max-width:1023px){body:not(.on-home) #app::after{content:'';display:block;height:calc(max(14px,env(safe-area-inset-bottom)) + 50px + 12px)}}
 /* One centred column for all three stacked regions, so the composer lines up
    under the thread instead of running the width of an iPad. */
-#shell.ai-full .ai-head>div:first-of-type,
+#shell.ai-full .ai-head>.ai-mark,
 #shell.ai-full .ai-body,
 #shell.ai-full .chips,
 #shell.ai-full .src-strip,
@@ -159,9 +168,8 @@
 #shell.ai-full .ai-foot>*{max-width:860px;margin-left:auto;margin-right:auto;width:100%}
 #shell.ai-full .ai-body{padding:28px 24px 32px;gap:24px}
 #shell.ai-full .ai-head{padding:14px 20px}
-/* The header's own centred column would push the buttons to the middle of the
-   screen; only the title block is capped, and the row itself stays full width. */
-#shell.ai-full .ai-head>div:first-of-type{margin-left:0;margin-right:auto}
+/* The head is one button, the mark and the name, which closes the panel: capped as the column is, at its left. */
+#shell.ai-full .ai-head>.ai-mark{margin-left:0;margin-right:auto}
 #shell.ai-full .msg{max-width:100%}
 #shell.ai-full .msg.user{max-width:min(82%,620px)}
 #shell.ai-full .msg.bot p,#shell.ai-full .msg.bot li{max-width:34em}

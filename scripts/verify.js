@@ -321,8 +321,8 @@ const SUITES = [
      src/core/themes.js; the script before paint is held to it. */
   ['themes-pure', 'every theme has an id, a group and a mode it allows, a palette or none and its colours; a saved choice is its theme, the old names their new ones, anything else Auto; Auto alone follows the system; and the script before paint draws each theme as the table says'],
   /* Where the reader is in a question session, drawn as a small brain (src/ui/sessionbrain.js): the owner's choice of
-     November 2026 for the card that stood over the question. */
-  ['sessionbrain-pure', 'a point per question in the brain, each in its state; the pill says the place and opens a small panel that picks and goes to a question; one motion, which rests'],
+     November 2026 for the card that stood over the question, worn by the Apex button (the master Apex Brain). */
+  ['sessionbrain-pure', 'a point per question in the brain, each in its state; the Apex button wears it and Apex opens on it, where a question is picked and gone to and the session asked about; one motion, which rests'],
   /* Where the fellow's material starts and stops in what Apex is sent (docs/ROADMAP.md, E1): the nonce, the fence and
      what a note cannot carry inside one, moved to src/core/fence.js. */
   ['fence-pure', 'a fence is twelve characters from random bytes, kept for a request and new for a turn; a note cannot forge one, whole, half or as a bare block id, while ordinary comparisons are left alone; every block of a request is on its fence'],

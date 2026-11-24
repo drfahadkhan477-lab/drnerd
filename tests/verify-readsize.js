@@ -282,9 +282,9 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
        measure ? `${measure.chars} characters across ${measure.px}px at ${measure.per}px each` : 'no answer on screen');
     /* The sentence that says Apex can be wrong about something that changes care was set at 9px, the smallest type in
        the app. 11 is the floor; it is set at 12. */
-    const fine = await page.evaluate(() => ['ai-disclaim', 'ai-powered'].map(c => {
+    const fine = await page.evaluate(() => ['ai-disclaim'].map(c => {
       const el = document.querySelector('.' + c); return { c, px: el ? parseFloat(getComputedStyle(el).fontSize) : 0 }; }));
-    ok('the safety line and the model line are at least 11 px', fine.every(f => f.px >= 11), JSON.stringify(fine));
+    ok('the safety line is at least 11 px', fine.every(f => f.px >= 11), JSON.stringify(fine));
 
     /* THE COMPOSER DOES NOT KEEP WHAT IT HAS ALREADY SENT. buildAI() reads the panel through apexPanelState() and
        writes it back through apexPanelRestore(), so a draft survives a rebuild mid-typing — and so did the question
@@ -631,7 +631,7 @@ const FACTORS = [1, 1.125, 1.25, 1.4];
           const se = document.scrollingElement, app = document.getElementById('app'), frame = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
           for (let i = 0, was = -1; i < 40 && se.scrollHeight + app.scrollHeight !== was; i++) {
             was = se.scrollHeight + app.scrollHeight; se.scrollTop = se.scrollHeight; app.scrollTop = app.scrollHeight; await frame(); await frame(); }
-          const ctl = [document.querySelector('#rail:not(.hidden)'), document.getElementById('aiFab'), document.getElementById('sbPill')].filter(el => {
+          const ctl = [document.querySelector('#rail:not(.hidden)'), document.getElementById('aiFab')].filter(el => {
             if (!el) return false; const cs = getComputedStyle(el), b = el.getBoundingClientRect();
             return cs.display !== 'none' && cs.visibility === 'visible' && +cs.opacity > 0 && b.width > 2; });
           const hits = [];

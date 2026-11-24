@@ -31,10 +31,10 @@
 
    WHAT THE SCREEN SAYS, each a thing a reader acts on:
 
-     1. Where the reader is: the session brain's pill (src/ui/sessionbrain.js, drawn by the page's
-        sessionBrainHtml), which says the question's place in the session and opens the chapter, the score so
-        far, each question's state and the way to start over when the session was resumed. It replaced the
-        card that said these over the question (the owner's choice, November 2026).
+     1. Where the reader is: not on this screen. The card that said it over the question (the chapter, "k of
+        n", start over, a progress line) became the master Apex Brain (the owner's choice, November 2026): the
+        Apex button wears the session's brain and its place, and Apex's panel begins with the session
+        (src/ui/sessionbrain.js, and the page's syncApexBrain() and apexSessionHtml()).
      2. The question, its options, and whether it is flagged or written on.
      3. Before answering: how sure the reader is, and the keys or a tap to answer.
      4. After answering: which option was right and which was chosen, the commentary, peer statistics where
@@ -84,7 +84,7 @@ function missRow(S,LOG,kit,wasCorrect){
 }
 
 function screenHtml(S, LOG, CH_COLORS, kit){
-  const {BANK,RATINGS,IMGS,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window,sessionBrainHtml}=kit;
+  const {BANK,RATINGS,IMGS,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}=kit;
   /* The two rows, under the names the body below calls them by. */
   const cfRowHtml=()=>cfRow(S,kit), missRowHtml=wasCorrect=>missRow(S,LOG,kit,wasCorrect);
   const {questions,qIdx,selected,answered}=S;
@@ -169,7 +169,6 @@ function screenHtml(S, LOG, CH_COLORS, kit){
       <button class="btn btn-skip" data-action="nextQ" type="button">Skip ${icon('arrow-right','icon-sm')}</button>`;
 
   return `<div class="quiz-wrap">
-    ${typeof sessionBrainHtml==='function'?sessionBrainHtml():''}
     <div class="reading-columns"><div class="reading-question">${hasFigs?`<div class="reading-figs">${figHtml}</div>`:figHtml}<div class="reading-text">
     <div class="q-card anim-pop" tabindex="-1" aria-labelledby="qTag" style="border-left-color:${chColor}">
       <div class="q-tag" id="qTag"><span class="q-tag-dot" style="color:${chColor}"></span>Question ${q.n} · ${e(q.ch)}

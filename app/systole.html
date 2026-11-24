@@ -138,6 +138,10 @@
 <symbol id="i-nav-focus" viewBox="0 0 24 24"><path d="M4 8.5v-3A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/><circle cx="12" cy="12" r="2.6" style="fill:var(--icon-acc,currentColor);stroke:none"/></symbol>
 <symbol id="i-nav-notes" viewBox="0 0 24 24"><path d="M12 6.5C10.5 5.2 8.3 4.5 5.5 4.5H4v13h1.5c2.8 0 5 .7 6.5 2 1.5-1.3 3.7-2 6.5-2H20v-13h-1.5c-2.8 0-5 .7-6.5 2Z" style="fill:var(--icon-duo,none)"/><path d="M12 6.5v13" style="stroke:var(--icon-acc,currentColor)"/></symbol>
 <symbol id="i-nav-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2" style="stroke:var(--icon-acc,currentColor);fill:var(--icon-knob,none)"/><circle cx="9" cy="12" r="2" style="stroke:var(--icon-acc,currentColor);fill:var(--icon-knob,none)"/><circle cx="17" cy="17" r="2" style="stroke:var(--icon-acc,currentColor);fill:var(--icon-knob,none)"/></symbol>
+<!-- Settings' own section icons, two-toned as the bar's (app/css/gnav.css, THE SETTINGS SCREEN). -->
+<symbol id="i-set-reading" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="3" style="fill:var(--icon-duo,none)"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/><path d="M8 8.5h3" style="stroke:var(--icon-acc,currentColor);stroke-width:2.2"/></symbol>
+<symbol id="i-set-appearance" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" style="fill:var(--icon-duo,none)"/><path d="M12 4a8 8 0 0 1 0 16Z" style="fill:var(--icon-acc,currentColor);stroke:none"/><circle cx="12" cy="12" r="8"/></symbol>
+<symbol id="i-set-apex" viewBox="0 0 24 24"><path d="M11.4 5.2C9.8 3.9 7 4.3 6 6.2 4.2 6.5 3.2 8.4 3.9 10 2.9 11.4 3.3 13.6 4.8 14.4c-.1 2 1.7 3.6 3.6 3.3 1 1.4 2.6 1.6 3 1.1Z" style="fill:var(--icon-duo,none)"/><path d="M12.6 5.2c1.6-1.3 4.4-.9 5.4 1 1.8.3 2.8 2.2 2.1 3.8 1 1.4.6 3.6-.9 4.4.1 2-1.7 3.6-3.6 3.3-1 1.4-2.6 1.6-3 1.1Z" style="fill:var(--icon-duo,none)"/><path d="M12 5v14"/><circle cx="16.5" cy="9.5" r="1.4" style="fill:var(--icon-acc,currentColor);stroke:none"/><circle cx="8" cy="13" r="1.1" style="fill:var(--icon-acc,currentColor);stroke:none"/></symbol>
 <symbol id="i-nav-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" style="fill:var(--icon-duo,none);stroke:var(--icon-acc,currentColor)"/><path d="M12 3v2M12 19v2M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M3 12h2M19 12h2M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5"/></symbol>
 <symbol id="i-nav-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z" style="fill:var(--icon-duo,none)"/><circle cx="17.5" cy="5.5" r="1.2" style="fill:var(--icon-acc,currentColor);stroke:none"/></symbol>
 <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M4.5 9H9V4.5M19.5 9H15V4.5M4.5 15H9v4.5M19.5 15H15v4.5"/></symbol>
@@ -189,8 +193,9 @@ try{var _t=(JSON.parse(localStorage.getItem('accsap12.v2')||'{}')||{}).theme||'a
   <div id="srLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <aside id="ai" aria-label="Apex cardiology tutor"></aside>
 </div>
+<!-- The master Apex Brain: on a question it wears the session's brain and says the place (syncApexBrain()). -->
 <button class="ai-fab" id="aiFab" aria-label="Open the Apex tutor">
-  <canvas class="fab-av" id="apexFabAvatar" aria-hidden="true"></canvas> Apex</button>
+  <span class="fab-brain" id="fabBrain" aria-hidden="true"></span><canvas class="fab-av" id="apexFabAvatar" aria-hidden="true"></canvas> Apex<span class="fab-count" id="fabCount" aria-hidden="true"></span></button>
 <div id="peek"></div>
 <script>
 const ALL_Q=@@SLOT[payload:ALL_Q]@@;
@@ -3212,9 +3217,11 @@ function apexLocalAction(action){
   else if(action==='progress') goStats();
   else if(action==='review'&&dueQuestions().length) startQuiz(null,'due');
 }
-function apexLocalHtml(){
+/* The actions on this device, which need no AI request: on the setup screen, and in the tray under the conversation
+   (inTray), where on a question the session's asks of Apex come first (the master Apex Brain). */
+function apexLocalHtml(inTray){
   const due=dueQuestions().length;
-  return `<div class="src-strip" data-apex-local-actions role="group" aria-label="On this device — no AI request">
+  return (inTray&&onSession()?SessionBrain.asksHtml(sessionBrainModel(),e):'')+`<div class="src-strip" data-apex-local-actions role="group" aria-label="On this device — no AI request">
     <span class="src-lbl">On this device · no AI request</span>
     ${[['notes','Find notes'],['bank','Find questions'],['progress','My progress'],['review',due?'Review due cards ('+due+')':'No cards due']].map(([action,label])=>
       `<button type="button" class="src-pill" data-action="apexLocalAction" data-local="${action}" ${aiBusy||(action==='review'&&!due)?'disabled':''}>${e(label)}</button>`).join('')}
@@ -3225,14 +3232,15 @@ function apexLocalHtml(){
    the questions drawn on and the chat (bindChat()), restores what it read, and starts the avatar again.
    The figures from the notes drawn on are found here (apexFigsFor()), where their last answer is kept. */
 @@SLOT[src:src/app/apexpanel.js]@@
-const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,
-  apexIsFull,apexHosted,apexLocalHtml,setupHtml,visionBadge,cur,clip,md,e,icon});
+const apexKit=()=>({AI_GROUNDED,REF,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,
+  apexLocalHtml,setupHtml,clip,md,e,icon});
 function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=chatFor(q);
-  const kit=apexKit(), head=ApexPanel.headHtml(q,kit);
+  const session=apexSessionHtml(), kit=apexKit(), head=ApexPanel.headHtml(q,kit)+session;
+  wrap.classList.toggle('has-session',!!session);
   /* Hosted Gemini needs nothing typed, so the setup screen would be a door
      with no lock on it. Every other provider still asks. */
   if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
@@ -3890,10 +3898,26 @@ document.addEventListener('keydown',ev=>{
   ev.preventDefault();
   toggleApexFull();
 });
+/* How Apex opens, a Settings choice (the full-screen button was in its head): full screen, or beside the question. Set
+   while it is open, it takes effect at once. */
+const APEX_OPENS='systole.apexOpens';
+function apexOpensFull(){ try{ return localStorage.getItem(APEX_OPENS)==='full'; }catch(_){ return false; } }
+function setApexOpens(v){
+  try{ localStorage.setItem(APEX_OPENS,v==='full'?'full':'side'); }catch(_){}
+  const sh=document.getElementById('shell');
+  if(sh&&sh.classList.contains('ai-open')&&apexIsFull()!==(v==='full')) toggleApexFull();
+}
+/* Where Apex answers from, a Settings choice (the grounding button was in its head). With no notes to read it stays
+   open, and says why (toggleGrounded()), and the choice shows what holds. */
+function setApexGrounded(want){
+  if(want!==AI_GROUNDED) toggleGrounded();
+  syncSettingsControls();
+}
 function toggleAI(){
   const sh=document.getElementById('shell');
   sh.classList.toggle('ai-open');
   const open=sh.classList.contains('ai-open');
+  if(open&&apexOpensFull()) sh.classList.add('ai-full');
   if(!open){ sh.classList.remove('ai-full'); try{localStorage.setItem('accsap12.aifull','0');}catch(_){} }
   try{localStorage.setItem('accsap12.aiopen',open?'1':'0');}catch(_){}
   const fab=document.getElementById('aiFab'); if(fab)fab.style.display=open?'none':'flex';
@@ -4311,7 +4335,6 @@ function pencilOn(){ return displaySettings().pencil==='on'; }
 function syncRailShown(){
   const rail=document.getElementById('rail'); if(!rail) return;
   rail.classList.toggle('hidden',S.screen!=='quiz'||!pencilOn());
-  document.documentElement.classList.toggle('rail-shown',!rail.classList.contains('hidden'));   // the session brain's pill moves clear of it
   if(!pencilOn()&&(T.active||T.erase)){ T.active=false; T.erase=false; syncInkMode(); buildRail(); }
 }
 function applyDisplaySettings(){
@@ -4340,6 +4363,8 @@ function syncSettingsControls(){
   const v=displaySettings();
   box.querySelector('[name="layout"]').value=v.layout;
   const pen=box.querySelector('[name="pencil"]'); if(pen) pen.value=v.pencil;
+  const gr=box.querySelector('[name="apexGrounded"]'); if(gr) gr.value=AI_GROUNDED?'grounded':'open';
+  const op=box.querySelector('[name="apexOpens"]'); if(op) op.value=apexOpensFull()?'full':'side';
   paintTune();
 }
 function refreshSettingsThemes(){
@@ -4379,23 +4404,37 @@ function resetDisplaySettings(){
   try{localStorage.removeItem(DISPLAY_KEY);localStorage.removeItem(READ_KEY);}catch(_){}
   resetTune();S.theme='auto';applyTheme();save();notifyThemeRenderers();setReadSize(0);setReadWidth(WIDTH_DEFAULT);applyDisplaySettings();syncSettingsControls();refreshSettingsThemes();render();
 }
+/* A section of Settings, from the way to it in its head: scrolled to under the head, which stays, and given the keyboard. */
+function settingsJump(id){
+  const box=document.getElementById('generalSettings'), h=document.getElementById(id); if(!box||!h) return;
+  const head=box.querySelector('header'), sec=h.closest('section')||h;
+  box.scrollTop=Math.max(0,sec.offsetTop-(head?head.offsetHeight:0)-8);
+  h.focus({preventScroll:true});
+}
 function openSettings(section='reading'){
   if(document.getElementById('generalSettings')){document.getElementById(section==='apex'?'apexSettingsHeading':'settingsTitle')?.focus();return;}
   closeThemeMenu();settingsReturnFocus=document.activeElement;
   const box=document.createElement('dialog');box.id='generalSettings';box.setAttribute('aria-labelledby','settingsTitle');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
-  box.innerHTML=`<header><h2 id="settingsTitle" tabindex="-1">Settings</h2><button type="button" class="icon-btn" data-action="closeSettings" aria-label="Close settings">${icon('x')}</button></header>
-    <section aria-labelledby="readingSettingsHeading"><h3 id="readingSettingsHeading">Reading</h3>
+  /* A head with the way to each section, and each section a card with its own icon and a line saying what it holds
+     (the owner's choice of November 2026). Drawn, not blurred: gradients and borders, no filter over what is behind. */
+  box.innerHTML=`<header><div class="set-brand"><span class="set-mark" aria-hidden="true">${icon('nav-settings')}</span><div><h2 id="settingsTitle" tabindex="-1">Settings</h2><p class="set-sub">Kept on this iPad</p></div></div><button type="button" class="icon-btn" data-action="closeSettings" aria-label="Close settings">${icon('x')}</button>
+      <nav class="set-nav" aria-label="Settings sections"><button type="button" data-action="settingsJump" data-to="readingSettingsHeading">${icon('set-reading')}Reading</button><button type="button" data-action="settingsJump" data-to="appearanceSettingsHeading">${icon('set-appearance')}Appearance</button><button type="button" data-action="settingsJump" data-to="apexSettingsHeading">${icon('set-apex')}Apex</button></nav></header>
+    <section aria-labelledby="readingSettingsHeading"><h3 id="readingSettingsHeading" tabindex="-1"><span class="set-ico" aria-hidden="true">${icon('set-reading')}</span>Reading</h3><p class="set-lede">How a question sits on the screen, and the tools on it.</p>
       <label>Question layout<select name="layout" data-action="setLayout"><option value="focused">Focused</option><option value="split">Side by side</option></select></label>
       <p>Side by side appears after answering when both columns have room to read comfortably.</p>
       <label>Pencil tools on questions<select name="pencil" data-action="setPencil"><option value="off">Off</option><option value="on">On</option></select></label>
       <p>On shows the pencil button on each question, for writing and highlighting with an Apple Pencil or a finger.</p>
       ${readSizeHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}
       ${readWidthHtml().split('role="menuitemradio"').join('role="radio"').replace('role="group"','role="radiogroup"')}</section>
-    <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading">Appearance</h3><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
+    <section aria-labelledby="appearanceSettingsHeading"><h3 id="appearanceSettingsHeading" tabindex="-1"><span class="set-ico" aria-hidden="true">${icon('set-appearance')}</span>Appearance</h3><p class="set-lede">The theme, and how bright Systole is drawn.</p><div id="settingsThemes" role="radiogroup" aria-label="Theme"></div>
       ${tuneHtml()}
       <p>Brightness and contrast affect Systole only; device brightness is unchanged.</p>
       <button type="button" class="btn" data-action="resetDisplaySettings">Reset display settings</button></section>
-    <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1">Apex AI</h3><div id="settingsApex"></div></section>
+    <section aria-labelledby="apexSettingsHeading"><h3 id="apexSettingsHeading" tabindex="-1"><span class="set-ico" aria-hidden="true">${icon('set-apex')}</span>Apex AI</h3><p class="set-lede">Where the tutor answers from, how it opens, and its connection.</p>
+      <label>Apex answers from<select name="apexGrounded" data-action="setApexGrounded"><option value="open">Its own knowledge</option><option value="grounded">Your reference notes only</option></select></label>
+      <label>Apex opens<select name="apexOpens" data-action="setApexOpens"><option value="side">Beside the question</option><option value="full">Full screen</option></select></label>
+      <p>Close Apex by its name at the top of its panel, or with Escape.</p>
+      <div id="settingsApex"></div></section>
     <footer><p>© 2026 Dr Fahad Khan, FCPS Cardiology. All rights reserved in the Systole app.</p></footer>`;
   document.body.append(box);syncSettingsControls();refreshSettingsThemes();settingsApex();
   box.addEventListener('cancel',ev=>{ev.preventDefault();closeSettings();});
@@ -4771,66 +4810,69 @@ function keysSeen(ev){
   try{localStorage.setItem('systole.keys','1');}catch(_){}
 }
 document.addEventListener('keydown',keysSeen,true);
-/* Straight to a question of the session, from the session brain's panel: as Next and Back move, by any distance. */
+/* Straight to a question of the session, from the session in Apex's panel: as Next and Back move, by any distance.
+   Apex stays open, and follows to the question gone to, as it does on Next. */
 function goToQ(i){
-  sbOpen=false;
-  if(!(i>=0&&i<S.questions.length)) return;
-  if(i===S.qIdx){ paintSessionBrain(); return; }
+  if(!(i>=0&&i<S.questions.length)||i===S.qIdx) return;
   toTop();
   S.qIdx=i;restoreQuizState();render();clearAnnounce();focusEl('.q-card');markShown();saveResume();
 }
-/* ── the session brain: where the reader is in the session, as a small brain (src/ui/sessionbrain.js) ──
-   The pill is drawn with the question screen, and a redraw of the screen closes the panel. The panel is opened, closed
-   and repicked in place, never by render(), which would replay the screen's entrances and drop the keyboard's place,
-   as the flag is painted in place (paintFlag). It replaced the card over the question (the owner's choice, November
-   2026): the chapter, "k of n", the way to start a resumed session over, and the progress line. */
-let sbOpen=false, sbSel=-1, sbDrawn='';
+/* ── the master Apex Brain: where the reader is in the session, as a small brain, in the Apex button and at the head of
+   its panel (src/ui/sessionbrain.js). The owner's choice of November 2026: one control for Apex and the session, in
+   place of the card over the question (the chapter, "k of n", the way to start a resumed session over, the progress
+   line). The button is outside #app, so a draw of a screen sets it (syncApexBrain()); the panel's session is drawn
+   with the panel (buildAI()), and picked again in place, never by a rebuild of the panel, which would move its
+   conversation. ── */
+let sbSel=-1, sbAt=-1, sbDrawn='', sbDetail=false;
 function sessionBrainModel(){
   const q=S.questions[S.qIdx];
   return {n:S.questions.length,qIdx:S.qIdx,states:SessionBrain.states(S.questions,S.answers,S.qIdx,id=>S.flagged.has(id)),
-    chapter:S.chapter||(q&&q.ch)||'',resumed:!!S.resumed,open:sbOpen};
+    items:S.questions.map(x=>x&&x.n),chapter:S.chapter||(q&&q.ch)||'',resumed:!!S.resumed};
 }
-function sessionBrainHtml(){
-  sbOpen=false;
-  /* The halo brightens when the session has changed since the pill was last drawn, not at every redraw of the same. */
+function onSession(){ return S.screen==='quiz'&&S.questions.length>0; }
+function syncApexBrain(){
+  const fab=document.getElementById('aiFab'), orb=document.getElementById('fabBrain'), count=document.getElementById('fabCount');
+  if(!fab||!orb||!count) return;
+  if(!onSession()){
+    if(fab.classList.contains('has-brain')){ fab.classList.remove('has-brain'); orb.innerHTML=''; count.textContent=''; }
+    fab.setAttribute('aria-label','Open the Apex tutor'); sbDrawn=''; return;
+  }
+  /* The halo brightens when the session has changed since the button was last drawn, not at every draw of the same. */
   const m=sessionBrainModel(), was=sbDrawn;
-  sbDrawn=m.qIdx+':'+m.states.map(s=>s.state.charAt(0)).join('');
-  m.fresh=sbDrawn!==was;
-  return SessionBrain.pillHtml(m,e);
+  sbDrawn=m.qIdx+':'+m.states.map(x=>x.state.charAt(0)).join('');
+  if(sbDrawn===was) return;
+  m.fresh=true;
+  fab.classList.add('has-brain'); orb.innerHTML=SessionBrain.orbHtml(m); count.textContent=SessionBrain.fabCount(m);
+  fab.setAttribute('aria-label',SessionBrain.fabLabel(m));
 }
-function paintSessionBrain(){
-  const pill=document.getElementById('sbPill'), old=document.getElementById('sbPanel');
-  if(!sbOpen||S.screen!=='quiz'||!pill){ if(old) old.remove(); if(pill) pill.setAttribute('aria-expanded','false'); return; }
-  const html=SessionBrain.panelHtml(sessionBrainModel(),sbSel,e,icon);
-  if(old) old.outerHTML=html; else pill.insertAdjacentHTML('afterend',html);
-  pill.setAttribute('aria-expanded','true');
+/* The panel's session, opened on the question on screen; '' off a question. buildAI() draws it after the head, so the
+   panel begins with it on the setup screen and the conversation alike. */
+function apexSessionHtml(){
+  if(!onSession()) return '';
+  const m=sessionBrainModel();
+  /* The question picked is the one on screen whenever that changes (Next, Back, Go), and the reader's pick until then. */
+  if(sbAt!==m.qIdx||!(sbSel>=0&&sbSel<m.n)){ sbSel=m.qIdx; sbAt=m.qIdx; }
+  return SessionBrain.dockHtml(m,sbSel,e,icon,sbDetail);
 }
-function toggleSessionBrain(force,keepFocus){
-  sbOpen=typeof force==='boolean'?force:!sbOpen;
-  if(sbOpen) sbSel=S.qIdx;
-  paintSessionBrain();
-  if(keepFocus) return;
-  if(sbOpen) document.querySelector('#sbPanel .sb-brain')?.focus({preventScroll:true});
-  else document.getElementById('sbPill')?.focus({preventScroll:true});
+function paintApexSession(focusSel){
+  const old=document.getElementById('aiSession'); if(!old) return;
+  old.outerHTML=apexSessionHtml();
+  document.querySelector('#aiSession '+(focusSel||'.sb-brain'))?.focus({preventScroll:true});
 }
+/* The session's row opens on the brain, and shuts to one line over the conversation. */
+function toggleSessionDetail(){ sbDetail=!sbDetail; paintApexSession('.sb-row'); }
 /* A tap anywhere on the brain picks the question nearest it: a point is a few pixels across, and a finger is not. */
 function sessionBrainTap(el,ev){
   const m=el.getScreenCTM&&el.getScreenCTM(); if(!m||!m.a||!m.d) return;
   const i=SessionBrain.nearest(SessionBrain.layout(S.questions.length),(ev.clientX-m.e)/m.a,(ev.clientY-m.f)/m.d);
   if(i<0) return;
-  sbSel=i; paintSessionBrain(); document.querySelector('#sbPanel .sb-brain')?.focus({preventScroll:true});
+  sbSel=i; paintApexSession();
 }
 function sessionBrainKey(ev){
   const k=SessionBrain.step(sbSel,ev.key,S.questions.length);
-  if(k>=0){ ev.preventDefault(); sbSel=k; paintSessionBrain(); document.querySelector('#sbPanel .sb-brain')?.focus({preventScroll:true}); return; }
+  if(k>=0){ ev.preventDefault(); sbSel=k; paintApexSession(); return; }
   if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); goToQ(sbSel); }
 }
-document.addEventListener('pointerdown',ev=>{
-  if(!sbOpen) return;
-  const p=document.getElementById('sbPanel'), b=document.getElementById('sbPill');
-  if(p&&!p.contains(ev.target)&&!(b&&b.contains(ev.target))) toggleSessionBrain(false,true);
-},true);
-document.addEventListener('keydown',ev=>{ if(ev.key==='Escape'&&sbOpen){ ev.preventDefault(); toggleSessionBrain(false); } });
 /* ── Flag: mark the question on screen to come back to (src/core/flagset.js). Painted in place, not by render():
    a redraw replays the card's entrance, closes a sticky note being typed into and drops the keyboard's place.
    The count is what the bank still has, which is also what the Flagged card and deck count. ── */
@@ -4976,11 +5018,12 @@ const ACTIONS={
   prevQ:()=>prevQ(),
   nextQ:()=>nextQ(),
   quizStartOver:()=>restartQuiz(),
-  /* the session brain (src/ui/sessionbrain.js): its pill opens and closes the panel; a tap on the brain picks the
-     question nearest it; Go goes to the question picked */
-  toggleSessionBrain:()=>toggleSessionBrain(),
+  /* the session at the head of Apex's panel (src/ui/sessionbrain.js): its row opens on the brain; a tap on the brain
+     picks the question nearest it; Go goes to the question picked; an ask is sent to Apex as if typed (askApex: not with no key, nor over a reply) */
+  toggleSessionDetail:()=>toggleSessionDetail(),
   sessionBrainTap:(el,ev)=>sessionBrainTap(el,ev),
   sessionBrainGo:el=>goToQ(+el.dataset.i),
+  apexAsk:el=>askApex(el.dataset.ask),
   /* the mock block (src/app/mock.js): an option carries its index and a chip or a cell its question's, read back as the
      numbers the handlers were given; Back to the block goes to the question the block is on as it stands when tapped */
   mockPick:el=>mockPick(Number(el.dataset.mi)),
@@ -5038,11 +5081,11 @@ const ACTIONS={
   goNoteSearch:()=>goNoteSearch(),
   toggleLightDark:()=>setTheme(themeIsDark()?'daylight':'midnight'),
   openSettings:()=>openSettings(),
-  /* the Apex panel (src/app/apexpanel.js): its head's four buttons, and a figure in its strip, which is handed to
-     openFigureFrom() as its handler handed itself (this), so the figures around it come too */
-  toggleGrounded:()=>toggleGrounded(),
-  toggleApexFull:()=>toggleApexFull(),
-  aiSettings:()=>aiSettings(),
+  /* the ways to Settings' sections, in its head */
+  settingsJump:el=>settingsJump(el.dataset.to),
+  /* the Apex panel (src/app/apexpanel.js): its head, which closes it, and a figure in its strip, which is handed to
+     openFigureFrom() as its handler handed itself (this), so the figures around it come too. Grounding, full screen and
+     the connection are Settings' Apex section (CHANGE_ACTIONS). */
   toggleAI:()=>toggleAI(),
   openFigureFrom:el=>openFigureFrom(el),
   /* the pearl's figure, which is openFigureFrom() too but has keys of its own (KEY_ACTIONS), and a question's figure's
@@ -5073,6 +5116,9 @@ Actions.install(document,INPUT_ACTIONS,'input');
 /* What a choice does when another is chosen: the change event, as its onchange was. A table of its own too, so the
    input a select also fires calls nothing here, and a change that a field fires on losing focus calls nothing above. */
 const CHANGE_ACTIONS={
+  /* Settings' Apex section: where Apex answers from, and how it opens (they were buttons in its head) */
+  setApexGrounded:el=>setApexGrounded(el.value==='grounded'),
+  setApexOpens:el=>setApexOpens(el.value),
   /* the lesion the Home heart shows (src/app/home.js) */
   heroLesion:el=>setHeroLesion(el.value),
   /* the topic search's chapter */
@@ -5561,6 +5607,7 @@ function renderNow(){
   applyDisplaySettings();
   /* The Apex button is outside #app; on Home it shares the foot of the screen with the pages' tab bar (home.css). */
   document.body.classList.toggle('on-home',S.screen==='home');
+  syncApexBrain();
   document.body.classList.toggle('rating-active',
     S.screen==='quiz'&&S.answered&&S.mode==='due');
   const zone=app.querySelector('.fig-zone');
@@ -6771,7 +6818,7 @@ function buildSessions(){ return SessionsScreen.screenHtml(S,CHAPTERS,sessionsKi
    setMissReason(), which repaint those rows' chips in place, stay where the rows were, with every other handler. */
 @@SLOT[src:src/ui/sessionbrain.js]@@
 @@SLOT[src:src/app/quiz.js]@@
-function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window,sessionBrainHtml}); }
+function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }
 
 /* The results screen is src/app/results.js. This hands it the page's state, the bank's chapters and their
    accents, and the four helpers its markup uses; the handlers its buttons name stay here. */
@@ -6806,8 +6853,8 @@ document.addEventListener('keydown',ev=>{
   if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||ev.target.isContentEditable)return;
   // A focused conversation owns its reading keys, including Space and arrows.
   if(ev.target.closest&&ev.target.closest('#aiBody'))return;
-  // So does the session brain's panel: its arrows move the question picked (KEY_ACTIONS), not the question on screen.
-  if(ev.target.closest&&ev.target.closest('#sbPanel'))return;
+  // So does the session at the head of Apex's panel: its arrows move the question picked (KEY_ACTIONS), not the one on screen.
+  if(ev.target.closest&&ev.target.closest('#aiSession'))return;
   // Figure and related-question dialogs own their keys, not the quiz behind them.
   if(figPs||document.querySelector('.peek-open'))return;
   if(S.screen==='mock'){ mockKey(ev); return; }

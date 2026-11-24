@@ -51,7 +51,7 @@ const kitOf = over => Object.assign({
   apexFigsFor: (hits, lastBot, hist) => (figCalls.push(J([hits.map(h => h.id), lastBot, hist.length])), FIGS),
   /* The first figure's size is known, the second's is not (an AVIF, say): only the first carries one. */
   refImgAttrs: (key, src) => (key === 'k1' && src === 'data:image/png;base64,AA' ? ' width="9" height="4"' : ''),
-  apexIsFull: () => false, apexHosted: () => true, apexLocalHtml: () => '[LOCAL]', setupHtml: () => '[SETUP]', visionBadge: q => ' · VB(' + q.id + ')',
+  apexHosted: () => true, apexLocalHtml: inTray => (inTray ? '[TRAY]' : '[LOCAL]'), setupHtml: () => '[SETUP]', visionBadge: q => ' · VB(' + q.id + ')',
   cur: () => ({ key: '', model: 'g-pro' }), clip: (s, n) => 'CLIP' + n + '(' + s + ')', md: s => 'MD(' + s + ')',
   e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']',
 }, over);
@@ -67,20 +67,16 @@ const inlineOf = html => [...html.matchAll(/\s(on[a-z]+)\s*=/gi)].map(m => m[1])
 head('the head');
 {
   const h = headOf(Q);
-  ok('Apex, its avatar, and the question\'s chapter through e(), its number and what the model sees of its figures', h.startsWith('<div class="ai-head">\n      <div class="ai-avatar"><canvas id="apexAvatar" aria-hidden="true"></canvas></div>') && h.includes('<div class="ai-title">Apex</div>') && h.includes('<div class="ai-sub">E(Valves & more) · item 12 · VB(Q1)</div>'), g1(h, /<div class="ai-sub">([\s\S]*?)<\/div>/));
-  ok('away from a question, "Cardiology tutor", and no figures asked about', headOf(null).includes('<div class="ai-sub">Cardiology tutor</div>'));
+  const sub = x => g1(x, /<span class="ai-sub">([\s\S]*?)<\/span><\/span>\s*<span class="ai-mark-close"/) || '';
+  ok('one button, the head, which closes Apex (toggleAI) and says so: its avatar, its name, and a chevron',
+     h.startsWith('<div class="ai-head">\n      <button class="ai-mark" type="button" data-action="toggleAI" aria-label="Close Apex" title="Close Apex">\n        <span class="ai-avatar"><canvas id="apexAvatar" aria-hidden="true"></canvas></span>')
+     && h.includes('<span class="ai-title">Apex</span>') && h.includes('<span class="ai-mark-close" aria-hidden="true">[icon chevron-down icon-sm]</span>') && h.endsWith('</button>\n    </div>'), h.slice(0, 160));
+  ok('the question\'s number, and nothing more: its chapter is the session\'s row, and what the model sees is not said', sub(h).trim() === 'Item 12', sub(h));
+  ok('away from a question, "Cardiology tutor", and no figures asked about', sub(headOf(null)).trim() === 'Cardiology tutor', sub(headOf(null)));
   const g = headOf(Q, { AI_GROUNDED: true }), g1n = headOf(null, { AI_GROUNDED: true, REF: [1] });
-  ok('grounded, the notes it answers from instead, and "note" for one', g.includes('<div class="ai-sub"><span class="grounded-tag">grounded · 3 notes</span></div>') && g1n.includes('grounded · 1 note</span>') && headOf(null, { AI_GROUNDED: true, REF: [] }).includes('grounded · 0 notes</span>'));
-  const gb = x => g1(x, /(<button class="icon-btn grounded-btn[\s\S]*?<\/button>)/) || '';
-  ok('grounding, by toggleGrounded(): pressed and titled for answering from the notes when on', gb(g) === '<button class="icon-btn grounded-btn on"\n        data-action="toggleGrounded" aria-pressed="true"\n        title="Grounded: answering only from your reference library">[icon folder]</button>', gb(g));
-  ok('and when off, not pressed, titled for Apex\'s own knowledge', gb(h) === '<button class="icon-btn grounded-btn"\n        data-action="toggleGrounded" aria-pressed="false"\n        title="Open: Apex uses its own knowledge">[icon folder]</button>', gb(h));
-  const fb = x => g1(x, /(<button[^>]*\n\s*data-action="toggleApexFull"[\s\S]*?<\/button>)/) || '';
-  ok('full screen, by toggleApexFull(), from the side panel', fb(h).endsWith('data-action="toggleApexFull" aria-pressed="false"\n        title="Open Apex full screen"\n        aria-label="Open Apex full screen">[icon expand]</button>'), fb(h));
-  ok('and back, pressed, from full screen', fb(headOf(Q, { apexIsFull: () => true })).endsWith('aria-pressed="true"\n        title="Back to the side panel"\n        aria-label="Back to the side panel">[icon collapse]</button>'));
-  ok('then settings, by aiSettings(), and close, by toggleAI(), and the head ends', h.endsWith('data-action="aiSettings" title="Settings">[icon settings]</button>\n      <button class="icon-btn" style="background:var(--card);border-color:var(--border);color:var(--muted)"\n        data-action="toggleAI" title="Close">[icon x]</button>\n    </div>'), h.slice(-120));
-  ok('four buttons, in that order, each naming its action', J(actionsOf(h)) === J(['toggleGrounded', 'toggleApexFull', 'aiSettings', 'toggleAI']), J(actionsOf(h)));
-  ok('and the head carries no inline handler, grounded or not, in the side panel or full screen',
-     [h, g, headOf(null), headOf(Q, { apexIsFull: () => true })].every(x => inlineOf(x).length === 0), [h, g].map(x => inlineOf(x).join(' ')).join(' | ') || 'none');
+  ok('grounded, the notes it answers from instead, and "note" for one', sub(g).trim() === '<span class="grounded-tag">grounded · 3 notes</span>' && g1n.includes('grounded · 1 note</span>') && headOf(null, { AI_GROUNDED: true, REF: [] }).includes('grounded · 0 notes</span>'), sub(g));
+  ok('and nothing else in it: grounding, full screen and the connection are Settings\' (one action, one button)', J(actionsOf(h)) === J(['toggleAI']) && J(actionsOf(g)) === J(['toggleAI']) && (h.match(/<button/g) || []).length === 1, J(actionsOf(h)));
+  ok('and the head carries no inline handler, grounded or not', [h, g, headOf(null)].every(x => inlineOf(x).length === 0), [h, g].map(x => inlineOf(x).join(' ')).join(' | ') || 'none');
 }
 
 head('with no key to call with');
@@ -92,12 +88,12 @@ head('the thread');
 {
   const p = panel(Q, HIST);
   const body = g1(p, /<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">([\s\S]*?)<\/div>\n/) || '';
-  ok('after the head, the conversation as a region the keyboard can reach: the actions on this device, then the thread', p.startsWith('[HEAD]<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0">[LOCAL]<div class="msg user">'), p.slice(0, 140));
-  ok('what was asked, through e(); the reply as markdown', body === '[LOCAL]<div class="msg user">E(Why <b>?)</div><div class="msg bot">MD(Because **x**)</div>', body);
+  ok('after the head, the conversation as a region the keyboard can reach, and the thread alone in it', p.startsWith('[HEAD]<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0"><div class="msg user">'), p.slice(0, 140));
+  ok('what was asked, through e(); the reply as markdown', body === '<div class="msg user">E(Why <b>?)</div><div class="msg bot">MD(Because **x**)</div>', body);
   const odd = panel(Q, [{ role: 'assistant', content: 'Old', reused: true }, { role: 'assistant', content: 'Bad <x>', err: true }, { role: 'assistant', content: 'Cut', incomplete: true }]);
   ok('a reply that reused an explanation says so; a failed one is an error through e(), not markdown; one cut short says so', odd.includes('<div class="msg bot"><p class="src-lbl">Reused explanation · matching context</p>MD(Old)</div><div class="msg bot">[icon alert icon-sm] E(Bad <x>)</div><div class="msg bot">MD(Cut)<p class="src-lbl">Response reached its output limit and may be incomplete. Ask Apex to continue.</p></div>'), g1(odd, /tabindex="0">([\s\S]{0,300})/));
   const none = panel(Q, []);
-  ok('with no thread, what Apex can do', none.includes('[LOCAL]<div class="msg bot"><p>Ask me anything about the item you\'re on — mechanism, the distractors, the trial evidence, or the concept underneath.</p><p>I can also <b>search your whole question bank</b>') && none.includes('<i>"why do I keep missing these?"</i>.</p></div></div>'));
+  ok('with no thread, one quiet line asking for a question, and on no question for anything', none.includes('<div class="ai-body" id="aiBody" role="region" aria-label="Apex conversation" tabindex="0"><div class="msg bot ai-hello"><p>Ask about this question, or anything in cardiology.</p></div></div>') && panel(null, []).includes('<p>Ask anything in cardiology.</p>') && !none.includes('[LOCAL]'), g1(none, /<div class="msg bot[^>]*>([\s\S]*?)<\/div>/));
   ok('while a reply is being written, the dots after the thread, and only then', panel(Q, HIST, { aiBusy: true }).includes('MD(Because **x**)</div><div class="msg bot" id="aiLive"><span class="typing"><i></i><i></i><i></i></span></div></div>') && !p.includes('aiLive'));
 }
 
@@ -127,20 +123,17 @@ head('the figures');
   ok('none, no strip', !panel(Q, HIST, { apexFigsFor: () => [] }).includes('fig-strip'));
 }
 
-head('the prompts, the box and what it is powered by');
+head('the tray, the box and the caution');
 {
   const p = panel(Q, HIST);
   const chips = g1(p, /(<div class="chips[\s\S]*?<\/div>)/) || '';
-  ok('the prompts that apply to the question, the first two hot, each through e()', chips.startsWith('<div class="chips" id="aiChips"><button class="chip hot" data-chip="0">E(Why <is> this?)</button><button class="chip hot" data-chip="1">E(Kill)</button><button class="chip" data-chip="2">E(Picked)</button>\n') && !chips.includes('data-chip="3"') && !panel(null, HIST).includes('data-chip="2"'), chips.slice(0, 260));
+  ok('the tray: the session\'s asks and the actions on this device first (the page\'s, for the tray), then the prompts that apply to the question, the first two hot, each through e()', chips.startsWith('<div class="chips" id="aiChips">[TRAY]<button class="chip hot" data-chip="0">E(Why <is> this?)</button><button class="chip hot" data-chip="1">E(Kill)</button><button class="chip" data-chip="2">E(Picked)</button>\n') && !chips.includes('Never') && !p.replace(chips, '').includes('[TRAY]') && !p.includes('[LOCAL]'), chips.slice(0, 120));
   ok('then Explain draft, and Clear thread once there is one', chips.includes('<button class="chip" data-chip="explain" title="Explain your draft using supplied context, without study tools">Explain draft · no tools</button>') && chips.endsWith('<button class="chip" data-chip="clear">Clear thread</button></div>') && !panel(Q, []).includes('data-chip="clear"'));
   ok('the prompts open, and the button to them on and expanded, only when open', panel(Q, HIST, { apexChipsOpen: true }).includes('<div class="chips open" id="aiChips">') && panel(Q, HIST, { apexChipsOpen: true }).includes('<button class="ai-more on" id="aiMore" type="button"\n         aria-controls="aiChips" aria-expanded="true"') && p.includes('<button class="ai-more" id="aiMore" type="button"\n         aria-controls="aiChips" aria-expanded="false"'));
   ok('the box to write in, and Send', p.includes('<textarea id="aiIn" rows="1" placeholder="Ask about this question…"></textarea>') && p.includes('<button class="ai-send" id="aiSend" type="button"\n         title="Send" aria-label="Send"\n         >[icon send icon-sm]</button>'));
   ok('while a reply is being written, Stop', panel(Q, HIST, { aiBusy: true }).includes('<button class="ai-send stopping" id="aiSend" type="button"\n         title="Stop" aria-label="Stop generating"\n         >■</button>'));
-  const pw = x => g1(x, /<div class="ai-powered">([\s\S]*?)<\/div><\/div>$/) || '';
-  ok('the caution, and the model by the first part of its name, on the provider by its name, through this site', p.includes('</div><div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div><div class="ai-powered">') && pw(p) === 'Powered by <b>E(Gemini Pro)</b> on E(Google <Gemini>) · hosted key, called through this site', pw(p));
-  ok('or the reader\'s own key; Gemini through this site only when the page says so', pw(panel(Q, HIST, { apexHosted: () => false })).endsWith(' · your own key, called directly from this device') && pw(panel(Q, HIST, { AI: { provider: 'openai' }, cur: () => ({ key: 'k', model: 'o1' }) })) === 'Powered by <b>E(O one)</b> on E(OpenAI) · your own key, called directly from this device');
-  ok('a model or provider it does not know, by what it is called, or a dash', pw(panel(Q, HIST, { cur: () => ({ model: 'x-9' }) })).startsWith('Powered by <b>E(x-9)</b>') && pw(panel(Q, HIST, { cur: () => ({}) })).startsWith('Powered by <b>E(—)</b>') && pw(panel(Q, HIST, { AI: { provider: 'zed' }, cur: () => ({ model: 'm' }) })).startsWith('Powered by <b>E(m)</b> on E(zed) · your own key'));
-  ok('in that order: the conversation, what it drew on, the figures, the prompts, the box', ['id="aiBody"', 'data-apex-sources', 'id="aiFigWrap"', 'id="aiChips"', 'id="aiIn"', 'id="aiSend"', 'class="ai-powered"'].every((t, i, a) => i === 0 || p.indexOf(a[i - 1]) < p.indexOf(t)) && p.endsWith('</div></div>'));
+  ok('the caution closes the panel, and nothing after it: no model or provider line, which Settings says', p.endsWith('</div><div class="ai-disclaim">Study aid, not clinical advice — Apex can be wrong; check anything that changes care.</div></div>') && !/ai-powered|Powered by/.test(p), p.slice(-160));
+  ok('in that order: the conversation, what it drew on, the figures, the tray, the box, the caution', ['id="aiBody"', 'data-apex-sources', 'id="aiFigWrap"', 'id="aiChips"', 'id="aiIn"', 'id="aiSend"', 'class="ai-disclaim"'].every((t, i, a) => i === 0 || p.indexOf(a[i - 1]) < p.indexOf(t)) && p.endsWith('</div></div>'));
 }
 
 head('the place you had scrolled to');
@@ -189,14 +182,14 @@ const KIT_READS = new Set();
   const outs = [run(() => M.headHtml(deepWatch(Q, 'q'), kit)), run(() => M.setupPanelHtml('[HEAD]', kit)), run(() => M.panelHtml('[HEAD]', deepWatch(Q, 'q'), deepWatch(HIST, 'hist'), kit)),
     run(() => M.headHtml(null, watched(kitOf({ AI_GROUNDED: true }), KIT_READS, 'kit')))];
   const names = [...KIT_READS].sort().join(' ');
-  ok('of its kit, twenty-three names', !outs.some(o => o.startsWith('THREW')) && names === 'AI AI_GROUNDED CHIPS MODELS PROVIDERS REF aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexHosted apexIsFull apexLocalHtml clip cur e icon lastHits lastHitsKey md refImgAttrs setupHtml visionBadge', names);
+  ok('of its kit, sixteen names', !outs.some(o => o.startsWith('THREW')) && names === 'AI_GROUNDED CHIPS REF aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexLocalHtml clip e icon lastHits lastHitsKey md refImgAttrs setupHtml', names);
   ok('it sets, deletes and defines nothing on the question, the thread, the notes drawn on, the settings or the kit', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object') { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.panelHtml('[HEAD]', deep(Object.assign({}, Q)), deep(HIST.map(m => Object.assign({}, m))), deep(kitOf({ lastHits: HITS.map(h => Object.assign({}, h)), apexFigsFor: () => FIGS }))));
   ok('given everything frozen, it draws the same panel', !frozen.startsWith('THREW') && frozen === panel(Q, HIST) && frozen.includes('2 figures from those notes'), frozen.slice(0, 60));
   const readsOf = f => { const r = new Set(); run(() => f(watched(kitOf({ AI_GROUNDED: true }), r, 'kit'))); run(() => f(watched(kitOf(), r, 'kit'))); return [...r].sort().join(' '); };
-  ok('of those, the head reads six, the setup two and the panel eighteen, each only what it draws with', readsOf(k => M.headHtml(Q, k)) === 'AI_GROUNDED REF apexIsFull e icon visionBadge' && readsOf(k => M.setupPanelHtml('[HEAD]', k)) === 'apexLocalHtml setupHtml'
-     && readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)) === 'AI CHIPS MODELS PROVIDERS aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexHosted apexLocalHtml clip cur e icon lastHits lastHitsKey md refImgAttrs', readsOf(k => M.headHtml(Q, k)) + ' · ' + readsOf(k => M.setupPanelHtml('[HEAD]', k)));
+  ok('of those, the head reads three, the setup two and the panel thirteen, each only what it draws with', readsOf(k => M.headHtml(Q, k)) === 'AI_GROUNDED REF icon' && readsOf(k => M.setupPanelHtml('[HEAD]', k)) === 'apexLocalHtml setupHtml'
+     && readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)) === 'CHIPS aiBusy apexChipsOpen apexFigsFor apexFigsOpen apexLocalHtml clip e icon lastHits lastHitsKey md refImgAttrs', readsOf(k => M.headHtml(Q, k)) + ' · ' + readsOf(k => M.setupPanelHtml('[HEAD]', k)) + ' · ' + readsOf(k => M.panelHtml('[HEAD]', Q, HIST, k)));
 }
 
 head('the page hands the module what it has, and keeps what touches the page');
@@ -205,13 +198,14 @@ head('the page hands the module what it has, and keeps what touches the page');
   const page = blankComments(raw);
   const count = text => page.split(text).length - 1;
   const SLOT = '@@SLOT[src:src/app/apexpanel.js]@@';
-  const KIT = 'const apexKit=()=>({AI,AI_GROUNDED,REF,MODELS,PROVIDERS,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,\n  apexIsFull,apexHosted,apexLocalHtml,setupHtml,visionBadge,cur,clip,md,e,icon});';
+  const KIT = 'const apexKit=()=>({AI_GROUNDED,REF,CHIPS,aiBusy,lastHits,lastHitsKey,apexChipsOpen,apexFigsOpen,apexFigsFor,refImgAttrs,\n  apexLocalHtml,setupHtml,clip,md,e,icon});';
   const BUILD = `function buildAI(){
   const wrap=document.getElementById('ai'); if(!wrap)return;
   const panelWas=apexPanelState();
   const q=(S.screen==='quiz'&&S.questions.length)?S.questions[S.qIdx]:null;
   const hist=chatFor(q);
-  const kit=apexKit(), head=ApexPanel.headHtml(q,kit);`;
+  const session=apexSessionHtml(), kit=apexKit(), head=ApexPanel.headHtml(q,kit)+session;
+  wrap.classList.toggle('has-session',!!session);`;
   const BRANCH = `  if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
     wrap.innerHTML=ApexPanel.setupPanelHtml(head,kit); bindSetup(); mountApexAvatar(); return; }
   wrap.innerHTML=ApexPanel.panelHtml(head,q,hist,kit);
@@ -222,26 +216,25 @@ head('the page hands the module what it has, and keeps what touches the page');
 }`;
   const MEMO = `function apexFigsFor(hits,lastBot,hist){
 ${' '.repeat(2)}`;
-  ok('buildAI() reads the panel\'s state and the thread, makes the kit once, and draws the head first', count(BUILD) === 1 && count('function buildAI(') === 1);
+  ok('buildAI() reads the panel\'s state and the thread, makes the kit once, and draws the head first, then the session (the master Apex Brain)', count(BUILD) === 1 && count('function buildAI(') === 1);
   ok('then, with no key, the setup, bound; otherwise the panel, its questions wired to peekQuestion(), the chat bound, the state restored, the avatar started', count(BRANCH) === 1 && page.indexOf(BRANCH) > page.indexOf(BUILD) && page.indexOf(BRANCH) - page.indexOf(BUILD) < BUILD.length + 200);
   ok('the module is written into the page once, above apexKit() and buildAI()', count(SLOT) === 1 && page.indexOf(SLOT) < page.indexOf('const apexKit=') && page.indexOf(SLOT) < page.indexOf(BUILD));
   ok('the kit is made at each drawing, never kept: a function, called by buildAI() alone', count(KIT) === 1 && count('apexKit') === 2 && count('apexKit()') === 1, count('apexKit') + ' ' + count('apexKit()'));
   const handed = String(g1(page, /const apexKit=\(\)=>\(\{([^}]*)\}\);/)).replace(/\s+/g, '');
-  ok('the kit is the twenty-three names the module was seen to ask for, each under its own name', KIT_READS.size === 23 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
+  ok('the kit is the sixteen names the module was seen to ask for, each under its own name', KIT_READS.size === 16 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
   const memo = g1(page, /(function apexFigsFor\(hits,lastBot,hist\)\{[\s\S]*?\n\})/) || '';
   ok('the figures\' memo is the page\'s: keyed on the notes, the reply\'s length and whether one is being written, kept in apexFigMemo, which it alone writes', memo.startsWith(MEMO) && memo.includes("const figKey=hits.map(h=>h.id).join(',')+'|'+lastBot.length+'|'+(aiBusy?1:0);") && memo.includes('if(apexFigMemo.key!==figKey){') && memo.endsWith('  return apexFigMemo.figs;\n}') && count('let apexFigMemo={key:null,figs:[]};') === 1 && count('apexFigMemo=') === 2, memo.slice(0, 80));
   ok('and finds none while a reply is being written or with no thread, three at most, none the reply already placed', memo.includes("apexFigMemo={ key:figKey, figs:(hist.length&&!aiBusy)\n      ? refFiguresForHits(hits,3).filter(f=>lastBot.indexOf('refimg://'+f.key)<0)\n      : [] };"));
   const all = headOf(Q) + panel(Q, HIST) + setup();
   const handlers = [...new Set(actionsOf(all))].sort();
-  ok('its markup names five actions, and carries no inline handler', J(handlers) === J(['aiSettings', 'openFigureFrom', 'toggleAI', 'toggleApexFull', 'toggleGrounded']) && inlineOf(all).length === 0, handlers.join(' ') + ' · inline: ' + (inlineOf(all).join(' ') || 'none'));
+  ok('its markup names two actions, and carries no inline handler', J(handlers) === J(['openFigureFrom', 'toggleAI']) && inlineOf(all).length === 0, handlers.join(' ') + ' · inline: ' + (inlineOf(all).join(' ') || 'none'));
   ok('and each is a function the page declares, once', handlers.length > 0 && handlers.every(n => count('function ' + n + '(') === 1), handlers.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   /* Each in the page's ACTIONS table once, calling the page's function of that name; a figure hands itself, as its
      handler's (this) did, so openFigureFrom() can bring the figures around it. */
-  const TABLE = { aiSettings: 'aiSettings:()=>aiSettings(),', openFigureFrom: 'openFigureFrom:el=>openFigureFrom(el),', toggleAI: 'toggleAI:()=>toggleAI(),',
-    toggleApexFull: 'toggleApexFull:()=>toggleApexFull(),', toggleGrounded: 'toggleGrounded:()=>toggleGrounded(),' };
+  const TABLE = { openFigureFrom: 'openFigureFrom:el=>openFigureFrom(el),', toggleAI: 'toggleAI:()=>toggleAI(),' };
   const table = (page.match(/const ACTIONS=\{([\s\S]*?)\n\};/) || [])[1] || '';
   ok('each is in the page\'s ACTIONS table once, calling the page\'s function of that name; a figure is handed itself',
-     handlers.length === 5 && handlers.every(n => table.split(TABLE[n] || '\u0000').length === 2), handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1)).join(' '));
+     handlers.length === 2 && handlers.every(n => table.split(TABLE[n] || '\u0000').length === 2), handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1)).join(' '));
   /* The gathering is src/ui/figzoom.js's (FigZoom.gather), read with its comments blanked like the page. */
   const figzoom = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'figzoom.js'), 'utf8'));
   ok('and openFigureFrom() gathers the figures that name its action, with the pearl\'s',
@@ -258,10 +251,11 @@ ${' '.repeat(2)}`;
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const parts = [read('src/core/markdown.js'), read('src/core/vision.js'), read('src/core/imagesize.js'), whole('const REF_IMG_SIZE=new Map();', '\n}'), whole('function refImgAttrs(key,src){', '\n'), whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function clip(s,n){', '\n'),
     whole('const PROVIDERS=[', '\n];'), whole('const MODELS={', '\n};'), whole('function cur(){', '\n'), whole('function apexHosted(){', '\n}'), whole('const APEX_ASK={', '\n};'), whole('const CHIPS=[', '\n];'),
-    whole('function chatFor(q){', '\n'), whole('function apexLocalHtml(){', '\n}'), whole('function apexIsFull(){', '\n}'), whole('function visionBadge(q){', '\n}'), whole('const KEY_PREFIX=', '\n'), whole('function setupHtml(p=AI.provider){', '\n}'), whole('function md(t){', '\n'),
+    whole('function chatFor(q){', '\n'), whole('function apexLocalHtml(inTray){', '\n}'), whole('function apexIsFull(){', '\n}'), whole('function visionBadge(q){', '\n}'), whole('const KEY_PREFIX=', '\n'), whole('function setupHtml(p=AI.provider){', '\n}'), whole('function md(t){', '\n'),
     whole('let apexFigMemo=', '\n'), read('src/app/apexpanel.js'), whole('const apexKit=()=>', 'icon});'), whole('function buildAI(){', '\n}'), whole('function apexFigsFor(', '\n}')].join('\n');
   const log = [];
-  const wrap = { innerHTML: '', querySelectorAll: () => [...wrap.innerHTML.matchAll(/data-jump="([^"]*)"/g)].map(m => ({ dataset: { jump: m[1] } })) };
+  const classes = [];
+  const wrap = { innerHTML: '', classList: { toggle: (c, on) => classes.push(c + ' ' + on) }, querySelectorAll: () => [...wrap.innerHTML.matchAll(/data-jump="([^"]*)"/g)].map(m => ({ dataset: { jump: m[1] } })) };
   const ctx = {
     location: { protocol: 'https:' }, document: { getElementById: id => (id === 'ai' ? wrap : id === 'shell' ? { classList: { contains: c => c === 'ai-full' && ctx.FULL } } : null) },
     S: { screen: 'quiz', questions: [{ id: 'Q1', ch: 'Valves & more', n: 12, img: 1 }], qIdx: 0, answered: true }, REF: [1, 2], AI_GROUNDED: false, FULL: false,
@@ -270,23 +264,26 @@ ${' '.repeat(2)}`;
     dueQuestions: () => [1, 2], refImgSrc: k => 'data:x/' + k,
     refFiguresForHits: (hits, n) => (log.push('figures ' + hits.map(h => h.id).join(',') + ' ' + n), [{ key: 'f1', dataUrl: 'data:image/png;base64,F1', caption: 'Valve <cap>', noteTitle: 'Valve note' }, { key: 'f2', dataUrl: 'data:image/png;base64,F2', caption: 'Placed', noteTitle: 'Valve note' }]),
     apexPanelState: () => (log.push('state'), { s: 1 }), apexPanelRestore: st => log.push('restore ' + J(st)), bindChat: q => log.push('bindChat ' + (q && q.id)), bindSetup: () => log.push('bindSetup'),
-    mountApexAvatar: () => log.push('avatar'), peekQuestion: id => log.push('peek ' + id),
+    mountApexAvatar: () => log.push('avatar'), peekQuestion: id => log.push('peek ' + id), apexSessionHtml: () => '[SESSION]', onSession: () => false,
   };
   ctx.window = ctx; vm.createContext(ctx);
   const ask = code => { try { return vm.runInContext(code, ctx); } catch (err) { return 'THREW ' + err.message; } };
   const loaded = ask(parts + '\nCHATS.Q1=[{role:"user",content:"Why?"},{role:"assistant",content:"See refimg://f2 and **this**"}];\n"loaded"');
   log.length = 0; ask('buildAI()');
   const first = wrap.innerHTML, firstLog = log.slice();
-  ok('the page\'s own buildAI() draws the panel: the question\'s chapter with what Gemini sees of its figure, the thread as markdown, the actions on this device', loaded === 'loaded' && first.includes('<div class="ai-sub">Valves &amp; more · item 12 · sees 1 figure</div>') && first.includes('<div class="msg user">Why?</div>') && first.includes('<strong>this</strong>') && first.includes('Review due cards (2)'), String(loaded).slice(0, 60) + ' · ' + g1(first, /<div class="ai-sub">([^<]*)/));
-  ok('through this site\'s key, with the model\'s name and the provider\'s; the prompt for a question answered is there', /Powered by <b>[^<]+<\/b> on Gemini · hosted key, called through this site<\/div><\/div>$/.test(first) && first.includes('data-chip="2">Why did I pick that?</button>'), g1(first, /<div class="ai-powered">([\s\S]*?)<\/div><\/div>$/));
+  ok('the page\'s own buildAI() draws the panel: the question\'s number, the thread as markdown, the actions on this device in the tray', loaded === 'loaded' && /<span class="ai-sub">\s*Item 12<\/span>/.test(first) && first.includes('<div class="msg user">Why?</div>') && first.includes('<strong>this</strong>') && first.includes('Review due cards (2)'), String(loaded).slice(0, 60) + ' · ' + g1(first, /<span class="ai-sub">([^<]*)/));
+  ok('the caution ends it, with no model line; the prompt for a question answered is there', first.endsWith('check anything that changes care.</div></div>') && !first.includes('ai-powered') && first.includes('data-chip="2">Why did I pick that?</button>'), first.slice(-80));
   ok('the figures from the notes drawn on, less the one the reply placed, open as the page left them', times(first, '<figure class="ai-fig"') === 1 && first.includes('alt="Valve &lt;cap&gt;"') && first.includes('<div class="fig-strip open" id="aiFigWrap">') && first.includes('1 figure from those notes'));
   ok('and the page then wires the question drawn on, binds the chat to the question, restores what it read, and starts the avatar, in that order', J(firstLog) === J(['state', 'figures n1,Q9 3', 'bindChat Q1', 'restore {"s":1}', 'avatar']), J(firstLog));
   log.length = 0; ask('buildAI()');
+  ok('the panel is marked as holding a session when it does (full screen gives it a column)', classes[classes.length - 1] === 'has-session true', J(classes));
+  ok('the session follows the head, before the conversation', /<\/div>\[SESSION\]<div class="ai-body"/.test(first.replace(/\s*\n\s*/g, '')), (first.match(/.{40}\[SESSION\].{30}/) || ['no session'])[0]);
   ok('drawn again with nothing changed, the same panel, and the figures are not looked for again', wrap.innerHTML === first && !log.some(l => l.startsWith('figures')), J(log));
   log.length = 0; ask('aiBusy=true; buildAI()');
   ok('with a reply being written: the dots, Stop, no figures, none looked for, and the memo kept for this reply in progress', wrap.innerHTML.includes('id="aiLive"') && wrap.innerHTML.includes('aria-label="Stop generating"') && !wrap.innerHTML.includes('fig-strip') && !log.some(l => l.startsWith('figures')) && String(ask('JSON.stringify(apexFigMemo)')) === '{"key":"n1,Q9|28|1","figs":[]}', String(ask('JSON.stringify(apexFigMemo)')));
   log.length = 0; ask('aiBusy=false; location.protocol="file:"; buildAI()');
   ok('with no key and no site to call through: the setup, bound, with no conversation', wrap.innerHTML.includes('id="aiKey"') && !wrap.innerHTML.includes('id="aiBody"') && wrap.innerHTML.endsWith('check anything that changes care.</div>') && J(log) === J(['state', 'bindSetup', 'avatar']), J(log));
+  ok('and on the setup screen too, after the head', /<\/div>\[SESSION\]/.test(wrap.innerHTML.replace(/\s*\n\s*/g, '')) && wrap.innerHTML.indexOf('[SESSION]') < wrap.innerHTML.indexOf('id="aiKey"'));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

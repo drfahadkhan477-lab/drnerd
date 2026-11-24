@@ -126,37 +126,38 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       vw: window.innerWidth, vh: window.innerHeight,
       appVisible: getComputedStyle(app).visibility !== 'hidden',
       bodyW: body ? Math.round(body.getBoundingClientRect().width) : 0,
-      hasButton: !!document.querySelector('.ai-head [data-action="toggleApexFull"]'),
+      head: [...document.querySelectorAll('.ai-head button')].map(b => b.getAttribute('data-action')).join(','),
     };
   });
 
   const side = await geoOf();
-  ok('the header carries the expand button', side.hasButton);
+  /* The owner's choice of November 2026: the head is one control, which closes Apex; grounding, full page and the
+     connection are Settings' Apex section, chosen there below. */
+  ok('the header is one control, which closes Apex', side.head === 'toggleAI', side.head);
   ok('as a side panel it takes part of the width, not all of it',
      side.w > 0 && side.w < side.vw * 0.75, `${side.w} of ${side.vw}px`);
 
-  /* docs/ROADMAP.md, E2: the head's buttons name actions, heard by the page's one listener on the document, so they are
-     tapped here, not called: grounding and Apex's settings first, then full page, below, and closing. */
-  const groundedNow = () => page.evaluate(() => ({ on: AI_GROUNDED,
-    pressed: (document.querySelector('.ai-head [data-action="toggleGrounded"]') || {}).getAttribute?.('aria-pressed') }));
+  /* Grounding and full page are chosen in Settings' Apex section (CHANGE_ACTIONS), as a reader chooses them. */
+  await page.evaluate(() => openSettings('apex'));
+  await settled(page, () => !!document.querySelector('#generalSettings select[name="apexGrounded"]'), { label: 'Settings open at Apex' });
+  const groundedNow = () => page.evaluate(() => ({ on: AI_GROUNDED, chosen: document.querySelector('#generalSettings select[name="apexGrounded"]').value,
+    says: /grounded ·/.test((document.querySelector('.ai-head .ai-sub') || {}).textContent || '') }));
   const g0 = await groundedNow();
-  await page.click('.ai-head [data-action="toggleGrounded"]');
-  await page.waitForTimeout(200);
+  await page.selectOption('#generalSettings select[name="apexGrounded"]', g0.on ? 'open' : 'grounded');
   const g1 = await groundedNow();
-  await page.click('.ai-head [data-action="toggleGrounded"]');
-  await page.waitForTimeout(200);
+  await page.selectOption('#generalSettings select[name="apexGrounded"]', g0.on ? 'grounded' : 'open');
   const g2 = await groundedNow();
-  ok('its grounding button, tapped, turns grounding on and says so, and tapped again turns it off',
-     g1.on === !g0.on && g1.pressed === String(!g0.on) && g2.on === g0.on && g2.pressed === String(g0.on), JSON.stringify([g0, g1, g2]));
-  await page.click('.ai-head [data-action="aiSettings"]');
-  await page.waitForTimeout(200);
-  const sets = await page.evaluate(() => ({ open: !!document.getElementById('generalSettings')?.open, at: document.activeElement && document.activeElement.id }));
-  ok('its settings button, tapped, opens Settings at Apex', sets.open && sets.at === 'apexSettingsHeading', JSON.stringify(sets));
+  ok('Settings\' "Apex answers from", chosen, turns grounding over and the head says so, and chosen back turns it back',
+     g1.on === !g0.on && g1.chosen === (g1.on ? 'grounded' : 'open') && g1.says === g1.on && g2.on === g0.on && g2.says === g0.on, JSON.stringify([g0, g1, g2]));
   await page.evaluate(() => closeSettings());
-  await page.waitForTimeout(200);
+  await page.evaluate(() => aiSettings());
+  const sets = await page.evaluate(() => ({ open: !!document.getElementById('generalSettings')?.open, at: document.activeElement && document.activeElement.id,
+    choices: [...document.querySelectorAll('#generalSettings select[name^="apex"]')].map(x => x.name).join(',') }));
+  ok('Apex\'s settings open Settings at Apex, where its choices are', sets.open && sets.at === 'apexSettingsHeading' && sets.choices === 'apexGrounded,apexOpens', JSON.stringify(sets));
 
-  await page.click('.ai-head [data-action="toggleApexFull"]');
-  await page.waitForTimeout(350);
+  await page.selectOption('#generalSettings select[name="apexOpens"]', 'full');
+  await page.evaluate(() => closeSettings());
+  await settled(page, () => document.getElementById('shell').classList.contains('ai-full'), { label: 'Apex full page, chosen in Settings' }).catch(() => {});
   const full = await geoOf();
   await page.evaluate(async () => {
     const src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="gray"/></svg>');
@@ -182,6 +183,12 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('Escape returns it to the side panel', !afterEsc.full);
   ok('and the panel is still open, not dismissed by the same press',
      afterEsc.w > 0 && afterEsc.appVisible, `${afterEsc.w}px wide`);
+  /* The choice is how Apex opens: shut and opened again, it opens full page; chosen back, beside the question. */
+  await page.evaluate(() => { toggleAI(); toggleAI(); });
+  const reopened = await page.evaluate(() => document.getElementById('shell').classList.contains('ai-full'));
+  await page.evaluate(() => { setApexOpens('side'); });
+  const sideAgain = await page.evaluate(() => { const sh = document.getElementById('shell'); return sh.classList.contains('ai-open') && !sh.classList.contains('ai-full'); });
+  ok('Settings\' "Apex opens: full screen" is kept: shut and opened again, Apex opens full page, and "beside the question" puts it back', reopened && sideAgain, JSON.stringify({ reopened, sideAgain }));
 
   /* Closing while full must not leave the flag set: the next tap on the FAB
      would otherwise take the whole screen with no warning. */

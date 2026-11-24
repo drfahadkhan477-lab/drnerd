@@ -10,8 +10,8 @@
  * expected to say is worked out here and never read back from the module.
  *
  * What is measured, rather than assumed:
- *   - where the reader is: the page's session brain (src/ui/sessionbrain.js, held by verify-sessionbrain-pure), drawn
- *     first, and nothing left of the card it replaced: chapter, bar, score and start over;
+ *   - where the reader is: not on this screen; nothing is left of the card that said it (chapter, bar, score and start
+ *     over), which became the master Apex Brain (src/ui/sessionbrain.js, held by verify-sessionbrain-pure);
  *   - the question: its words, number, chapter, flag and pencil badges, figure note and notice;
  *   - the options: before answering, and after, right and chosen, with peer percentages where there are any;
  *   - the reveal: right or wrong, the right answer cut at 58, the commentary in paragraphs, what is said of
@@ -50,7 +50,6 @@ const kitOf = over => Object.assign({
   BANK: { name: 'Bank<1>' }, RATINGS, IMGS: { q1: ['f1'], q2: [] }, Calib: CALIB, hasPeers: q => q.o.every(o => typeof o.p === 'number'), hasMarkup: () => false,
   fmtInterval: d => 'IVL(' + d + ')', fsrsPreview: (card, g) => ({ ivl: (card ? card.tag : 'new') + '/' + g }),
   chInk: c => 'INK(' + c + ')', e: s => 'E(' + s + ')', icon: (name, cls) => '[icon ' + name + (cls ? ' ' + cls : '') + ']', window: { innerWidth: 1194 },
-  sessionBrainHtml: () => '[SESSION BRAIN]',
 }, over);
 const question = (id, over) => Object.assign({ id, ch: 'Rhythm', n: 7, s: 'the stem', ex: 'one\n\ntwo\nthree', o: [{ l: 'A', t: 'first', p: 20 }, { l: 'B', t: 'second', p: 80 }], ci: 1 }, over);
 const state = over => Object.assign({ questions: [question('q1'), question('q2')], qIdx: 0, selected: null, answered: false, answers: {}, mode: 'all', flagged: new Set(), srs: {}, resumed: false, quizCorrect: 0, quizTotal: 0 }, over);
@@ -65,15 +64,13 @@ const actions = html => actionsOf(g1(html, /<div class="actions">([\s\S]*)<\/div
 
 head('where the reader is');
 {
-  /* The card over the question (the chapter, "k of n", start over, the bar and the score) went for the session brain,
-     the owner's choice of November 2026: its pill and panel are the page's (sessionBrainHtml), held by
-     verify-sessionbrain-pure and, drawn by the page, below. */
-  let asked = 0;
-  const html = draw({ qIdx: 1, resumed: true, quizCorrect: 2, quizTotal: 3 }, { sessionBrainHtml: () => (asked++, '[SESSION BRAIN]') });
-  ok('the page\'s session brain, asked once, is the first thing on the screen', asked === 1 && html.includes('<div class="quiz-wrap">\n    [SESSION BRAIN]\n'), asked + ' asked');
+  /* The card over the question (the chapter, "k of n", start over, the bar and the score) went, the owner's choice of
+     November 2026, to the master Apex Brain: the Apex button wears the session and its panel begins with it (the page's,
+     held by verify-sessionbrain-pure). The screen opens on the question. */
+  const html = draw({ qIdx: 1, resumed: true, quizCorrect: 2, quizTotal: 3 });
+  ok('the screen opens on the question, with nothing of the session over it', /^<div class="quiz-wrap">\s*<div class="reading-columns">/.test(html) && !/sb-|sessionBrain/.test(html), html.slice(0, 80));
   ok('and nothing is left of the card it replaced: no chapter badge, bar, score or start over of the screen\'s own',
      !/ch-badge|prog-track|prog-fill|qstats|q-restart|quizStartOver|q-counter/.test(html), (html.match(/ch-badge|prog-track|prog-fill|qstats|q-restart|quizStartOver|q-counter/g) || []).join(' ') || 'none');
-  ok('a page that hands no session brain gets none, and the screen still draws', !/SESSION BRAIN/.test(draw({}, { sessionBrainHtml: undefined })) && draw({}, { sessionBrainHtml: undefined }).includes('class="q-card'));
   ok('a chapter with no colour takes the teal, on the card\'s edge and its dot', draw({}, {}, [], {}).includes('style="border-left-color:var(--teal)"') && draw({}, {}, [], {}).includes('class="q-tag-dot" style="color:var(--teal)"'));
 }
 
@@ -187,7 +184,7 @@ const KIT_READS = new Set(), S_READS = new Set();
   const outs = sts.map(o => run(() => M.screenHtml(watched(state(Object.assign({ screen: 'quiz', chapter: 'x' }, o)), S_READS, 'S'), watched(LOG, new Set(), 'LOG'), { Rhythm: '#112233' }, watched(kitOf(), KIT_READS, 'kit'))));
   const names = s => [...s].sort().join(' ');
   ok('of the state it reads the names below and nothing else', !outs.some(o => o.startsWith('THREW')) && names(S_READS) === 'answered answers flagged mode qIdx questions selected srs', names(S_READS));
-  ok('of the kit, thirteen names', names(KIT_READS) === 'BANK Calib IMGS RATINGS chInk e fmtInterval fsrsPreview hasMarkup hasPeers icon sessionBrainHtml window', names(KIT_READS));
+  ok('of the kit, twelve names', names(KIT_READS) === 'BANK Calib IMGS RATINGS chInk e fmtInterval fsrsPreview hasMarkup hasPeers icon window', names(KIT_READS));
   ok('it sets, deletes and defines nothing on any of them', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object' && !(o instanceof Set)) { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
   const frozen = run(() => M.screenHtml(deep(state({ answered: true, selected: 0, answers: { 0: { cf: 2 } } })), deep([{ q: 'q1', why: 'gap' }]), deep({ Rhythm: '#112233' }), deep(kitOf())));
@@ -235,17 +232,17 @@ head('the page hands the module what it has, and keeps what the markup names');
   const page = blankComments(raw);
   const count = text => page.split(text).length - 1;
   const SLOT = '@@SLOT[src:src/app/quiz.js]@@';
-  const LINE = 'function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window,sessionBrainHtml}); }';
+  const LINE = 'function buildQuiz(){ return QuizScreen.screenHtml(S,LOG,CH_COLORS,{BANK,RATINGS,IMGS,Calib,hasPeers,hasMarkup,fmtInterval,fsrsPreview,chInk,e,icon,window}); }';
   ok('buildQuiz() is one line: the state, the log, the colours and the kit', count(LINE) === 1 && count('function buildQuiz(') === 1);
   ok('the module is written into the page once, above that line', count(SLOT) === 1 && page.indexOf(LINE) > page.indexOf(SLOT));
   const handed = String(g1(page, /QuizScreen\.screenHtml\(S,LOG,CH_COLORS,\{([^}]*)\}\); \}/));
-  ok('the kit is the thirteen names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 13 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
+  ok('the kit is the twelve names the module was seen to ask for, each the page\'s own under its own name', KIT_READS.size === 12 && handed.split(',').sort().join(' ') === [...KIT_READS].sort().join(' '), handed);
   ok('cfRowHtml() and missRowHtml() are no longer the page\'s; fsrsPreview(), fmtInterval() and hasPeers are', count('function cfRowHtml(') === 0 && count('function missRowHtml(') === 0 && count('function fsrsPreview(card,rating,id){') === 1 && count('function fmtInterval(days){') === 1 && count('const hasPeers=q=>') === 1);
   const WORDS = ['How sure?', 'Why did you miss it?', 'Answer Distribution', 'Resumed · start over', 'How well did you know this'];
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw({ resumed: true, qIdx: 1 }) + draw({ answered: true, selected: 0 }, {}, [{ q: 'q1', why: null }]) + draw({ mode: 'due', answered: true, selected: 1 });
   const named = [...new Set(actionsOf(all))].sort();
-  ok('its markup names eight actions and carries no inline handler (start over is the session brain\'s now)', J(named) === J(['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'setConfidence', 'setMissReason', 'toggleFlag']) && inlineOf(all).length === 0, named.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  ok('its markup names eight actions and carries no inline handler (start over is the session\'s, at the head of Apex\'s panel, now)', J(named) === J(['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'setConfidence', 'setMissReason', 'toggleFlag']) && inlineOf(all).length === 0, named.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
   const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
   const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
   const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
@@ -266,8 +263,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const parts = ['calib', 'fsrs', 'reviewqueue'].map(m => read('src/core/' + m + '.js')).concat([whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('function chInk(hex){', '\n}'),
     whole('const hasPeers=q=>', '\n'), whole("const RATINGS=[['again'", '];'), whole('function isoLocal(d){', '\n'), whole('function todayISO(){', '\n'), whole('function fsrsPreview(card,rating,id){', '\n'),
-    whole('function fmtInterval(days){', '\n'), read('src/ui/sessionbrain.js'), whole('let sbOpen=false, sbSel=-1', '\n'), whole('function sessionBrainModel(){', '\n}'),
-    whole('function sessionBrainHtml(){', '\n}'), read('src/app/quiz.js'), whole('function buildQuiz(){', '\n')]).join('\n');
+    whole('function fmtInterval(days){', '\n'), read('src/app/quiz.js'), whole('function buildQuiz(){', '\n')]).join('\n');
   const NOW = new Date(2026, 10, 15, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
   const ctx = { Date: FixedDate, innerWidth: 1194, BANK: { name: 'Test Bank' }, IMGS: { a1: ['f1'] }, CH_COLORS: {}, LOG: [], themeIsDark: () => false, hasMarkup: () => false,
@@ -283,7 +279,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const unnamed = String(ask('JSON.stringify(RATINGS.map(([k,l,g])=>[l, ReviewQueue.fmtInterval(FSRS.update(undefined,g,todayISO()).ivl)]))'));
   ok('for this question, naming the card changes at least one rating\'s day, so the next check can tell (precondition)', want !== unnamed, want + ' vs ' + unnamed);
   ok('a new card\'s four ratings, each with when the real FSRS would bring this card back, as the real ReviewQueue says it', scheds.length === 4 && J(scheds) === want, J(scheds));
-  ok('where the reader is, and the score, are the page\'s session brain: one of one, one right', /<button class="sb-pill( sb-fresh)?" id="sbPill"/.test(html) && html.includes('<span class="q-counter">1 of 1') && html.includes('question 1 of 1: 1 right, 0 wrong'));
+  ok('and the page\'s own line draws nothing of where the reader is, which the Apex button holds', !/sb-|q-counter|qstats/.test(html), (html.match(/sb-[a-z]+|q-counter|qstats/g) || []).join(' ') || 'none');
   /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document over the page's own
      tables, with a recording stand-in for each function they call, and as the element each button the page's own line
      drew over the real Calib and RATINGS, its attributes read back as a browser reads them, in the order drawn. Three
@@ -307,12 +303,12 @@ head('the page hands the module what it has, and keeps what the markup names');
     const el = { nodeType: 1, dataset, getAttribute: k => (k in at ? at[k] : null), closest: sel => (sel === '[data-action]' && 'data-action' in at ? el : null) };
     tctx.listeners.filter(l => l[0] === 'click').forEach(l => l[1]({ type: 'click', target: el })); }); return tcalls.slice(); };
   const tr = tapAll(rating), ta = tapAll(asking), tm = tapAll(missed);
-  ok('tapped through the real Actions and the page\'s tables, waiting for a rating: the session brain, each rating with its grade as a number (Again 1 to Easy 4), then the flag',
-     J(tr) === J(['toggleSessionBrain', 'rateReview [1]', 'rateReview [2]', 'rateReview [3]', 'rateReview [4]', 'toggleFlag']), J(tr));
-  ok('a resumed session\'s second question: the session brain (whose panel holds start over), each band as a number, home, back, flag and skip',
-     J(ta) === J(['toggleSessionBrain', 'setConfidence [0]', 'setConfidence [1]', 'setConfidence [2]', 'setConfidence [3]', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(ta));
-  ok('a miss: the session brain, each of the real reasons, Ask Apex why, home, back, flag and next',
-     J(tm) === J(['toggleSessionBrain', 'setMissReason ["gap"]', 'setMissReason ["misread"]', 'setMissReason ["mixed"]', 'setMissReason ["slip"]', 'setMissReason ["guess"]', 'askApexWhy', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(tm));
+  ok('tapped through the real Actions and the page\'s tables, waiting for a rating: each rating with its grade as a number (Again 1 to Easy 4), then the flag',
+     J(tr) === J(['rateReview [1]', 'rateReview [2]', 'rateReview [3]', 'rateReview [4]', 'toggleFlag']), J(tr));
+  ok('a resumed session\'s second question (start over is in Apex\'s panel): each band as a number, home, back, flag and skip',
+     J(ta) === J(['setConfidence [0]', 'setConfidence [1]', 'setConfidence [2]', 'setConfidence [3]', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(ta));
+  ok('a miss: each of the real reasons, Ask Apex why, home, back, flag and next',
+     J(tm) === J(['setMissReason ["gap"]', 'setMissReason ["misread"]', 'setMissReason ["mixed"]', 'setMissReason ["slip"]', 'setMissReason ["guess"]', 'askApexWhy', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(tm));
 
 }
 

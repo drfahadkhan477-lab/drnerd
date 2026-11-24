@@ -2,10 +2,14 @@
    sessionbrain.js — where the reader is in a question session, drawn as a small brain.
 
    The question screen opened on a card that said the chapter, "1 of 129", "Resumed · start over" and a progress line.
-   The owner had it taken away (November 2026) for a control of its own, chosen from three drawn for them: a pill the
-   size of the Apex button, at the other bottom corner, holding a brain seen from above whose points of light are the
-   session's questions, each lit by how it went, with a ring round it for how far the session has come. Tapped, it
-   opens a panel with the same brain large: a question tapped there says how it went and is a way to go to it.
+   The owner had it taken away (November 2026), and then asked for one control in its place and Apex's: the Apex
+   button became the master Apex Brain. On a question it wears a brain seen from above whose points of light are the
+   session's questions, each lit by how it went, with a ring round it for how far the session has come, and says
+   where the reader is ("6 of 20"). Tapped, it opens Apex, whose panel then begins with the session in one row (the
+   chapter, the place, the counts and the share right), which opens on the brain (a question tapped there says how it
+   went and is a way to go to it); asks that put Apex to work on the session (its misses, what next, a quiz) wait in
+   the tray under the conversation with its other prompts. The owner asked for a clean chat window. Off a question the
+   button is Apex as it was.
 
    It is not the Brain page's brain (src/core/brain.js), which is a lilac side view of the whole bank lit by memory:
    the owner asked for a brain of its own, so this one is two hemispheres seen from above, in the app's cyan.
@@ -20,22 +24,26 @@
      nearest(points, x, y)              the question nearest a point of the drawing (a tap on the brain picks one)
      step(sel, key, n)                  the question an arrow key moves the pick to (Left and Up back, Right and Down on,
                                         Home and End the ends), or -1 for any other key
-     pillHtml(m, e)                     the pill: the ring, the brain, and where the reader is ("12 of 40")
-     panelHtml(m, sel, e, icon)         the panel: the brain large, the chapter and the counts, the question picked
-                                        and the way to it, and Start over for a resumed session
+     orbHtml(m)                         the button's brain: the ring and the session's points, drawn small
+     fabLabel(m)                        what the button says to a screen reader, and fabCount(m) the place it shows
+     asks(m)                            the session's asks of Apex, [label, prompt]: its misses (when there are any),
+                                        what to study next, a quiz; asksHtml(m, e) draws them for the tray under the chat
+     dockHtml(m, sel, e, icon, open)    the panel's session: one row, the chapter, the place and the counts, that opens
+                                        on the brain, the question picked and the way to it, and Start over when resumed
 
-   m is { n, qIdx, states, chapter, resumed, open, fresh }: fresh when the session changed since the pill was last drawn
-   (an answer, a move), which is the only time its halo brightens. The page hands it over (app/systole.html, sessionBrainHtml()), keeps
-   whether the panel is open and which question is picked, and answers the actions the markup names:
-   toggleSessionBrain, sessionBrainTap (a tap on the brain, which picks the nearest question), sessionBrainGo
-   (data-i, the question to go to) and quizStartOver.
+   m is { n, qIdx, states, items, chapter, resumed, fresh }: items the questions' own numbers in the bank (the asks name
+   misses by them), fresh when the session changed since the button was last drawn (an answer, a move), which is the
+   only time its halo brightens. The page hands it over (app/systole.html, syncApexBrain(), apexSessionHtml() and
+   apexLocalHtml()), keeps which question is picked and whether the row is open, and answers the actions the markup
+   names: toggleSessionDetail (the row), sessionBrainTap (a tap on the brain, which picks the nearest question),
+   sessionBrainGo (data-i, the question to go to), apexAsk (data-ask, sent to Apex as typed) and quizStartOver.
 
    ALMOST NOTHING MOVES. The Brain page's sparks are a loop of frames; this is still vector drawing, redrawn when the
    screen is (an answer, a move), so it costs nothing between taps. The one motion is the question on screen's halo,
-   which brightens twice when the session has changed (an answer, a move; not a redraw of the same) and then rests (app/css/gnav.css, opacity only, none when motion is reduced).
+   which brightens twice when the session has changed (an answer, a move; not a redraw of the same) and then rests
+   (app/css/gnav.css, opacity only, none when motion is reduced).
    Its depth and glow are drawn into the picture, not a filter or a blur over what lies behind it
-   (tests/verify-glassbudget.js counts those). The panel is small on purpose (the owner's word): a brain a little
-   wider than the pill, and beside it what the reader acts on.
+   (tests/verify-glassbudget.js counts those).
 
    Pure: no DOM, no clock, no storage. ES2015; Safari 13.4 is the floor (README).
    tests/verify-sessionbrain-pure.js holds all of it.
@@ -113,7 +121,7 @@ function ringDash(c, r) {
 /* THE LOOK OF DEPTH, drawn rather than filtered (a filter is a pass the iPad pays for at every frame): each hemisphere is
    lit from the upper left by a radial gradient and shaded below by a second, the folds are pressed in with a dark line
    and a light one a little above it, and a soft highlight sits on each crown. The ids are the drawing's own (id), so the
-   pill's and the panel's can stand in one page. */
+   button's and the panel's can stand in one page. */
 function defs(id) {
   return '<defs><radialGradient id="' + id + 'L" cx="34%" cy="28%" r="78%"><stop offset="0" class="sb-l0"/><stop offset=".55" class="sb-l1"/><stop offset="1" class="sb-l2"/></radialGradient>'
     + '<linearGradient id="' + id + 'S" x1="0" y1="0" x2="0" y2="1"><stop offset=".45" class="sb-s0"/><stop offset="1" class="sb-s1"/></linearGradient>'
@@ -134,38 +142,68 @@ function glyph(id, cls, pts, list, r, mini) {
     + '<g class="' + cls + '">' + halos + dots + '</g>';
 }
 
-function pillHtml(m, e) {
-  const list = m.states || [], c = counts(list), n = list.length, pts = layout(n), at = Math.min(n, (m.qIdx || 0) + 1);
-  return '<button class="sb-pill' + (m.fresh ? ' sb-fresh' : '') + '" id="sbPill" type="button" data-action="toggleSessionBrain" aria-expanded="' + (m.open ? 'true' : 'false') + '"'
-    + ' aria-controls="sbPanel" aria-label="This session, question ' + at + ' of ' + n + ': ' + c.right + ' right, ' + c.wrong + ' wrong. Show its brain">'
-    + '<svg class="sb-orb" viewBox="0 0 44 44" aria-hidden="true"><circle class="sb-orb-ground" cx="22" cy="22" r="19.5"/>'
+const at = m => Math.min((m.states || []).length, (m.qIdx || 0) + 1);
+function orbHtml(m, id) {
+  const list = m.states || [], c = counts(list), n = list.length;
+  return '<svg class="sb-orb' + (m.fresh ? ' sb-fresh' : '') + '" viewBox="0 0 44 44" aria-hidden="true"><circle class="sb-orb-ground" cx="22" cy="22" r="19.5"/>'
     + '<circle class="sb-ring-track" cx="22" cy="22" r="19.5"/><circle class="sb-ring" cx="22" cy="22" r="19.5" stroke-dasharray="' + ringDash(c, 19.5) + '" transform="rotate(-90 22 22)"/>'
-    + '<svg x="7" y="9" width="30" height="26" viewBox="' + GLYPH.view + '">' + glyph('sbP', 'sb-dots', pts, list, round1(dotR(n) * 1.9), true) + '</svg></svg>'
-    + '<span class="q-counter">' + at + ' of ' + n + '<span class="sr-only"> in this session</span></span></button>';
+    + '<svg x="7" y="9" width="30" height="26" viewBox="' + GLYPH.view + '">' + glyph(id || 'sbP', 'sb-dots', layout(n), list, round1(dotR(n) * 1.9), true) + '</svg></svg>';
+}
+const fabCount = m => at(m) + ' of ' + (m.states || []).length;
+function fabLabel(m) {
+  const c = counts(m.states);
+  return 'Apex, with this session: question ' + fabCount(m) + ', ' + c.right + ' right, ' + c.wrong + ' wrong. Open';
 }
 
-function panelHtml(m, sel, e, icon) {
+function asks(m) {
+  const list = m.states || [], c = counts(list), n = list.length, ch = m.chapter ? ' on ' + m.chapter : '';
+  const items = m.items || [], num = i => items[i] != null ? items[i] : i + 1;
+  const missed = list.map((s, i) => s.state === 'wrong' ? num(i) : null).filter(v => v !== null);
+  const out = [];
+  if (missed.length) out.push(['Go over my ' + missed.length + (missed.length === 1 ? ' miss' : ' misses'),
+    'Go over the question' + (missed.length === 1 ? '' : 's') + ' I missed in this session' + ch + ' (item' + (missed.length === 1 ? ' ' : 's ')
+    + missed.join(', ') + '): ' + (missed.length === 1 ? '' : 'for each, ') + 'the idea it tests, why the answer I chose was wrong, and one line to remember.']);
+  out.push(['What should I study next?', 'This session' + ch + ': ' + c.right + ' right and ' + c.wrong + ' wrong of ' + c.seen + ' answered, '
+    + (n - c.seen) + ' to go. What should I study next, and why?']);
+  out.push(['Quiz me', missed.length
+    ? 'Quiz me with three short questions on the ideas behind the questions I missed in this session, one at a time, and wait for my answer to each.'
+    : 'Quiz me with three short questions' + (m.chapter ? ' on ' + m.chapter : '') + ', one at a time, and wait for my answer to each.']);
+  return out;
+}
+
+/* The session's asks of Apex, for the tray under the conversation (the ⚡ button), where its prompts are. */
+function asksHtml(m, e) {
+  return '<div class="src-strip sb-asks" role="group" aria-label="Ask Apex about this session"><span class="src-lbl">This session</span>'
+    + asks(m).map(a => '<button class="src-pill sb-ask" type="button" data-action="apexAsk" data-ask="' + e(a[1]) + '">' + e(a[0]) + '</button>').join('') + '</div>';
+}
+
+/* The session at the head of Apex's panel: one row, the place and the counts, that opens (toggleSessionDetail) on the
+   brain to pick a question and go to it, and Start over for a resumed session. Closed, it is one line over the chat. */
+function dockHtml(m, sel, e, icon, open) {
   const list = m.states || [], c = counts(list), n = list.length, pts = layout(n);
   const pick = sel >= 0 && sel < n ? sel : (m.qIdx || 0), s = list[pick] || { state: 'unseen', current: false, flagged: false };
-  const r = dotR(n);
-  const chips = '<span class="sb-chip" data-state="right">' + c.right + ' right</span><span class="sb-chip" data-state="wrong">' + c.wrong + ' wrong</span>'
-    + (c.flagged ? '<span class="sb-chip" data-state="flagged">' + c.flagged + ' flagged</span>' : '');
+  const r = dotR(n), share = c.seen ? Math.round(100 * c.right / c.seen) + '% right' : 'none answered';
+  const stat = (k, v, label) => '<span class="sb-stat" data-state="' + k + '"><b>' + v + '</b> ' + label + '</span>';
   const go = s.current ? '<p class="sb-here">The question on screen.</p>'
     : '<button class="sb-go" type="button" data-action="sessionBrainGo" data-i="' + pick + '">' + icon('arrow-right', 'icon-sm') + ' Go to question ' + (pick + 1) + '</button>';
-  return '<div class="sb-panel" id="sbPanel" role="dialog" aria-labelledby="sbTitle">'
+  return '<section class="ai-session' + (open ? ' open' : '') + '" id="aiSession" aria-labelledby="sbTitle">'
+    + '<button class="sb-row" type="button" data-action="toggleSessionDetail" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="sbDetail">'
+    + '<span class="sb-mini" aria-hidden="true">' + orbHtml(m, 'sbR') + '</span>'
+    + '<span class="sb-row-text"><span class="sb-title" id="sbTitle">' + e(m.chapter || 'Questions') + (m.resumed ? '<span class="sb-resumed"> · resumed</span>' : '') + '</span>'
+    + '<span class="sb-where">Question ' + at(m) + ' of ' + n + '</span></span>'
+    + '<span class="sb-stats">' + stat('right', c.right, 'right') + stat('wrong', c.wrong, 'wrong') + (c.flagged ? stat('flagged', c.flagged, 'flagged') : '')
+    + '<span class="sb-stat" data-state="share"><b>' + share + '</b></span></span>'
+    + '<span class="sb-chev" aria-hidden="true">' + icon('chevron-down', 'icon-sm') + '</span></button>'
+    + '<div class="sb-detail" id="sbDetail"' + (open ? '' : ' hidden') + '>'
     + '<svg class="sb-brain" viewBox="' + GLYPH.view + '" role="group" aria-label="The session as a brain: a point for each of ' + n + ' questions, '
     + c.right + ' right, ' + c.wrong + ' wrong, ' + (n - c.seen) + ' not answered yet. Tap it, or use the arrow keys, to pick a question." tabindex="0" data-action="sessionBrainTap">'
     + glyph('sbB', 'sb-neurons', pts, list, r, false)
     + '<circle class="sb-pick" cx="' + (pts[pick] ? pts[pick].x : 0) + '" cy="' + (pts[pick] ? pts[pick].y : 0) + '" r="' + round1(r + 1.6) + '"/></svg>'
-    + '<div class="sb-info"><p class="sb-eyebrow">This session' + (m.resumed ? ' · resumed' : '') + '</p>'
-    + '<h2 class="sb-title" id="sbTitle" tabindex="-1">' + e(m.chapter || 'Questions') + '</h2>'
-    + '<p class="sb-where">Question ' + Math.min(n, (m.qIdx || 0) + 1) + ' of ' + n + '</p>'
-    + '<div class="sb-chips">' + chips + '</div></div>'
     + '<div class="sb-picked" aria-live="polite"><p class="sb-picked-t">' + e(said(s, pick)) + '</p>' + go + '</div>'
-    + '<div class="sb-actions">' + (m.resumed ? '<button class="q-restart" type="button" data-action="quizStartOver" title="Deal this chapter again from the beginning">Start over</button>' : '')
-    + '<button class="sb-done" type="button" data-action="toggleSessionBrain">Done</button></div></div>';
+    + (m.resumed ? '<button class="q-restart" type="button" data-action="quizStartOver" title="Deal this chapter again from the beginning">Start over</button>' : '')
+    + '</div></section>';
 }
 
-root.SessionBrain = { GLYPH, layout, states, counts, nearest, step, pillHtml, panelHtml, said, dotR };
+root.SessionBrain = { GLYPH, layout, states, counts, nearest, step, orbHtml, fabLabel, fabCount, asks, asksHtml, dockHtml, said, dotR };
 
 })(typeof window !== 'undefined' ? window : this);

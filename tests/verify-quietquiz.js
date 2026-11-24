@@ -59,10 +59,11 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
      only one until it is answered. */
   await page.evaluate(() => new Promise(done => { const go = () => setTimeout(done, 0); Store.ready().then(go, go); }));
 
-  /* A quiz of four questions, and the entrance they have finished before anything is chosen. */
+  /* A quiz of four questions, and the entrance they have finished before anything is chosen: the screen's, and the Apex
+     button's brain, which is outside #app and brightens for a question arrived at. */
   const arrived = async () => {
     await onScreen(page, 'quiz', { marker: '.q-card' });
-    await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== 'running' || !a.effect || !a.effect.target || !a.effect.target.closest || !a.effect.target.closest('#app') || a.effect.getComputedTiming().iterations === Infinity), null, { timeout: 8000 })
+    await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== 'running' || !a.effect || !a.effect.target || !a.effect.target.closest || !a.effect.target.closest('#app, #aiFab') || a.effect.getComputedTiming().iterations === Infinity), null, { timeout: 8000 })
       .then(() => true, () => false);
     await quiet(page);
   };
@@ -88,9 +89,10 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
   ok('the redraw says it is the same view again', r.again === true, String(r.again));
   ok('the question card does not rise in again', r.question === 0, r.question + ' running');
   ok('no option slides in again', r.slid === 0, `options ${r.slid}`);
-  /* The card over the question, whose bar slid up, went for the session brain (the owner's choice, November 2026). Its
-     one motion is the halo of the question on screen, for a session that changed: an answer is one. */
-  ok('the session brain\'s halo brightens, once, for the answer', r.halo === 1, r.halo + ' running');
+  /* The card over the question, whose bar slid up, went to the master Apex Brain (the owner's choice, November 2026):
+     the Apex button wears the session. Its one motion is the halo of the question on screen, for a session that
+     changed: an answer is one. */
+  ok('the Apex button\'s brain brightens its halo, once, for the answer', r.halo === 1, r.halo + ' running');
   ok('what is new arrives: the verdict rises in', r.verdict === 1, r.verdict + ' running');
   ok('the right option pops and the one that was wrong gives its nudge', r.right === 1 && r.wrong === 1, `right ${r.right}, wrong ${r.wrong}`);
   ok('the annotation pencil is there, and does not pop in again', r.pencils === 1 && r.pencil === 0, `${r.pencils} pencil(s), ${r.pencil} running`);
@@ -105,7 +107,7 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
         pencil: COUNT('popIn', '.rail-open'), pencils: document.querySelectorAll('.rail-open').length };
     })()`);
     ok('the next question is not the same view: it does not wear it', n.again === false, String(n.again));
-    ok('and it arrives as a question does: the card rises in, the options slide in, and the session brain\'s halo brightens', n.question === 1 && n.slid >= 4 && n.halo === 1, JSON.stringify([n.question, n.slid, n.halo]));
+    ok('and it arrives as a question does: the card rises in, the options slide in, and the Apex button\'s brain brightens its halo', n.question === 1 && n.slid >= 4 && n.halo === 1, JSON.stringify([n.question, n.slid, n.halo]));
     ok('the annotation pencil, which is on every question, does not pop in again with it', n.pencils === 1 && n.pencil === 0, `${n.pencils} pencil(s), ${n.pencil} running`);
     await arrived();
 
@@ -131,7 +133,7 @@ const COUNT = `(name, sel) => document.getAnimations().filter(a => a.animationNa
       render(); render();
       return { again: document.getElementById('app').classList.contains('again'), question: COUNT('riseIn', '.q-card'), slid: COUNT('slideL', '.opts>.opt'), halo: COUNT('sbPulse', '.sb-halo') };
     })()`);
-    ok('a quiz redrawn twice in place is not entered twice, and the session brain, which has not changed, does not brighten', twice.again === true && twice.question === 0 && twice.slid === 0 && twice.halo === 0, JSON.stringify(twice));
+    ok('a quiz redrawn twice in place is not entered twice, and the Apex button\'s brain, which has not changed, does not brighten', twice.again === true && twice.question === 0 && twice.slid === 0 && twice.halo === 0, JSON.stringify(twice));
   }
 
   head('the pencil is made again when it is not what it was');

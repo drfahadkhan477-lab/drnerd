@@ -186,7 +186,7 @@ jobs:
         run: node tests/verify-fence-pure.js
       - name: every theme is one the app can draw, a saved choice is its theme or Auto, and the script before paint draws each as the table says (20 checks)
         run: node tests/verify-themes-pure.js
-      - name: a point per question in the brain, each in its state; the pill says the place and opens a small panel that picks and goes to a question; one motion, which rests (39 checks)
+      - name: a point per question in the brain, each in its state; the Apex button wears it and Apex opens on it, where a question is picked and gone to and the session asked about; one motion, which rests (52 checks)
         run: node tests/verify-sessionbrain-pure.js
       - name: the build's notes reach a device and are kept up to date, and a note the fellow wrote or edited is never touched (19 checks)
         run: node tests/verify-refseed-pure.js
