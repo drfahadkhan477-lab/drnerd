@@ -579,7 +579,11 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       return {rows:rows.length,items:items.length,shown:items.filter(i=>i.shown).length,wrong,spans};
     });
   };
+  /* The line has its three items only once something is answered (docs/ROADMAP.md, D4: for someone new it is the bank's
+     size alone), so the dots are measured with three answered today, and the day put back after. */
+  const daily=await page.evaluate(()=>{const was=JSON.stringify(S.daily||{});S.daily=Object.assign({},S.daily,{[todayISO()]:{a:3,c:2}});render();return was;});
   const narrow=await dots(1024,768), wide=await dots(1366,1024);
+  await page.evaluate(was=>{S.daily=JSON.parse(was);render();},daily);
   ok('at 1024x768 the bank\'s line wraps (precondition)',narrow.rows>=2,JSON.stringify(narrow));
   ok('and a dot stands only between two items on one row, never at a row\'s start or end',narrow.rows>=2&&narrow.wrong.length===0&&narrow.spans===0&&narrow.shown===narrow.items-narrow.rows,JSON.stringify(narrow));
   ok('at 1366x1024, one row with a dot between each pair',wide.rows===1&&wide.wrong.length===0&&wide.spans===0&&wide.shown===wide.items-1,JSON.stringify(wide));
