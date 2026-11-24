@@ -25,14 +25,20 @@
  *   - the beat handed to the diagram: a lesion's, or Normal's, which in the PV loop is the intervention's, or none
  *     without the engine; the engine asked for while it is not there; the phase, the diagram's or Physio's at its
  *     time; and the caption painted in Wiggers only when the phase turns over, in any other view each time;
+ *   - the mounts: the cycle's diagram mounted once per canvas with the view, theme, rate, speed and whether it
+ *     plays, and waited for where Wiggers is not there; its chips bound to their handlers; a drag that scrubs it
+ *     outside the PV loop and Curves; the 12-lead with the lead kept, a tap selecting a lead or letting it go;
+ *     and the monitor stopped on every draw and started again on the Lab;
  *   - the page: its line, the slot, that the two panel builders are no longer the page's, the two handlers,
- *     that every element the page's mounts look up is in the markup under that name, that what is chosen
+ *     that every element the mounts look up is in the markup under that name, that what is chosen
  *     is still the page's, and the page's own line over its own constants, helpers, Physio and Leads12; that the
  *     page's four handler names are one line each into the module, that mountPhysio() hands its chips to them,
  *     and, called through those lines, that LAB_ENV reaches the page's document, store, draw and two mounts;
  *     that the lesion's beat, the phase and the caption's painter are one line each into the module, and, called
  *     through them, that the circulation engine is asked for once while it loads, and asked again after a load
- *     that failed.
+ *     that failed; that the three mounts are one line each, and, through the page's own mountLab(), that LAB_ENV
+ *     lends the diagrams' code, the next frame, Wiggers' load, the 12-lead map, the lead card, the theme and the
+ *     screen.
  *
  * Not held here: what the titles of the half and quarter speed chips say. They read "${label} of real
  * time", the name where the label was meant; that is the page's as it was before the screen moved, and it
@@ -372,8 +378,9 @@ head('what a tap on the cycle panel does, and a rhythm chip');
   const at = mod.indexOf('function isPlaying('), end = mod.indexOf('root.RhythmLabScreen');
   /* The quoted selectors and keys name the page's attributes, not its code, and are set aside; the handlers quote with ' alone. */
   const part = at >= 0 && end > at ? mod.slice(at, end).replace(/'[^'\n]*'/g, "''") : '';
-  const seen = ['document', 'localStorage', 'window', 'matchMedia', 'render', 'physioApplyLesion', 'paintPhysioNote', 'RHYTHMS', 'physio', 'LAB'].filter(t => new RegExp('(?<![.\\w$])' + t + '\\b').test(part));
-  ok('the handlers reach the page only through what they are handed', part.length > 0 && seen.length === 0, part ? (seen.join(' ') || 'none of the page\'s names') : 'handlers not found');
+  const seen = ['document', 'localStorage', 'window', 'matchMedia', 'render', 'physioApplyLesion', 'paintPhysioNote', 'RHYTHMS', 'physio', 'LAB',
+    'Wiggers', 'ECG12', 'ECGMonitor', 'requestAnimationFrame', 'LEAD12_MAP', 'leadCardHtml', 'loadWiggers', 'S', 'Circulation', 'Physio'].filter(t => new RegExp('(?<![.\\w$])' + t + '\\b').test(part));
+  ok('the handlers, and the functions below them, reach the page only through what they are handed', part.length > 0 && seen.length === 0, part ? (seen.join(' ') || 'none of the page\'s names') : 'handlers not found');
 }
 
 head('the beat handed to the diagram, and the caption painted');
@@ -450,6 +457,134 @@ head('the beat handed to the diagram, and the caption painted');
   }
 }
 
+head('the mounts: the monitor, the 12-lead and the cycle, drawn into their canvases');
+{
+  /* A stand-in page with the three canvases, a lead card and the cycle's chips, and stand-ins for the diagrams' code that
+     say what they were asked: Wiggers mounts a diagram, ECG12 a 12-lead, ECGMonitor a monitor. Wiggers' load is a
+     promise that has already settled, so what it does is seen at once. What each mount should do is worked out here. */
+  const rig = (st0, o = {}) => {
+    const log = [], frames = [];
+    const canvas = id => ({ id, getBoundingClientRect: () => ({ left: 10, top: 20 }), setPointerCapture: p => log.push(id + ' capture ' + p),
+      releasePointerCapture: p => { log.push(id + ' release ' + p); if (o.releaseThrows) throw new Error('gone'); } });
+    const els = {};
+    if (!o.noLabCanvas) els.labCanvas = canvas('labCanvas');
+    if (!o.noPhysioCanvas) els.physioCanvas = canvas('physioCanvas');
+    if (!o.noTwelveCanvas) els.twelveCanvas = canvas('twelveCanvas');
+    els.leadCard = { innerHTML: '-' };
+    const chip = (attr, key, val) => { const b = { attr, val, dataset: { [key]: val }, hot: false, textContent: '-', title: '-' };
+      b.classList = { toggle: (c, on) => { if (c === 'hot') b.hot = !!on; } }; return b; };
+    const chips = [chip('data-physio-lesion', 'physioLesion', 'as'), chip('data-physio-slow', 'physioSlow', '4'), chip('data-physio-play', 'physioPlay', ''),
+      chip('data-physio-view', 'physioView', 'pv'), chip('data-physio-iv', 'physioIv', 'ino')];
+    let n = 0;
+    const diagram = () => { const tag = 'cycle' + (++n);
+      return { tag, destroy: () => log.push(tag + ' destroy'), setIntervention: i => log.push(tag + ' iv ' + i), scrubAt: (x, y) => log.push(tag + ' scrub ' + x + ',' + y),
+        setScrub: on => log.push(tag + ' scrub ' + on), draw: () => log.push(tag + ' draw'), play: () => log.push(tag + ' play'), pause: () => log.push(tag + ' pause'),
+        setSlow: s => log.push(tag + ' slow ' + s), setRate: r => log.push(tag + ' rate ' + r) }; };
+    const Wiggers = { mount: (cv, op) => { const { onFrame, ...rest } = op; log.push('Wiggers ' + cv.id + ' ' + J(rest)); frames.push(() => onFrame && onFrame()); return o.mountFails ? null : diagram(); } };
+    const ECG12 = { mount: (cv, op) => { log.push('ECG12 ' + cv.id + ' ' + J(op)); return o.twelveFails ? null : {
+      select: id => log.push('select ' + id), leadAt: (x, y) => (x > 50 ? 'V1' : x > 20 ? 'II' : null), draw: () => log.push('twelve draw') }; } };
+    class ECGMonitor { constructor(cv, op) { this.cv = cv.id; log.push('monitor ' + cv.id + ' ' + J(op)); } start() { log.push('monitor start'); } destroy() { log.push('monitor destroy ' + this.cv); } }
+    let libs = { Wiggers: o.noWiggers ? undefined : Wiggers, ECG12: o.noECG12 ? undefined : ECG12, ECGMonitor };
+    const st = Object.assign({ mon: null, kind: 'sinus', physio: null, view: 'wiggers', iv: 'base', canvas: null, lesion: 'normal', slow: 2, playing: true, twelve: null, lead: null, notePhase: 'Ejection' }, st0);
+    const env = {
+      doc: { getElementById: id => els[id] || null, querySelectorAll: q => { const m = /^\[([a-z-]+)\]$/.exec(q); return m ? chips.filter(c => c.attr === m[1]) : []; } },
+      store: { getItem: () => null, setItem: (k, v) => log.push('save ' + k + '=' + v) }, reducedMotion: () => false,
+      RHYTHMS: { sinus: { hr: 68 }, vt: { hr: 180 }, asys: { hr: 0 }, afib: { hr: 110 } }, render: () => log.push('render'),
+      applyLesion: () => log.push('applyLesion'), paintNote: () => log.push('paintNote "' + st.notePhase + '"'),
+      dark: () => !!o.dark, libs: () => libs, frame: f => frames.push(f), screen: () => (o.screen || 'lab'),
+      lead12: k => ({ sinus: 'sinus', afib: 'afib' })[k], leadCardHtml: id => 'card ' + id,
+      loadWiggers: () => ({ then: f => { log.push('load Wiggers'); if (o.arrives) libs = Object.assign({}, libs, { Wiggers }); if (o.canvasReplaced) els.physioCanvas = canvas('physioCanvas'); f(!!o.arrives); } }),
+    };
+    const runFrames = () => { frames.splice(0).forEach(f => f()); };
+    /* Anything the mount did not bind, tapped, says so in the log, so the check that asked fails and the run goes on. */
+    const call = (el, h, ev) => (el && typeof el[h] === 'function' ? el[h](ev) : log.push('no ' + h));
+    return { log, els, chips, st, env, runFrames, call, tap: attr => call(chips.find(c => c.attr === attr), 'onclick') };
+  };
+  const run = f => { try { return f(); } catch (err) { return 'THREW ' + err.message; } };
+
+  {
+    const a = rig({ kind: 'vt', view: 'flow', iv: 'ino', slow: 4, playing: false }, { dark: true }), r = run(() => L.mountPhysio(a.st, a.env));
+    ok('mountPhysio(): the diagram is mounted with the view, the theme, the rhythm\'s rate, the speed and whether it plays, then handed the intervention and the lesion, and the caption painted from no phase',
+       r === undefined && J(a.log) === J(['Wiggers physioCanvas {"view":"flow","dark":true,"hr":180,"slow":4,"playing":false}', 'cycle1 iv ino', 'applyLesion', 'paintNote ""'])
+       && a.st.physio && a.st.physio.tag === 'cycle1' && a.st.canvas === a.els.physioCanvas, J([r, a.log]));
+    a.log.length = 0; a.runFrames();
+    ok('and on the next frames it is drawn, and each frame it draws paints the caption', J(a.log) === J(['paintNote ""', 'cycle1 draw']), J(a.log));
+    const b = rig({ kind: 'asys', playing: null }), rb = run(() => L.mountPhysio(b.st, b.env));
+    ok('a rhythm with no rate gives it 68, and whether it plays is decided then', rb === undefined && /"hr":68,"slow":2,"playing":true\}$/.test(b.log[0]) && b.st.playing === true, J([rb, b.log[0]]));
+  }
+  {
+    const a = rig({}); run(() => L.mountPhysio(a.st, a.env)); a.log.length = 0;
+    const again = run(() => L.mountPhysio(a.st, a.env));
+    ok('mounted again on the same canvas, nothing is done: one diagram per canvas', again === undefined && J(a.log) === J([]) && a.st.physio.tag === 'cycle1', J(a.log));
+    a.els.physioCanvas = { id: 'physioCanvas', getBoundingClientRect: () => ({ left: 0, top: 0 }) }; run(() => L.mountPhysio(a.st, a.env));
+    ok('on a new canvas the old diagram is destroyed before the new one is mounted', a.log[0] === 'cycle1 destroy' && /^Wiggers physioCanvas /.test(a.log[1]) && a.st.physio.tag === 'cycle2' && a.st.canvas === a.els.physioCanvas, J(a.log.slice(0, 2)));
+    const c = rig({}, { mountFails: true }), rc = run(() => L.mountPhysio(c.st, c.env));
+    ok('a diagram that will not mount leaves nothing kept and nothing handed', rc === undefined && c.st.physio === null && c.st.canvas === null && c.log.length === 1, J([rc, c.log]));
+  }
+  {
+    const old = { tag: 'old', destroy() { this.gone = true; } };
+    const a = rig({ physio: old, canvas: {} }, { noWiggers: true, arrives: true }), r = run(() => L.mountPhysio(a.st, a.env));
+    ok('without Wiggers: the diagram there was destroyed and forgotten, Wiggers asked for, and mounted when it is there, the canvas still the panel\'s',
+       r === undefined && old.gone === true && a.log[0] === 'load Wiggers' && /^Wiggers physioCanvas /.test(a.log[1]) && a.st.physio && a.st.physio.tag === 'cycle1', J([r, a.log.slice(0, 2)]));
+    const b = rig({}, { noWiggers: true, arrives: true, canvasReplaced: true }), c = rig({}, { noWiggers: true });
+    run(() => L.mountPhysio(b.st, b.env)); run(() => L.mountPhysio(c.st, c.env));
+    ok('but not when the canvas was replaced meanwhile, nor when Wiggers could not be had', J(b.log) === J(['load Wiggers']) && J(c.log) === J(['load Wiggers']) && b.st.physio === null && c.st.physio === null, J([b.log, c.log]));
+    const d = rig({ physio: { tag: 'old', destroy() { this.gone = true; } } }, { noPhysioCanvas: true });
+    const rd = run(() => L.mountPhysio(d.st, d.env));
+    ok('with no canvas, the diagram is destroyed and forgotten, and Wiggers not asked for', rd === undefined && d.st.physio === null && d.st.canvas === null && J(d.log) === J([]), J([rd, d.log]));
+  }
+  {
+    const a = rig({ view: 'wiggers' }); run(() => L.mountPhysio(a.st, a.env)); a.log.length = 0;
+    ['data-physio-slow', 'data-physio-play', 'data-physio-lesion', 'data-physio-iv', 'data-physio-view'].forEach(t => run(() => a.tap(t)));
+    ok('each chip the mount bound does its own handler\'s work: the speed, Play, the lesion, the intervention, the view',
+       a.st.slow === 4 && a.st.playing === false && a.st.lesion === 'as' && a.st.iv === 'ino' && a.st.view === 'pv'
+       && J(a.log) === J(['save accsap12.physioslow=4', 'cycle1 slow 4', 'cycle1 pause', 'save accsap12.physiolesion=as', 'applyLesion', 'paintNote ""', 'cycle1 iv ino', 'applyLesion', 'paintNote ""', 'save accsap12.physioview=pv', 'render']), J(a.log));
+  }
+  {
+    const a = rig({ view: 'wiggers' }); run(() => L.mountPhysio(a.st, a.env)); a.log.length = 0;
+    const cv = a.els.physioCanvas;
+    const at = (h, ev) => run(() => a.call(cv, h, ev));
+    at('onpointermove', { clientX: 99, clientY: 99 });
+    at('onpointerdown', { pointerId: 7, clientX: 40, clientY: 50 }); at('onpointermove', { pointerId: 7, touches: [{ clientX: 70, clientY: 30 }] }); at('onpointerup', { pointerId: 7 });
+    at('onpointermove', { clientX: 99, clientY: 99 }); at('onpointerup', { pointerId: 7 });
+    ok('dragging the diagram scrubs it at the finger, less the canvas\'s corner, and paints the caption; a move with no finger down, or a second lift, does nothing',
+       J(a.log) === J(['cycle1 scrub true', 'physioCanvas capture 7', 'cycle1 scrub 30,30', 'paintNote ""', 'cycle1 scrub 60,10', 'paintNote ""', 'cycle1 scrub false', 'physioCanvas release 7']), J(a.log));
+    const pv = ['pv', 'curves'].map(view => { const x = rig({ view }); run(() => L.mountPhysio(x.st, x.env)); x.log.length = 0; run(() => x.call(x.els.physioCanvas, 'onpointerdown', { pointerId: 1, clientX: 40, clientY: 50 })); return x.log.length; });
+    const b = rig({}, { releaseThrows: true }); run(() => L.mountPhysio(b.st, b.env));
+    const rb = run(() => { b.call(b.els.physioCanvas, 'onpointerdown', { pointerId: 2, clientX: 40, clientY: 50 }); b.call(b.els.physioCanvas, 'onpointercancel', { pointerId: 2 }); });
+    ok('the PV loop and Curves, which have no time to scrub, take no drag; a cancelled drag ends it, and a capture already gone is let be',
+       J(pv) === J([0, 0]) && rb === undefined && b.log.slice(-2).join() === 'cycle1 scrub false,physioCanvas release 2', J([pv, rb, b.log.slice(-2)]));
+  }
+  {
+    const a = rig({ kind: 'afib', lead: 'II' }, { dark: true }), r = run(() => L.mountTwelve(a.st, a.env));
+    ok('mountTwelve(): the 12-lead of the rhythm\'s own, its rate and the theme, the lead selected kept, and drawn on the next frame',
+       r === undefined && J(a.log) === J(['ECG12 twelveCanvas {"kind":"afib","hr":110,"dark":true}', 'select II']) && (a.runFrames(), a.log[a.log.length - 1] === 'twelve draw'), J([r, a.log]));
+    a.log.length = 0; const cv = a.els.twelveCanvas;
+    const tapAt = x => run(() => a.call(cv, 'onclick', { clientX: x, clientY: 5 }));
+    tapAt(70); const first = [a.st.lead, a.els.leadCard.innerHTML];
+    tapAt(70); const second = [a.st.lead, a.els.leadCard.innerHTML];
+    tapAt(20);
+    ok('a tap on a lead selects it and draws its card; on it again lets it go; off any lead does nothing',
+       J(first) === J(['V1', 'card V1']) && J(second) === J([null, 'card null']) && J(a.log) === J(['select V1', 'select null']), J([first, second, a.log]));
+    const b = rig({ kind: 'vt' }), c = rig({ twelve: 'old' }, { noECG12: true }), d = rig({ twelve: 'old' }, { noTwelveCanvas: true });
+    run(() => L.mountTwelve(b.st, b.env)); run(() => L.mountTwelve(c.st, c.env)); run(() => L.mountTwelve(d.st, d.env));
+    ok('a rhythm with no 12-lead of its own is drawn as sinus at its own rate; with no ECG12 or no canvas there is no 12-lead',
+       b.log[0] === 'ECG12 twelveCanvas {"kind":"sinus","hr":180,"dark":false}' && c.st.twelve === null && d.st.twelve === null && c.log.length + d.log.length === 0, J([b.log[0], c.log, d.log]));
+  }
+  {
+    const a = rig({ kind: 'vt' }), r = run(() => L.mountLab(a.st, a.env));
+    ok('mountLab() on the Lab: the monitor made for the rhythm and started, then the 12-lead and the cycle mounted',
+       r === undefined && a.log[0] === 'monitor labCanvas {"kind":"vt","speed":0.15,"grid":true,"amp":60,"lineWidth":2.2}' && a.log[1] === 'monitor start'
+       && /^ECG12 twelveCanvas /.test(a.log[2]) && /^Wiggers physioCanvas /.test(a.log[3]) && a.st.mon && a.st.mon.cv === 'labCanvas', J([r, a.log.slice(0, 4)]));
+    a.log.length = 0; run(() => L.mountLab(a.st, a.env));
+    ok('drawn again, the monitor that was running is destroyed before the next is made', a.log[0] === 'monitor destroy labCanvas' && /^monitor labCanvas /.test(a.log[1]), J(a.log.slice(0, 2)));
+    const b = rig({}, { screen: 'home' }); b.st.mon = { destroy: () => b.log.push('monitor destroy') }; const rb = run(() => L.mountLab(b.st, b.env));
+    const c = rig({}, { noLabCanvas: true }); run(() => L.mountLab(c.st, c.env));
+    ok('on any other screen the monitor is destroyed and nothing is mounted; on the Lab with no monitor canvas, the diagrams still are',
+       rb === undefined && J(b.log) === J(['monitor destroy']) && b.st.mon === null && c.st.mon === null && /^ECG12 /.test(c.log[0]) && /^Wiggers /.test(c.log[1]), J([b.log, c.log.slice(0, 2)]));
+  }
+}
+
 head('the page hands over what it has, and keeps what is chosen');
 {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
@@ -476,9 +611,10 @@ head('the page hands over what it has, and keeps what is chosen');
      handlers.length === 2 && handlers.every(n => table.split(TABLE[n]).length === 2 && count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1,
      handlers.map(n => n + ':' + (table.split(TABLE[n] || '\u0000').length - 1) + '/' + count('function ' + n + '(')).join(' '));
 
-  /* The markup is the module's, and what finds its elements again is the page's mounts and, since the caption's painter
-     moved, the module's own. They meet at six ids and four data attributes: a name changed on one side leaves a canvas or
-     a caption nothing can find, and nothing says so. Both are read with their comments blanked. */
+  /* The markup is the module's, and so, since the mounts and the caption's painter moved, is what finds its elements
+     again; a lookup left in the page counts too. The two meet at six ids and five data attributes: a name changed on
+     one side leaves a canvas or a caption nothing can find, and nothing says so. Both are read with their comments
+     blanked. */
   const ids = [...new Set([...all.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]))].sort();
   const modSrc = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'rhythmlab.js'), 'utf8'));
   const lookedUp = id => count('getElementById(\'' + id + '\')') + modSrc.split('getElementById(\'' + id + '\')').length - 1 > 0;
@@ -491,8 +627,12 @@ head('the page hands over what it has, and keeps what is chosen');
      ids.map(i => i + (lookedUp(i) ? '' : ' (not looked up)')).join(' '));
   const wig = draw(page({ physioView: 'wiggers' }));
   const datas = [...new Set([...(all + wig).matchAll(/\b(data-physio-[a-z]+)\b/g)].map(m => m[1]))].sort();
-  ok('and every data attribute on a cycle chip, in the PV loop and the Wiggers view, is one the page binds a tap to', J(datas) === J(['data-physio-iv', 'data-physio-lesion', 'data-physio-play', 'data-physio-slow', 'data-physio-view']) && datas.every(d => count('querySelectorAll(\'[' + d + ']\')') > 0),
-     datas.map(d => d + ':' + count('querySelectorAll(\'[' + d + ']\')')).join(' '));
+  /* The taps are bound by the cycle's mount, which is the module's since it left the page: each attribute's chips, found
+     and each given an onclick. A query that only marks a chip (the handlers do that too) is not a binding. */
+  const physioMount = (at => at < 0 ? '' : modSrc.slice(at, modSrc.indexOf('\n}\n', at)))(modSrc.indexOf('function mountPhysio(st,env){'));
+  const binds = d => physioMount.split(new RegExp("querySelectorAll\\('\\[" + d + "\\]'\\)\\.forEach\\(b=>\\s*b\\.onclick=")).length - 1;
+  ok('and every data attribute on a cycle chip, in the PV loop and the Wiggers view, is one the cycle\'s mount binds a tap to', J(datas) === J(['data-physio-iv', 'data-physio-lesion', 'data-physio-play', 'data-physio-slow', 'data-physio-view']) && datas.every(d => binds(d) === 1),
+     physioMount ? datas.map(d => d + ':' + binds(d)).join(' ') : 'no mountPhysio(st,env) in the module');
 
   ok('which rhythm is chosen is still the page\'s to keep: its state is LAB, made by the module, and labKind is a view of LAB.kind',
      count('const LAB=RhythmLabScreen.state({getItem:k=>localStorage.getItem(k)},PHYSIO_VIEWS,PHYSIO_LESIONS);') === 1 && count("labKind:labView('kind')") === 1
@@ -501,13 +641,15 @@ head('the page hands over what it has, and keeps what is chosen');
     'function physioIsPlaying(){ return RhythmLabScreen.isPlaying(LAB,LAB_ENV); }', 'function setPhysioPlaying(on){ RhythmLabScreen.setPlaying(LAB,on,LAB_ENV); }'];
   ok('setLab(), setPhysioSlow(), physioIsPlaying() and setPhysioPlaying() are one line each into the module, with LAB and what the page lends it, each declared once',
      ONE.every(l => count(l) === 1) && ['setLab', 'setPhysioSlow', 'physioIsPlaying', 'setPhysioPlaying'].every(n => count('function ' + n + '(') === 1), ONE.map(l => count(l)).join(' '));
-  const mountAt = shell.indexOf('function mountPhysio(){'), mount = mountAt < 0 ? '' : shell.slice(mountAt, shell.indexOf('\n}\n', mountAt));
-  const TAPS = ["document.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseLesion(LAB,b,LAB_ENV));",
-    "document.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseView(LAB,b,LAB_ENV));",
-    "document.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>RhythmLabScreen.chooseIv(LAB,b,LAB_ENV));",
-    'b.onclick=()=>setPhysioSlow(+b.dataset.physioSlow));', 'b.onclick=()=>setPhysioPlaying(!physioIsPlaying()));'];
-  ok('mountPhysio() hands a lesion, view or intervention chip to the module, with LAB, and a speed or Play chip to the page\'s names',
-     mount.length > 0 && TAPS.every(l => mount.split(l).length === 2), mount ? TAPS.map(l => mount.split(l).length - 1).join(' ') : 'no mountPhysio()');
+  const MOUNTS = ['function mountPhysio(){ RhythmLabScreen.mountPhysio(LAB,LAB_ENV); }', 'function mountTwelve(){ RhythmLabScreen.mountTwelve(LAB,LAB_ENV); }',
+    'function mountLab(){ RhythmLabScreen.mountLab(LAB,LAB_ENV); }'];
+  const TAPS = ["doc.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>chooseLesion(st,b,env));",
+    "doc.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>chooseView(st,b,env));",
+    "doc.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>chooseIv(st,b,env));",
+    'b.onclick=()=>setSlow(st,+b.dataset.physioSlow,env));', 'b.onclick=()=>setPlaying(st,!isPlaying(st,env),env));'];
+  ok('mountPhysio(), mountTwelve() and mountLab() are one line each into the module, each declared once, and the module\'s cycle mount hands each chip to its own handler, with the state and what the page lends',
+     MOUNTS.every(l => count(l) === 1) && ['mountPhysio', 'mountTwelve', 'mountLab'].every(n => count('function ' + n + '(') === 1) && physioMount.length > 0 && TAPS.every(l => physioMount.split(l).length === 2),
+     MOUNTS.map(l => count(l)).join(' ') + ' · ' + (physioMount ? TAPS.map(l => physioMount.split(l).length - 1).join(' ') : 'no mountPhysio(st,env)'));
   ok('and the page keeps no copy of what they do: no key they remember a choice under, and no word the Play chip says',
      count('accsap12.physio') === 0 && count('Pause the cycle') === 0 && count("'Pause'") === 0, [count('accsap12.physio'), count('Pause the cycle'), count("'Pause'")].join(' '));
 
@@ -519,7 +661,8 @@ head('the page hands over what it has, and keeps what is chosen');
     whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('const LAB_ENV=', '};\n'), whole('function physioIsPlaying(){', '\n'), whole('function setPhysioSlow(n){', '\n'),
     whole('function setPhysioPlaying(on){', '\n'), whole('function setLab(k){', '\n'), whole('function leadCardHtml(id){', '\n'),
     whole('let circLibP=null;', '\n'), whole('function physioCycle(id){', '\n'), whole('function physioRef(){', '\n'), whole('function physioApplyLesion(){', '\n'),
-    whole('function physioPhaseNow(){', '\n'), whole('function paintPhysioNote(){', '\n')].join('\n');
+    whole('function physioPhaseNow(){', '\n'), whole('function paintPhysioNote(){', '\n'), whole('function mountPhysio(){', '\n'), whole('function mountTwelve(){', '\n'),
+    whole('function mountLab(){', '\n')].join('\n');
   const world = (state, opts) => {
     const ctx = { RHYTHMS: { sinus: { name: 'Sinus <rhythm>', hr: 68, desc: 'Normal & regular' }, vt: { name: 'VT', hr: 180, desc: 'Fast' } }, RHYTHM_KEYS: ['sinus', 'vt'] };
     ctx.window = ctx; if (opts && opts.reduce !== undefined) ctx.matchMedia = () => ({ matches: opts.reduce });
@@ -608,6 +751,37 @@ head('the page hands over what it has, and keeps what is chosen');
   const rd = (() => { try { return JSON.parse(read); } catch (err) { return {}; } })();
   ok('and LAB_ENV lends the page\'s own Physio and views: a diagram with only a clock is in Physio\'s phase at its time, and outside Wiggers the pill names the page\'s own view',
      rd.phase === rd.physio && rd.phase !== rd.start && typeof rd.phase === 'string' && rd.pill === rd.view && rd.view === 'Flow', String(read));
+  /* The mounts, called through the page's own mountLab(), over stand-ins for the diagrams' code, the next frame, the screen
+     and Wiggers' load, with the page's own LEAD12_MAP and lead card. AF has a 12-lead of its own in the page's map and is
+     given a rate here. The theme is asked three ways: the page's dark, its light, and none, where the device's is dark. */
+  const mounted = (theme, late) => world('var labKind="afib", physioView="wiggers", physioSlow=2, physioIv="base", twelveLead="V1";', { reduce: false }).ask(`var did=[], frames=[], cv={};
+    RHYTHMS.afib={name:'AF',hr:110,desc:'Irregular'};
+    ['labCanvas','physioCanvas','twelveCanvas','leadCard'].forEach(id=>cv[id]={id,innerHTML:'-',getBoundingClientRect:()=>({left:0,top:0})});
+    document={getElementById:id=>cv[id]||null, querySelectorAll:()=>[], documentElement:{getAttribute:a=>a==='data-theme'?${J(theme)}:null, hasAttribute:a=>a==='data-theme'&&${J(theme)}!==null}};
+    matchMedia=q=>({matches:/dark/.test(q)});
+    var W={mount:(c,o)=>{ did.push('Wiggers '+c.id+' dark '+o.dark+' hr '+o.hr); return {setIntervention(){},draw:()=>did.push('cycle draw')}; }};
+    if(!${late}) Wiggers=W;
+    ECG12={mount:(c,o)=>{ did.push('ECG12 '+c.id+' '+o.kind+' dark '+o.dark); return {select:id=>did.push('select '+id),leadAt:()=>'V2',draw:()=>did.push('twelve draw')}; }};
+    ECGMonitor=class{ constructor(c,o){ did.push('monitor '+c.id+' '+o.kind); } start(){ did.push('monitor start'); } destroy(){} };
+    requestAnimationFrame=f=>frames.push(f); S={screen:'lab'}; loadWiggers=()=>({then:f=>{ did.push('load Wiggers'); Wiggers=W; f(true); }});
+    physioApplyLesion=()=>did.push('applyLesion'); paintPhysioNote=()=>did.push('paintNote');
+    mountLab(); frames.forEach(f=>f()); cv.twelveCanvas.onclick({clientX:5,clientY:5});
+    JSON.stringify({did, card:/lead-id">V2</.test(cv.leadCard.innerHTML), lead:twelveLead})`);
+  const wantMounted = (dark, late) => J({ did: ['monitor labCanvas afib', 'monitor start', 'ECG12 twelveCanvas afib dark ' + dark, 'select V1'].concat(late ? ['load Wiggers'] : [],
+    ['Wiggers physioCanvas dark ' + dark + ' hr 110', 'applyLesion', 'paintNote', 'twelve draw', 'cycle draw', 'select V2']), card: true, lead: 'V2' });
+  const themes = [mounted('dark', false), mounted('light', false), mounted(null, false), mounted('dark', true)];
+  ok('through LAB_ENV the page\'s mounts find the diagrams\' code, the next frame, Wiggers\' load, the page\'s 12-lead map and lead card, and the page\'s theme, or where it has none the device\'s',
+     themes[0] === wantMounted(true, false) && themes[1] === wantMounted(false, false) && themes[2] === wantMounted(true, false) && themes[3] === wantMounted(true, true),
+     themes.map(t => String(t).slice(0, 160)).join(' | '));
+  /* The screen the page is on, which the check above holds at the Lab: here a monitor is running and the page has moved on. */
+  const away = world('var labKind="sinus", physioView="wiggers", physioSlow=2, physioIv="base", twelveLead=null;', { reduce: false }).ask(`var did=[];
+    document={getElementById:id=>({id}), querySelectorAll:()=>[], documentElement:{getAttribute:()=>null, hasAttribute:()=>false}};
+    ECGMonitor=class{ constructor(){ did.push('monitor'); } start(){} destroy(){} }; ECG12={mount:()=>{ did.push('ECG12'); return null; }}; Wiggers={mount:()=>{ did.push('Wiggers'); return null; }};
+    requestAnimationFrame=()=>{}; loadWiggers=()=>({then(){}});
+    labMon={destroy:()=>did.push('monitor destroy')}; S={screen:'home'}; mountLab();
+    JSON.stringify({did, mon:labMon})`);
+  ok('and the screen the page is on: once it has left the Lab, the page\'s mountLab() stops the monitor and mounts nothing',
+     away === J({ did: ['monitor destroy'], mon: null }), String(away));
   const bare = world('var labKind="sinus", physioView="flow", physioSlow=1, physioIv="base", twelveLead=null;', { noPhysio: true, reduce: false });
   ok('on a page with no Physio the screen is still drawn outside the PV loop', !bare.shown.startsWith('THREW') && bare.shown.includes('<span>Cardiac cycle · Flow</span>'), bare.shown.slice(0, 90));
 }

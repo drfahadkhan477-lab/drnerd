@@ -414,6 +414,10 @@ Then the beat and the painter: `physioCycle()`, `physioRef()`, `physioApplyLesio
 `physioPhaseNow()` and `paintPhysioNote()` are `RhythmLabScreen`'s `cycle`, `ref`,
 `applyLesion`, `phaseNow` and `paintNote`; the circulation engine's load stays the page's,
 lent as `LAB_ENV.loadCirculation`, since the Practice Lab and the Home hero share it.
+Then the mounts: `mountPhysio()`, `mountTwelve()` and `mountLab()` are `RhythmLabScreen`'s,
+handed the page's document, theme, diagrams' code, next frame, screen and Wiggers' load
+through `LAB_ENV`. The Rhythm Lab's wiring is then the module's; the page keeps its names,
+one line each, the views of `LAB`, `LAB_ENV`, and the loads it shares with other screens.
 
 **E2 — Delegated events, then a real `script-src`.** Replace `onclick="fn(this)"`
 with `data-action` attributes and one delegated listener per root, screen by

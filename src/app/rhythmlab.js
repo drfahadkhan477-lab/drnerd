@@ -24,8 +24,8 @@
        e, icon                 the page's helpers
 
    The three builders change nothing and draw nothing: they return markup with three empty canvases in it.
-   The page's mountLab() draws into them after the screen is in the document. What is chosen is kept in
-   state() below, and changed by the handlers below it.
+   mountLab() below draws into them after the screen is in the document, called from the page's render()
+   through its one line. What is chosen is kept in state() below, and changed by the handlers below it.
 
    WHAT THE SCREEN SAYS:
 
@@ -43,8 +43,8 @@
    The rhythm chips and the Home button carry no inline handler (docs/ROADMAP.md, E2): each names an
    action, setLab with the rhythm's key in data-kind, or goHome, which the page's one delegated listener
    (src/core/actions.js) finds in its ACTIONS table and calls. goHome() is the page's, and setLab() its one line
-   into setKind() below; mountPhysio() still gives the cycle's chips their listeners by their data-physio-*
-   attributes, each a call into the handlers below.
+   into setKind() below; mountPhysio() below gives the cycle's chips their listeners by their data-physio-*
+   attributes, each a call into the handlers.
    ═════════════════════════════════════════════ */
 (function (root) {
 'use strict';
@@ -362,7 +362,115 @@ function paintNote(st,env){
     ? phaseNow(st,env).name : env.VIEWS.find(x=>x[0]===st.view)[1];
 }
 
+/* ── the mounts ──
+   They were the page's mountPhysio(), mountTwelve() and mountLab(), which draw into the canvases screenHtml() leaves once
+   the screen is in the document; the page keeps each name as one line, and its render() calls them after every draw.
+   Besides what the functions above use, they use of the page:
+
+     env.doc.getElementById(id)      the canvases and the lead card
+     env.dark()                      whether the page is dark: its theme, or the device's where it sets none
+     env.libs()                      { Wiggers, ECG12, ECGMonitor }, each the diagram's code, or nothing until it is there
+     env.loadWiggers()               a promise of whether Wiggers is there; the page loads it once, where the split build
+                                     lifted it out, and ambient mode shares the load
+     env.frame(fn)                   fn on the next animation frame
+     env.screen()                    the screen the page is on
+     env.lead12(k)                   the 12-lead a rhythm has of its own, or nothing
+     env.leadCardHtml(id)            a lead's card
+
+     mountPhysio(st, env)    the cycle's diagram on its canvas, mounted once per canvas, with its chips' taps, its drag
+                             and its caption; where Wiggers is not there yet, mounted when it is, if the canvas is still
+                             the panel's
+     mountTwelve(st, env)    the 12-lead on its canvas, the lead selected kept, a tap on a lead selecting it or letting
+                             it go, and its card drawn again
+     mountLab(st, env)       the monitor stopped, and on the Lab the monitor and the two diagrams started again */
+function mountPhysio(st,env){
+  const doc=env.doc, cv=doc.getElementById('physioCanvas'), W=env.libs().Wiggers;
+  if(!cv||!W){
+    if(st.physio&&st.physio.destroy) st.physio.destroy();
+    st.physio=null; st.canvas=null;
+    /* Drawn when the diagrams are there, if this canvas is still the panel's. */
+    if(cv) env.loadWiggers().then(ok=>{ if(ok&&doc.getElementById('physioCanvas')===cv) mountPhysio(st,env); });
+    return;
+  }
+  /* A screen change can render twice — the second render replaces the canvas
+     node under the first one's deferred callback. Guarding on existence alone
+     leaves the old instance animating a node that has left the document, and
+     requestAnimationFrame will happily keep calling it forever. Guarding on
+     identity is what makes that race harmless. */
+  if(st.physio&&st.canvas===cv) return;
+  if(st.physio&&st.physio.destroy) st.physio.destroy();
+  const dark=env.dark();
+  st.physio=W.mount(cv,{view:st.view,dark,hr:env.RHYTHMS[st.kind].hr||68,
+    slow:st.slow, playing:isPlaying(st,env),
+    /* Its own clock. wiggers.js integrates one when no timeSource is given,
+       and onFrame is how the caption learns what time it is — sixty
+       times a second, from the thing that owns the time. */
+    onFrame:()=>env.paintNote()});
+  if(!st.physio) return;
+  st.canvas=cv;
+  st.physio.setIntervention(st.iv);
+  env.applyLesion();
+  doc.querySelectorAll('[data-physio-lesion]').forEach(b=>b.onclick=()=>chooseLesion(st,b,env));
+  doc.querySelectorAll('[data-physio-slow]').forEach(b=>
+    b.onclick=()=>setSlow(st,+b.dataset.physioSlow,env));
+  doc.querySelectorAll('[data-physio-play]').forEach(b=>
+    b.onclick=()=>setPlaying(st,!isPlaying(st,env),env));
+  doc.querySelectorAll('[data-physio-view]').forEach(b=>b.onclick=()=>chooseView(st,b,env));
+  doc.querySelectorAll('[data-physio-iv]').forEach(b=>b.onclick=()=>chooseIv(st,b,env));
+  /* Dragging the diagram scrubs the cycle. While a finger is down the heart's
+     clock is ignored, so you can stop time on the dicrotic notch and read it. */
+  let down=false;
+  const at=ev=>{ const r=cv.getBoundingClientRect();
+    return st.physio.scrubAt((ev.touches?ev.touches[0].clientX:ev.clientX)-r.left,
+                             (ev.touches?ev.touches[0].clientY:ev.clientY)-r.top); };
+  cv.onpointerdown=ev=>{ if(st.view==='pv'||st.view==='curves') return;
+    down=true; st.physio.setScrub(true); cv.setPointerCapture(ev.pointerId); at(ev); env.paintNote(); };
+  cv.onpointermove=ev=>{ if(!down) return; at(ev); env.paintNote(); };
+  cv.onpointerup=cv.onpointercancel=ev=>{ if(!down) return;
+    down=false; st.physio.setScrub(false); try{cv.releasePointerCapture(ev.pointerId);}catch(_){} };
+  /* The note's repaint guard tracks the phase already on screen. render()
+     hands us a fresh, empty #physioNote, so the guard has to be cleared with
+     it — otherwise it reports "already painted" about an element that no
+     longer exists and the note stays blank until the phase happens to turn
+     over. */
+  st.notePhase='';
+  env.paintNote();
+  env.frame(()=>st.physio&&st.physio.draw());
+}
+function mountTwelve(st,env){
+  const cv=env.doc.getElementById('twelveCanvas'), E=env.libs().ECG12;
+  if(!cv||!E){ st.twelve=null; return; }
+  const dark=env.dark();
+  st.twelve=E.mount(cv,{kind:env.lead12(st.kind)||'sinus',hr:env.RHYTHMS[st.kind].hr||68,dark});
+  if(!st.twelve) return;
+  if(st.lead) st.twelve.select(st.lead);
+  cv.onclick=ev=>{
+    const r=cv.getBoundingClientRect();
+    const id=st.twelve.leadAt(ev.clientX-r.left, ev.clientY-r.top);
+    if(!id) return;
+    st.lead = st.lead===id ? null : id;
+    st.twelve.select(st.lead);
+    const card=env.doc.getElementById('leadCard');
+    if(card) card.innerHTML=env.leadCardHtml(st.lead);
+  };
+  /* The canvas is sized from its box, and the box is not final until layout
+     settles after a screen change — redraw once it is. */
+  env.frame(()=>st.twelve&&st.twelve.draw());
+}
+/* Every draw asks for this, not only a draw of the Lab: the monitor is a loop that asks for its own next frame, and one the
+   screen does not end goes on drawing into a canvas that is no longer in the page, at 60 frames a second, for the rest of the
+   session (7 ms of every second in Chromium and 10 in WebKit at iPad size, on every screen after the Lab). */
+function mountLab(st,env){
+  if(st.mon){ st.mon.destroy(); st.mon=null; }
+  if(env.screen()!=='lab') return;
+  const cv=env.doc.getElementById('labCanvas'), M=env.libs().ECGMonitor;
+  if(cv){ st.mon=new M(cv,{kind:st.kind,speed:0.15,grid:true,amp:60,lineWidth:2.2}); st.mon.start(); }
+  mountTwelve(st,env);
+  mountPhysio(st,env);
+}
+
 root.RhythmLabScreen = { screenHtml, physioHtml, twelveHtml, leadCardHtml, state, noteHtml,
   isPlaying, setPlaying, setSlow, setKind, chooseLesion, chooseView, chooseIv,
-  cycle, ref, applyLesion, phaseNow, paintNote };
+  cycle, ref, applyLesion, phaseNow, paintNote,
+  mountPhysio, mountTwelve, mountLab };
 })(typeof window !== 'undefined' ? window : this);
