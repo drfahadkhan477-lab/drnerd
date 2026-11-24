@@ -294,6 +294,39 @@ head('no wait passes its options where the argument goes');
     ok('a predicate that throws counts as not yet, and its error is named at the end', /last error: .*figures/.test(thrown), thrown.slice(0, 90));
   }
 
+  head('atRest(): a running transition is not at rest, and a finished one the engine keeps listing is, after its grace');
+  {
+    /* Windows WebKit listed 34 transitions, finished at 0 of 0 ms, for good after a theme change, and verify-contrast's
+       wait for the list to empty never ended (tests/_render.js, atRest). Such a transition is made here: an object of
+       CSSTransition's own prototype, finished, returned by getAnimations every time it is asked. */
+    const rp = watch(await (await browser.newContext()).newPage(), events, 'blank/atRest');
+    await rp.setContent('<!doctype html><html><body><div id="mover" style="opacity:1">x</div></body></html>');
+    const listForGood = () => rp.evaluate(() => {
+      const left = Object.create(CSSTransition.prototype, { playState: { value: 'finished' }, effect: { value: null },
+        currentTime: { value: 0 }, transitionProperty: { value: '-webkit-text-fill-color' } });
+      window.__realGetAnimations = window.__realGetAnimations || document.getAnimations.bind(document);
+      document.getAnimations = () => [left];
+    });
+    const restore = () => rp.evaluate(() => { if (window.__realGetAnimations) document.getAnimations = window.__realGetAnimations; window.__restSeen = null; });
+    const time = async opts => { const t0 = Date.now(); let err = ''; await R.atRest(rp, opts).catch(e => { err = e.message; }); return { ms: Date.now() - t0, err }; };
+
+    ok('with nothing listed it is at rest at once', (await time({ timeout: 2000 })).err === '');
+    await listForGood();
+    const early = await time({ timeout: 400 });
+    await restore(); await listForGood();
+    const later = await time({ timeout: 4000 });
+    await restore();
+    ok('a transition that has only just finished still holds the wait, for the old colour WebKit keeps briefly',
+       /render never settled/.test(early.err), early.err.slice(0, 80) || 'it settled inside the grace');
+    ok('and one the engine keeps listing, finished, stops holding it once the grace has passed',
+       later.err === '' && later.ms >= R.REST_GRACE, later.err ? later.err.slice(0, 120) : `${later.ms} ms`);
+    await rp.evaluate(() => { const m = document.getElementById('mover'); m.style.transition = 'opacity 30s linear'; m.getBoundingClientRect(); m.style.opacity = '0'; });
+    const running = await time({ timeout: 1200 });
+    ok('a transition still running holds it to the timeout, and the timeout names it',
+       /render never settled/.test(running.err) && /div#mover transition opacity running/.test(running.err), running.err.slice(-120));
+    await rp.close();
+  }
+
   head('booted() is a real wait, not an immediate true');
   const blank = watch(await (await browser.newContext()).newPage(), events, 'blank/booted');
   await blank.setContent('<!doctype html><html><body><p>nothing here</p></body></html>');

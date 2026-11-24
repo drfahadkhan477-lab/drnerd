@@ -301,6 +301,38 @@ async function resolved(page, fn, arg, { timeout = 30000, interval = 100 } = {})
   }
 }
 
+/* AT REST: no transition still going and no finite animation still running, the precondition verify-contrast and
+   verify-a11y read a screen under. A transition is waited on until the engine stops listing it, OR until it has been
+   finished for REST_GRACE. Both halves were learned on WebKit:
+     · on Linux, a just-finished transition kept the old theme's colour on #app for about a fifth of a second
+       (verify-a11y, 1.1:1 on the Echo title), so a finished transition is not at rest the moment it finishes;
+     · on Windows, a theme change left 34 transitions of -webkit-text-fill-color, finished at 0 of 0 ms, listed for
+       good (the private gate of 24 November 2026, build 446): a wait for the list to empty never ended, and
+       verify-contrast stopped on its first screen having read nothing.
+   A finished transition is first seen finished in one call of the predicate and held to the grace from then, in a
+   WeakMap on the page, so a later call does not start its clock again. A running or pending one is never at rest. */
+const REST_GRACE = 1000;
+async function atRest(page, opts = {}) {
+  const grace = opts.grace === undefined ? REST_GRACE : opts.grace;
+  try {
+    await settled(page, grace => {
+      const seen = window.__restSeen || (window.__restSeen = new WeakMap());
+      const now = performance.now();
+      for (const a of document.getAnimations()) {
+        if (typeof CSSTransition !== 'undefined' && a instanceof CSSTransition) {
+          if (a.playState !== 'finished') return false;
+          if (!seen.has(a)) seen.set(a, now);
+          if (now - seen.get(a) < grace) return false;
+        } else if (a.playState === 'running' && a.effect && a.effect.getComputedTiming().iterations !== Infinity) return false;
+      }
+      return true;
+    }, { arg: grace, timeout: opts.timeout || SETTLE_TIMEOUT, label: opts.label || 'the screen\'s entrances and the theme\'s transitions to end' });
+  } catch (e) {
+    /* Says what never stopped, by element and property and never by text, so a run on another machine can be acted on. */
+    throw new Error(`${e.message} ${await stillMoving(page)}`);
+  }
+}
+
 /* What is still moving: the transitions, and the finite animations still running, that a wait for the screen to come to
    rest is waiting on, named by their element (tag, id, two classes, pseudo-element), what they animate and how far they
    are. Never any text: an element's classes and ids are the app's own words. For the message of a wait that timed out,
@@ -326,6 +358,6 @@ async function stillMoving(page, limit = 6) {
   }, limit).catch(e => 'could not list what was moving: ' + String(e && e.message || e).split('\n')[0]);
 }
 
-module.exports = { booted, settled, onScreen, quiet, afterRender, resolved, stillMoving,
+module.exports = { booted, settled, onScreen, quiet, afterRender, resolved, stillMoving, atRest, REST_GRACE,
                    watchTransitions, transitionDone, resized, framesSteady,
                    BOOT_TIMEOUT, SETTLE_TIMEOUT, QUIET_FRAMES };
