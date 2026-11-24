@@ -19,9 +19,12 @@
  *     can see to that ancestor's own painting (the backdrop root of Filter Effects 2). TRANSFORM IS NOT ASKED ABOUT: it is not
  *     in that list, and Home's pages carry one (scale(1) at rest, for the glide), which this suite does not claim to be free.
  *   - NOTHING MOVES BENEATH ONE. At rest (a screen's one-shot entrances over), with motion allowed and Home's own motion
- *     playing, no running animation and no canvas that
+ *     playing, nothing moves a blurred surface (an animation of its transform or position, or any animation on what holds it,
+ *     which carries it over its backdrop; one on its own ::before or ::after is its content and is not counted), and
+ *     no running animation and no canvas that
  *     draws in a 600 ms window is painted beneath a blurred surface. "Beneath" is what the page paints at that point: a grid
- *     of points across their overlap, each asked with elementsFromPoint, so a thing drawn above the glass (the Apex button's
+ *     of points across their overlap, each asked with elementsFromPoint with every element made hit-testable for the asking (a
+ *     canvas or glow with pointer-events:none is otherwise invisible to it), so a thing drawn above the glass (the Apex button's
  *     avatar over a card) or clipped away before it reaches it (a card's own glow) does not count. Each screen is read at its
  *     top, at rest: a canvas scrolled under the header is not asked about here.
  * Not measured: WebKit's own cost, which only an iPad shows; screens a question is read on, which the capsule does not reach
@@ -87,7 +90,12 @@ const AUDIT = async () => {
   const anims = document.getAnimations().filter(a => a.playState === 'running' && a.effect && a.effect.target && a.effect.target.nodeType === 1);
   const animatedBlur = anims.filter(a => { try { return a.effect.getKeyframes().some(k => 'backdropFilter' in k || 'webkitBackdropFilter' in k); } catch (_) { return false; } })
     .map(a => tag(a.effect.target));
-  /* Painted beneath: at some point of the overlap the page's own stack has the blurred surface above the other thing. */
+  /* Painted beneath: at some point of the overlap the page's own stack has the blurred surface above the other thing.
+     elementsFromPoint leaves out whatever has pointer-events:none (the hero's ECG canvas, every decorative glow), so for the
+     length of this audit everything, pseudo-elements included, is made hit-testable; the style is taken away after. */
+  const probe = document.createElement('style'); probe.id = '__gbProbe';
+  probe.textContent = '*,*::before,*::after{pointer-events:auto!important}';
+  document.head.appendChild(probe);
   const beneath = (T, B) => { const a = T.getBoundingClientRect(), b = B.getBoundingClientRect();
     const l = Math.max(a.left, b.left, 0), r = Math.min(a.right, b.right, innerWidth), t = Math.max(a.top, b.top, 0), bo = Math.min(a.bottom, b.bottom, innerHeight);
     if (r - l < 1 || bo - t < 1) return false;
@@ -98,14 +106,22 @@ const AUDIT = async () => {
     }
     return false; };
   const under = [];
-  for (const B of blurred) for (const a of anims) { const T = a.effect.target;
-    if (T === B || B.contains(T) || T.contains(B)) continue;
+  const MOVES = /^(transform|translate|scale|rotate|top|left|right|bottom|inset|margin|offset)/i;
+  const moves = a => { try { return a.effect.getKeyframes().some(k => Object.keys(k).some(p => MOVES.test(p))); } catch (_) { return false; } };
+  for (const B of blurred) for (const a of anims) { const T = a.effect.target, pseudo = a.effect.pseudoElement, what = a.animationName || a.transitionProperty || 'animation';
+    /* Inside the glass (its own ::before or ::after, or something it holds) is its content, painted over its backdrop. The glass
+       itself moved, or anything that holds it, is the glass carried over its backdrop: blurred again every frame. An ancestor's
+       pseudo-element cannot be asked where it paints (elementsFromPoint answers with its host), so it is counted as beneath. */
+    if (B.contains(T) && T !== B) continue;
+    if (T === B) { if (!pseudo && moves(a)) under.push(tag(B) + ' (' + what + ') moves the glass itself'); continue; }
+    if (T.contains(B)) { under.push(pseudo ? tag(T) + pseudo + ' (' + what + ') may paint beneath ' + tag(B) : tag(T) + ' (' + what + ') carries the glass ' + tag(B)); continue; }
     if (beneath(T, B)) under.push(tag(T) + ' (' + (a.animationName || a.transitionProperty || 'animation') + ') beneath ' + tag(B)); }
   const canvases = [...document.querySelectorAll('canvas')].filter(vis);
   canvases.forEach(c => { c.__draws = 0; });
   await new Promise(r => setTimeout(r, 600));
   const drew = canvases.filter(c => c.__draws > 0);
   for (const B of blurred) for (const c of drew) { if (B.contains(c)) continue; if (beneath(c, B)) under.push('canvas ' + tag(c) + ' (' + c.__draws + ' draws) beneath ' + tag(B)); }
+  probe.remove();
   return { blurred: blurred.length, transitioned, roots: [...new Set(roots)], animatedBlur, under: [...new Set(under)], drew: drew.map(tag) };
 };
 
@@ -130,9 +146,10 @@ const AUDIT = async () => {
     for (const [name, go] of Object.entries(SCREENS)) {
       await page.evaluate(go);
       await settled(page, () => !window.__vtLive, { label: name }); await quiet(page);
-      const b = await page.evaluate(BLURRED);
+      const b = await page.evaluate(BLURRED), was = (RECORD[`${w}x${h}`] || {})[name];
       counts[name] = b.length;
-      if (b.length > RECORD[`${w}x${h}`][name]) over.push(`${name} ${b.length} (was ${RECORD[`${w}x${h}`][name]}: ${b.join(' ')})`);
+      if (!(was > 0)) over.push(`${name}: not in the record at ${w}x${h}`);
+      else if (b.length > was) over.push(`${name} ${b.length} (was ${was}: ${b.join(' ')})`);
     }
     ok(`${w}x${h}: every screen has no more blurred surfaces than the record`, over.length === 0 && Object.values(counts).some(n => n > 0), over.join('; ') || J(counts));
     await ctx.close();

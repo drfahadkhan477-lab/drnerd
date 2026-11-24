@@ -642,6 +642,11 @@ made before still open.
 *Planned (November 2026):* [UI-REVAMP.md](UI-REVAMP.md) takes D1's first slice (one glass token set, a
 lint for CSS variables used but never defined), the Labs page's Study Tools, and D5's navigation question (a glass
 capsule in the header band on inner screens; Apex stays a floating button). Each of its tasks names a model and effort.
+*Landed (November 2026):* the CSS-variable lint, with every undefined name it found fixed; the Study Tools bento; the
+header capsule on inner screens, which now takes over the back buttons it covers (T3.6); the Apex orb; the lab cards'
+focus ring and High-contrast ground; a glass budget (`tests/verify-glassbudget.js`: no screen blurs more surfaces than
+before, and nothing moves beneath a blur); and the contrast sweep widened to the screens the capsule reaches. Still the
+owner's: the private build and deploy, and a real study session on the iPad (UI-REVAMP.md, T5.7 and T5.8).
 
 **D1 — One design language.** Decide whether the inner screens adopt Quiet Atlas
 or are deliberately different, then make it so: (a) collect the tokens, which are

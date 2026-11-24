@@ -22,7 +22,8 @@
    tools) light Labs, Chapters lights Chapters, and the two searches light nothing: search is the header's own button.
 
    THE BACK BUTTONS IT TAKES OVER (T3.6). While the capsule is up, each screen's own back button whose destination is a
-   capsule item (Brain's and Labs' Home, Chapters' Back, the Labs screens' Home or Labs) is set aside by app/css/gnav.css,
+   capsule item (Brain's and Labs' Home, Chapters' Back, the Labs screens' Home or Labs, Notes' and Memory's Back) is set
+   aside by app/css/gnav.css,
    under body.has-gnav, which the page's gnavSync sets only when the capsule is drawn and fits. So a phone, focus mode, the
    question screens and a header with no room keep their back buttons; the lit item goes back to its section's root, as a
    tab bar's selected tab does. tests/verify-gnav-pure.js holds the list to the buttons in the source.

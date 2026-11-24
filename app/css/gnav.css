@@ -52,7 +52,7 @@ html[data-palette="contrast"] .ai-fab{border:2px solid currentColor;background:v
 
 /* ── The back buttons the capsule takes over (docs/UI-REVAMP.md, T3.6) ──
    While the capsule is up (body.has-gnav, which gnavSync sets only when it is drawn and fits), a back button whose
-   destination is one of its items is set aside: the capsule names the same place, and tapping the lit item goes back to
+   destination is one of its items is set aside (Notes' and Memory's Back among them): the capsule names the same place, and tapping the lit item goes back to
    that section's root, as a tab bar's selected tab does. Each is named by what it does, never by its class alone (.sb-back
    is also the plain style of Progress's export and import buttons). Kept, because the capsule does not go where they go:
    the Practice lab's "Practice Lab" (back within the lab), the note search's "Results", the Home buttons of the question

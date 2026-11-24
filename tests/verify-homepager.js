@@ -210,6 +210,32 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(()=>goStudy()); await settled(page, () => !window.__vtLive && S.screen === 'study', { label: 'Chapters on a phone' }); await quiet(page);
   const phs = await capsule();
   ok('600×900: and Chapters keeps its own Back', !phs.shown && phs.back === true, JSON.stringify(phs));
+  /* Where there is no capsule its back buttons are the only way back, so each is tapped here, where it is drawn, and must reach
+     its own destination by its own action: the capsule's taps elsewhere take their own paths and would not see one broken.
+     Sessions' is tapped with the pager set to Home's page, so only goLabs() lands on the Labs page. */
+  const BACKS = [
+    ['Brain\'s Home', 'homePage=1;goHome();homeGo(1,false)', '#homePage1 .home-back', 'S.screen==="home"&&homePage===0'],
+    ['Labs\' Home', 'homePage=2;goHome();homeGo(2,false)', '#homePage2 .home-back', 'S.screen==="home"&&homePage===0'],
+    ['Chapters\' Back', 'goStudy()', '.study-back', 'S.screen==="home"'],
+    ['the Rhythm Lab\'s Home', 'goLab()', '.sb-back[data-action="goHome"]', 'S.screen==="home"'],
+    ['Search\'s Home', 'openSearch()', '.sb-back[data-action="goHome"]', 'S.screen==="home"'],
+    ['Progress\'s Home', 'goStats()', '.stats-head .sb-back', 'S.screen==="home"'],
+    ['Sessions\' Labs', 'goSessions()', '#sessionsPage .sb-back', 'S.screen==="home"&&homePage===2', 'homePage=0'],
+    ['Annotations\' Chapters', 'goAnnotations()', '.anno-wrap .sb-back', 'S.screen==="study"'],
+    ['the Practice lab\'s Home', 'goPractice()', '.plab-back[data-act="leave"]', 'S.screen==="home"'],
+    ['Notes\' Back', 'goRefs()', '.ref-new .ref-btns [data-action="goHome"]', 'S.screen==="home"'],
+    ['Memory\'s Back', 'goMemory()', '.ref-btns [data-action="goHome"]', 'S.screen==="home"'],
+  ];
+  for (const [what, open, sel, there, before] of BACKS) {
+    await page.evaluate(open); await settled(page, () => !window.__vtLive, { label: what + ': its screen' }); await quiet(page);
+    const drawn = await page.evaluate(sel => { const b = document.querySelector(sel); return !!b && b.getClientRects().length > 0 && !document.body.classList.contains('has-gnav'); }, sel);
+    if (before) await page.evaluate(before);
+    const tapped = drawn && await page.locator(sel).first().click({ timeout: 5000 }).then(() => true, () => false);
+    const went = tapped && await page.waitForFunction(there, null, { timeout: 8000, polling: 40 }).then(() => true, () => false);
+    if (went) { await settled(page, () => !window.__vtLive, { label: what + ': where it went' }); await quiet(page); }
+    ok(`600×900: ${what}, drawn with no capsule, tapped, goes where it says`, went,
+       !drawn ? 'not drawn, or the capsule is up' : !tapped ? 'could not be tapped' : await page.evaluate(() => JSON.stringify({ screen: S.screen, page: homePage })));
+  }
 
   /* Tapped: the pages glide and the capsule keeps the focus; Chapters opens Chapters; Labs from there comes back to the Labs page. */
   await page.setViewportSize({width:1180,height:820});

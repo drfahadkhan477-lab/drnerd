@@ -745,9 +745,9 @@ let section = '';
         ground: em ? getComputedStyle(em).backgroundImage : '' }; };
     const bare = await show(Object.assign({}, base, { figKey: null, figCap: '', chapter: ch }));
     /* The same emblem in High contrast, then the theme put back. */
-    const was = S.theme; setTheme('contrast');
-    const solid = getComputedStyle(document.getElementById('pearlEmblem')).backgroundImage;
-    setTheme(was);
+    /* A missing emblem is read as 'missing' and fails its check below, rather than throwing away every check after it. */
+    const was = S.theme; let solid = 'missing';
+    try { setTheme('contrast'); const e = document.getElementById('pearlEmblem'); if (e) solid = getComputedStyle(e).backgroundImage; } finally { setTheme(was); }
     const withFig = pearlAll().find(p => p.figKey && refImgSrc(p.figKey));
     const fig = withFig ? await show(withFig) : null;
     /* and the emblem follows the pearl when another is asked for */

@@ -92,27 +92,29 @@ head('the back buttons it takes over (app/css/gnav.css)');
   const sels = rules.length === 1 ? rules[0].map(x => x.slice('body.has-gnav '.length)) : [];
   /* Written out: each back button whose destination is a capsule item (Home, Brain and Labs' Home button; Chapters' Back;
      the Rhythm Lab's, Search's and Progress's Home; Sessions' Labs; Annotations' Chapters; the Practice lab's Home; the
-     Notes screen's Back and Back to study). */
+     Notes screen's Back and Back to study; Memory's Back). */
   const WANT = ['.home-back', '.study-back', '.sb-back[data-action="goHome"]', '.sb-back[data-action="goLabs"]',
     '.sb-back[data-action="goStudy"]', '.plab-back[data-act="leave"]', '.ref-btns [data-action="goHome"]'];
   ok('one rule, and only while the capsule is up (body.has-gnav), sets aside exactly these', rules.length === 1 && J(sels) === J(WANT), J(rules));
-  /* Every button the app's modules draw: its classes, its attributes, and its file. A button in refs.js counts as inside
-     .ref-btns, where both of that screen's goHome buttons sit. */
+  /* Every button the app's modules draw: its classes, its attributes, and its file. A button in a module that draws a
+     .ref-btns row counts as inside it: Notes (refs.js) and Memory (memory.js) hold their goHome buttons there. */
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
   const files = walk(path.join(__dirname, '..', 'src')).filter(f => f.endsWith('.js'));
+  const refRows = new Set(files.filter(f => /class="ref-btns"/.test(blankComments(fs.readFileSync(f, 'utf8')))).map(f => path.relative(path.join(__dirname, '..'), f)));
   const buttons = files.flatMap(f => [...blankComments(fs.readFileSync(f, 'utf8')).matchAll(/<button class="([^"]*)"([^>]*)>/g)].map(m => ({
     file: path.relative(path.join(__dirname, '..'), f), cls: m[1].split(/\s+/),
     attrs: Object.fromEntries([...m[2].matchAll(/([a-z-]+)="([^"]*)"/g)].map(a => [a[1], a[2]])) })));
   const one = (sel, b) => {
     const m = sel.match(/^(\.ref-btns )?(?:\.([a-z-]+))?(?:\[([a-z-]+)="([^"]*)"\])?$/);
     if (!m) return null;
-    if (m[1] && !/refs\.js$/.test(b.file)) return false;
+    if (m[1] && !refRows.has(b.file)) return false;
     if (m[2] && !b.cls.includes(m[2])) return false;
     if (m[3] && b.attrs[m[3]] !== m[4]) return false;
     return true;
   };
   const read = WANT.every(x => buttons.some(b => one(x, b) !== null));
-  ok('the source was read: many buttons, and each selector understood (precondition)', buttons.length > 50 && read, buttons.length + ' buttons');
+  ok('the source was read: many buttons, each selector understood, and the .ref-btns rows found where Notes and Memory draw them (precondition)',
+     buttons.length > 50 && read && refRows.has('src/app/refs.js') && refRows.has('src/app/memory.js'), buttons.length + ' buttons; .ref-btns in ' + [...refRows].join(', '));
   const hit = sels.map(x => ({ x, b: buttons.filter(b => one(x, b)) }));
   ok('each selector sets aside a button the app draws, none a name nothing has', hit.length === WANT.length && hit.every(h => h.b.length > 0), J(hit.map(h => h.x + ': ' + h.b.length)));
   /* Where each goes, and the capsule item that goes there too (Home's pages and the screens Labs opens come back through

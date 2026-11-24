@@ -181,7 +181,7 @@ toolbar. So:
   pure suites pin the markup. The capsule complements them. Retiring them is an optional later task (T3.6).
 - **T3.6, done (the owner asked for it).** While the capsule is up (`body.has-gnav`), a back button whose destination is a capsule item is set aside by
   `app/css/gnav.css`: Brain's and Labs' Home, Chapters' Back, and the Home or Labs of the Rhythm Lab, Search, Progress, Sessions, Annotations, the Practice
-  lab and Notes. The markup is untouched, so a phone, focus mode, the question screens and a header with no room keep every back button. Kept everywhere:
+  lab, Notes and Memory. The markup is untouched, so a phone, focus mode, the question screens and a header with no room keep every back button. Kept everywhere:
   the Practice lab's back within the lab, the note search's Results, and the question screens' Home. The keyboard that opens Brain or Labs lands on the
   capsule's Home, and the capsule's Home hands it back to the door that was used. `verify-gnav-pure` holds the list to the source's buttons; the browser
   suites that tapped a back button at tablet width now take the capsule's item, after measuring that the screen's own button is set aside.
@@ -268,6 +268,20 @@ check whose FAIL evidence matters (the default for real work).
 | T5.6 | Whole-diff review (`/code-review high`) | Opus · high | Silent-failure hunt |
 | T5.7 | Private build and deploy to the Access-protected `systole` Pages project, only after the private gate passes (AGENTS.md authorises it; verify project, Access and SHA first) | Sonnet · high, on the owner's laptop | Touches the build and release |
 | T5.8 | A 30-40 minute real session on the iPad; note battery % before and after (the discovery doc's one experiment) | You | Use beats build |
+
+**Phase 5 status (November 2026).**
+- T5.1: `verify-contrast` now also reads Echo, the Practice lab, Search, Annotations and Memory, the screens the capsule reaches that
+  it did not open.
+- T5.2: `tests/verify-glassbudget.js`. It found the Rhythm Lab readout blurring a canvas that draws every frame, and the header's icon
+  buttons blurring inside the blurred bar; both were fixed.
+- T5.3: `conic-gradient` has its floor-table row (Phase 3); the new rules use nothing newer than the floor.
+- T5.4: the full measured run is CI's (both engines); here, the affected suites in Chromium and the pure suites, also under
+  `TZ=America/New_York`.
+- T5.5: `DESIGN-HANDOFF.md` and `ROADMAP.md` record the capsule and what landed.
+- T5.6: `/code-review high` on this branch's diff (the `--card2` fix, T3.6, T5.1, T5.2). It found the glass budget blind to anything with
+  `pointer-events:none` and to glass carried by a moving ancestor, and no browser suite still tapping the real back buttons, which phones
+  rely on. All three are fixed, with smaller points. Phases 0 to 4, merged earlier, were not reviewed again.
+- T5.7 and T5.8 are the owner's: they need the licensed export, the Cloudflare login and the iPad.
 
 **Sequence.** T0 first. In Phase 1, the lint (T1.1) first; the two bug fixes wait for your T0.3 decision. Phase 2 and the capsule work (T3.1-T3.2) can run in
 parallel sessions: they touch disjoint files (T2: `home.js`, `cardiac.css`, `home.css` and three suites; T3: new files plus `buildNav` hunks). T3.3 waits for #435.
