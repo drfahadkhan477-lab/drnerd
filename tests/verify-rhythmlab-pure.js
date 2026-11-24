@@ -207,6 +207,10 @@ head('the lab\'s state: one object, read from what was saved');
   const thrown = (() => { try { return L.state({ getItem: () => { throw new Error('denied'); } }, V, LS); } catch (err) { return { err: err.message }; } })();
   ok('a store that refuses to be read gives the defaults', thrown.view === 'wiggers' && thrown.lesion === 'normal' && thrown.slow === 2, J(thrown));
   ok('each call is an object of its own', mk() !== mk() && (() => { const a = mk(), b = mk(); a.kind = 'vt'; return b.kind === 'sinus'; })());
+  /* A name put into a pattern is escaped whole, every character a pattern gives a meaning to, the backslash first among
+     them; these names are the suite's own and hold none of them today, and a pattern built from one should not depend on
+     that. */
+  const escapeRe = t => String(t).replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
   /* The page's views: each old name reads and writes one field of LAB. */
   const VIEWS = { labMon: 'mon', labKind: 'kind', physio: 'physio', physioView: 'view', physioIv: 'iv', physioCanvasEl: 'canvas', physioLesion: 'lesion', physioSlow: 'slow',
     physioPlaying: 'playing', twelve: 'twelve', twelveLead: 'lead', __physioNoteAt: 'noteAt', __physioNotePhase: 'notePhase' };
@@ -214,7 +218,7 @@ head('the lab\'s state: one object, read from what was saved');
   const views = (/Object\.defineProperties\(window,\{labMon:([\s\S]*?)\}\);/.exec(pg) || [])[0] || '';
   const named = [...views.matchAll(/([A-Za-z_$][\w$]*):labView\('([A-Za-z]+)'\)/g)].map(m => m[1] + ':' + m[2]);
   ok('the page keeps each of the thirteen old names as a view of its own field, and declares none of them again',
-     J(named.sort()) === J(Object.entries(VIEWS).map(([k, f]) => k + ':' + f).sort()) && Object.keys(VIEWS).every(k => !new RegExp('\\b(?:let|var|const)\\s+(?:[^;]*,\\s*)?' + k.replace(/\$/g, '\\$') + '\\s*=').test(pg)),
+     J(named.sort()) === J(Object.entries(VIEWS).map(([k, f]) => k + ':' + f).sort()) && Object.keys(VIEWS).every(k => !new RegExp('\\b(?:let|var|const)\\s+(?:[^;]*,\\s*)?' + escapeRe(k) + '\\s*=').test(pg)),
      named.length + ' views');
   ok('and every field the module makes has its view', Object.values(VIEWS).sort().join(' ') === Object.keys(fresh).sort().join(' '), Object.keys(fresh).sort().join(' '));
 }
