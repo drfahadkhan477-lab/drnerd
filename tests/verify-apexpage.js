@@ -228,7 +228,23 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     document.addEventListener('keydown', ev => { if (ev.key !== 'PageDown') return;
       const t = ev.target, k = { on: t && (t.id || t.tagName), prevented: null };
       w.keys.push(k); setTimeout(() => { k.prevented = ev.defaultPrevented; }, 0); }, { capture: true, passive: true });
-    document.getElementById('aiBody').addEventListener('scroll', () => { w.scrolls++; }, { passive: true });
+    const body = document.getElementById('aiBody'), t0 = performance.now();
+    const ms = () => Math.round(performance.now() - t0);
+    /* Who called: the first frames of the stack below the wrapper, file and line only. */
+    const who = () => String(new Error().stack || '').split('\n').slice(2, 5).map(l => l.trim().replace(/^.*[\/(]/, '').replace(/\)$/, '')).join(' < ');
+    w.log = [];
+    /* One line per event; an event the same as the one before it is counted on that line, not written again. */
+    w.add = text => { const last = w.log[w.log.length - 1];
+      if (last && last.text === text) last.n++; else w.log.push({ at: ms(), text, n: 1 }); };
+    body.addEventListener('scroll', () => { w.scrolls++; w.add('scroll ' + Math.round(body.scrollTop)); }, { passive: true });
+    /* Each write to the conversation's scrollTop, and each redraw, with who asked: the scroll in CI's failure ran (two scroll
+       events) and ended at 0, so something put it back. They only record, and are taken off once the check has its answer. */
+    const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+    Object.defineProperty(body, 'scrollTop', { configurable: true, get() { return desc.get.call(this); },
+      set(v) { w.add('scrollTop=' + Math.round(v) + ' by ' + who()); desc.set.call(this, v); } });
+    w.real = { buildAI, render };
+    buildAI = function () { w.add('buildAI by ' + who()); return w.real.buildAI.apply(this, arguments); };
+    render = function () { w.add('render by ' + who()); return w.real.render.apply(this, arguments); };
     w.at = { active: document.activeElement && (document.activeElement.id || document.activeElement.tagName), focus: document.hasFocus() };
   });
   await page.keyboard.press('PageDown');
@@ -236,7 +252,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   const said = scrolled ? '' : await page.evaluate(() => { const b = document.getElementById('aiBody'), w = window.__pgdn || {};
     return JSON.stringify({ before: w.at, keys: w.keys, scrolls: w.scrolls, now: { active: document.activeElement && (document.activeElement.id || document.activeElement.tagName),
       top: b && b.scrollTop, height: b && b.scrollHeight, shown: b && b.clientHeight, kept: b === document.getElementById('aiBody') },
-      page: { y: window.scrollY, app: (document.getElementById('app') || {}).scrollTop } }); });
+      page: { y: window.scrollY, app: (document.getElementById('app') || {}).scrollTop }, log: (w.log || []).slice(0, 24).map(l => l.at + ' ' + l.text + (l.n > 1 ? ' ×' + l.n : '')) }); });
+  await page.evaluate(() => { const w = window.__pgdn; if (!w || !w.real) return;
+    buildAI = w.real.buildAI; render = w.real.render; delete document.getElementById('aiBody').scrollTop; });
   ok('Page Down scrolls the conversation after a panel redraw', scrolled, said);
   /* A redraw DURING the scroll, not before it. Page Down scrolls smoothly, and when the key press returns the scroll
      has not begun: in both engines scrollTop is still 0. A panel redraw then (Apex redraws after every tool step) used
