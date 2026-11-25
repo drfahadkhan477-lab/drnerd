@@ -20,7 +20,8 @@
  *     var(--teal2) or var(--accent) (the scan reads that form; the chapter icons' color:var(--accent,var(--teal)) is a
  *     graphic's colour, held to 3:1, and is not read), and in each of those states the ink clears 4.5:1 on the page, a card, the raised surface, the
  *     accent's tint (--teal4) and the green tint some of it sits on;
- *   · real accent and chapter text, in every state: a chapter's badge on the quiz and its label in search results, a
+ *   · real accent and chapter text, in every state: the session's place on the Apex button, and its chapter and counts
+ *     at the head of Apex's panel, opened, a chapter's label in search results, a
  *     figure's zoom hint, a note's tags, the source picked in Apex's settings, the rhythm lab's phase chip, a chapter
  *     tile's percentage (in its own chapter's ink, not the accent's), and the Echo screen's selected tab (text on the ink
  *     rather than in it, with no glass sheen under it); a chapter with no colour of its own takes the accent ink;
@@ -217,8 +218,17 @@ const TOOLS = () => {
         const c = T.parse(getComputedStyle(el).color), g = T.ground(el), seen = [0, 1, 2].map(i => c[i] * c[3] * a + g[i] * (1 - c[3] * a));
         return { name, ratio: Math.round(T.contrast(seen, g) * 100) / 100 }; }); }, probes);
     const screens = [
+      /* The chapter's badge over the question became the master Apex Brain (November 2026): the Apex button says the
+         place, and the session at the head of Apex's panel, opened, the chapter and what was answered. The button's ink
+         is read as it stands; the session is dark in every theme and paints a colour under its gradient, its lighter
+         end, which is the ground read here. The figure's zoom hint is read with Apex shut, under it. */
       ['the quiz, a question with a figure', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, null,
-        [['a chapter\'s badge', '.ch-badge'], ['a figure\'s zoom hint', '.fig-zoom-hint']]],
+        [['the session\'s place, on the Apex button', '#aiFab .fab-count'], ['a figure\'s zoom hint', '.fig-zoom-hint']]],
+      /* Its pill, opened, says the chapter and the counts in words; the asks wait in the tray under the conversation, opened here to be read, with
+         a key so the conversation is drawn rather than the setup (nothing is sent). */
+      ['the quiz, with Apex open on the session', () => { startAdhocQuiz([POOL.find(x => !x.bad && x.img)], null); }, () => { AI.provider = 'gemini'; AI.gemini = Object.assign({}, AI.gemini, { key: 'test-key' }); if (!document.getElementById('shell').classList.contains('ai-open')) toggleAI(); apexChipsOpen = true; sbDetail = true; buildAI(); },
+        [['its chapter', '#aiSession .sb-title'], ['where the reader is', '#aiSession .sb-where'], ['the right answers it counts', '#aiSession .sb-stat[data-state="right"] b'],
+         ['the wrong ones', '#aiSession .sb-stat[data-state="wrong"] b'], ['what each count is', '#aiSession .sb-stat[data-state="right"]'], ['an ask of Apex, in the tray', '#aiChips .sb-ask']]],
       ['the search screen', () => { openSearch(); }, () => {
         /* A word the bank's own questions hold, so there are results on any bank. */
         let w = null;
@@ -238,6 +248,7 @@ const TOOLS = () => {
     ];
     const per = {}, names = [];
     for (const [id, scheme, label] of STATES) {
+      await page.evaluate(() => { apexChipsOpen = false; });
       await theme(id, scheme);
       for (const [where, go, then, probes] of screens) {
         await page.evaluate(() => { if (document.getElementById('shell').classList.contains('ai-open')) toggleAI(); });

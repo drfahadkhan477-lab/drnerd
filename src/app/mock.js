@@ -104,7 +104,7 @@ function screenHtml(S, kit){
       ${q.flag?`<div class="notice"><span>${icon("alert")}</span><span>${e(q.flag)}</span></div>`:''}
     </div>
     <div class="opts" role="group" aria-label="Answer options">${opts}</div>
-    ${isMobile?'':'<div class="kb-hint kbd-row">Press <kbd>A</kbd>–<kbd>E</kbd> to answer · <kbd>F</kbd> to flag · <kbd>←</kbd> <kbd>→</kbd> to move</div>'}
+    ${isMobile?'':'<div class="kb-hint kbd-row kb-keys">Press <kbd>A</kbd>–<kbd>E</kbd> to answer · <kbd>F</kbd> to flag · <kbd>←</kbd> <kbd>→</kbd> to move</div>'}
     </div></div>
     <div class="actions mock-actions">
       <button class="btn btn-prev" type="button" data-action="mockPrev" aria-label="Previous question"${r.i===0?' disabled':''}>${icon('arrow-left','icon-sm')}</button>

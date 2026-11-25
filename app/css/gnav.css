@@ -68,3 +68,152 @@ body.has-gnav .ref-btns [data-action="goHome"]{display:none}
 /* Sessions' page has no top padding of its own: its back button, and the grid's gap after it, were all the room above its
    heading, which without them sat against the bar, in the bar's shadow (verify-contrast read its eyebrow at 4.19:1 there). */
 body.has-gnav .sessions-page{padding-top:24px}
+
+/* ═══ THE MASTER APEX BRAIN (src/ui/sessionbrain.js) ═══
+   Apex and the session in one control (the owner's choice, November 2026). On a question the Apex button wears the
+   session's brain, a ring round it for how far the session has come, with Apex's own mark as a badge on it, and says
+   the place ("6 of 20"); Apex's panel begins with the session, dark glass in every theme as the button is. The brain's
+   depth is drawn, not filtered: each hemisphere lit from the upper left and shaded below, the folds pressed in with a
+   dark line under a light one, a highlight on each crown. The one motion is the halo of the question on screen, which
+   brightens twice when the session has changed, by opacity alone, and then rests; none when motion is reduced. */
+.ai-fab .fab-brain,.ai-fab .fab-count{display:none}
+/* The button paints a gradient and no colour under it, so its text was read on the page behind it (verify-ink, 1.11:1
+   on Daylight). Under the gradient now, its lighter end: the ground the button's words are read on, at their worst. */
+#aiFab.ai-fab{background-color:color-mix(in srgb,var(--teal) 55%,var(--navy3))}
+@supports not (color:color-mix(in srgb,red,blue)){#aiFab.ai-fab{background-color:var(--navy3)}}
+.ai-fab.has-brain{padding-left:4px;gap:8px}
+.ai-fab.has-brain .fab-brain{display:block;position:relative;width:42px;height:42px;flex:none}
+.ai-fab.has-brain .fab-brain .sb-orb{width:42px;height:42px}
+/* Apex's own mark, a badge on the brain: the same live creature, smaller, at the brain's lower right. */
+.ai-fab.has-brain .fab-av{position:absolute;left:31px;top:31px;transform:scale(.62);transform-origin:0 0;border-radius:50%;
+  box-shadow:0 0 0 2px #0B2236}
+.ai-fab.has-brain .fab-count{display:inline;white-space:nowrap;font-weight:700;color:inherit}
+.ai-fab.has-brain .fab-count::before{content:"·";margin:0 6px 0 2px;opacity:.6}
+.sb-orb{display:block}
+.sb-orb-ground{fill:#06131F}
+.sb-ring-track{fill:none;stroke:rgba(94,234,212,.18);stroke-width:3}
+.sb-ring{fill:none;stroke:#5EEAD4;stroke-width:3;stroke-linecap:round}
+.sb-l0{stop-color:#8FF3EA}.sb-l1{stop-color:#2A8FA8}.sb-l2{stop-color:#0B3247}
+.sb-s0{stop-color:#000;stop-opacity:0}.sb-s1{stop-color:#000;stop-opacity:.42}
+.sb-h0{stop-color:#fff;stop-opacity:.5}.sb-h1{stop-color:#fff;stop-opacity:0}
+.sb-rim{fill:none;stroke:#9AF5EC;stroke-opacity:.75;stroke-width:1.4}
+.sb-orb .sb-rim{stroke-width:5}
+.sb-folds-dark path{fill:none;stroke:#05202E;stroke-opacity:.55;stroke-width:1.3;stroke-linecap:round}
+.sb-folds-lit path{fill:none;stroke:#C8FBF5;stroke-opacity:.45;stroke-width:.8;stroke-linecap:round}
+.sb-dot{fill:rgba(203,213,225,.5)}
+.sb-dot[data-state="right"]{fill:#4ADE80}
+.sb-dot[data-state="wrong"]{fill:#FB7185}
+.sb-dot[data-flagged]{stroke:#FBBF24;stroke-width:.9}
+.sb-dot[data-current]{fill:#F0F9FF;stroke:#38BDF8;stroke-width:1}
+.sb-orb .sb-dot[data-flagged],.sb-orb .sb-dot[data-current]{stroke-width:2.6}
+.sb-halo{fill:#7DD3FC;opacity:.3}
+.sb-fresh .sb-halo{animation:sbPulse .9s ease-in-out 2}
+@keyframes sbPulse{0%,100%{opacity:.3}50%{opacity:.85}}
+@media(prefers-reduced-motion:reduce){.sb-fresh .sb-halo{animation:none}}
+/* The session at the head of Apex's panel, kept to one row so the panel is a clean chat window (the owner's word):
+   a small brain, the chapter and the place, and the counts. The row opens on the brain, where a question is picked
+   and gone to. Dark in every theme, it paints a colour under its gradient, the lighter end, which is the ground its
+   text is read on (tests/verify-ink.js). At most a little under half the panel, and it scrolls within itself; it never
+   shrinks under what follows it (on the setup screen, shrunk, the actions on this device lay over its row). */
+.ai-session{flex:0 1 auto;min-width:0;max-height:45vh;overflow-y:auto;margin:0;border-radius:16px;color:#F1F5F9;
+  background:#113046 linear-gradient(160deg,rgba(17,48,70,.98),rgba(9,24,40,.98));border:1px solid rgba(94,234,212,.28);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.sb-row{width:100%;min-height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 5px;
+  margin:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:16px}
+.sb-row:focus-visible{outline:2px solid #5EEAD4;outline-offset:-2px}
+.sb-mini{display:block;width:38px;height:38px;flex:none}
+.sb-mini .sb-orb{width:38px;height:38px}
+.sb-row-text{display:flex;flex-direction:column;gap:2px;min-width:7.5em;flex:1 1 9em}
+.sb-title{font-size:13px;font-weight:700;line-height:1.2;color:#F1F5F9;overflow-wrap:break-word}
+.sb-resumed{font-weight:600;color:#C3CFDC}
+.sb-where{font-size:11px;color:#C3CFDC}
+.sb-stats{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;min-width:0;flex:0 1 auto;max-width:62%}
+.sb-stat{padding:2px 7px;border-radius:999px;font-size:11px;line-height:1.5;color:#C3CFDC;background:rgba(203,213,225,.1);white-space:nowrap}
+.sb-stat b{font-weight:700;color:#F1F5F9}
+.sb-stat[data-state="right"]{background:rgba(74,222,128,.14)}.sb-stat[data-state="right"] b{color:#4ADE80}
+.sb-stat[data-state="wrong"]{background:rgba(251,113,133,.16)}.sb-stat[data-state="wrong"] b{color:#FDA4AF}
+.sb-stat[data-state="flagged"]{background:rgba(251,191,36,.14)}.sb-stat[data-state="flagged"] b{color:#FBBF24}
+.sb-stat[data-state="share"] b{color:#5EEAD4}
+.sb-chev{display:inline-flex;flex:none;color:#C3CFDC}
+.ai-session.open .sb-chev{transform:rotate(180deg)}
+.sb-detail{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;align-items:center;padding:2px 12px 12px}
+.sb-detail[hidden]{display:none}
+.sb-brain{width:120px;height:100px;display:block;cursor:pointer;overflow:visible}
+.sb-brain:focus-visible{outline:2px solid #5EEAD4;outline-offset:3px;border-radius:12px}
+.sb-pick{fill:none;stroke:#fff;stroke-width:1}
+.sb-picked{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:12px;background:rgba(6,19,31,.7);border:1px solid rgba(94,234,212,.2)}
+.sb-picked-t{margin:0;font-size:13px;color:#D5DEE8}
+.sb-here{margin:0;font-size:13px;color:#5EEAD4}
+.sb-go,.ai-session .q-restart{min-height:44px;padding:0 14px;border-radius:12px;font:700 13px/1 var(--font-sans);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px}
+.sb-go{border:1px solid #5EEAD4;background:transparent;color:#5EEAD4}
+.ai-session .q-restart{grid-column:1/-1;justify-self:start;border:1px solid rgba(148,197,255,.28);background:transparent;color:#D5DEE8}
+/* The tray under the conversation (the ⚡ button): the session's asks, then the actions on this device, each a row. */
+#aiChips>.src-strip{flex:1 0 100%;padding:0}
+#aiChips .src-pill{font:600 13px/1.2 var(--font-sans);letter-spacing:0;min-height:36px;padding:0 12px}
+/* The session is a pill in Apex's head, beside its name, so the conversation keeps the panel (verify-chat: most of it).
+   Shut, the pill says the place and right and wrong; tapped, it takes a line of its own under the head, at full width,
+   with the chapter, every count and the brain. */
+.ai-head{flex-wrap:wrap;row-gap:8px}
+.ai-head .ai-mark{flex:1 1 9em}
+.ai-session:not(.open) .sb-title,.ai-session:not(.open) .sb-stat[data-state="flagged"],.ai-session:not(.open) .sb-stat[data-state="share"]{display:none}
+.ai-session:not(.open) .sb-row{min-height:44px;padding:2px 10px 2px 3px;gap:8px}
+.ai-session:not(.open) .sb-row-text{min-width:0;flex:0 1 auto}
+.ai-session:not(.open) .sb-stats{max-width:none;flex-wrap:nowrap}
+.ai-session.open{flex:1 0 100%}
+/* With no thread, one line, quietly. */
+.ai-hello p{color:var(--muted)}
+/* Full screen, the session stands alongside the conversation: a column of its own at the left, open on the brain. */
+@media (min-width:900px){
+  #shell.ai-full #ai.has-session .ai-session{position:absolute;left:16px;top:76px;bottom:16px;width:300px;max-height:none;margin:0;overflow-y:auto}
+  #shell.ai-full #ai.has-session .sb-detail[hidden],#shell.ai-full #ai.has-session .sb-detail{display:flex;flex-direction:column;align-items:stretch}
+  #shell.ai-full #ai.has-session .sb-brain{width:100%;height:auto}
+  #shell.ai-full #ai.has-session .sb-chev{display:none}
+  #shell.ai-full #ai.has-session .sb-row{flex-wrap:wrap;cursor:default}
+  #shell.ai-full #ai.has-session .sb-stats{flex:1 0 100%;max-width:none;justify-content:flex-start}
+  #shell.ai-full #ai.has-session>:not(.ai-session):not(.ai-head){margin-left:332px;margin-right:16px;width:auto;max-width:860px}
+}
+/* Shorter than that, Apex is a sheet with no room for both: the conversation keeps it, and the session stays on the
+   button, which wears it while Apex is shut. */
+@media (max-height:500px){.ai-session{display:none}}
+@media print{.ai-session,.ai-fab .fab-brain{display:none}}
+
+/* ═══ THE TOP BAR'S ICONS ═══
+   Two tones (the i-nav-* symbols in the shell): the line in the button's own colour, a soft fill and an accent. Inside a
+   question or any inner screen the bar is navy in every theme, so the buttons are glass there with a light accent; on
+   Home the bar is the page's own ground, so the accent is the theme's ink. */
+#navbar .icon-btn{--icon-duo:rgba(56,189,248,.16)}
+body:not(.on-home) #navbar .nav-right .icon-btn{--icon-acc:#7DD3FC;--icon-knob:#0F1A33;width:36px;height:36px;border-radius:12px;
+  border:1px solid rgba(148,197,255,.24);background:linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.03));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 6px 16px rgba(0,0,0,.24)}
+body:not(.on-home) #navbar .nav-right .icon-btn .icon{width:19px;height:19px}
+body.on-home #navbar .icon-btn{--icon-acc:var(--teal-ink);--icon-knob:var(--card)}
+
+/* ═══ THE SETTINGS SCREEN ═══
+   A head that stays, with the app's mark and a way to each section; each section a card with its own two-tone icon
+   (the i-set-* symbols) and a line saying what it holds; fields in the app's glass. Drawn in gradients and borders on
+   the theme's own tokens, so it is light to paint and right in every theme; nothing is blurred. */
+#generalSettings{--icon-duo:rgba(56,189,248,.16);--icon-acc:var(--teal-ink);border-radius:24px}
+#generalSettings header{flex-wrap:wrap;row-gap:10px;padding:10px 0 12px;border-bottom:1px solid var(--border)}
+#generalSettings .set-brand{display:flex;align-items:center;gap:12px;min-width:0}
+#generalSettings .set-mark{width:42px;height:42px;flex:none;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  color:#E0F2FE;--icon-acc:#7DD3FC;--icon-knob:#0B3B5A;--icon-duo:rgba(125,211,252,.22);
+  background:linear-gradient(145deg,#0E7490,#1E3A8A);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 6px 16px rgba(14,116,144,.28)}
+#generalSettings .set-mark .icon{width:22px;height:22px}
+#generalSettings #settingsTitle{margin:0;font-size:23px;letter-spacing:-.01em}
+#generalSettings .set-sub{margin:1px 0 0;font-size:13px;line-height:1.3}
+#generalSettings .set-nav{flex:1 0 100%;display:flex;gap:6px;flex-wrap:wrap}
+#generalSettings .set-nav button{min-height:44px;padding:0 14px 0 10px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text);font:600 13px/1 var(--font-sans)}
+#generalSettings .set-nav .icon{width:18px;height:18px}
+@media (hover:hover){#generalSettings .set-nav button:hover{border-color:var(--teal-ink)}}
+#generalSettings section{margin:14px 0;padding:14px 16px 16px;border:1px solid var(--border);border-radius:18px;
+  background:linear-gradient(180deg,rgba(148,163,184,.07),rgba(148,163,184,.02))}
+#generalSettings h3{display:flex;align-items:center;gap:10px;margin:0;font-size:16px}
+#generalSettings h3:focus{outline:none}
+#generalSettings h3:focus-visible{outline:2px solid var(--teal-ink);outline-offset:4px;border-radius:8px}
+#generalSettings .set-ico{width:34px;height:34px;flex:none;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.24)}
+#generalSettings .set-ico .icon{width:19px;height:19px}
+#generalSettings .set-lede{margin:6px 0 4px;font-size:13px;line-height:1.45}
+#generalSettings select{border-radius:12px}

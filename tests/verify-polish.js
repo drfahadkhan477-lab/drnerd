@@ -134,6 +134,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
      beat's coupling to it. The re-render race those checks defended cannot
      recur: an <img> in the markup is rebuilt with the markup. */
 
+  /* The pencil's tools are offered only once Settings turns them on (November 2026), and a Pencil touch wakes them only
+     then. The sections below use them, so they are on. */
+  await page.evaluate(() => updateDisplaySetting('pencil', 'on'));
   head('pencil: width responds to pressure, tilt, and size — verified against the real paint path');
   const widths = await page.evaluate(() => ({
     baseline: PencilFX.widthFor(2.6, 0.5, 0, 'M'),
@@ -499,7 +502,7 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
       const d = document.querySelector('.ai-disclaim');
       const out = {
         text: d ? d.textContent.replace(/\s+/g, ' ').trim() : null,
-        beforeModelLine: !!(d && d.nextElementSibling && d.nextElementSibling.classList.contains('ai-powered')),
+        last: !!(d && !d.nextElementSibling && d.parentElement && d.parentElement.classList.contains('ai-foot')),
         color: d ? getComputedStyle(d).color : null,
       };
       AI[AI.provider].key = '';
@@ -508,8 +511,9 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     ok('once connected, it states that it is not clinical advice',
        !!connected.text && /not clinical advice/i.test(connected.text), (connected.text || 'ABSENT').slice(0, 60));
     ok('and that it can be wrong', !!connected.text && /can be wrong|check anything/i.test(connected.text));
-    ok('and it sits directly above the model line, where the answers end',
-       connected.beforeModelLine, String(connected.beforeModelLine));
+    /* The model line went (the owner asked for a clean chat window, November 2026); Settings says the connection. */
+    ok('and it is the last line, under the box, where the answers end',
+       connected.last, String(connected.last));
     ok('both placements say the same thing, so they cannot drift apart',
        setup.text === connected.text, `setup ${(setup.text || '').length} chars, connected ${(connected.text || '').length}`);
   }
