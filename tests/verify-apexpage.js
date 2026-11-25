@@ -220,9 +220,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   });
   ok('the conversation can receive keyboard focus with content to scroll', reading.focused && reading.overflow);
   await page.evaluate(() => buildAI());
+  /* What the key did, kept for the detail when the check fails: the check alone failed in CI's WebKit with nothing to
+     say why, and never here (#463, #466, November 2026). Listeners that only watch: passive, in the capture phase, and
+     reading defaultPrevented after every handler has run. */
+  await page.evaluate(() => {
+    const w = window.__pgdn = { keys: [], scrolls: 0, at: null };
+    document.addEventListener('keydown', ev => { if (ev.key !== 'PageDown') return;
+      const t = ev.target, k = { on: t && (t.id || t.tagName), prevented: null };
+      w.keys.push(k); setTimeout(() => { k.prevented = ev.defaultPrevented; }, 0); }, { capture: true, passive: true });
+    document.getElementById('aiBody').addEventListener('scroll', () => { w.scrolls++; }, { passive: true });
+    w.at = { active: document.activeElement && (document.activeElement.id || document.activeElement.tagName), focus: document.hasFocus() };
+  });
   await page.keyboard.press('PageDown');
   const scrolled = await page.waitForFunction(() => document.getElementById('aiBody').scrollTop > 0, null, {timeout:3000}).then(() => true, () => false);
-  ok('Page Down scrolls the conversation after a panel redraw', scrolled);
+  const said = scrolled ? '' : await page.evaluate(() => { const b = document.getElementById('aiBody'), w = window.__pgdn || {};
+    return JSON.stringify({ before: w.at, keys: w.keys, scrolls: w.scrolls, now: { active: document.activeElement && (document.activeElement.id || document.activeElement.tagName),
+      top: b && b.scrollTop, height: b && b.scrollHeight, shown: b && b.clientHeight, kept: b === document.getElementById('aiBody') },
+      page: { y: window.scrollY, app: (document.getElementById('app') || {}).scrollTop } }); });
+  ok('Page Down scrolls the conversation after a panel redraw', scrolled, said);
   /* A redraw DURING the scroll, not before it. Page Down scrolls smoothly, and when the key press returns the scroll
      has not begun: in both engines scrollTop is still 0. A panel redraw then (Apex redraws after every tool step) used
      to put a new conversation in place of the one scrolling, and the key press was lost. Seen in CI on 25 November
