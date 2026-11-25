@@ -102,6 +102,7 @@ head('the block');
      J(cells) === J([['mock-cell done flag', '0', '0', 'CELL 1', undefined, '1'], ['mock-cell cur', '1', '1', 'CELL 2', ' aria-current="true"', '2'], ['mock-cell', '2', '2', 'CELL 3', undefined, '3']]), J(cells));
   ok('"End block", by the mockEnd action', html.includes('data-action="mockEnd">[icon check icon-sm]<span>End block</span>'));
   ok('a wide screen is told the keys; a screen under 768 is not', html.includes('Press <kbd>A</kbd>–<kbd>E</kbd> to answer') && !draw({}, { window: { innerWidth: 767 } }).includes('kb-hint') && draw({}, { window: { innerWidth: 768 } }).includes('kb-hint'));
+  ok('and the hint that names keys is marked as keys (kb-keys), shown once a key is pressed', html.includes('<div class="kb-hint kbd-row kb-keys">Press <kbd>A</kbd>'));
 }
 
 head('the summary before handing in');

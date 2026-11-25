@@ -10,7 +10,8 @@
  * expected to say is worked out here and never read back from the module.
  *
  * What is measured, rather than assumed:
- *   - the bar: chapter, place in the session, "start over" when resumed, and the score so far;
+ *   - where the reader is: not on this screen; nothing is left of the card that said it (chapter, bar, score and start
+ *     over), which became the master Apex Brain (src/ui/sessionbrain.js, held by verify-sessionbrain-pure);
  *   - the question: its words, number, chapter, flag and pencil badges, figure note and notice;
  *   - the options: before answering, and after, right and chosen, with peer percentages where there are any;
  *   - the reveal: right or wrong, the right answer cut at 58, the commentary in paragraphs, what is said of
@@ -61,15 +62,16 @@ const inlineOf = html => [...html.matchAll(/<[a-z][^>"']*(?:("[^"]*"|'[^']*')[^>
 const actionsOf = html => [...html.matchAll(/data-action="([^"]*)"/g)].map(m => m[1]);
 const actions = html => actionsOf(g1(html, /<div class="actions">([\s\S]*)<\/div>\s*<\/div>\s*$/) || '');
 
-head('the bar');
+head('where the reader is');
 {
-  const html = draw({ qIdx: 1 });
-  ok('the chapter, in chInk()\'s ink on its colour, through e()', html.includes('<span class="ch-badge" style="background:#11223322;color:INK(#112233)">E(Rhythm)</span>'));
-  ok('the place in the session, said to a screen reader as in this session', html.includes('<span class="q-counter">2 of 2<span class="sr-only"> in this session</span></span>'));
-  ok('the bar is as far along as the place', g1(html, /transform:scaleX\(([^)]*)\)/) === '1.0000' && g1(draw(), /transform:scaleX\(([^)]*)\)/) === '0.5000');
-  ok('"start over" only when the session was resumed, by the quizStartOver action', draw({ resumed: true }).includes('<button class="q-restart" type="button" data-action="quizStartOver"') && !html.includes('quizStartOver'));
-  ok('the score so far, and nothing before the first answer', g1(draw({ quizCorrect: 2, quizTotal: 3 }), /<div class="qstats">([^<]*)</) === 'This quiz: 2/3 (67%)' && g1(html, /<div class="qstats">([^<]*)</) === '');
-  ok('a chapter with no colour takes the teal', draw({}, {}, [], {}).includes('style="background:var(--teal)22;color:INK(var(--teal))"'));
+  /* The card over the question (the chapter, "k of n", start over, the bar and the score) went, the owner's choice of
+     November 2026, to the master Apex Brain: the Apex button wears the session and its panel begins with it (the page's,
+     held by verify-sessionbrain-pure). The screen opens on the question. */
+  const html = draw({ qIdx: 1, resumed: true, quizCorrect: 2, quizTotal: 3 });
+  ok('the screen opens on the question, with nothing of the session over it', /^<div class="quiz-wrap">\s*<div class="reading-columns">/.test(html) && !/sb-|sessionBrain/.test(html), html.slice(0, 80));
+  ok('and nothing is left of the card it replaced: no chapter badge, bar, score or start over of the screen\'s own',
+     !/ch-badge|prog-track|prog-fill|qstats|q-restart|quizStartOver|q-counter/.test(html), (html.match(/ch-badge|prog-track|prog-fill|qstats|q-restart|quizStartOver|q-counter/g) || []).join(' ') || 'none');
+  ok('a chapter with no colour takes the teal, on the card\'s edge and its dot', draw({}, {}, [], {}).includes('style="border-left-color:var(--teal)"') && draw({}, {}, [], {}).includes('class="q-tag-dot" style="color:var(--teal)"'));
 }
 
 head('the question');
@@ -160,6 +162,11 @@ head('the actions and the keys');
   const three = draw({ qIdx: 1, questions: [question('q1'), question('q2', { o: [{ l: 'A', t: 'x' }, { l: 'B', t: 'y' }, { l: 'C', t: 'z' }] })] });
   ok('the letters are those of the question on screen', three.includes('Press <kbd>A</kbd><kbd>B</kbd><kbd>C</kbd> to answer'));
   ok('a screen narrower than 768 is told to tap', draw({}, { window: { innerWidth: 767 } }).includes('>Tap to answer</div>') && draw({ answered: true }, { window: { innerWidth: 390 } }).includes('>Tap Next to continue</div>') && !draw({}, { window: { innerWidth: 768 } }).includes('Tap to answer'));
+  /* The keys are offered only once a key is pressed (the page's data-keys; app/css/home-quiz.css): an iPad with no keyboard
+     showed "Press A to answer" to a finger. So the hints that name keys say so (kb-keys), and a phone's tap hint does not. */
+  ok('the hints that name keys are marked as keys (kb-keys), and a phone\'s hint to tap is not',
+     draw().includes('<div class="kb-hint kbd-row kb-keys">Press ') && draw({ answered: true }).includes('<div class="kb-hint kb-keys">Press ')
+     && draw({}, { window: { innerWidth: 767 } }).includes('<div class="kb-hint kbd-row">Tap to answer') && draw({ answered: true }, { window: { innerWidth: 767 } }).includes('<div class="kb-hint">Tap Next'));
 }
 
 head('it reads what it is given, and changes nothing');
@@ -176,7 +183,7 @@ const KIT_READS = new Set(), S_READS = new Set();
   const sts = [{ questions: [question('q1', { img: true })] }, { answered: true, selected: 0, quizTotal: 2, quizCorrect: 1, resumed: true }, { mode: 'due', answered: true, selected: 1, srs: { q1: { tag: 'c' } } }];
   const outs = sts.map(o => run(() => M.screenHtml(watched(state(Object.assign({ screen: 'quiz', chapter: 'x' }, o)), S_READS, 'S'), watched(LOG, new Set(), 'LOG'), { Rhythm: '#112233' }, watched(kitOf(), KIT_READS, 'kit'))));
   const names = s => [...s].sort().join(' ');
-  ok('of the state it reads the names below and nothing else', !outs.some(o => o.startsWith('THREW')) && names(S_READS) === 'answered answers flagged mode qIdx questions quizCorrect quizTotal resumed selected srs', names(S_READS));
+  ok('of the state it reads the names below and nothing else', !outs.some(o => o.startsWith('THREW')) && names(S_READS) === 'answered answers flagged mode qIdx questions selected srs', names(S_READS));
   ok('of the kit, twelve names', names(KIT_READS) === 'BANK Calib IMGS RATINGS chInk e fmtInterval fsrsPreview hasMarkup hasPeers icon window', names(KIT_READS));
   ok('it sets, deletes and defines nothing on any of them', wrote.length === 0, wrote.join(', ') || 'nothing');
   const deep = o => { if (o && typeof o === 'object' && !(o instanceof Set)) { Object.values(o).forEach(deep); Object.freeze(o); } return o; };
@@ -235,17 +242,17 @@ head('the page hands the module what it has, and keeps what the markup names');
   ok('and the screen\'s own words are no longer in the page', WORDS.every(t => count(t) === 0), WORDS.map(t => count(t)).join(' '));
   const all = draw({ resumed: true, qIdx: 1 }) + draw({ answered: true, selected: 0 }, {}, [{ q: 'q1', why: null }]) + draw({ mode: 'due', answered: true, selected: 1 });
   const named = [...new Set(actionsOf(all))].sort();
-  ok('its markup names nine actions and carries no inline handler', J(named) === J(['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'quizStartOver', 'rateReview', 'setConfidence', 'setMissReason', 'toggleFlag']) && inlineOf(all).length === 0, named.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
+  ok('its markup names eight actions and carries no inline handler (start over is the session\'s, at the head of Apex\'s panel, now)', J(named) === J(['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'setConfidence', 'setMissReason', 'toggleFlag']) && inlineOf(all).length === 0, named.join(' ') + ' · ' + (inlineOf(all).join(' ') || 'no on* attribute'));
   const TABLES = ['ACTIONS', 'INPUT_ACTIONS', 'CHANGE_ACTIONS'];
   const tableOf = name => (page.match(new RegExp('const ' + name + '=\\{([\\s\\S]*?)\\n\\};')) || [])[1] || '';
   const keyed = (t, n) => (tableOf(t).match(new RegExp('(^|\\s)' + n + ':', 'g')) || []).length;
   const ENTRY = { setConfidence: 'setConfidence:el=>setConfidence(Number(el.dataset.cf)),', setMissReason: 'setMissReason:el=>setMissReason(el.dataset.why),', askApexWhy: 'askApexWhy:()=>askApexWhy(),',
     toggleFlag: 'toggleFlag:()=>toggleFlag(),', rateReview: 'rateReview:el=>rateReview(Number(el.dataset.grade)),', prevQ: 'prevQ:()=>prevQ(),', nextQ: 'nextQ:()=>nextQ(),', quizStartOver: 'quizStartOver:()=>restartQuiz(),', goHome: 'goHome:()=>goHome(),' };
-  ok('each is in the page\'s ACTIONS table once, as written, and in neither of the others: the numbers read back as numbers, and start over the page\'s restartQuiz()',
-     named.length === 9 && named.every(n => ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0),
+  ok('each is in the page\'s ACTIONS table once, as written, and in neither of the others: the numbers read back as numbers',
+     named.length === 8 && named.every(n => ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 && keyed('ACTIONS', n) === 1 && keyed('INPUT_ACTIONS', n) === 0 && keyed('CHANGE_ACTIONS', n) === 0),
      named.map(n => n + ':' + TABLES.map(t => keyed(t, n)).join('/') + (ENTRY[n] && tableOf('ACTIONS').split(ENTRY[n]).length === 2 ? '' : ' (not as written)')).join(' '));
-  const CALLS = ['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'restartQuiz', 'setConfidence', 'setMissReason', 'toggleFlag'];
-  ok('they call nine functions the page declares, once each, and the page listens for taps on the document', CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
+  const CALLS = ['askApexWhy', 'goHome', 'nextQ', 'prevQ', 'rateReview', 'setConfidence', 'setMissReason', 'toggleFlag'];
+  ok('they call eight functions the page declares, once each, and the page listens for taps on the document', CALLS.every(n => count('function ' + n + '(') === 1) && count('Actions.install(document,ACTIONS);') === 1, CALLS.map(n => n + ':' + count('function ' + n + '(')).join(' '));
   ok('the chips setConfidence() and setMissReason() repaint are found by the classes the module draws', count('document.querySelectorAll(".cf-chip")') === 1 && count('document.querySelectorAll(".miss-chip")') === 1 && all.includes('class="cf-chip') && all.includes('class="miss-chip'));
   const ids = ['qFlag', 'qFlagBadge'];
   ok('the ids the page looks up are drawn', ids.every(id => count("getElementById('" + id + "')") + count("'#" + id) > 0 && draw().includes('id="' + id + '"')), ids.map(id => id + ':' + (count("getElementById('" + id + "')") + count("'#" + id))).join(' '));
@@ -260,7 +267,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const NOW = new Date(2026, 10, 15, 9, 0).getTime();
   class FixedDate extends Date { constructor(...a) { if (a.length) super(...a); else super(NOW); } static now() { return NOW; } }
   const ctx = { Date: FixedDate, innerWidth: 1194, BANK: { name: 'Test Bank' }, IMGS: { a1: ['f1'] }, CH_COLORS: {}, LOG: [], themeIsDark: () => false, hasMarkup: () => false,
-    S: { questions: [{ id: 'a1', ch: 'Valves & more', n: 3, s: 'A <b>stem</b>', ex: 'Why.', o: [{ l: 'A', t: 'One', p: 30 }, { l: 'B', t: 'Two & three', p: 70 }], ci: 1, img: true }], qIdx: 0, selected: 1, answered: true, answers: {}, mode: 'due', flagged: new Set(), srs: {}, resumed: false, quizCorrect: 1, quizTotal: 1 } };
+    S: { questions: [{ id: 'a1', ch: 'Valves & more', n: 3, s: 'A <b>stem</b>', ex: 'Why.', o: [{ l: 'A', t: 'One', p: 30 }, { l: 'B', t: 'Two & three', p: 70 }], ci: 1, img: true }], qIdx: 0, selected: 1, answered: true, answers: { 0: { selected: 1 } }, mode: 'due', flagged: new Set(), srs: {}, resumed: false, quizCorrect: 1, quizTotal: 1 } };
   ctx.window = ctx; vm.createContext(ctx);
   const ask = code => { try { return vm.runInContext(code, ctx); } catch (err) { return 'THREW ' + err.message; } };
   const loaded = ask(parts + '\n"loaded"');
@@ -272,7 +279,7 @@ head('the page hands the module what it has, and keeps what the markup names');
   const unnamed = String(ask('JSON.stringify(RATINGS.map(([k,l,g])=>[l, ReviewQueue.fmtInterval(FSRS.update(undefined,g,todayISO()).ivl)]))'));
   ok('for this question, naming the card changes at least one rating\'s day, so the next check can tell (precondition)', want !== unnamed, want + ' vs ' + unnamed);
   ok('a new card\'s four ratings, each with when the real FSRS would bring this card back, as the real ReviewQueue says it', scheds.length === 4 && J(scheds) === want, J(scheds));
-  ok('the bar and the score are the page\'s', html.includes('<span class="q-counter">1 of 1') && html.includes('This quiz: 1/1 (100%)'));
+  ok('and the page\'s own line draws nothing of where the reader is, which the Apex button holds', !/sb-|q-counter|qstats/.test(html), (html.match(/sb-[a-z]+|q-counter|qstats/g) || []).join(' ') || 'none');
   /* A tap, as the page takes it: the real src/core/actions.js listening on a stand-in document over the page's own
      tables, with a recording stand-in for each function they call, and as the element each button the page's own line
      drew over the real Calib and RATINGS, its attributes read back as a browser reads them, in the order drawn. Three
@@ -298,8 +305,8 @@ head('the page hands the module what it has, and keeps what the markup names');
   const tr = tapAll(rating), ta = tapAll(asking), tm = tapAll(missed);
   ok('tapped through the real Actions and the page\'s tables, waiting for a rating: each rating with its grade as a number (Again 1 to Easy 4), then the flag',
      J(tr) === J(['rateReview [1]', 'rateReview [2]', 'rateReview [3]', 'rateReview [4]', 'toggleFlag']), J(tr));
-  ok('a resumed session\'s second question: start over (the page\'s restartQuiz(), not the results screen\'s), each band as a number, home, back, flag and skip',
-     J(ta) === J(['restartQuiz', 'setConfidence [0]', 'setConfidence [1]', 'setConfidence [2]', 'setConfidence [3]', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(ta));
+  ok('a resumed session\'s second question (start over is in Apex\'s panel): each band as a number, home, back, flag and skip',
+     J(ta) === J(['setConfidence [0]', 'setConfidence [1]', 'setConfidence [2]', 'setConfidence [3]', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(ta));
   ok('a miss: each of the real reasons, Ask Apex why, home, back, flag and next',
      J(tm) === J(['setMissReason ["gap"]', 'setMissReason ["misread"]', 'setMissReason ["mixed"]', 'setMissReason ["slip"]', 'setMissReason ["guess"]', 'askApexWhy', 'goHome', 'prevQ', 'toggleFlag', 'nextQ']), J(tm));
 

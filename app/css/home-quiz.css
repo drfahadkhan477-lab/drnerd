@@ -230,6 +230,9 @@ html [data-home="focus"] .story-rail{display:none}
 /* ═══ KEYBOARD HINT ═══ */
 .kb-hint{text-align:center;font-size:11px;color:var(--muted);margin-bottom:10px;
   display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px}
+/* Keys are offered only to a reader who has pressed one: an iPad with no keyboard showed "Press A to answer" to a
+   finger. The page sets data-keys on the first key pressed outside a text field, and keeps it on the device (app/systole.html). */
+html:not([data-keys]) .kb-keys{display:none}
 kbd{background:var(--card);border:1px solid var(--border);border-bottom:2px solid var(--border3);
   border-radius:5px;padding:2px 7px;font-family:var(--font-mono);font-size:11px;
   box-shadow:0 1px 2px rgba(0,0,0,.08)}
