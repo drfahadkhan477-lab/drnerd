@@ -209,7 +209,7 @@ head('the page hands the module what it has, and keeps what touches the page');
   wrap.classList.toggle('has-session',!!session);`;
   const BRANCH = `  if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
     wrap.innerHTML=ApexPanel.setupPanelHtml(head,kit); bindSetup(); mountApexAvatar(); return; }
-  wrap.innerHTML=ApexPanel.panelHtml(head,q,hist,kit);
+  apexPutPanel(wrap,ApexPanel.panelHtml(head,q,hist,kit));
   wrap.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>peekQuestion(b.dataset.jump));
   bindChat(q);
   apexPanelRestore(panelWas);
@@ -265,6 +265,9 @@ ${' '.repeat(2)}`;
     dueQuestions: () => [1, 2], refImgSrc: k => 'data:x/' + k,
     refFiguresForHits: (hits, n) => (log.push('figures ' + hits.map(h => h.id).join(',') + ' ' + n), [{ key: 'f1', dataUrl: 'data:image/png;base64,F1', caption: 'Valve <cap>', noteTitle: 'Valve note' }, { key: 'f2', dataUrl: 'data:image/png;base64,F2', caption: 'Placed', noteTitle: 'Valve note' }]),
     apexPanelState: () => (log.push('state'), { s: 1 }), apexPanelRestore: st => log.push('restore ' + J(st)), bindChat: q => log.push('bindChat ' + (q && q.id)), bindSetup: () => log.push('bindSetup'),
+    /* The page's apexPutPanel() keeps the conversation that is scrolling and puts the rest in around it; a page's
+       nodes are tests/verify-apexpage.js's to hold. Here the panel is its markup, put in whole. */
+    apexPutPanel: (w, html) => { w.innerHTML = html; },
     mountApexAvatar: () => log.push('avatar'), peekQuestion: id => log.push('peek ' + id), apexSessionHtml: () => '[SESSION]', onSession: () => false,
   };
   ctx.window = ctx; vm.createContext(ctx);

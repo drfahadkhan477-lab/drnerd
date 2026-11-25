@@ -223,6 +223,17 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.keyboard.press('PageDown');
   const scrolled = await page.waitForFunction(() => document.getElementById('aiBody').scrollTop > 0, null, {timeout:3000}).then(() => true, () => false);
   ok('Page Down scrolls the conversation after a panel redraw', scrolled);
+  /* A redraw DURING the scroll, not before it. Page Down scrolls smoothly, and when the key press returns the scroll
+     has not begun: in both engines scrollTop is still 0. A panel redraw then (Apex redraws after every tool step) used
+     to put a new conversation in place of the one scrolling, and the key press was lost. Seen in CI on 25 November
+     2026, in WebKit, on #463. */
+  await page.evaluate(() => { const b = document.getElementById('aiBody'); b.scrollTop = 0; b.focus(); });
+  await page.keyboard.press('PageDown');
+  const during = await page.evaluate(() => { const before = document.getElementById('aiBody');
+    buildAI(); return { kept: document.getElementById('aiBody') === before }; });
+  const scrolledThrough = await page.waitForFunction(() => document.getElementById('aiBody').scrollTop > 0, null, {timeout:3000}).then(() => true, () => false);
+  ok('a Page Down under way when the panel is redrawn still scrolls the conversation', scrolledThrough,
+     during.kept ? 'the conversation was kept' : 'the conversation was replaced');
   await page.keyboard.press('b');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Space');

@@ -3179,11 +3179,28 @@ function buildAI(){
      with no lock on it. Every other provider still asks. */
   if(!cur().key && !(AI.provider==='gemini' && apexHosted())) {
     wrap.innerHTML=ApexPanel.setupPanelHtml(head,kit); bindSetup(); mountApexAvatar(); return; }
-  wrap.innerHTML=ApexPanel.panelHtml(head,q,hist,kit);
+  apexPutPanel(wrap,ApexPanel.panelHtml(head,q,hist,kit));
   wrap.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>peekQuestion(b.dataset.jump));
   bindChat(q);
   apexPanelRestore(panelWas);
   mountApexAvatar();
+}
+/* The conversation is kept across a redraw, and only what it says is put in: everything around it is new. A scroll is
+   the element's, so a new conversation in its place drops one under way. A Page Down has not begun when its key is
+   handled (it scrolls smoothly), and a finger's momentum on iOS goes on after it lifts, so a redraw then, after a tool
+   step, lost the key press or stopped the scroll. What it says is put in only when it changed. */
+function apexPutPanel(wrap,html){
+  const body=p=>Array.prototype.find.call(p.children,n=>n.id==='aiBody');
+  const was=body(wrap);
+  if(!was){ wrap.innerHTML=html; return; }
+  const t=document.createElement('template'); t.innerHTML=html;
+  const now=body(t.content);
+  if(!now){ wrap.innerHTML=html; return; }
+  while(wrap.firstChild!==was) wrap.firstChild.remove();
+  while(was.nextSibling) was.nextSibling.remove();
+  while(t.content.firstChild!==now) wrap.insertBefore(t.content.firstChild,was);
+  now.remove(); wrap.append(t.content);
+  if(was.innerHTML!==now.innerHTML) was.innerHTML=now.innerHTML;
 }
 function apexFigsFor(hits,lastBot,hist){
   /* refFiguresForHits walks REF and resolves a data: URL per figure, and the
