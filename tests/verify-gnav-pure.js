@@ -99,10 +99,13 @@ head('the back buttons it takes over (app/css/gnav.css)');
   /* Every button the app's modules draw: its classes, its attributes, and its file. A button in a module that draws a
      .ref-btns row counts as inside it: Notes (refs.js) and Memory (memory.js) hold their goHome buttons there. */
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+  /* A file's path from the repository root with / between its parts, as it is written below: on Windows path.relative
+     answers with \, and the owner's gate of 25 November 2026, on Windows, failed the precondition here in both engines. */
+  const rel = f => path.relative(path.join(__dirname, '..'), f).replace(/\\/g, '/');
   const files = walk(path.join(__dirname, '..', 'src')).filter(f => f.endsWith('.js'));
-  const refRows = new Set(files.filter(f => /class="ref-btns"/.test(blankComments(fs.readFileSync(f, 'utf8')))).map(f => path.relative(path.join(__dirname, '..'), f)));
+  const refRows = new Set(files.filter(f => /class="ref-btns"/.test(blankComments(fs.readFileSync(f, 'utf8')))).map(rel));
   const buttons = files.flatMap(f => [...blankComments(fs.readFileSync(f, 'utf8')).matchAll(/<button class="([^"]*)"([^>]*)>/g)].map(m => ({
-    file: path.relative(path.join(__dirname, '..'), f), cls: m[1].split(/\s+/),
+    file: rel(f), cls: m[1].split(/\s+/),
     attrs: Object.fromEntries([...m[2].matchAll(/([a-z-]+)="([^"]*)"/g)].map(a => [a[1], a[2]])) })));
   const one = (sel, b) => {
     const m = sel.match(/^(\.ref-btns )?(?:\.([a-z-]+))?(?:\[([a-z-]+)="([^"]*)"\])?$/);
