@@ -443,7 +443,7 @@ const SUITES = [
   ['echoui-pure',  'Echo Studio computes only what was measured, and restates no cutoff'],
   /* Echo Studio's wiring, out of the shell (docs/ROADMAP.md, E1): the four listeners the page puts on the document for
      it, and the repaint of its results, in src/app/echoscreen.js. */
-  ['echoscreen-pure', 'a tap on an Echo tab or disease chooses it, draws the screen and puts focus back on it, a phase is shown on the cycle and pressed alone, the arrow keys, Home and End move focus along the tabs, typing keeps a finite number or forgets the field and repaints the results alone, and the page installs the listeners once from a module written after the two it lifts'],
+  ['echoscreen-pure', 'a tap on an Echo tab or disease chooses it, draws the screen and puts focus back on it, a phase is shown on the cycle and pressed alone, the arrow keys, Home and End move focus along the tabs, typing keeps a finite number or forgets the field and repaints the results alone, and the page installs the listeners once from a module written after the two it lifts; the screen is EchoUI\'s once it is there, and before, the split build\'s file is loaded once, the screen drawn again when it is in if the page is still on Echo, and a failed load is said, taken out, and tried again on the way back in'],
   /* The three above stop where strings become a document. This one starts
      there: it cuts Echo out of app/ into a scaffold and drives the result, so
      the glue, the delegated listeners and the caret are held rather than

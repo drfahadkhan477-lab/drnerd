@@ -20,10 +20,15 @@
  *   - typing a number keeps it as a number, under its field's name; anything that is no finite number, an empty field
  *     among them, forgets the field rather than keeping a nought; and the results alone are repainted;
  *   - repaint() draws the results block from the fields, and does nothing where there is no block;
+ *   - the screen is EchoUI's once it is there; before, the split build's file is added once and the screen says it is
+ *     loading; a load that ends is ready, or failed (an error, or a file without EchoUI), and a failed one is taken out
+ *     and said, with a Retry; the screen is drawn again only if the page is still on Echo; the way in lets a failed
+ *     load go, so it is tried again, and leaves any other;
  *   - the page: the module is written into the page's own script once, after the two slots the split build lifts and not
- *     between them; echoRepaintResults() is one line into it; the page installs it once and adds no Echo listener of
+ *     between them; buildEchoScreen(), goEcho() and echoRepaintResults() are one line each into it, the load is the
+ *     module's and the page keeps none of its own; the page installs it once and adds no Echo listener of
  *     its own; and, through the page's own lines, ECHO_ENV hands the wiring the page's ECHO, EchoUI once it is there,
- *     render() and the repaint.
+ *     render() and the repaint, and the way in and the load the page's S, document and window.ECHO_SRC.
  *
  * verify-echo is the browser half: it cuts this out of the page with the rest of Echo's glue and drives it.
  */
@@ -179,12 +184,60 @@ head('repaint()');
   ok('with no results block, nothing is drawn and EchoUI is not asked', rn === undefined, String(rn));
 }
 
+head('putting the screen on the page, and loading its code the first time');
+{
+  /* A page that keeps the scripts it is asked to make and add, an EchoUI that may arrive, and a render() that says the
+     screen it was drawn on. */
+  const page = (o = {}) => {
+    const log = [], scripts = [];
+    const doc = { createElement: t => { const s = { t, src: '', remove() { log.push('remove ' + this.src); } }; scripts.push(s); return s; },
+      head: { appendChild: s => log.push('add ' + s.src) } };
+    let ui = o.ui ? { screenHtml: e => 'drawn by EchoUI on tab ' + e.tab } : undefined;
+    const st = { screen: o.screen || 'echo' };
+    const env = { echo: () => ({ tab: 'reference' }), ui: () => ui, src: () => (o.noSrc ? undefined : 'vendor/echo-1.js'), screen: () => st.screen,
+      render: () => log.push('render on ' + st.screen), show: () => { st.screen = 'echo'; log.push('show'); } };
+    return { log, scripts, doc, env, st, load: E.loader(), arrive: () => { ui = { screenHtml: e => 'drawn by EchoUI on tab ' + e.tab }; },
+      draw() { return run(() => E.screenHtml(doc, this.load, env)); } };
+  };
+  const LOADING = '<p role="status">Loading Echo Studio…</p>';
+  const FAILED = '<p role="status">Echo Studio could not load.</p><button data-action="goEcho">Retry</button>';
+  ok('a load begins idle, and each is its own', J(E.loader()) === J({ state: 'idle' }) && E.loader() !== E.loader());
+  const there = page({ ui: true });
+  ok('with EchoUI there, the screen is EchoUI\'s drawing of ECHO, and nothing is loaded', there.draw() === 'drawn by EchoUI on tab reference' && there.scripts.length === 0 && there.load.state === 'idle',
+     J([there.draw(), there.log]));
+  const a = page(), first = a.draw(), second = a.draw();
+  ok('without it, the first drawing adds the split build\'s file once and says it is loading; a second adds nothing',
+     first === LOADING && second === LOADING && J(a.log) === J(['add vendor/echo-1.js']) && a.load.state === 'loading', J([first, a.log, a.load]));
+  a.arrive(); run(() => a.scripts[0].onload());
+  ok('when it is in, the load is ready and the screen drawn again, and then it is EchoUI\'s', a.load.state === 'ready' && J(a.log) === J(['add vendor/echo-1.js', 'render on echo']) && a.draw() === 'drawn by EchoUI on tab reference',
+     J([a.load, a.log]));
+  const f = page(); f.draw(); run(() => f.scripts[0].onerror());
+  ok('a load that fails is taken out of the page, and the screen drawn again says so, with a Retry that goes in again',
+     f.load.state === 'failed' && J(f.log) === J(['add vendor/echo-1.js', 'remove vendor/echo-1.js', 'render on echo']) && f.draw() === FAILED && f.scripts.length === 1, J([f.load, f.log]));
+  const g = page(); g.draw(); run(() => g.scripts[0].onload());
+  ok('so does one that loads a file without EchoUI in it', g.load.state === 'failed' && g.log.includes('remove vendor/echo-1.js'), J([g.load, g.log]));
+  const away = page(); away.draw(); away.st.screen = 'home'; away.arrive(); run(() => away.scripts[0].onload());
+  ok('a load that ends after the page has moved on does not draw the page again', away.load.state === 'ready' && J(away.log) === J(['add vendor/echo-1.js']), J(away.log));
+  const none = page({ noSrc: true });
+  ok('where the split build left no file, nothing is loaded, and the screen says it is loading', none.draw() === LOADING && none.scripts.length === 0 && none.load.state === 'idle', J([none.draw(), none.load]));
+}
+
+head('the way in');
+{
+  const page = state => { const log = []; const load = { state }; const env = { show: () => log.push('show with ' + load.state) };
+    return { log, load, r: run(() => E.go(load, env)) }; };
+  const failed = page('failed');
+  ok('after a load that failed, going in lets it go, so the screen tries again, then shows the screen', failed.r === undefined && J(failed.log) === J(['show with idle']), J(failed.log));
+  const others = ['idle', 'loading', 'ready'].map(s => page(s).log[0]);
+  ok('any other load is left as it is', J(others) === J(['show with idle', 'show with loading', 'show with ready']), J(others));
+}
+
 head('the module reaches the page only through what it is handed');
 {
   /* Read with its comments blanked: the module says in prose what it does not touch; quoted selectors set aside. */
   const mod = blankComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'echoscreen.js'), 'utf8')).replace(/'[^'\n]*'/g, "''");
   const body = mod.slice(mod.indexOf('(function (root) {'), mod.indexOf('root.EchoScreen'));
-  const seen = ['document', 'window', 'ECHO', 'EchoUI', 'render', 'echoRepaintResults', 'S'].filter(t => new RegExp('(?<![.\\w$])' + t + '\\b').test(body));
+  const seen = ['document', 'window', 'ECHO', 'EchoUI', 'ECHO_SRC', 'render', 'echoRepaintResults', 'goEcho', 'S'].filter(t => new RegExp('(?<![.\\w$])' + t + '\\b').test(body));
   ok('no name of the page\'s is used but through env, or the document it is handed', body.length > 0 && seen.length === 0, seen.join(' ') || 'none');
 }
 
@@ -198,24 +251,44 @@ head('the page');
   const lifted = '@@SLOT[src:src/core/echo.js]@@\n@@SLOT[src:src/ui/echo.js]@@', slot = '@@SLOT[src:src/app/echoscreen.js]@@';
   ok('the module is written into the page once, after the two slots the split build lifts as one block, and not between them',
      n(slot) === 1 && n(lifted) === 1 && shell.indexOf(slot) > shell.indexOf(lifted), [n(slot), n(lifted), shell.indexOf(slot) - shell.indexOf(lifted)].join(' '));
-  const LINES = ['function echoRepaintResults(){ EchoScreen.repaint(document,ECHO_ENV); }', 'EchoScreen.install(document,ECHO_ENV);'];
-  ok('echoRepaintResults() is one line into it, declared once, and the page installs it once, below the slot',
-     LINES.every(l => n(l) === 1) && n('function echoRepaintResults(') === 1 && shell.indexOf(LINES[1]) > shell.indexOf(slot), LINES.map(l => n(l)).join(' '));
+  const LINES = ['function buildEchoScreen(){ return EchoScreen.screenHtml(document,ECHO_LOAD,ECHO_ENV); }', 'function goEcho(){ EchoScreen.go(ECHO_LOAD,ECHO_ENV); }',
+    'function echoRepaintResults(){ EchoScreen.repaint(document,ECHO_ENV); }', 'EchoScreen.install(document,ECHO_ENV);', 'const ECHO_LOAD=EchoScreen.loader();'];
+  ok('buildEchoScreen(), goEcho() and echoRepaintResults() are one line each into it, declared once; the load is the module\'s; the page installs the listeners once; all below the slot',
+     LINES.every(l => n(l) === 1 && shell.indexOf(l) > shell.indexOf(slot)) && ['buildEchoScreen', 'goEcho', 'echoRepaintResults'].every(f => n('function ' + f + '(') === 1),
+     LINES.map(l => n(l)).join(' '));
+  ok('and the page keeps no load of its own: no echoLoadState, and no script made for ECHO_SRC', n('echoLoadState') === 0 && n('window.ECHO_SRC;') === 0 && n('script.src = window.ECHO_SRC') === 0,
+     [n('echoLoadState'), n('script.src = window.ECHO_SRC')].join(' '));
   const echoListeners = [...shell.matchAll(/document\.addEventListener\('(?:click|keydown|input)', ?function\(e\)\{[^\n]*\n[^\n]*(?:data-echo|\.echo-)/g)].length;
   ok('and adds no Echo listener of its own', echoListeners === 0 && n("closest('[data-echo-tab],[data-echo-disease]')") === 0 && n("hasAttribute('data-echo-field')") === 0, String(echoListeners));
-  /* The page's own lines, from the slot to the next banner, over a document of this suite's and a page that says what
+  /* The page's own lines, from the load below the slot to the next banner, over a document of this suite's and a page that says what
      it was asked: ECHO and EchoUI are the page's names, read when a listener runs. */
-  const at = raw.indexOf("const ECHO_ENV="), end = raw.indexOf('/* ══════════ Search your notes');
-  const pageLines = at >= 0 && end > at ? raw.slice(at, end) : 'throw new Error("no ECHO_ENV in the page")';
+  const at = raw.indexOf("const ECHO_LOAD="), end = raw.indexOf('/* ══════════ Search your notes');
+  const pageLines = at >= 0 && end > at ? raw.slice(at, end) : 'throw new Error("no ECHO_LOAD in the page")';
   const s = screen({ redraw: false });
   const ctx = { document: s.doc, calls: [] }; ctx.window = ctx; vm.createContext(ctx);
-  const loaded = run(() => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'echoscreen.js'), 'utf8') + '\nvar ECHO={tab:"reference",fields:{}};\nfunction render(){ calls.push("render"); }\n' + pageLines + '\n"loaded"', ctx));
+  const loaded = run(() => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'echoscreen.js'), 'utf8') + '\nvar ECHO={tab:"reference",fields:{}};\nvar S={screen:"home"};\nfunction render(){ calls.push("render on " + S.screen); }\n' + pageLines + '\n"loaded"', ctx));
   /* EchoUI arrives after the page has loaded, as the split build's does. */
   ctx.EchoUI = { tabId: t => 'ui:' + t, resultsHtml: f => 'from the page ' + J(f) };
   const tap = run(() => { s.fire('click', { target: s.find('data-echo-tab', 'visual') }); const el = s.find('data-echo-field', 'vti'); el.value = '7'; s.fire('input', { target: el });
     return J({ calls: ctx.calls, tab: vm.runInContext('ECHO.tab', ctx), fields: vm.runInContext('ECHO.fields', ctx), out: s.cls('echo-out').innerHTML, listeners: s.listeners.length }); });
   ok('through the page\'s own lines, ECHO_ENV hands the wiring the page\'s ECHO, the EchoUI that arrived after it, its render() and its repaint',
-     loaded === 'loaded' && tap === J({ calls: ['render'], tab: 'ui:visual', fields: { vti: 7 }, out: 'from the page {"vti":7}', listeners: 4 }), String(loaded === 'loaded' ? tap : loaded));
+     loaded === 'loaded' && tap === J({ calls: ['render on home'], tab: 'ui:visual', fields: { vti: 7 }, out: 'from the page {"vti":7}', listeners: 4 }), String(loaded === 'loaded' ? tap : loaded));
+  /* The way in and the load, through the page's own lines: the split build's file named on window, the screen put on
+     by the page's S and render(), the script made and added on the page's document, and EchoUI arriving with it. */
+  const scripts = []; s.doc.createElement = t => { const x = { t, src: '', remove() { ctx.calls.push('remove ' + this.src); } }; scripts.push(x); return x; };
+  s.doc.head = { appendChild: x => ctx.calls.push('add ' + x.src) };
+  const ui = ctx.EchoUI; delete ctx.EchoUI; ctx.ECHO_SRC = 'vendor/echo-9.js'; ctx.calls.length = 0;
+  const way = run(() => { vm.runInContext('goEcho()', ctx); const before = vm.runInContext('buildEchoScreen()', ctx);
+    ctx.EchoUI = Object.assign({}, ui, { screenHtml: e => 'EchoUI on ' + e.tab }); scripts[0].onload();
+    return J({ before, after: vm.runInContext('buildEchoScreen()', ctx), screen: vm.runInContext('S.screen', ctx), load: vm.runInContext('ECHO_LOAD.state', ctx), calls: ctx.calls }); });
+  ok('and the way in and the load find the page\'s S, render(), document and window.ECHO_SRC',
+     way === J({ before: '<p role="status">Loading Echo Studio…</p>', after: 'EchoUI on ui:visual', screen: 'echo', load: 'ready', calls: ['render on echo', 'add vendor/echo-9.js', 'render on echo'] }), String(way));
+  /* The screen the page is on, which the load above reads only while it is Echo's: here a second load, after one that
+     failed, ends once the page has moved on. */
+  const moved = run(() => { ctx.calls.length = 0; delete ctx.EchoUI; vm.runInContext('ECHO_LOAD.state="failed"; goEcho(); buildEchoScreen(); S.screen="home";', ctx);
+    ctx.EchoUI = { screenHtml: () => 'x' }; scripts[scripts.length - 1].onload(); return J(ctx.calls); });
+  ok('and a load that ends once the page has left Echo, read from the page\'s own S, does not draw the page again',
+     moved === J(['render on echo', 'add vendor/echo-9.js']), String(moved));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
