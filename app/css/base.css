@@ -57,6 +57,9 @@
      on its theme's page, cards and its own tint, and the amber on the home screen's due chip too (verify-ink). The dark
      green leans yellow, away from Monitor's teal accent, and the dark amber keeps the light amber's hue. */
   --green-ink:#046C4E;--red-ink:#B91C1C;--amber-ink:#92400E;
+  /* The four review ratings' colours, the values the script wrote before they were tokens (roadmap D1): one in every
+     theme until a theme sets its own. */
+  --rate-again:#EF4444;--rate-hard:#F59E0B;--rate-good:#10B981;--rate-easy:#0891B2;
   --purple:#7C3AED;
   /* Type — a minor third (1.2) from a 16px body. Named by role rather than by
      size, because a role survives a change of ratio and "--t-14" does not. */

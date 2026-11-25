@@ -1707,9 +1707,10 @@ function reviewDeck(qs){
   return due.concat(arranged.filter(q=>!ids.has(q.id)));
 }
 
-/* ── active-recall rating (shown after the explanation, review sessions only) ── */
-const RATINGS=[['again','Again',1,'#EF4444'],['hard','Hard',2,'#F59E0B'],
-               ['good','Good',3,'#10B981'],['easy','Easy',4,'#0891B2']];
+/* ── active-recall rating (shown after the explanation, review sessions only) ──
+   Each rating's colour is a token (base.css, --rate-*), so a theme can reach it (roadmap D1). */
+const RATINGS=[['again','Again',1,'var(--rate-again)'],['hard','Hard',2,'var(--rate-hard)'],
+               ['good','Good',3,'var(--rate-good)'],['easy','Easy',4,'var(--rate-easy)']];
 function rateReview(grade){
   const q=S.questions[S.qIdx]; if(!q||!S.answered) return;
   const ans=S.answers[S.qIdx]; if(ans&&ans.rated) return;   // the rate-row is gone once true; this is the second line of defence

@@ -702,6 +702,11 @@ declared across `base.css`, `themes.css`, `figures.css`, `tablet.css`,
 (c) add a pure lint that fails on a new hex literal outside the tokens and themes
 files, with an allowlist for illustration, and watch it fail on an injected one.
 *Opus* (it reads screenshots well); *Sonnet* for the mechanical moves.
+*Started (November 2026):* (c) is `tests/verify-hexcolours-pure.js`. A hex colour in a custom property's value is a
+token; anywhere else in a stylesheet, the shell or `src/` it is counted, and each file is held to what it held when the
+suite was written, so the table only shrinks, in the change that removes a colour. (b) began with the review ratings,
+now `--rate-again`, `--rate-hard`, `--rate-good` and `--rate-easy` in `base.css`, with the values the script wrote. (a)
+and the direction (Quiet Atlas or not) are still to decide.
 
 **D2 — Contrast for every text, not a list of texts.** Sweep every visible text
 node on each landing and study screen in every theme state, against its effective
