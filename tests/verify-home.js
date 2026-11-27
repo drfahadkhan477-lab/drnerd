@@ -776,12 +776,20 @@ onDeath(() => ({ section, checks: passed + failed, errors,
       await page.evaluate(n => homeGo(n), n);
       // homeGo marks the destination immediately. A scroll frame can make
       // it inert again until the pager reaches it, which drops keyboard focus.
+      /* When the pager never settles, the error says which part of the wait did not come true: it failed in CI's
+         Chromium on master (68cdf63, November 2026) and in the owner's WebKit gate with only its label to go on. */
       await settled(page, n => {
         const pager = document.getElementById('homePager');
         const panel = document.getElementById('homePage' + n);
         return !!pager?.clientWidth && !!panel && !panel.inert && homePage === n &&
           !homeTween && Math.abs(pager.scrollLeft - n * pager.clientWidth) <= 1;
-      }, { arg: n, timeout: 8000, label: 'the Home pager to settle on page ' + n });
+      }, { arg: n, timeout: 8000, label: 'the Home pager to settle on page ' + n }).catch(async err => {
+        const state = await page.evaluate(n => { const pager = document.getElementById('homePager'), panel = document.getElementById('homePage' + n);
+          return JSON.stringify({ screen: S.screen, homePage, tween: !!homeTween, width: pager && pager.clientWidth, left: pager && pager.scrollLeft,
+            want: pager && n * pager.clientWidth, panel: !!panel, inert: !!(panel && panel.inert) }); }, n).catch(e => 'unreadable: ' + e.message);
+        err.message += ' · the pager then: ' + state;
+        throw err;
+      });
       await quiet(page);
     };
     /* A button low on a page is scrolled to first, as a reader scrolls to it, and the page let settle: the pages sit in a
