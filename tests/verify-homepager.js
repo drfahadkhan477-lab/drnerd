@@ -492,6 +492,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   await page.evaluate(() => goHome()); await still('home after a chapter');
 
   head('turning the iPad');
+  await page.evaluate(() => homeGo(0)); await still('Home before changing pager width');
+  // Change the laid-out width in the same task as homeGo, so it changes before the glide can finish.
+  const resizing = await page.evaluate(() => {
+    const pager = document.getElementById('homePager'), width = pager.clientWidth;
+    homeGo(1);
+    pager.style.width = Math.round(width * 0.75) + 'px';
+    window.dispatchEvent(new Event('resize'));
+    return { width, resized: pager.clientWidth, gliding: !!homeTween };
+  });
+  await settled(page, () => !homeTween, { label: 'the glide to finish at the changed width' });
+  const afterResize = await state();
+  ok('when the pager changes width during a glide, it lands on Brain at the new width',
+    resizing.gliding && resizing.resized < resizing.width && Math.abs(afterResize.f - 1) < 0.01 &&
+      afterResize.homePage === 1 && afterResize.sel.join() === '1', JSON.stringify({ ...resizing, ...afterResize }));
+  await page.evaluate(() => {
+    document.getElementById('homePager').style.removeProperty('width');
+    window.dispatchEvent(new Event('resize'));
+  });
   await page.evaluate(() => homeGo(1)); await still('Brain before turning');
   await page.setViewportSize({ width: 820, height: 1180 });
   await settled(page, () => document.getElementById('homePager').clientWidth === innerWidth && innerWidth === 820, { label: 'the pager to take the portrait width' });

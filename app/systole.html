@@ -6677,17 +6677,18 @@ function homeFillBrain(){
 function homeGo(i){
   const pg=document.getElementById('homePager'); if(!pg) return;
   i=Math.max(0,Math.min(2,i)); homePage=i; homeMark();
-  const to=i*pg.clientWidth, from=pg.scrollLeft;
+  const width=pg.clientWidth, from=pg.scrollLeft, to=i*width;
   if(homeTween){ cancelAnimationFrame(homeTween); homeTween=0; }
-  const glide=homeMotionOK()&&Math.abs(to-from)>=1; homeLastGo={to:i, glide};
+  const glide=width>0&&homeMotionOK()&&Math.abs(to-from)>=1; homeLastGo={to:i, glide};
   if(!glide){ pg.scrollLeft=to; homePagerSync(); return; }
   /* Eased by hand rather than scrollTo's smooth behaviour, which an iPad before 15.4 does not have; the snap is lifted
      for the glide, or it would pull every intermediate position back to a page. */
   pg.style.scrollSnapType='none';
-  const t0=performance.now(), dur=420;
+  const t0=performance.now(), dur=420, start=from/width;
   const step=now=>{
     const k=Math.min(1,Math.max(0,(now-t0)/dur)), ease=1-Math.pow(1-k,3);
-    pg.scrollLeft=from+(to-from)*ease;
+    /* An iPad can turn during the glide. Keep the same page fraction at the new width. */
+    pg.scrollLeft=(start+(i-start)*ease)*pg.clientWidth;
     if(k<1) homeTween=requestAnimationFrame(step); else { homeTween=0; pg.style.scrollSnapType=''; homePagerSync(); }
   };
   homeTween=requestAnimationFrame(step);
