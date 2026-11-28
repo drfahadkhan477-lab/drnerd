@@ -25,7 +25,7 @@
 'use strict';
 const path = require('path');
 const { launch, isEngineNoise } = require('./_engine');
-const { booted, settled } = require('./_render.js');
+const { booted, quiet, settled } = require('./_render.js');
 const { onDeath } = require('./_deathnote.js');
 
 const target = process.argv[2];
@@ -214,12 +214,18 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
     history.length = 0; history.push({role:'assistant',content:'Conversation reading fixture.\n\n'.repeat(100)});
     buildAI();
     const body = document.getElementById('aiBody');
-    body.scrollTop = 0; body.focus();
+    body.scrollTop = 0; body.focus({ preventScroll: true });
     return {focused:document.activeElement === body, overflow:body.scrollHeight > body.clientHeight,
       question:S.questions[S.qIdx].id};
   });
   ok('the conversation can receive keyboard focus with content to scroll', reading.focused && reading.overflow);
   await page.evaluate(() => buildAI());
+  // This key is sent after the redraw. The next case still sends the key before redrawing.
+  if (!await quiet(page, { selector: '#ai' })) throw new Error('the Apex panel did not finish redrawing');
+  await settled(page, () => {
+    const body = document.getElementById('aiBody');
+    return !!body && document.activeElement === body && body.scrollTop === 0;
+  }, { label: 'the redrawn conversation to have focus at the top' });
   /* What the key did, kept for the detail when the check fails: the check alone failed in CI's WebKit with nothing to
      say why, and never here (#463, #466, November 2026). Listeners that only watch: passive, in the capture phase, and
      reading defaultPrevented after every handler has run. */

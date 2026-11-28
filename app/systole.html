@@ -1936,7 +1936,7 @@ function goLab(){ S.screen='lab'; render(); toTop(); }
 function buildPractice(){ return `<div class="home-wrap anim-fade"><div class="plab" id="plabRoot"></div></div>`; }
 /* The split build lifts the Lab's modules into vendor/ and leaves LAB_SRC naming the file (scripts/build-pwa.js);
    the first draw of this screen loads it and draws again when it is there. A failed load is not remembered. */
-let labLibP=null, labNoCirc=false;
+let labLibP=null, labNoCirc=false, labWaitingForCirc=false;
 function mountPractice(){
   /* The Lab's heart sounds for AS, AR, MS and MR are placed on the circulation engine's valve events
      (HeartSounds.eventsFor), so the Lab waits for the engine too, which the split build also lifts (CIRC_SRC). If the
@@ -1947,10 +1947,19 @@ function mountPractice(){
       labLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); labLibP=null; res(); }; });
       document.head.appendChild(s);
     }
-    if(S.screen==='practice'&&window.CIRC_SRC&&!circLibP&&typeof Circulation==='undefined'){
-      const s=document.createElement('script'); s.src=window.CIRC_SRC;
-      circLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); circLibP=null; labNoCirc=true; res(); mountPractice(); }; });
-      document.head.appendChild(s);
+    if(S.screen==='practice'&&window.CIRC_SRC&&typeof Circulation==='undefined'&&!labNoCirc&&!labWaitingForCirc){
+      if(!circLibP){
+        const s=document.createElement('script'); s.src=window.CIRC_SRC;
+        circLibP=new Promise(res=>{ s.onload=()=>res(); s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
+        document.head.appendChild(s);
+      }
+      /* The Rhythm Lab or Home may already be loading the engine. Resume Practice in either case. */
+      labWaitingForCirc=true;
+      circLibP.then(()=>{
+        labWaitingForCirc=false;
+        labNoCirc=typeof Circulation==='undefined';
+        mountPractice();
+      });
     }
     return;
   }
