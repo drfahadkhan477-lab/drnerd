@@ -1929,43 +1929,17 @@ function mountLab(){ RhythmLabScreen.mountLab(LAB,LAB_ENV); }
 let __lastReadoutPaint=0;
 function goLab(){ S.screen='lab'; render(); toTop(); }
 
-/* ═══════════ The Practice Lab: heart sounds, pressure tracings, ECG strips and the heart map, drilled ═══════════
-   The screen is an empty element; src/lab/ui.js draws inside it and keeps its own place, its own progress and its own
-   keys. Every draw of this screen hands it the element again, and every draw of another lets it go, which stops a heart
-   sound that is playing. */
-function buildPractice(){ return `<div class="home-wrap anim-fade"><div class="plab" id="plabRoot"></div></div>`; }
-/* The split build lifts the Lab's modules into vendor/ and leaves LAB_SRC naming the file (scripts/build-pwa.js);
-   the first draw of this screen loads it and draws again when it is there. A failed load is not remembered. */
-let labLibP=null, labNoCirc=false, labWaitingForCirc=false;
-function mountPractice(){
-  /* The Lab's heart sounds for AS, AR, MS and MR are placed on the circulation engine's valve events
-     (HeartSounds.eventsFor), so the Lab waits for the engine too, which the split build also lifts (CIRC_SRC). If the
-     engine will not load, the Lab draws all the same, on physio.js's events, which is what eventsFor gives without it. */
-  if(typeof LabUI==='undefined'||(window.CIRC_SRC&&typeof Circulation==='undefined'&&!labNoCirc)){
-    if(S.screen==='practice'&&window.LAB_SRC&&!labLibP&&typeof LabUI==='undefined'){
-      const s=document.createElement('script'); s.src=window.LAB_SRC;
-      labLibP=new Promise(res=>{ s.onload=()=>{ res(); mountPractice(); }; s.onerror=()=>{ s.remove(); labLibP=null; res(); }; });
-      document.head.appendChild(s);
-    }
-    if(S.screen==='practice'&&window.CIRC_SRC&&typeof Circulation==='undefined'&&!labNoCirc&&!labWaitingForCirc){
-      if(!circLibP){
-        const s=document.createElement('script'); s.src=window.CIRC_SRC;
-        circLibP=new Promise(res=>{ s.onload=()=>res(); s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
-        document.head.appendChild(s);
-      }
-      /* The Rhythm Lab or Home may already be loading the engine. Resume Practice in either case. */
-      labWaitingForCirc=true;
-      circLibP.then(()=>{
-        labWaitingForCirc=false;
-        labNoCirc=typeof Circulation==='undefined';
-        mountPractice();
-      });
-    }
-    return;
-  }
-  if(S.screen==='practice') LabUI.mount(document.getElementById('plabRoot'),S.examDate);
-  else LabUI.unmount();
-}
+/* Practice Lab's wiring is available before the split build loads its UI. */
+@@SLOT[src:src/app/practicescreen.js]@@
+const PRACTICE_ENV={
+  doc:document, screen:()=>S.screen, examDate:()=>S.examDate,
+  ui:()=>typeof LabUI==='undefined'?null:LabUI,
+  hasCirculation:()=>typeof Circulation!=='undefined',
+  labSrc:()=>window.LAB_SRC, circSrc:()=>window.CIRC_SRC,
+  get circLoad(){ return circLibP; }, set circLoad(load){ circLibP=load; }
+};
+function buildPractice(){ return PracticeScreen.screenHtml(); }
+function mountPractice(){ PracticeScreen.mount(PRACTICE_ENV); }
 function goPractice(){ S.screen='practice'; render(); toTop(); }
 
 /* ═══════════ Apex agent — client-side tool loop ═══════════ */
