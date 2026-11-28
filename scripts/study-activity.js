@@ -2,11 +2,35 @@
 'use strict';
 
 const fs = require('node:fs');
+const readline = require('node:readline/promises');
+const { Writable } = require('node:stream');
 const { Calib } = require('../src/core/calib.js');
 const { FSRS } = require('../src/core/fsrs.js');
+require('../src/core/backupcrypto.js');
+const { BackupCrypto } = globalThis;
 
-function report(file, asOf) {
-  if (!file) throw new Error('Usage: node scripts/study-activity.js <plain-backup.json> [YYYY-MM-DD]');
+async function readPassphrase() {
+  if (!process.stdin.isTTY || !process.stderr.isTTY) {
+    throw new Error('Open an interactive terminal to enter the backup passphrase.');
+  }
+  // Readline handles editing and restores terminal settings on close. Discard its echo.
+  const muted = new Writable({ write(_chunk, _encoding, done) { done(); } });
+  const line = readline.createInterface({ input: process.stdin, output: muted, terminal: true, historySize: 0 });
+  const abort = new AbortController();
+  line.once('SIGINT', () => abort.abort());
+  line.once('close', () => abort.abort());
+  process.stderr.write('Backup passphrase (input hidden): ');
+  try {
+    return await line.question('', { signal: abort.signal });
+  } catch {
+    throw new Error('Backup passphrase entry was canceled.');
+  } finally {
+    line.close();
+    process.stderr.write('\n');
+  }
+}
+
+async function report(file, asOf) {
   const day = FSRS.isoToLocalDate(asOf);
   if (!day || FSRS.localDateToISO(day) !== asOf) throw new Error('Enter a real date as YYYY-MM-DD.');
 
@@ -16,11 +40,19 @@ function report(file, asOf) {
   } catch {
     throw new Error('Could not read the backup as JSON.');
   }
+  if (BackupCrypto.isEncrypted(backup)) {
+    const passphrase = await readPassphrase();
+    try {
+      backup = JSON.parse(await BackupCrypto.decrypt(backup, passphrase));
+    } catch {
+      throw new Error('Could not open the encrypted backup. Check its passphrase and format.');
+    }
+  }
   const daily = backup?.stats?.daily;
   const hasDaily = daily && typeof daily === 'object' && !Array.isArray(daily);
   const hasLog = Array.isArray(backup?.log);
   if (!Number.isInteger(backup?.v) || (!hasLog && !hasDaily)) {
-    throw new Error('Use a plain Systole backup containing the review log or daily progress.');
+    throw new Error('Use a Systole backup containing the review log or daily progress.');
   }
 
   const log = hasLog ? backup.log : [];
@@ -60,10 +92,12 @@ function report(file, asOf) {
   };
 }
 
-try {
-  const [, , file, asOf = FSRS.todayISO()] = process.argv;
-  console.log(JSON.stringify(report(file, asOf), null, 2));
-} catch (error) {
+async function main() {
+  const [, , file, asOf = FSRS.todayISO(), ...extra] = process.argv;
+  if (!file || extra.length) throw new Error('Usage: node scripts/study-activity.js <backup.json> [YYYY-MM-DD]');
+  console.log(JSON.stringify(await report(file, asOf), null, 2));
+}
+main().catch(error => {
   console.error(error.message);
   process.exitCode = 1;
-}
+});
