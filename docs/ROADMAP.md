@@ -1098,6 +1098,15 @@ of 288.
 week, reviews done against reviews due, and the Certain-and-wrong rate. Read them
 after two weeks of real use, and let them choose the next feature. *Sonnet.*
 
+Run `node scripts/study-activity.js "<plain-backup.json>"` on your own computer
+to read the last two complete Monday-to-Sunday weeks in that computer's local
+time zone. An optional `YYYY-MM-DD` argument sets the date from which the report
+looks back. The report prints aggregate counts only. The rating total sums the
+days with a recorded count and shows how many days supplied one. The
+Certain-and-wrong rate uses Progress's calibration rule, including its minimum
+sample size. Session counts and historical due totals stay unmeasured because
+the backup stores neither session boundaries nor snapshots of the past queue.
+
 ## 6. Phases
 
 - **Phase 0, this week.** Study: three real sessions, notes per the discovery doc.
