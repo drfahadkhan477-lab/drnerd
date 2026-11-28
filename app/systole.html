@@ -1772,7 +1772,11 @@ function storageLine(){
           : 'never backed up';
   return p+' · '+b;
 }
-function logRated(){ const d=todayISO(); (S.daily[d]||(S.daily[d]={a:0,c:0,r:0})).r++; }
+function logRated(){
+  const d=todayISO(), day=S.daily[d]||(S.daily[d]={a:0,c:0,r:0});
+  // Older progress records may omit the rating count.
+  day.r=(day.r||0)+1;
+}
 
 function storageOK(){
   try{ const k='__t'+Date.now(); localStorage.setItem(k,'1'); localStorage.removeItem(k); return true; }

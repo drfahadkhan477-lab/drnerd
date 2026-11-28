@@ -265,18 +265,24 @@ const head = t => { section = t; console.log('\n── ' + t + ' ──'); };
   ok('started count includes practice', practice.started === 1);
 
   const review = await page.evaluate(() => {
+    const day = todayISO(), { a, c } = S.daily[day];
+    S.daily = progressFromBackup({ daily: { [day]: { a, c } } }).daily;
     (S.resume = {}, startQuiz)(null, 'due');
     const q = S.questions[0];
     selectOpt(q.ci);
     const before = LOG.length;
     rateReview(4);
-    return { card: S.srs[q.id], entry: LOG[before], day: S.daily[todayISO()] };
+    return { card: S.srs[q.id], entry: LOG[before], day: S.daily[day],
+             persisted: JSON.parse(localStorage.getItem(KEY)).daily[day], answers: a + 1, correct: c + 1 };
   });
   ok('rating schedules the card', !!review.card && review.card.reps === 1);
   ok('card records its last-review date', !!(review.card && review.card.last), review.card.last);
   ok('log captures grade and prior state',
     review.entry.g === 4 && review.entry.m === 'review' && review.entry.reps === 0);
-  ok('rated counter increments', review.day.r === 1);
+  ok('rating a review after restoring a day with no rated count persists the first rating and keeps its answer counts',
+    review.day.r === 1 && review.persisted.r === 1 &&
+      review.persisted.a === review.answers && review.persisted.c === review.correct,
+    JSON.stringify(review.persisted));
 
   head('durable storage and backup state');
   const storage = await page.evaluate(() => {
