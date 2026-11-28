@@ -13,10 +13,8 @@
  * own box. A text passes on the median of those pixels (the 10th percentile is printed beside it): 4.5:1, or 3:1 for
  * large text (24px, or 18.66px bold).
  *
- * WHAT IT READS: fifteen screens (Home's three pages, Chapters, a question answered wrong, Progress, Notes, the Rhythm Lab,
- * Sessions, the mock exam with an answer chosen, a figure question answered right, Apex before a key is given and with an
- * invented conversation, Settings, and the mock exam's report) at 1180x820, and eight of them on a 390x844 touch phone, in
- * the theme states verify-ink uses, with motion reduced, so an animated glow is read where it rests.
+ * WHAT IT READS: the screens in SCREENS at 1180x820 and the screens in PHONE at 390x844 with touch, including
+ * Rhythm Lab and Practice Lab on both. Motion is reduced so an animated glow is read where it rests.
  * WHAT IT LEAVES OUT: text a reader is not given (hidden, screen-reader-only, aria-hidden, on a disabled control), a text
  * with no letter or digit in it (a separator dot), text behind an open modal dialog or inside [inert] (inactive), and
  * text a reader cannot see where it is: cut away by a box that clips overflow, under a frosted bar or a sheet
@@ -58,12 +56,12 @@ const SCREENS = [
   ['a question answered wrong', () => { const q = POOL.find(x => !x.bad && !x.img); startAdhocQuiz([q], q.ch); selectOpt((q.ci + 1) % q.o.length); }],
   ['Progress', () => { goStats(); }],
   ['the notes', () => { goRefs(); }],
-  ['the Rhythm Lab', () => { goLab(); }],
+  ['the Rhythm Lab', () => { goLab(); }, () => !!document.getElementById('labRhythmHeading')],
   ['Sessions', () => { goSessions(); }],
   /* The screens the UI revamp's capsule reaches that were not read here before (docs/UI-REVAMP.md, T5.1): each wears the
      capsule in its header, and Echo's ground was changed. */
   ['Echo', () => { goEcho(); }],
-  ['the Practice lab', () => { goPractice(); }],
+  ['the Practice Lab', () => { goPractice(); }, () => !!document.querySelector('#plabRoot .plab-card')],
   ['Search', () => { openSearch(); }],
   ['Annotations', () => { goAnnotations(); }],
   ['Memory', () => { goMemory(); }],
@@ -91,7 +89,8 @@ const SCREENS = [
   ['the mock exam\'s report', () => { if (!S.mock) startMock(); mockStopTicker(); if (S.mock.sel[S.mock.i] !== 0) mockPick(0); mockSubmit(false); }],
 ];
 /* A phone draws the same colours in another arrangement: a text can land on another part of a glow or a gradient. */
-const PHONE = ['Home', 'Brain', 'Labs', 'a question answered wrong', 'the mock exam, an answer chosen', 'Apex, before a key is given', 'Apex, with a conversation', 'Settings'];
+const PHONE = ['Home', 'Brain', 'Labs', 'a question answered wrong', 'the mock exam, an answer chosen', 'Apex, before a key is given', 'Apex, with a conversation', 'Settings',
+  'the Rhythm Lab', 'the Practice Lab'];
 
 /* In the page: every visible text box, its colour and the opacity it is painted at. Never its text. */
 const COLLECT = () => {
