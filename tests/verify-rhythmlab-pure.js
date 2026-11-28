@@ -660,7 +660,7 @@ head('the page hands over what it has, and keeps what is chosen');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
     whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('const LAB_ENV=', '};\n'), whole('function physioIsPlaying(){', '\n'), whole('function setPhysioSlow(n){', '\n'),
     whole('function setPhysioPlaying(on){', '\n'), whole('function setLab(k){', '\n'), whole('function leadCardHtml(id){', '\n'),
-    whole('let circLibP=null;', '\n'), whole('function physioCycle(id){', '\n'), whole('function physioRef(){', '\n'), whole('function physioApplyLesion(){', '\n'),
+    whole('let circLibP=null, labCircWait=null;', '\n'), whole('function physioCycle(id){', '\n'), whole('function physioRef(){', '\n'), whole('function physioApplyLesion(){', '\n'),
     whole('function physioPhaseNow(){', '\n'), whole('function paintPhysioNote(){', '\n'), whole('function mountPhysio(){', '\n'), whole('function mountTwelve(){', '\n'),
     whole('function mountLab(){', '\n')].join('\n');
   const world = (state, opts) => {
@@ -740,6 +740,14 @@ head('the page hands over what it has, and keeps what is chosen');
      arrived === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'setCycle as normal'], scripts: 1, phase: 'ej', note: 'NOTE wiggers', pill: 'Ejection', loading: true }), String(arrived));
   ok('and a load that fails is let go, so the next drawing asks again',
      failed === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'remove vendor/circulation.js', 'append vendor/circulation.js', 'setCycle null undefined'], scripts: 2, phase: '', note: '-', pill: '-', loading: true }), String(failed));
+  const joined = world('').ask(`var ready=[], did=[];
+    CIRC_SRC='vendor/circulation.js'; circLibP={ then: callback=>ready.push(callback) };
+    LAB_ENV.loadCirculation(()=>did.push('repaint'));
+    LAB_ENV.loadCirculation(()=>did.push('duplicate repaint'));
+    Circulation={}; ready.forEach(callback=>callback());
+    JSON.stringify({subscriptions:ready.length, did})`);
+  ok('Rhythm Lab joins another screen\'s pending circulation load once and repaints when it arrives',
+     joined === J({ subscriptions: 1, did: ['repaint'] }), String(joined));
   /* The two of LAB_ENV's loans the load above does not reach: Physio, asked where a diagram keeps only a clock, and the
      views, which name the pill outside Wiggers. The diagram's time, 0.62, is in rapid filling, a phase the start of the
      cycle is not in, so a Physio asked at the wrong time says so. */

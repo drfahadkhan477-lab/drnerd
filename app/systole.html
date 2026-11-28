@@ -1838,7 +1838,7 @@ const PHYSIO_LESION_NOTE={
    (scripts/build-pwa.js, 3.747): the panel's first drawing loads it (LAB_ENV.loadCirculation, below), Normal included,
    and physio.js draws until it is there. circLibP is the load under way, shared with the Practice Lab and the Home hero;
    a failed load is not remembered, and leaves physio.js drawing. */
-let circLibP=null;
+let circLibP=null, labCircWait=null;
 function physioCycle(id){ return RhythmLabScreen.cycle(LAB,id,LAB_ENV); }
 function physioRef(){ return RhythmLabScreen.ref(LAB_ENV); }
 function physioApplyLesion(){ RhythmLabScreen.applyLesion(LAB,LAB_ENV); }
@@ -1869,11 +1869,16 @@ const LAB_ENV={doc:{querySelectorAll:q=>document.querySelectorAll(q),getElementB
   RHYTHMS, render:()=>render(), applyLesion:()=>physioApplyLesion(), paintNote:()=>paintPhysioNote(),
   Physio:()=>Physio, Circulation:()=>typeof Circulation!=='undefined'?Circulation:undefined,
   loadCirculation:then=>{
-    if(window.CIRC_SRC&&!circLibP){
+    if(!window.CIRC_SRC || (circLibP && circLibP===labCircWait)) return;
+    if(circLibP){
+      /* Practice Lab or Home may own the pending request. Repaint once when it succeeds. */
+      circLibP.then(()=>{ if(typeof Circulation!=='undefined') then(); });
+    }else{
       const s=document.createElement('script'); s.src=window.CIRC_SRC;
       circLibP=new Promise(res=>{ s.onload=()=>{ res(); then(); }; s.onerror=()=>{ s.remove(); circLibP=null; res(); }; });
       document.head.appendChild(s);
     }
+    labCircWait=circLibP;
   },
   noteHtml:()=>physioNoteHtml(), VIEWS:PHYSIO_VIEWS,
   dark:()=>document.documentElement.getAttribute('data-theme')==='dark'
