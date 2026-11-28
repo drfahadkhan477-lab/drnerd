@@ -625,6 +625,20 @@ runs (`scripts/chromium-ci-timings.json`), which predicts the slowest shard's
 step time falling from 13.07 to 9.28 minutes. The next measurement should
 check that prediction on runs made after the change.
 
+*Follow-up:* the observed median slowest shard improved after the switch, with
+a smaller gain than the prediction. A replay refit each suite's median on
+earlier runs and scored the resulting assignment on later runs with a complete
+current Chromium suite set. It used the existing shard planner and summed
+measured suite step times, excluding setup. On the held-out runs the refit
+increased the median slowest shard, so the weights stay. The replay treats a
+suite's measured duration as portable between shards.
+Held-out runs:
+[loader merge](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/45597348113),
+[CI diagnostics merge](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/46039816110),
+[colour lint merge](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/46041978608),
+[build reference merge](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/46043999728)
+and [Home pager PR](https://github.com/drfahadkhan477-lab/drnerd/actions/runs/46097923876).
+
 **E5 — Measure battery on the iPad, then set a frame budget.** The discovery doc
 showed the container cannot measure it. Add a hidden diagnostics line that counts
 frames drawn per second per canvas, note the iPad's battery percentage before and
