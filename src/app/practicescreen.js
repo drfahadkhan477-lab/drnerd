@@ -18,14 +18,9 @@ function mount(env){
       env.doc.head.appendChild(s);
     }
     if(env.screen()==='practice'&&env.circSrc()&&!env.hasCirculation()&&!labNoCirc&&!labWaitingForCirc){
-      if(!env.circLoad){
-        const s=env.doc.createElement('script'); s.src=env.circSrc();
-        env.circLoad=new Promise(res=>{ s.onload=()=>res(); s.onerror=()=>{ s.remove(); env.circLoad=null; res(); }; });
-        env.doc.head.appendChild(s);
-      }
       /* The Rhythm Lab or Home may already be loading the engine. Resume Practice in either case. */
       labWaitingForCirc=true;
-      env.circLoad.then(()=>{
+      env.loadCirculation().then(()=>{
         labWaitingForCirc=false;
         labNoCirc=!env.hasCirculation();
         mount(env);
