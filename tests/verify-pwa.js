@@ -669,6 +669,39 @@ async function heapAfterBoot(page, url) {
     await page.close();
   }
 
+  head('Practice Lab joins a circulation load already underway');
+  for (const failLoad of [false, true]) {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 }, serviceWorkers: 'block' });
+    const page = watch(await ctx.newPage(), events, 'Practice Lab shared load', errors);
+    let release, requests = 0;
+    const held = new Promise(resolve => { release = resolve; });
+    await page.route('**/vendor/circulation-*.js', async route => {
+      requests++;
+      await held;
+      return failLoad ? route.fulfill({ status: 503, body: '' }) : route.continue();
+    });
+    try {
+      await page.goto(ORIGIN + '/index.html', { waitUntil: 'load', timeout: 120000 });
+      await booted(page);
+      // Start the shared request through the Rhythm Lab's loader before opening Practice.
+      await page.evaluate(() => { LAB_ENV.loadCirculation(() => {}); goPractice(); });
+      await settled(page, () => !!document.getElementById('plabRoot') && typeof LabUI !== 'undefined',
+        { label: 'the Practice Lab screen and its own script' });
+      const waiting = await page.evaluate(() => !!circLibP && typeof Circulation === 'undefined' &&
+        !document.querySelector('#plabRoot .plab-card'));
+      release();
+      const mounted = await settled(page, () => !!document.querySelector('#plabRoot .plab-card'),
+        { timeout: 8000, label: 'the Practice Lab to mount after the shared load settles' }).then(() => true, () => false);
+      const engine = await page.evaluate(() => typeof Circulation !== 'undefined');
+      ok(failLoad ? 'Practice Lab opens with its fallback when the shared request fails'
+        : 'Practice Lab opens with the engine when the shared request succeeds',
+      waiting && requests === 1 && mounted && engine === !failLoad, JSON.stringify({ waiting, requests, mounted, engine }));
+    } finally {
+      release();
+      await ctx.close();
+    }
+  }
+
   head('offline, once installed');
   {
     const transport = await originTransport(target);
