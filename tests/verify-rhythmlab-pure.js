@@ -586,7 +586,7 @@ head('the mounts: the monitor, the 12-lead and the cycle, drawn into their canva
 }
 
 head('the page hands over what it has, and keeps what is chosen');
-{
+(async () => {
   /* Read with its comments blanked: the page explains itself, and quotes what is looked for. Positions are
      kept, so code found in the blanked copy is taken from the real one. */
   const raw = fs.readFileSync(path.join(__dirname, '..', 'app', 'systole.html'), 'utf8');
@@ -660,7 +660,7 @@ head('the page hands over what it has, and keeps what is chosen');
   const pageCode = [whole('function icon(name, cls){', '\n}'), whole('const ESC={', '\n'), whole('const e=s=>', '\n'), whole('const PHYSIO_VIEWS=[', '];'), whole('const PHYSIO_SPEEDS=[', '\n'),
     whole('const PHYSIO_LESIONS=[', '];'), whole('const LEAD12_MAP={', '};'), whole('const LAB=RhythmLabScreen.state(', '\n'), whole('const labView=', '\n'), whole('Object.defineProperties(window,{labMon:', '});'), whole('const LAB_ENV=', '};\n'), whole('function physioIsPlaying(){', '\n'), whole('function setPhysioSlow(n){', '\n'),
     whole('function setPhysioPlaying(on){', '\n'), whole('function setLab(k){', '\n'), whole('function leadCardHtml(id){', '\n'),
-    whole('let circLibP=null, labCircWait=null;', '\n'), whole('function physioCycle(id){', '\n'), whole('function physioRef(){', '\n'), whole('function physioApplyLesion(){', '\n'),
+    whole('let circLibP=null, labCircWait=null;', '\n'), whole('function loadCirculation(){', '\n}'), whole('function physioCycle(id){', '\n'), whole('function physioRef(){', '\n'), whole('function physioApplyLesion(){', '\n'),
     whole('function physioPhaseNow(){', '\n'), whole('function paintPhysioNote(){', '\n'), whole('function mountPhysio(){', '\n'), whole('function mountTwelve(){', '\n'),
     whole('function mountLab(){', '\n')].join('\n');
   const world = (state, opts) => {
@@ -734,12 +734,12 @@ head('the page hands over what it has, and keeps what is chosen');
     physioApplyLesion(); physioApplyLesion();
     if(${fail}){ made[0].onerror(); physioApplyLesion(); }
     else { Circulation={cycle:id=>({id}),INTERVENTIONS:{}}; physioLesion='as'; made[0].onload(); }
-    JSON.stringify({did, scripts:made.length, phase:__physioNotePhase, note:noteEl.innerHTML, pill:pillEl.textContent, loading:circLibP!==null})`);
-  const arrived = loading(false), failed = loading(true);
+    Promise.resolve().then(()=>JSON.stringify({did, scripts:made.length, phase:__physioNotePhase, note:noteEl.innerHTML, pill:pillEl.textContent, loading:circLibP!==null}))`);
+  const arrived = await loading(false), failedLoad = await loading(true);
   ok('without the engine, the page\'s names ask for its file once while it loads, and when it is in, hand over the chosen lesion\'s beat and paint the caption from no phase',
      arrived === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'setCycle as normal'], scripts: 1, phase: 'ej', note: 'NOTE wiggers', pill: 'Ejection', loading: true }), String(arrived));
   ok('and a load that fails is let go, so the next drawing asks again',
-     failed === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'remove vendor/circulation.js', 'append vendor/circulation.js', 'setCycle null undefined'], scripts: 2, phase: '', note: '-', pill: '-', loading: true }), String(failed));
+     failedLoad === J({ did: ['append vendor/circulation.js', 'setCycle null undefined', 'setCycle null undefined', 'remove vendor/circulation.js', 'append vendor/circulation.js', 'setCycle null undefined'], scripts: 2, phase: '', note: '-', pill: '-', loading: true }), String(failedLoad));
   const joined = world('').ask(`var ready=[], did=[];
     CIRC_SRC='vendor/circulation.js'; circLibP={ then: callback=>ready.push(callback) };
     LAB_ENV.loadCirculation(()=>did.push('repaint'));
@@ -792,7 +792,6 @@ head('the page hands over what it has, and keeps what is chosen');
      away === J({ did: ['monitor destroy'], mon: null }), String(away));
   const bare = world('var labKind="sinus", physioView="flow", physioSlow=1, physioIv="base", twelveLead=null;', { noPhysio: true, reduce: false });
   ok('on a page with no Physio the screen is still drawn outside the PV loop', !bare.shown.startsWith('THREW') && bare.shown.includes('<span>Cardiac cycle · Flow</span>'), bare.shown.slice(0, 90));
-}
-
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exitCode = failed ? 1 : 0;
+})().catch(error => { console.error(error); process.exitCode = 1; });
